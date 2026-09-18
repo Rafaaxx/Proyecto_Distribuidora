@@ -1,0 +1,134 @@
+schema: spec-driven
+
+context: |
+  ## Sistema de gestión para distribuidora
+
+  Sistema de venta en ruta con soporte offline, stock por ubicación, precios
+  versionados, costos promedio ponderado y cuentas corrientes.
+  Multi-tenant desde el día uno: todo dato de negocio tiene `organizacion_id`.
+
+  ### Stack
+  - Backend: Python 3.12+, FastAPI (endpoints síncronos `def`), SQLAlchemy 2.x
+    síncrono, Pydantic v2, Alembic, PostgreSQL 17+
+  - Frontend: React + TypeScript strict, Vite, Tailwind CSS, React Router,
+    TanStack Query (área /admin), Dexie/IndexedDB (área /ruta), vite-plugin-pwa
+  - Infraestructura: Docker Compose, Caddy
+
+  ### Documentación fuente de verdad
+  Antes de proponer cualquier cosa, leer los documentos relevantes:
+  - `docs/01-dominio.md` — reglas de negocio con ID estable (VTA-12, INV-13…)
+  - `docs/02-arquitectura.md` — pipeline de comandos, transacciones, pruebas
+  - `docs/03-modelo-de-datos.md` — tablas, tipos, restricciones, índices
+  - `docs/04-roadmap-changes.md` — orden de construcción y definición de terminado
+  - `docs/adr/` — decisiones de arquitectura vigentes
+  Los documentos en `docs/referencia/` son antecedentes con contradicciones
+  ya resueltas; NO usarlos como especificación.
+
+  ### Reglas críticas (no negociables)
+  - DINERO: `Decimal` en Python, `decimal.js` en TS, `NUMERIC` en Postgres.
+    Nunca `float`. Importes viajan como string en JSON ("31250.00").
+    Redondeo ROUND_HALF_UP solo desde `core/money.py` y `lib/money.ts`.
+  - ORGANIZACIÓN: `organizacion_id` obligatorio en toda entidad de negocio.
+    Se toma del token JWT, nunca del cuerpo de la petición.
+    FK entre entidades son compuestas e incluyen `organizacion_id`.
+    Recurso de otra organización responde 404.
+  - COMANDOS: toda escritura pasa por el bus de comandos con `operation_id`
+    (UUIDv7 generado por el cliente). Online y offline usan el mismo handler.
+    Los handlers no hacen commit; el bus gestiona la transacción.
+  - INMUTABILIDAD: ninguna operación confirmada se edita ni se borra.
+    Correcciones con movimientos inversos. Tablas de libro: solo inserción.
+  - MÓDULOS: un módulo usa a otro solo por su `service.py`. `domain/` no
+    importa FastAPI, SQLAlchemy ni infraestructura.
+  - PRUEBAS: integración con PostgreSQL real (Testcontainers, nunca SQLite).
+    Concurrencia con commits reales. Todo invariante de `docs/01` §20 tiene
+    prueba que lo cita por ID.
+
+  ### Conceptos de dominio clave
+  - Unidad base: unidad mínima de stock (botella, lata). Siempre integer.
+  - Presentación de referencia: base del precio de lista de un producto.
+  - Precio de línea: `precio_referencia × cantidad_base / unidades_referencia`,
+    redondeado una sola vez al final (PRC-22).
+  - Costo promedio: por producto en toda la organización. Se recalcula en cada
+    ingreso (compra, stock inicial, anulación de venta). CST-11.
+  - Costo congelado: asignado a cada línea de venta al confirmarla. Inmutable.
+  - Cuenta corriente: libro de movimientos. El saldo se deriva de ellos (CC-04).
+    No existe saldo editable.
+  - Saldo cuenta: tabla materializada que se bloquea en cada operación.
+  - Comando: operación de escritura con operation_id único por organización.
+    Mismo operation_id + misma huella = devolver resultado original (idempotencia).
+    Mismo operation_id + huella distinta = RECHAZADO.
+  - Modo OFFLINE: venta o cobranza sin conexión. Nunca se rechaza por reglas
+    de negocio; se acepta con observaciones (SYN-05).
+  - Jornada: período de trabajo de un vendedor sobre una ubicación. Una
+    ubicación admite como máximo una jornada no cerrada (INV-16).
+  - Observación: marca de revisión sobre una operación aceptada. Se resuelve
+    con comentario; nunca modifica la operación.
+
+  ### Convenciones de código
+  - Nombres de entidades de negocio en español (igual que la base).
+  - Errores de dominio: clases propias con código estable, no excepciones genéricas.
+  - Commits en Conventional Commits: `feat(ventas): confirmar venta online`.
+  - IDs: UUIDv7 como clave primaria. Momentos: timestamptz en UTC.
+  - El backend obtiene la hora desde `core/clock.py`, no desde `datetime.now()`.
+
+rules:
+  proposal:
+    - Empezar con una sección "Qué resuelve este change" de máximo 3 líneas.
+    - Incluir sección "No incluye" con lo que explícitamente queda fuera.
+    - Citar los IDs de reglas de dominio que implementa (VTA-12, INV-01, etc.).
+    - Citar los invariantes que toca y cómo los garantiza.
+    - Si hay una decisión técnica no resuelta en docs/, señalarla como bloqueante
+      antes de proponer implementación.
+    - Si el change toca el cálculo de precios, descuentos o costos, mencionar
+      explícitamente los fixtures compartidos que agrega o modifica.
+    - Máximo 600 palabras.
+
+  tasks:
+    - Cada tarea debe ser verificable de forma independiente (con una prueba
+      o comprobando un endpoint).
+    - Las migraciones de Alembic van como tarea separada, antes de los modelos.
+    - Las pruebas de integración van como tarea separada al final, antes del
+      paso de verificación manual.
+    - Si el change incluye lógica de cálculo, la tarea de fixtures compartidos
+      va antes de implementar el cálculo.
+    - El último paso siempre es la verificación manual del flujo principal
+      en el navegador.
+
+  design:
+    - Solo crear design.md si hay una decisión técnica que docs/ no resuelve.
+    - Si se crea, presentar exactamente dos o tres alternativas con sus
+      consecuencias concretas, y recomendar una con justificación.
+    - Una vez resuelta, registrar la decisión como ADR en docs/adr/.
+
+  specs:
+    - Cada spec corresponde a una capacidad cohesiva, no a un endpoint.
+    - Los escenarios usan formato GIVEN / WHEN / THEN.
+    - Cada escenario cita el ID de la regla de dominio que verifica.
+    - Los valores numéricos en escenarios usan los mismos ejemplos de docs/01
+      donde existan (no inventar números propios).
+    - Los escenarios de error son obligatorios para toda operación de escritura.
+    - Las specs de sincronización incluyen siempre el escenario de doble envío.
+
+operations:
+  apply:
+    guidance:
+      - Leer docs/04-roadmap-changes.md §2.1 (definición de terminado) antes
+        de marcar cualquier tarea como completa.
+      - Verificar que import-linter pase después de cada cambio de dependencias
+        entre módulos.
+      - Verificar que los tipos del cliente API estén actualizados si se modificó
+        algún schema de Pydantic.
+      - "Si una prueba de concurrencia falla intermitentemente, no ignorarla:
+        es señal de una condición de carrera real."
+      - No marcar el change como terminado si alguna prueba está en skip o xfail
+        sin justificación registrada.
+
+  archive:
+    guidance:
+      - Verificar que todos los invariantes tocados por el change tienen prueba
+        que los cita por ID antes de archivar.
+      - Actualizar docs/04-roadmap-changes.md marcando el change como archivado.
+      - Si durante la implementación se tomó una decisión nueva, verificar que
+        quedó registrada como ADR en docs/adr/ antes de archivar.
+      - El resumen del archivo debe indicar qué capacidades quedaron operativas
+        y qué pruebas las cubren.

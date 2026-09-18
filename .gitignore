@@ -1,0 +1,17 @@
+# Entorno
+.env
+*.local
+
+# Sistema operativo / editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Backend (ver backend/.gitignore para detalle)
+backend/.venv/
+backend/__pycache__/
+
+# Frontend (ver frontend/.gitignore para detalle)
+frontend/node_modules/
+frontend/dist/

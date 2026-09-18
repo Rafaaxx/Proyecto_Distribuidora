@@ -1,0 +1,37 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "."
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.importlinter]
+root_package = "app"
+
+[[tool.importlinter.contracts]]
+name = "domain no importa infraestructura"
+type = "forbidden"
+source_modules = ["app.modules"]
+forbidden_modules = ["fastapi", "sqlalchemy"]
+ignore_imports = [
+    "app.modules.*.api -> fastapi",
+    "app.modules.*.models -> sqlalchemy",
+    "app.modules.*.repository -> sqlalchemy",
+]

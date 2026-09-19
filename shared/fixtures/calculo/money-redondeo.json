@@ -1,0 +1,26 @@
+[
+  {
+    "id": "MONEY-importe-medio-positivo-redondea-arriba",
+    "reglas": ["INV-03"],
+    "entrada": { "motor": "money", "operacion": "redondear_importe", "valor": "0.125" },
+    "salida_esperada": { "resultado": "0.13" }
+  },
+  {
+    "id": "MONEY-importe-medio-negativo-se-aleja-de-cero",
+    "reglas": ["INV-03"],
+    "entrada": { "motor": "money", "operacion": "redondear_importe", "valor": "-0.125" },
+    "salida_esperada": { "resultado": "-0.13" }
+  },
+  {
+    "id": "MONEY-costo-se-cuantiza-a-seis-decimales",
+    "reglas": ["INV-03"],
+    "entrada": { "motor": "money", "operacion": "redondear_costo", "valor": "1.0000005" },
+    "salida_esperada": { "resultado": "1.000001" }
+  },
+  {
+    "id": "MONEY-alicuota-iva-veintiuno-por-ciento",
+    "reglas": ["INV-03"],
+    "entrada": { "motor": "money", "operacion": "redondear_costo", "valor": "0.21" },
+    "salida_esperada": { "resultado": "0.210000" }
+  }
+]

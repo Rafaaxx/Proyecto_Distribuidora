@@ -182,8 +182,8 @@ Monorepo:
 
 | Módulo | Responsabilidad | Reglas |
 | --- | --- | --- |
-| identidad | Organizaciones, usuarios, roles, permisos, dispositivos, autenticación, PIN | SEG |
-| configuracion | Parámetros de organización, catálogos configurables | §4 de `01` |
+| identidad | Organización, configuración de la organización, usuarios, roles, permisos, dispositivos, autenticación, PIN | SEG |
+| configuracion | Catálogos configurables: alícuotas de IVA, medios de pago, motivos | §4 de `01` |
 | catalogo | Productos, presentaciones, categorías, marcas, alícuotas | CAT |
 | proveedores | Proveedores, costos informados, compras, pagos | CST-01..05, CMP, PAG |
 | costeo | Costo promedio y costo de venta | CST-10..15 |
@@ -397,7 +397,7 @@ Una tarea diaria compara cada tabla de saldo con la suma de su libro. Cualquier 
 
 - **DEBE:** tipo `Decimal` en todo el dominio; nunca `float`.
 - **DEBE:** un único módulo `core/money.py` con las funciones de redondeo (`redondear_importe`, `redondear_costo`), configuradas con `ROUND_HALF_UP` de forma explícita. El contexto decimal por defecto de Python redondea al par y no debe usarse para cuantizar.
-- Columnas `NUMERIC(14,2)` para importes, `NUMERIC(18,6)` para costos por unidad base y porcentajes.
+- Columnas `NUMERIC(14,2)` para importes, `NUMERIC(18,6)` para costos por unidad base, `NUMERIC(9,6)` para porcentajes y alícuotas.
 
 ### 10.2 API
 

@@ -11,6 +11,12 @@ from alembic import context
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.core.config import Settings  # noqa: E402
+from app.core.db import Base  # noqa: E402
+
+# Importar los `models.py` de cada módulo registra sus tablas en
+# `Base.metadata` (import por efecto secundario, único lugar donde se hace).
+from app.modules.configuracion import models as configuracion_models  # noqa: E402,F401
+from app.modules.identidad import models as identidad_models  # noqa: E402,F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -21,11 +27,9 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-target_metadata = None
+# `target_metadata` alimenta `alembic revision --autogenerate` (tarea 4.3):
+# compara `Base.metadata` (los modelos) contra el esquema real de la base.
+target_metadata = Base.metadata
 
 
 def _database_url() -> str:

@@ -22,8 +22,20 @@ disallow_untyped_defs = false
 testpaths = ["tests"]
 pythonpath = ["."]
 
+# El change 02 (organizacion-y-configuracion) es el primer modulo de negocio
+# real: agrega aqui las excepciones de `ignore_imports` para que
+# `models.py`/`repository.py`/`service.py` de `identidad` y `configuracion`
+# puedan importar SQLAlchemy (`service.py` solo para el type hint de
+# `Session` que reenvia a `repository.py`; no hay bus de comandos hasta el
+# change 04). Todavia no hay `api.py` en ningun modulo (sin rutas de negocio
+# en este change, `design.md` D1), asi que no se agrega excepcion para
+# FastAPI: el dia que exista un `api.py` real (change 03), se agrega su
+# propia excepcion. import-linter falla por diseno ante un `ignore_imports`
+# que no matchea ningun import (ver docs/02-arquitectura.md §5.2), asi que
+# cada excepcion de abajo corresponde a un import real existente.
 [tool.importlinter]
 root_package = "app"
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "domain no importa infraestructura"
@@ -31,7 +43,24 @@ type = "forbidden"
 source_modules = ["app.modules"]
 forbidden_modules = ["fastapi", "sqlalchemy"]
 ignore_imports = [
-    "app.modules.*.api -> fastapi",
-    "app.modules.*.models -> sqlalchemy",
-    "app.modules.*.repository -> sqlalchemy",
+    "app.modules.identidad.models -> app.core.db",
+    "app.modules.identidad.models -> sqlalchemy",
+    "app.modules.identidad.repository -> sqlalchemy",
+    "app.modules.identidad.service -> sqlalchemy",
+    "app.modules.configuracion.models -> app.core.db",
+    "app.modules.configuracion.models -> sqlalchemy",
+    "app.modules.configuracion.repository -> sqlalchemy",
+    "app.modules.configuracion.service -> sqlalchemy",
 ]
+
+[[tool.importlinter.contracts]]
+name = "configuracion no importa modelos ni repositorio de identidad"
+type = "forbidden"
+source_modules = ["app.modules.configuracion"]
+forbidden_modules = ["app.modules.identidad.models", "app.modules.identidad.repository"]
+
+[[tool.importlinter.contracts]]
+name = "identidad no importa modelos ni repositorio de configuracion"
+type = "forbidden"
+source_modules = ["app.modules.identidad"]
+forbidden_modules = ["app.modules.configuracion.models", "app.modules.configuracion.repository"]

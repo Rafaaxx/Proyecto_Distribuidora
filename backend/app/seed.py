@@ -17,6 +17,7 @@ porque no hay otro camino de alta todavía).
 
 from __future__ import annotations
 
+import os
 import sys
 from decimal import Decimal
 
@@ -28,6 +29,7 @@ from app.core.config import Settings
 from app.core.db import crear_engine, crear_session_factory
 from app.modules.configuracion import service as configuracion_service
 from app.modules.identidad import service as identidad_service
+from app.modules.identidad.domain.permisos import ADMINISTRADOR
 from app.modules.identidad.models import Organizacion
 from app.modules.identidad.service import DatosConfiguracionInicial
 
@@ -36,6 +38,11 @@ from app.modules.identidad.service import DatosConfiguracionInicial
 # dejan como `None` explícito pasándolos a `DatosConfiguracionInicial` con su
 # default (que es `None`).
 NOMBRE_ORGANIZACION_INICIAL = "Organización inicial"
+# `ADR-021`: resuelve la organización en el login antes de que exista un
+# token. En un despliegue real, cada instancia tiene su propio slug (una
+# organización por instancia, `ADR-021` Alternativas); acá se sembra uno
+# fijo porque la siembra crea una sola organización.
+SLUG_ORGANIZACION_INICIAL = "organizacion-inicial"
 MONEDA_INICIAL = "ARS"
 ZONA_HORARIA_INICIAL = "America/Argentina/Mendoza"
 
@@ -61,6 +68,22 @@ class BaseSinMigrarError(RuntimeError):
     explícitamente")."""
 
 
+class AdminPasswordNoDefinidaError(RuntimeError):
+    """La puesta en marcha no recibió la contraseña del administrador
+    inicial (tarea 8.13, `design.md` D8: ningún secreto tiene valor por
+    defecto). No se crea ningún usuario ni organización cuando falta."""
+
+
+def _password_administrador_desde_entorno() -> str:
+    valor = os.environ.get("ADMIN_PASSWORD")
+    if not valor:
+        raise AdminPasswordNoDefinidaError(
+            "ADMIN_PASSWORD no está definida. La puesta en marcha no puede crear el "
+            "usuario administrador sin una contraseña provista (design.md D8)."
+        )
+    return valor
+
+
 def _ya_sembrado(sesion: Session) -> bool:
     try:
         return sesion.query(Organizacion).first() is not None
@@ -71,10 +94,21 @@ def _ya_sembrado(sesion: Session) -> bool:
         ) from error
 
 
-def sembrar(sesion: Session, reloj: Clock) -> Organizacion | None:
+def sembrar(sesion: Session, reloj: Clock, *, password_administrador: str) -> Organizacion | None:
     """Siembra la organización inicial y sus catálogos si todavía no existe
     ninguna organización. Devuelve la organización sembrada, o `None` si ya
-    estaba sembrada (no vuelve a crear ni a pisar nada existente)."""
+    estaba sembrada (no vuelve a crear ni a pisar nada existente, tarea 8.6
+    y, para el administrador, tarea 8.13: "repetir la puesta en marcha no
+    pisa la contraseña existente").
+
+    `password_administrador` es obligatoria y sin valor por defecto (tarea
+    8.13, `design.md` D8): si falta, falla antes de crear nada, ni siquiera
+    la organización."""
+    if not password_administrador:
+        raise AdminPasswordNoDefinidaError(
+            "password_administrador vacía: la puesta en marcha no puede crear el "
+            "usuario administrador sin una contraseña provista (design.md D8)."
+        )
     if _ya_sembrado(sesion):
         return None
 
@@ -82,6 +116,7 @@ def sembrar(sesion: Session, reloj: Clock) -> Organizacion | None:
         sesion,
         reloj,
         nombre=NOMBRE_ORGANIZACION_INICIAL,
+        slug=SLUG_ORGANIZACION_INICIAL,
         cuit=None,
         moneda=MONEDA_INICIAL,
         zona_horaria=ZONA_HORARIA_INICIAL,
@@ -116,10 +151,25 @@ def sembrar(sesion: Session, reloj: Clock) -> Organizacion | None:
             organizacion.id, sesion, reloj, ambito="AJUSTE_STOCK", nombre=nombre
         )
 
+    roles = identidad_service.crear_plantillas_de_rol_iniciales(organizacion.id, sesion, reloj)
+    identidad_service.crear_usuario_administrador_inicial(
+        organizacion.id,
+        sesion,
+        reloj,
+        rol_administrador_id=roles[ADMINISTRADOR].id,
+        password=password_administrador,
+    )
+
     return organizacion
 
 
 def main() -> None:
+    try:
+        password_administrador = _password_administrador_desde_entorno()
+    except AdminPasswordNoDefinidaError as error:
+        print(f"error: {error}", file=sys.stderr)
+        raise SystemExit(1) from error
+
     settings = Settings()  # type: ignore[call-arg]
     engine = crear_engine(settings.database_url)
     factory: sessionmaker[Session] = crear_session_factory(engine)
@@ -127,7 +177,7 @@ def main() -> None:
 
     with factory() as sesion:
         try:
-            resultado = sembrar(sesion, reloj)
+            resultado = sembrar(sesion, reloj, password_administrador=password_administrador)
         except BaseSinMigrarError as error:
             sesion.rollback()
             print(f"error: {error}", file=sys.stderr)

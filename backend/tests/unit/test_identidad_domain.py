@@ -19,6 +19,7 @@ from app.modules.identidad.domain.valores import (
     ModoImpositivoInvalidoError,
     PoliticaCreditoInvalidaError,
     RedondeoDireccionInvalidaError,
+    SlugOrganizacionInvalidoError,
     ToleranciaOfflineTipoInvalidoError,
     validar_estado_facturacion_default,
     validar_estado_organizacion,
@@ -26,8 +27,27 @@ from app.modules.identidad.domain.valores import (
     validar_modo_impositivo,
     validar_politica_credito_default,
     validar_redondeo_direccion,
+    validar_slug_organizacion,
     validar_tolerancia_offline_tipo,
 )
+
+
+class TestSlugOrganizacion:
+    """`ADR-021`: resuelve la organización en el login antes del token."""
+
+    @pytest.mark.parametrize("valor", ["distribuidora-cuyo", "acme", "org2"])
+    def test_acepta_slugs_bien_formados(self, valor: str) -> None:
+        assert validar_slug_organizacion(valor) == valor
+
+    @pytest.mark.parametrize(
+        "valor",
+        ["Distribuidora-Cuyo", "-empieza-con-guion", "termina-con-guion-", "con espacio", ""],
+    )
+    def test_rechaza_slugs_mal_formados(self, valor: str) -> None:
+        with pytest.raises(SlugOrganizacionInvalidoError) as exc_info:
+            validar_slug_organizacion(valor)
+
+        assert exc_info.value.codigo == "IDENTIDAD_SLUG_ORGANIZACION_INVALIDO"
 
 
 class TestEstadoOrganizacion:

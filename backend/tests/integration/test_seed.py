@@ -11,18 +11,21 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.clock import FixedClock
+from app.core.seguridad import verificar_password
 from app.modules.configuracion import service as configuracion_service
 from app.modules.identidad import repository as identidad_repository
 from app.modules.identidad import service as identidad_service
-from app.seed import BaseSinMigrarError, sembrar
+from app.modules.identidad.domain.permisos import ADMINISTRADOR, PLANTILLAS_DE_ROL
+from app.seed import AdminPasswordNoDefinidaError, BaseSinMigrarError, sembrar
 
 RELOJ = FixedClock(datetime(2026, 1, 1, tzinfo=UTC))
+PASSWORD_ADMIN_DE_PRUEBA = "una-contrasena-larga-123"
 
 
 def test_sembrar_crea_la_organizacion_inicial_con_los_valores_de_01_parrafo_4(
     db_session: Session,
 ) -> None:
-    organizacion = sembrar(db_session, RELOJ)
+    organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
 
     assert organizacion is not None
     assert organizacion.moneda == "ARS"
@@ -44,7 +47,7 @@ def test_los_parametros_a_definir_al_configurar_quedan_explicitamente_nulos(
 ) -> None:
     """Escenario 'Un parámetro sin valor definido queda explícitamente sin
     definir' (tarea 8.3): no se inventan valores por omisión."""
-    organizacion = sembrar(db_session, RELOJ)
+    organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
     assert organizacion is not None
 
     configuracion = identidad_service.obtener_configuracion(organizacion.id, db_session)
@@ -63,7 +66,7 @@ def test_los_parametros_a_definir_al_configurar_quedan_explicitamente_nulos(
 
 def test_sembrar_dos_veces_no_duplica_ni_pisa(db_session: Session) -> None:
     """Escenario 'Sembrar dos veces no duplica ni pisa' (tarea 8.6)."""
-    organizacion = sembrar(db_session, RELOJ)
+    organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
     assert organizacion is not None
 
     identidad_repository.actualizar_configuracion(
@@ -71,7 +74,9 @@ def test_sembrar_dos_veces_no_duplica_ni_pisa(db_session: Session) -> None:
     )
     db_session.flush()
 
-    resultado_segunda_siembra = sembrar(db_session, RELOJ)
+    resultado_segunda_siembra = sembrar(
+        db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA
+    )
 
     total_organizaciones = db_session.execute(
         text("SELECT COUNT(*) FROM organizacion")
@@ -92,14 +97,14 @@ def test_sembrar_sobre_una_base_sin_migrar_falla_explicitamente(db_session: Sess
     db_session.flush()
 
     with pytest.raises(BaseSinMigrarError):
-        sembrar(db_session, RELOJ)
+        sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
 
 
 def test_los_seis_motivos_de_ajuste_stock_se_listan_por_ambito_y_ninguno_de_otro_ambito(
     db_session: Session,
 ) -> None:
     """Escenario 'Los motivos se listan por ámbito' (tarea 8.7)."""
-    organizacion = sembrar(db_session, RELOJ)
+    organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
     assert organizacion is not None
 
     motivos = configuracion_service.listar_motivos_por_ambito(
@@ -127,7 +132,7 @@ def test_un_elemento_desactivado_deja_de_ofrecerse_pero_sigue_legible_por_id(
     db_session: Session,
 ) -> None:
     """Escenario 'Un elemento desactivado deja de ofrecerse' (tarea 8.7)."""
-    organizacion = sembrar(db_session, RELOJ)
+    organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
     assert organizacion is not None
     motivos = configuracion_service.listar_motivos_por_ambito(
         organizacion.id, db_session, "AJUSTE_STOCK"
@@ -153,7 +158,7 @@ def test_un_elemento_desactivado_deja_de_ofrecerse_pero_sigue_legible_por_id(
 def test_las_tres_alicuotas_y_cinco_medios_de_pago_iniciales(db_session: Session) -> None:
     from decimal import Decimal
 
-    organizacion = sembrar(db_session, RELOJ)
+    organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
     assert organizacion is not None
 
     alicuotas = configuracion_service.listar_alicuotas_activas(organizacion.id, db_session)
@@ -172,3 +177,97 @@ def test_las_tres_alicuotas_y_cinco_medios_de_pago_iniciales(db_session: Session
         "Billetera",
         "Tarjeta",
     }
+
+
+class TestPlantillasDeRolYAdministradorInicial:
+    """Tarea 8.13 (`design.md` D8): la puesta en marcha crea las cinco
+    plantillas de rol y un usuario administrador sin contraseña por
+    omisión."""
+
+    def test_las_cinco_plantillas_de_rol_quedan_disponibles(self, db_session: Session) -> None:
+        organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+        assert organizacion is not None
+
+        roles = identidad_repository.listar_roles(organizacion.id, db_session)
+        assert {rol.nombre for rol in roles} == set(PLANTILLAS_DE_ROL)
+        for rol in roles:
+            permisos = set(
+                identidad_repository.listar_permisos_de_rol(organizacion.id, rol.id, db_session)
+            )
+            assert permisos == PLANTILLAS_DE_ROL[rol.nombre]
+
+    def test_el_usuario_administrador_puede_autenticarse_con_la_contrasena_provista(
+        self, db_session: Session
+    ) -> None:
+        organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+        assert organizacion is not None
+
+        admin = identidad_repository.obtener_usuario_por_nombre_usuario(
+            organizacion.id, "admin", db_session
+        )
+        assert admin is not None
+        assert admin.estado == "ACTIVO"
+        assert verificar_password(PASSWORD_ADMIN_DE_PRUEBA, admin.password_hash) is True
+
+        rol_administrador = next(
+            rol
+            for rol in identidad_repository.listar_roles(organizacion.id, db_session)
+            if rol.nombre == ADMINISTRADOR
+        )
+        assert admin.rol_id == rol_administrador.id
+
+    def test_sin_contrasena_provista_la_puesta_en_marcha_falla(
+        self, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Escenario "Sin contraseña provista la puesta en marcha falla"."""
+        monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
+
+        with pytest.raises(AdminPasswordNoDefinidaError):
+            from app.seed import _password_administrador_desde_entorno
+
+            _password_administrador_desde_entorno()
+
+        with pytest.raises(AdminPasswordNoDefinidaError):
+            sembrar(db_session, RELOJ, password_administrador="")
+
+        total_organizaciones = db_session.execute(
+            text("SELECT COUNT(*) FROM organizacion")
+        ).scalar_one()
+        assert total_organizaciones == 0
+
+    def test_repetir_la_puesta_en_marcha_no_pisa_la_contrasena_existente(
+        self, db_session: Session
+    ) -> None:
+        """Escenario "Repetir la puesta en marcha no pisa la contraseña
+        existente"."""
+        organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+        assert organizacion is not None
+        admin = identidad_repository.obtener_usuario_por_nombre_usuario(
+            organizacion.id, "admin", db_session
+        )
+        assert admin is not None
+        hash_original = admin.password_hash
+
+        resultado_segunda_siembra = sembrar(
+            db_session, RELOJ, password_administrador="otra-contrasena-distinta-999"
+        )
+        assert resultado_segunda_siembra is None
+
+        admin_despues = identidad_repository.obtener_usuario_por_nombre_usuario(
+            organizacion.id, "admin", db_session
+        )
+        assert admin_despues is not None
+        assert admin_despues.password_hash == hash_original
+
+        cantidad_de_administradores = len(
+            identidad_repository.listar_usuarios_por_rol(
+                organizacion.id,
+                next(
+                    rol
+                    for rol in identidad_repository.listar_roles(organizacion.id, db_session)
+                    if rol.nombre == ADMINISTRADOR
+                ).id,
+                db_session,
+            )
+        )
+        assert cantidad_de_administradores == 1

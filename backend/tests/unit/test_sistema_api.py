@@ -11,6 +11,9 @@ def _client(monkeypatch: pytest.MonkeyPatch, **env: str) -> TestClient:
     monkeypatch.setenv(
         "DATABASE_URL", env.get("DATABASE_URL", "postgresql+psycopg://u:p@localhost:5432/db")
     )
+    monkeypatch.setenv(
+        "JWT_SECRET", env.get("JWT_SECRET", "un-secreto-de-prueba-suficientemente-largo")
+    )
     if "APP_VERSION" in env:
         monkeypatch.setenv("APP_VERSION", env["APP_VERSION"])
     else:

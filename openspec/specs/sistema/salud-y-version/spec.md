@@ -4,7 +4,7 @@ Expone los dos endpoints operativos del grupo Sistema (`02` §11) que permiten c
 
 Nota de trazabilidad: este change no implementa ninguna regla de negocio de `01-dominio.md`, por lo que los escenarios citan las secciones de `02-arquitectura.md` que los originan en lugar de identificadores `VTA-`/`INV-`.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Verificación de salud del servicio
 El sistema DEBE exponer `GET /api/v1/salud` sin autenticación, que verifica la conexión con la base de datos antes de responder (`02` §17).

@@ -18,6 +18,42 @@ La documentación funcional y técnica completa vive en [`docs/`](docs/) y es la
 - Docker y Docker Compose
 - Para desarrollo fuera de contenedores: Python 3.12+ y Node.js 20+
 
+## Variables de entorno
+
+Copiar `.env.example` a `.env` y ajustar los secretos antes de levantar el
+entorno (`docker compose up` los necesita: no tienen valor por defecto).
+
+Dos roles de PostgreSQL, no uno (INV-05, `ADR-020`, change 03):
+
+- **`app_migrations`**: dueño del esquema. Solo lo usa Alembic para correr
+  migraciones (`DATABASE_URL_MIGRATIONS`, leída directamente por
+  `backend/app/core/alembic_url.py` — no es un campo de `Settings`).
+- **`app_runtime`**: el único rol que usa la aplicación en runtime
+  (`DATABASE_URL`, la única que conoce `backend/app/core/config.py`).
+  Recibe permisos otorgados tabla por tabla en cada migración (nunca
+  `UPDATE`/`DELETE` sobre tablas de libro, como `auditoria`).
+
+`infra/postgres/init-app-roles.sh` crea los dos roles la primera vez que se
+inicializa el volumen `postgres_data`, usando `APP_MIGRATIONS_DB_PASSWORD` y
+`APP_RUNTIME_DB_PASSWORD` del `.env`. **En producción, estos dos valores y
+`JWT_SECRET` se inyectan por separado y nunca comparten valor entre sí** ni
+con `POSTGRES_PASSWORD` (que solo lo usa Postgres para su propio arranque).
+
+Si ya tenías el entorno levantado antes de este change (un solo rol), el
+script de arriba no corre solo sobre un volumen existente: hay que recrear
+el volumen (`docker compose down -v` y volver a levantar) o crear los roles
+a mano contra la base ya levantada, con el mismo SQL de
+`infra/postgres/init-app-roles.sh` (`design.md` D3, Risks).
+
+### Puesta en marcha (`python -m app.seed`)
+
+Además de la organización inicial (change 02), la siembra crea las cinco
+plantillas de rol (`01` §19) y un usuario `admin` con permisos de
+Administrador. La contraseña del administrador sale de `ADMIN_PASSWORD`
+(sin valor por defecto, tarea 8.13 del change 03): sin definirla, la
+siembra falla antes de crear nada. Repetir la siembra nunca pisa la
+contraseña de un administrador ya existente.
+
 ## Cómo levantar el entorno
 
 ```bash
@@ -26,7 +62,8 @@ docker compose up
 
 Esto levanta tres servicios:
 
-- `postgres` — PostgreSQL 17+ con un volumen persistente
+- `postgres` — PostgreSQL 17+ con un volumen persistente y los dos roles de
+  aplicación
 - `backend` — FastAPI con recarga automática en `http://localhost:8000`
 - `frontend` — Vite (React + TypeScript) en `http://localhost:5173`
 
@@ -35,6 +72,13 @@ Verificar que el backend responde:
 ```bash
 curl http://localhost:8000/api/v1/salud
 curl http://localhost:8000/api/v1/version
+```
+
+Aplicar migraciones (Alembic corre como `app_migrations`, nunca como
+`app_runtime`):
+
+```bash
+docker compose exec backend alembic upgrade head
 ```
 
 ## Desarrollo del backend fuera de Docker
@@ -46,6 +90,12 @@ pip install -r requirements-dev.txt
 alembic upgrade head
 python -m pytest
 ```
+
+Fuera de Docker, `alembic upgrade head` necesita `DATABASE_URL_MIGRATIONS`
+en el entorno (o en `.env`), apuntando al rol `app_migrations` contra el
+Postgres de `docker compose up -d postgres`. `python -m pytest` necesita
+`DATABASE_URL` (rol `app_runtime`) para las pruebas que no levantan su
+propio Testcontainers.
 
 ## Desarrollo del frontend fuera de Docker
 

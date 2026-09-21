@@ -31,6 +31,7 @@ def _crear_organizacion(sesion: Session, nombre: str) -> Organizacion:
     organizacion = Organizacion(
         id=nuevo_id(),
         nombre=nombre,
+        slug=f"org-{nuevo_id().hex[:12]}",
         cuit=None,
         moneda="ARS",
         zona_horaria="America/Argentina/Mendoza",

@@ -120,6 +120,7 @@ facturacion      factura · factura_venta · factura_alicuota · ajuste_iva_abso
 | --- | --- | --- |
 | `id` | `uuid` | PK |
 | `nombre` | `text` | |
+| `slug` | `text` | `UNIQUE`. Resuelve la organización en el login antes de que exista un token (`ADR-021`) |
 | `cuit` | `text` | Opcional |
 | `moneda` | `text` | ISO 4217 |
 | `zona_horaria` | `text` | IANA |

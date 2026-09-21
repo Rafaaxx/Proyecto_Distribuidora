@@ -10,7 +10,11 @@ con código estable si no.
 
 from __future__ import annotations
 
+import re
+
 from app.core.errors import DomainError
+
+_PATRON_SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 ESTADOS_ORGANIZACION = ("ACTIVA", "SUSPENDIDA")
 MODOS_IMPOSITIVOS = ("A", "B", "C")
@@ -23,6 +27,10 @@ MODALIDADES_IVA_DEFAULT = ("CLIENTE", "ABSORBIDO")
 
 class EstadoOrganizacionInvalidoError(DomainError):
     codigo = "IDENTIDAD_ESTADO_ORGANIZACION_INVALIDO"
+
+
+class SlugOrganizacionInvalidoError(DomainError):
+    codigo = "IDENTIDAD_SLUG_ORGANIZACION_INVALIDO"
 
 
 class ModoImpositivoInvalidoError(DomainError):
@@ -54,6 +62,18 @@ def validar_estado_organizacion(valor: str) -> str:
         raise EstadoOrganizacionInvalidoError(
             f"Estado de organización desconocido: {valor!r}. "
             f"Valores válidos: {ESTADOS_ORGANIZACION}."
+        )
+    return valor
+
+
+def validar_slug_organizacion(valor: str) -> str:
+    """Valida el formato del `slug` que resuelve la organización en el
+    login antes de que exista un token (`ADR-021`): minúsculas, dígitos y
+    guiones simples, sin empezar ni terminar en guion."""
+    if not _PATRON_SLUG.match(valor):
+        raise SlugOrganizacionInvalidoError(
+            f"Slug de organización inválido: {valor!r}. Debe ser minúsculas, "
+            "dígitos y guiones simples (ej. 'distribuidora-cuyo')."
         )
     return valor
 

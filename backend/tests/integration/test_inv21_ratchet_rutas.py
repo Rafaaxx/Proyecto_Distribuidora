@@ -1,24 +1,42 @@
-"""INV-21 (`docs/01-dominio.md` §20; `design.md` D1): ratchet de rutas.
+"""INV-21 (`docs/01-dominio.md` §20; `design.md` D1 del change 02): ratchet
+de rutas.
 
-Sin JWT todavía (llega en el change 03), el aislamiento de rutas de negocio
-no se puede probar end-to-end. Esta prueba recorre dinámicamente las rutas
-registradas de FastAPI (`app.openapi()["paths"]`, que refleja el path
-completo con prefijo, a diferencia de `app.routes` cuyas rutas anidadas no
-exponen el path resuelto en esta versión de FastAPI) y falla nombrando ruta
-y método si aparece una ruta de negocio que no está en `COBERTURA_DE_AISLAMIENTO`.
+Recorre dinámicamente las rutas registradas de FastAPI (`app.openapi()["paths"]`,
+que refleja el path completo con prefijo, a diferencia de `app.routes` cuyas
+rutas anidadas no exponen el path resuelto en esta versión de FastAPI) y
+falla nombrando ruta y método si aparece una ruta de negocio que no está en
+`COBERTURA_DE_AISLAMIENTO`.
 
-Hoy `COBERTURA_DE_AISLAMIENTO` está vacía (no hay ninguna ruta de negocio) y
-el mensaje de la prueba lo dice explícitamente (tarea 9.2), para que la
-cobertura nula no se confunda con cobertura completa (`design.md`, Risks).
+Tarea 12.1 (change 03) cierra lo que el change 02 dejó parcial (`design.md`
+D1 de ese change: "hoy la prueba de rutas pasa sin ejercitar nada de
+negocio... el change 03 no puede agregar su primer endpoint sin que la
+suite se ponga roja hasta cubrirlo"): las rutas de negocio del grupo 10.7
+(usuarios, roles, PIN, dispositivos, desbloqueo) ya están declaradas en
+`COBERTURA_DE_AISLAMIENTO`, cada una con su prueba real en
+`test_identidad_api_usuarios.py` / `test_inv21_aislamiento_endpoints_identidad.py`
+(HTTP, con `login` real de un usuario de otra organización, nunca un JWT
+fabricado a mano con `emitir_access_token`). Las rutas de `/auth` quedan
+exentas en `RUTAS_DE_AUTENTICACION`, separadas de `RUTAS_DE_SISTEMA`,
+porque operan sin organización en contexto (spec `aislamiento-multiorganizacion`,
+escenario "Las rutas de autenticación quedan exentas por operar sin
+organización en contexto").
 
-CÓMO DECLARAR UNA RUTA NUEVA (tarea 9.4, para el change 03 y siguientes):
-cuando un módulo agrega su primer `api.py` con una ruta de negocio, agregar
-la tupla `(metodo, "/api/v1/<ruta>")` a `COBERTURA_DE_AISLAMIENTO` en este
-archivo, junto con la prueba de integración (con dos organizaciones y un
-token/dependencia real) que demuestra que esa ruta aísla por organización.
-Sin esa prueba, no agregar la tupla: agregarla sin probar el aislamiento real
-es exactamente la falsa sensación de cobertura que este ratchet existe para
-evitar.
+CÓMO DECLARAR UNA RUTA NUEVA (tarea 9.2/12.1, para los changes siguientes):
+cuando un módulo agrega una ruta de negocio, agregar la tupla
+`(metodo, "/api/v1/<ruta>")` a `COBERTURA_DE_AISLAMIENTO` en este archivo,
+junto con la prueba de integración que demuestra su aislamiento real:
+- dos organizaciones, cada una con su propio usuario autenticado por
+  `POST /api/v1/auth/login` (login real, NUNCA un access token fabricado a
+  mano con `emitir_access_token`, porque eso no prueba que el flujo de
+  autenticación real produzca un contexto correcto);
+- el usuario de la organización B ejerce la ruta sobre un recurso de la
+  organización A (o, para una ruta de alta, con una referencia -- p. ej.
+  `rol_id` -- que pertenece a la organización A);
+- la respuesta indica "no encontrado", nunca un error de infraestructura ni
+  un 200/201/204 que hubiera modificado o expuesto el recurso ajeno.
+Sin esa prueba, no agregar la tupla: agregarla sin probar el aislamiento
+real es exactamente la falsa sensación de cobertura que este ratchet existe
+para evitar.
 """
 
 from __future__ import annotations
@@ -28,7 +46,10 @@ import os
 from app.core.config import Settings
 from app.main import crear_app
 
-# Lista enumerable y explícita (`design.md` D1): nunca un patrón de nombre.
+# Listas enumerables y explícitas (`design.md` D1 del change 02): nunca un
+# patrón de nombre. Separadas porque representan dos motivos de exención
+# distintos: sistema (sin negocio en absoluto) vs. autenticación (negocio de
+# identidad, pero sin organización todavía en contexto -- tarea 12.1).
 RUTAS_DE_SISTEMA = frozenset(
     {
         ("get", "/api/v1/salud"),
@@ -36,20 +57,45 @@ RUTAS_DE_SISTEMA = frozenset(
     }
 )
 
-# Ver "CÓMO DECLARAR UNA RUTA NUEVA" arriba. Vacío a propósito en este change.
-COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset()
+RUTAS_DE_AUTENTICACION = frozenset(
+    {
+        ("post", "/api/v1/auth/login"),
+        ("post", "/api/v1/auth/refresh"),
+        ("post", "/api/v1/auth/logout"),
+    }
+)
+
+# Ver "CÓMO DECLARAR UNA RUTA NUEVA" arriba. Las siete rutas de negocio del
+# grupo 10.7, cada una con su prueba de aislamiento real (login real, dos
+# organizaciones, "no encontrado" sobre el recurso ajeno):
+# - `test_identidad_api_usuarios.py`: composición de rol, rotación de PIN,
+#   desbloqueo manual.
+# - `test_inv21_aislamiento_endpoints_identidad.py`: listado y revocación de
+#   dispositivos, listado y alta de usuarios (incluida el alta con un
+#   `rol_id` de otra organización).
+COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("get", "/api/v1/identidad/dispositivos"),
+        ("delete", "/api/v1/identidad/dispositivos/{dispositivo_id}"),
+        ("get", "/api/v1/identidad/usuarios"),
+        ("post", "/api/v1/identidad/usuarios"),
+        ("put", "/api/v1/identidad/roles/{rol_id}/permisos"),
+        ("post", "/api/v1/identidad/usuarios/{usuario_id}/pin"),
+        ("post", "/api/v1/identidad/usuarios/{usuario_id}/desbloqueo"),
+    }
+)
 
 
 def rutas_de_negocio_sin_cobertura(
     rutas_del_esquema: dict[str, dict[str, object]],
     *,
-    rutas_de_sistema: frozenset[tuple[str, str]],
+    rutas_exentas: frozenset[tuple[str, str]],
     cobertura: frozenset[tuple[str, str]],
 ) -> list[tuple[str, str]]:
     """Devuelve las rutas `(metodo, path)` que son de negocio (no están en
-    `rutas_de_sistema`) y no están cubiertas por `cobertura`."""
+    `rutas_exentas`) y no están cubiertas por `cobertura`."""
     todas = [(metodo, path) for path, metodos in rutas_del_esquema.items() for metodo in metodos]
-    de_negocio = [ruta for ruta in todas if ruta not in rutas_de_sistema]
+    de_negocio = [ruta for ruta in todas if ruta not in rutas_exentas]
     return [ruta for ruta in de_negocio if ruta not in cobertura]
 
 
@@ -67,9 +113,10 @@ def test_inv21_toda_ruta_de_negocio_esta_cubierta_por_el_aislamiento(
     fallar la verificación'."""
     os.environ.setdefault("DATABASE_URL", database_url)
     rutas = _rutas_reales_del_esquema()
+    rutas_exentas = RUTAS_DE_SISTEMA | RUTAS_DE_AUTENTICACION
 
     sin_cobertura = rutas_de_negocio_sin_cobertura(
-        rutas, rutas_de_sistema=RUTAS_DE_SISTEMA, cobertura=COBERTURA_DE_AISLAMIENTO
+        rutas, rutas_exentas=rutas_exentas, cobertura=COBERTURA_DE_AISLAMIENTO
     )
 
     total_de_negocio = len(
@@ -77,21 +124,15 @@ def test_inv21_toda_ruta_de_negocio_esta_cubierta_por_el_aislamiento(
             (metodo, path)
             for path, metodos in rutas.items()
             for metodo in metodos
-            if (metodo, path) not in RUTAS_DE_SISTEMA
+            if (metodo, path) not in rutas_exentas
         ]
     )
     mensaje = (
         f"INV-21: {len(sin_cobertura)} ruta(s) de negocio sin cobertura de "
         f"aislamiento: {sin_cobertura}. Rutas de negocio cubiertas hoy: "
-        f"{total_de_negocio - len(sin_cobertura)} de {total_de_negocio} "
-        "(tarea 9.2: la cobertura nula debe ser visible, no confundirse con completa)."
+        f"{total_de_negocio - len(sin_cobertura)} de {total_de_negocio}."
     )
     assert sin_cobertura == [], mensaje
-    assert total_de_negocio == 0, (
-        "Este change no debe registrar ninguna ruta de negocio (design.md D1); "
-        f"se encontraron {total_de_negocio}. Si esto cambió, el change 03 debe "
-        "agregar su cobertura en COBERTURA_DE_AISLAMIENTO antes de continuar."
-    )
 
 
 def test_inv21_las_rutas_de_sistema_no_requieren_organizacion(database_url: str) -> None:
@@ -107,9 +148,64 @@ def test_inv21_las_rutas_de_sistema_no_requieren_organizacion(database_url: str)
         )
 
 
+def test_inv21_las_rutas_de_autenticacion_quedan_exentas_por_operar_sin_organizacion(
+    database_url: str,
+) -> None:
+    """Escenario 'Las rutas de autenticación quedan exentas por operar sin
+    organización en contexto' (tarea 12.1, spec `aislamiento-multiorganizacion`):
+    `/auth/login`, `/auth/refresh` y `/auth/logout` están registradas, y
+    quedan fuera de la exigencia de `COBERTURA_DE_AISLAMIENTO` por estar
+    declaradas explícitamente en `RUTAS_DE_AUTENTICACION` -- una lista
+    separada de `RUTAS_DE_SISTEMA`, porque el motivo de la exención es
+    distinto (sin organización en contexto todavía, no "sin negocio")."""
+    os.environ.setdefault("DATABASE_URL", database_url)
+    rutas = _rutas_reales_del_esquema()
+
+    rutas_presentes = {(metodo, path) for path, metodos in rutas.items() for metodo in metodos}
+    for ruta_auth in RUTAS_DE_AUTENTICACION:
+        assert ruta_auth in rutas_presentes, (
+            f"Ruta de autenticación {ruta_auth} esperada pero no está registrada."
+        )
+
+    sin_cobertura = rutas_de_negocio_sin_cobertura(
+        rutas,
+        rutas_exentas=RUTAS_DE_SISTEMA | RUTAS_DE_AUTENTICACION,
+        cobertura=COBERTURA_DE_AISLAMIENTO,
+    )
+    for ruta_auth in RUTAS_DE_AUTENTICACION:
+        assert ruta_auth not in sin_cobertura, (
+            f"{ruta_auth} no debería exigir cobertura de aislamiento: opera "
+            "sin organización en contexto (tarea 12.1)."
+        )
+
+
+def test_inv21_una_ruta_de_autenticacion_no_declarada_no_queda_exenta_por_prefijo(
+    database_url: str,
+) -> None:
+    """Verificación en negativo (tarea 12.1, mismo criterio que la de
+    sistema/tarea 9.3): la exención de `/auth` es una lista enumerable, no
+    un patrón de prefijo -- una ruta de negocio nueva bajo `/auth` que no
+    esté declarada en `RUTAS_DE_AUTENTICACION` sigue exigiendo cobertura."""
+    esquema_con_ruta_ficticia = {
+        "/api/v1/salud": {"get": {}},
+        "/api/v1/auth/login": {"post": {}},
+        "/api/v1/auth/impersonar": {"post": {}},  # ruta de negocio ficticia bajo /auth
+    }
+
+    sin_cobertura = rutas_de_negocio_sin_cobertura(
+        esquema_con_ruta_ficticia,
+        rutas_exentas=RUTAS_DE_SISTEMA | RUTAS_DE_AUTENTICACION,
+        cobertura=COBERTURA_DE_AISLAMIENTO,
+    )
+
+    assert sin_cobertura == [("post", "/api/v1/auth/impersonar")]
+
+
 def test_inv21_detecta_una_ruta_de_negocio_ficticia_sin_cobertura() -> None:
-    """Verificación en negativo (tarea 9.3): una ruta de negocio no
-    registrada en `COBERTURA_DE_AISLAMIENTO` debe ser detectada y nombrada."""
+    """Verificación en negativo (tarea 9.3, extendida en 12.6): una ruta de
+    negocio no registrada en `COBERTURA_DE_AISLAMIENTO` debe ser detectada y
+    nombrada -- el ratchet falla si se agrega a propósito una ruta de
+    negocio sin declarar su cobertura de aislamiento."""
     esquema_con_ruta_ficticia = {
         "/api/v1/salud": {"get": {}},
         "/api/v1/version": {"get": {}},
@@ -118,7 +214,7 @@ def test_inv21_detecta_una_ruta_de_negocio_ficticia_sin_cobertura() -> None:
 
     sin_cobertura = rutas_de_negocio_sin_cobertura(
         esquema_con_ruta_ficticia,
-        rutas_de_sistema=RUTAS_DE_SISTEMA,
+        rutas_exentas=RUTAS_DE_SISTEMA | RUTAS_DE_AUTENTICACION,
         cobertura=COBERTURA_DE_AISLAMIENTO,
     )
 
@@ -135,7 +231,9 @@ def test_inv21_no_marca_una_ruta_de_negocio_que_si_tiene_cobertura_declarada() -
     cobertura_de_prueba = frozenset({("post", "/api/v1/venta")})
 
     sin_cobertura = rutas_de_negocio_sin_cobertura(
-        esquema, rutas_de_sistema=RUTAS_DE_SISTEMA, cobertura=cobertura_de_prueba
+        esquema,
+        rutas_exentas=RUTAS_DE_SISTEMA | RUTAS_DE_AUTENTICACION,
+        cobertura=cobertura_de_prueba,
     )
 
     assert sin_cobertura == []

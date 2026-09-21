@@ -2,13 +2,26 @@ services:
   postgres:
     image: postgres:17
     environment:
+      # Superusuario de arranque de la imagen oficial: solo lo usa Postgres
+      # para inicializar el volumen y correr `init-app-roles.sh`. Ni la
+      # aplicación ni Alembic se conectan con este usuario (tarea 1.5,
+      # `design.md` D3, `ADR-020`).
       POSTGRES_USER: ${POSTGRES_USER:-distribuidora}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-distribuidora}
       POSTGRES_DB: ${POSTGRES_DB:-distribuidora}
+      # Contraseñas de los dos roles de aplicación que crea
+      # `init-app-roles.sh` (INV-05). Sin valor por defecto: son secretos
+      # (`CLAUDE.md` §4). En desarrollo se definen en `.env`; en producción
+      # se inyectan por separado, nunca con el mismo valor entre sí.
+      APP_MIGRATIONS_DB_PASSWORD: ${APP_MIGRATIONS_DB_PASSWORD:?Definí APP_MIGRATIONS_DB_PASSWORD en el entorno o en un .env}
+      APP_RUNTIME_DB_PASSWORD: ${APP_RUNTIME_DB_PASSWORD:?Definí APP_RUNTIME_DB_PASSWORD en el entorno o en un .env}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # Solo corre la primera vez que se inicializa `postgres_data` (ver el
+      # docstring del script). `:ro` porque Postgres no necesita escribirlo.
+      - ./infra/postgres/init-app-roles.sh:/docker-entrypoint-initdb.d/10-init-app-roles.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-distribuidora}"]
       interval: 5s
@@ -19,10 +32,21 @@ services:
     build:
       context: ./backend
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-distribuidora}:${POSTGRES_PASSWORD:-distribuidora}@postgres:5432/${POSTGRES_DB:-distribuidora}
+      # Rol app_runtime: el único que usa la aplicación en runtime (INV-05,
+      # ADR-020). `app.core.config.Settings` solo conoce esta variable.
+      DATABASE_URL: postgresql+psycopg://app_runtime:${APP_RUNTIME_DB_PASSWORD:?Definí APP_RUNTIME_DB_PASSWORD en el entorno o en un .env}@postgres:5432/${POSTGRES_DB:-distribuidora}
+      # Rol app_migrations: dueño del esquema. SOLO la lee Alembic
+      # (`app/core/alembic_url.py`), nunca la aplicación: no es un campo de
+      # `Settings` (tarea 1.5, `design.md` D3).
+      DATABASE_URL_MIGRATIONS: postgresql+psycopg://app_migrations:${APP_MIGRATIONS_DB_PASSWORD:?Definí APP_MIGRATIONS_DB_PASSWORD en el entorno o en un .env}@postgres:5432/${POSTGRES_DB:-distribuidora}
       APP_VERSION: ${APP_VERSION:-dev}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       ENVIRONMENT: development
+      # Secreto de firma de los access token (`design.md` D4, change 03). Sin
+      # valor por defecto: definir JWT_SECRET en el entorno o en un `.env`
+      # antes de levantar el backend (CLAUDE.md §4: ningún secreto por defecto).
+      JWT_SECRET: ${JWT_SECRET:?Definí JWT_SECRET en el entorno o en un .env}
+      JWT_KID: ${JWT_KID:-1}
     ports:
       - "8000:8000"
     volumes:
@@ -47,7 +71,10 @@ services:
     build:
       context: ./frontend
     environment:
-      VITE_API_BASE_URL: http://localhost:8000/api/v1
+      # `docs/02-arquitectura.md`: mismo origen, sin CORS abierto. El proxy
+      # de desarrollo de Vite (`vite.config.ts`) reenvía `/api` a este
+      # destino usando el hostname del servicio dentro de la red de Docker.
+      VITE_API_PROXY_TARGET: http://backend:8000
     ports:
       - "5173:5173"
     volumes:

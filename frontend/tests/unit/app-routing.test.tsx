@@ -15,14 +15,24 @@ describe('ruteo de áreas (docs/02 §13.1: /ruta y /admin cargadas de forma dife
     expect(await screen.findByText(/área de ruta/i)).toBeInTheDocument()
   })
 
-  it('muestra la pantalla de /admin al navegar a /admin', async () => {
+  it('redirige /admin al inicio de sesión (change 03, tarea 13.4)', async () => {
     render(
       <MemoryRouter initialEntries={['/admin']}>
         <AppRoutes />
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText(/área de administración/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /iniciar sesión/i })).toBeInTheDocument()
+  })
+
+  it('muestra la pantalla de dispositivos al navegar a /admin/dispositivos', async () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/dispositivos']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: /dispositivos/i })).toBeInTheDocument()
   })
 
   it('redirige la raíz a /ruta', async () => {

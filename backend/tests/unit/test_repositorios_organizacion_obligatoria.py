@@ -13,6 +13,8 @@ import inspect
 from collections.abc import Callable
 from typing import Any
 
+import pytest
+
 from app.modules.configuracion import repository as configuracion_repository
 from app.modules.identidad import repository as identidad_repository
 
@@ -27,12 +29,16 @@ def _funciones_publicas_del_modulo(modulo: Any) -> list[tuple[str, Callable[...,
     ]
 
 
-def _verificar_organizacion_id_primer_parametro(modulo: Any) -> None:
+def _verificar_organizacion_id_primer_parametro(
+    modulo: Any, *, exentas: frozenset[str] = frozenset()
+) -> None:
     funciones = _funciones_publicas_del_modulo(modulo)
     assert funciones, f"{modulo.__name__} no expone ninguna función pública para verificar."
 
     infractoras = []
     for nombre, funcion in funciones:
+        if nombre in exentas:
+            continue
         parametros = list(inspect.signature(funcion).parameters)
         if not parametros or parametros[0] != "organizacion_id":
             infractoras.append(nombre)
@@ -43,7 +49,37 @@ def _verificar_organizacion_id_primer_parametro(modulo: Any) -> None:
 
 
 def test_identidad_repository_exige_organizacion_id_primero_en_todo_metodo() -> None:
-    _verificar_organizacion_id_primer_parametro(identidad_repository)
+    """Tarea 6.4: la excepción del catálogo global `permiso` es la lista
+    explícita y enumerable `FUNCIONES_SIN_ORGANIZACION_ID` (mismo criterio
+    que `TABLAS_GLOBALES_EXENTAS` de la tarea 3.1), no una regla de nombre."""
+    _verificar_organizacion_id_primer_parametro(
+        identidad_repository,
+        exentas=identidad_repository.FUNCIONES_SIN_ORGANIZACION_ID,
+    )
+
+
+def test_la_excepcion_del_catalogo_global_es_explicita_y_enumerable() -> None:
+    assert isinstance(identidad_repository.FUNCIONES_SIN_ORGANIZACION_ID, frozenset)
+    assert {
+        "obtener_permiso_por_codigo",
+        "listar_permisos",
+        "obtener_organizacion_por_slug",
+        "obtener_sesion_refresh_por_token_hash_global",
+        "registrar_intento_login",
+        "contar_intentos_fallidos_por_usuario",
+        "contar_intentos_fallidos_por_ip",
+        "obtener_intento_fallido_mas_antiguo_en_ventana_por_usuario",
+        "obtener_intento_fallido_mas_antiguo_en_ventana_por_ip",
+    } == identidad_repository.FUNCIONES_SIN_ORGANIZACION_ID
+
+
+def test_sin_la_exencion_las_funciones_de_permiso_si_serian_detectadas() -> None:
+    """Verificación en negativo (mismo espíritu que la tarea 3.1): sin pasar
+    `exentas`, las funciones del catálogo global aparecen como infractoras
+    -- confirma que la exención hace lo que dice, no que la prueba esté
+    vacía por otra razón."""
+    with pytest.raises(AssertionError):
+        _verificar_organizacion_id_primer_parametro(identidad_repository)
 
 
 def test_configuracion_repository_exige_organizacion_id_primero_en_todo_metodo() -> None:

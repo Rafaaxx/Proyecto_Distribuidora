@@ -14,6 +14,10 @@ class DomainError(Exception):
     """
 
     codigo: str = "ERROR_DE_DOMINIO"
+    # Código HTTP con el que se traduce a Problem Details (tarea 10.2,
+    # `docs/02-arquitectura.md` §11). 400 por defecto; una subclase que
+    # representa una condición HTTP distinta (401, 403, 404...) lo declara.
+    status_http: int = 400
 
     def __init__(self, mensaje: str) -> None:
         super().__init__(mensaje)

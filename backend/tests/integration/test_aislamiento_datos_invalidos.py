@@ -24,6 +24,7 @@ def _crear_organizacion(sesion: Session) -> Organizacion:
     organizacion = Organizacion(
         id=nuevo_id(),
         nombre="Distribuidora de prueba",
+        slug=f"org-{nuevo_id().hex[:12]}",
         cuit=None,
         moneda="ARS",
         zona_horaria="America/Argentina/Mendoza",

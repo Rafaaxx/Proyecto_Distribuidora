@@ -14,7 +14,13 @@ import subprocess
 import sys
 import uuid
 
-from conftest import BACKEND_DIR, aplicar_migraciones
+from conftest import (
+    _PASSWORD_ROL_MIGRACIONES,
+    BACKEND_DIR,
+    NOMBRE_ROL_MIGRACIONES,
+    _url_con_credenciales,
+    aplicar_migraciones,
+)
 
 _VERSIONES_DIR = BACKEND_DIR / "alembic" / "versions"
 
@@ -28,7 +34,12 @@ def test_autogenerate_no_detecta_diferencias_entre_modelos_y_migracion(
     mensaje = f"verificacion_sin_deriva_{marca}"
     antes = set(_VERSIONES_DIR.glob("*.py"))
     try:
-        entorno = {**os.environ, "DATABASE_URL": database_url}
+        # Alembic lee `DATABASE_URL_MIGRATIONS` (rol `app_migrations`), no
+        # `DATABASE_URL` (tarea 1.5, `app/core/alembic_url.py`).
+        url_migraciones = _url_con_credenciales(
+            database_url, NOMBRE_ROL_MIGRACIONES, _PASSWORD_ROL_MIGRACIONES
+        )
+        entorno = {**os.environ, "DATABASE_URL_MIGRATIONS": url_migraciones}
         resultado = subprocess.run(
             [sys.executable, "-m", "alembic", "revision", "--autogenerate", "-m", mensaje],
             cwd=BACKEND_DIR,

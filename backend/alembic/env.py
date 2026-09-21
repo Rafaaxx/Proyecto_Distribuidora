@@ -10,7 +10,7 @@ from alembic import context
 # Permite `import app...` al ejecutar alembic desde `backend/`.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.core.config import Settings  # noqa: E402
+from app.core.alembic_url import resolver_database_url_migraciones  # noqa: E402
 from app.core.db import Base  # noqa: E402
 
 # Importar los `models.py` de cada módulo registra sus tablas en
@@ -33,9 +33,12 @@ target_metadata = Base.metadata
 
 
 def _database_url() -> str:
-    """La URL de la base viene de `app.core.config.Settings` (variable de
-    entorno `DATABASE_URL`), nunca de `alembic.ini` (`docs/02` §14)."""
-    return Settings().database_url  # type: ignore[call-arg]
+    """La URL de la base viene de `DATABASE_URL_MIGRATIONS` (rol
+    `app_migrations`, dueño del esquema), nunca de `alembic.ini` (`docs/02`
+    §14) ni de `app.core.config.Settings` (esa es `DATABASE_URL`, rol
+    `app_runtime`: la aplicación en runtime, no Alembic) -- tarea 1.5,
+    `design.md` D3."""
+    return resolver_database_url_migraciones()
 
 
 def run_migrations_offline() -> None:

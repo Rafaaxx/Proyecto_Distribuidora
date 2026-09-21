@@ -31,6 +31,22 @@ from app.core.db import crear_engine
 TABLA_RAIZ_SIN_ORGANIZACION = "organizacion"
 TABLAS_DE_SISTEMA = {"alembic_version"}
 
+# Lista explícita y enumerable (`design.md` D7, tarea 3.1): catálogos
+# globales, sin `organizacion_id`, sincronizados por migración y no editables
+# desde la aplicación. Una tabla de negocio nueva NUNCA se agrega acá por
+# comodidad: cada entrada tiene que poder justificarse igual que `permiso`
+# (`03` §4, `03` §17). `rol_permiso`, aunque referencia este catálogo, sí es
+# una tabla de negocio (tarea 3.3): no va en esta lista.
+#
+# `intento_login` (grupo 11, `ADR-018`) se agrega acá aunque no es un
+# catálogo: es una tabla de infraestructura de seguridad transversal a
+# organizaciones a propósito (el límite de intentos por IP protege contra
+# fuerza bruta repartida entre organizaciones, incluso contra un
+# `organizacion_slug` que no existe). Decisión señalada para revisión humana
+# en el docstring de la migración `e5f6a7b8c9d0` -- ver ahí el razonamiento
+# completo; no se decide en silencio.
+TABLAS_GLOBALES_EXENTAS = frozenset({"permiso", "intento_login"})
+
 _CONSULTA_TABLAS = text(
     """
     SELECT table_name FROM information_schema.tables
@@ -95,7 +111,9 @@ def _tablas_de_negocio(engine: Engine) -> list[str]:
     return [
         nombre
         for nombre in nombres
-        if nombre not in TABLAS_DE_SISTEMA and nombre != TABLA_RAIZ_SIN_ORGANIZACION
+        if nombre not in TABLAS_DE_SISTEMA
+        and nombre not in TABLAS_GLOBALES_EXENTAS
+        and nombre != TABLA_RAIZ_SIN_ORGANIZACION
     ]
 
 
@@ -145,8 +163,11 @@ def _tabla_declara_organizacion_id_obligatoria(engine: Engine, tabla: str) -> st
         return f"'{tabla}.organizacion_id' admite NULL (INV-02)."
 
     pk = _columnas_pk(engine, tabla)
-    if pk == ["organizacion_id"]:
-        return None  # PK = organizacion_id (caso configuracion_organizacion): automático.
+    if "organizacion_id" in pk:
+        # PK = organizacion_id (caso configuracion_organizacion) o PK
+        # compuesta que incluye organizacion_id (caso rol_permiso, tarea
+        # 3.3): en ambos casos la base no permite una fila sin organización.
+        return None
 
     unique_ok = any(
         set(columnas_unique) == {"organizacion_id", "id"}
@@ -166,6 +187,10 @@ def _fk_simple_entre_negocio(engine: Engine, tabla: str) -> list[str]:
         engine, tabla
     ).items():
         if columnas_origen == ["organizacion_id"] and tabla_destino == TABLA_RAIZ_SIN_ORGANIZACION:
+            continue
+        if tabla_destino in TABLAS_GLOBALES_EXENTAS:
+            # D7: la FK hacia un catálogo global (`permiso`) es simple a
+            # propósito, porque el catálogo no tiene organización.
             continue
         if "organizacion_id" not in columnas_origen:
             errores.append(
@@ -265,3 +290,38 @@ def test_inv02_detecta_una_fk_simple_entre_tablas_de_negocio(
     assert len(errores) == 1
     assert "inv02_negativo_fk_simple" in errores[0]
     assert "alicuota_iva" in errores[0]
+
+
+# --- Exención del catálogo global (grupo 3, `design.md` D7) ----------------
+
+
+def test_la_lista_de_globales_exentas_es_explicita_y_enumerable() -> None:
+    """Escenario "El catálogo global de permisos queda exento de forma
+    explícita"."""
+    assert isinstance(TABLAS_GLOBALES_EXENTAS, frozenset)
+    assert {"permiso", "intento_login"} == TABLAS_GLOBALES_EXENTAS
+
+
+def test_una_tabla_de_negocio_no_declarada_se_verifica_igual(
+    _tabla_temporal_sin_organizacion_id: Engine,
+) -> None:
+    """Escenario "Una tabla de negocio no puede exentarse por omisión": una
+    tabla nueva que no está en `TABLAS_GLOBALES_EXENTAS` se revisa como
+    cualquier otra tabla de negocio (y por eso el fixture, que la crea sin
+    `organizacion_id`, hace que la revisión la marque en rojo)."""
+    tablas = _tablas_de_negocio(_tabla_temporal_sin_organizacion_id)
+    assert "inv02_negativo_sin_org" in tablas
+
+
+def test_rol_permiso_si_se_verifica_como_tabla_de_negocio(database_url: str) -> None:
+    """Escenario "La relación entre roles y permisos sí pertenece a una
+    organización": `rol_permiso` referencia el catálogo global `permiso`
+    pero no está exenta -- se revisa y pasa porque su PK compuesta incluye
+    `organizacion_id`."""
+    aplicar_migraciones(database_url)
+    engine = crear_engine(database_url)
+
+    tablas = _tablas_de_negocio(engine)
+    assert "rol_permiso" in tablas
+    assert _tabla_declara_organizacion_id_obligatoria(engine, "rol_permiso") is None
+    assert _fk_simple_entre_negocio(engine, "rol_permiso") == []

@@ -91,13 +91,11 @@ La tabla indica qué changes deben estar archivados antes de empezar cada uno.
 | --- | --- | --- | --- |
 | 01a | `fundacion-repo-base` | Monorepo con estructura de `02` §4, Docker Compose de desarrollo, FastAPI con `/salud` y `/version`, aplicación Vite vacía, Alembic inicializado, logging estructurado en JSON con `request_id` (`02` §17) | — |
 | 01b | `dinero-fixtures-ci` | `core/money.py` y `lib/money.ts` con `ROUND_HALF_UP` explícito, arnés de fixtures compartidos, Testcontainers funcionando, CI completa (lint, tipos, unitarias, integración, build) | INV-03 (prueba que recorre catálogo de columnas) |
-| 02 | `organizacion-y-configuracion` | Tablas `organizacion`, `configuracion_organizacion`, catálogos (`alicuota_iva`, `medio_pago`, `motivo`); repositorios con `organizacion_id` obligatorio; prueba genérica de aislamiento que recorre todas las rutas | INV-02, INV-21 (parcial)* |
-| 03 | `identidad-usuarios-permisos` | Usuarios, roles, permisos, login, access token en memoria, refresh rotativo en cookie, registro y revocación de dispositivos, PIN de autorización, dependencia de permisos en handlers, tabla de auditoría, rate limit de login (`02` §18) | INV-05 (permisos de base sobre tablas de libro) |
+| 02 | `organizacion-y-configuracion` | Tablas `organizacion`, `configuracion_organizacion`, catálogos (`alicuota_iva`, `medio_pago`, `motivo`); repositorios con `organizacion_id` obligatorio; prueba genérica de aislamiento que recorre todas las rutas | INV-02 |
+| 03 | `identidad-usuarios-permisos` | Usuarios, roles, permisos, login, access token en memoria, refresh rotativo en cookie, registro y revocación de dispositivos, PIN de autorización, dependencia de permisos en handlers, tabla de auditoría, rate limit de login (`02` §18) | INV-05 (permisos de base sobre tablas de libro), INV-21 (cerrado por completo) |
 | 04 | `pipeline-comandos` | Tabla `comando`, bus, sobre, huella canónica, reserva de idempotencia, `POST /sync/comandos`, `observacion`, `comando_cuarentena`, reintentos transitorios, logging de contexto de comando (`operation_id`, organización, usuario, dispositivo), compatibilidad de versiones de comando (`02` §6.6) | INV-06 |
 
 **Después del 04, ninguna escritura se implementa fuera del bus.**
-
-\* **INV-21 (parcial) en el change 02:** no hay JWT hasta el change 03, así que el 02 no expone ninguna ruta HTTP de negocio (`design.md` del change, decisión D1). El aislamiento se prueba a nivel de repositorio/servicio, e instala un ratchet que recorre `app.openapi()["paths"]` y falla si aparece una ruta de negocio sin cobertura declarada — hoy cubre cero rutas porque no hay ninguna. El change 03 cierra INV-21 por completo al agregar su primer endpoint con la cobertura de aislamiento correspondiente.
 
 ## 6. Hito 2 — Maestros y libros
 

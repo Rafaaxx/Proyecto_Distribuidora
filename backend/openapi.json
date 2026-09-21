@@ -1,0 +1,946 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Distribuidora API",
+    "version": "dev"
+  },
+  "paths": {
+    "/api/v1/salud": {
+      "get": {
+        "tags": [
+          "sistema"
+        ],
+        "summary": "Salud",
+        "description": "Verifica la conexión con la base antes de responder (`02` §17).",
+        "operationId": "salud_api_v1_salud_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaludRespuesta"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/version": {
+      "get": {
+        "tags": [
+          "sistema"
+        ],
+        "summary": "Version",
+        "description": "Devuelve la versión de la aplicación en ejecución (`02` §11).",
+        "operationId": "version_api_v1_version_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionRespuesta"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "autenticacion"
+        ],
+        "summary": "Login",
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "tags": [
+          "autenticacion"
+        ],
+        "summary": "Refresh",
+        "operationId": "refresh_api_v1_auth_refresh_post",
+        "parameters": [
+          {
+            "name": "refresh_token",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Refresh Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "autenticacion"
+        ],
+        "summary": "Logout",
+        "operationId": "logout_api_v1_auth_logout_post",
+        "parameters": [
+          {
+            "name": "refresh_token",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Refresh Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identidad/dispositivos": {
+      "get": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Listar Dispositivos",
+        "description": "Escenario \"El listado incluye solo los dispositivos propios\": la\norganización es la del token, no puede pedirse otra (tarea 10.4).",
+        "operationId": "listar_dispositivos_api_v1_identidad_dispositivos_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DispositivoResponse"
+                  },
+                  "title": "Response Listar Dispositivos Api V1 Identidad Dispositivos Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identidad/dispositivos/{dispositivo_id}": {
+      "delete": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Revocar Dispositivo",
+        "description": "`revocar_dispositivo` del servicio devuelve `None` si `dispositivo_id`\nno pertenece a `contexto.organizacion_id` (INV-21): acá se traduce en\n`RecursoNoEncontradoError` (404, SEG-07), igual que el resto de las\nrutas de este archivo -- nunca un 204 silencioso, que dejaría creer que\nla revocación tuvo efecto sobre un recurso ajeno cuando en realidad no\ntocó nada (spec `dispositivos`, escenario \"Revocar un dispositivo de\notra organización no lo encuentra\").",
+        "operationId": "revocar_dispositivo_api_v1_identidad_dispositivos__dispositivo_id__delete",
+        "parameters": [
+          {
+            "name": "dispositivo_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Dispositivo Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identidad/usuarios": {
+      "get": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Listar Usuarios",
+        "description": "Tarea 10.8, escenario \"La contraseña no se puede recuperar del\nsistema\": ninguna vía de lectura de usuario expone `password_hash`.",
+        "operationId": "listar_usuarios_api_v1_identidad_usuarios_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UsuarioResponse"
+                  },
+                  "title": "Response Listar Usuarios Api V1 Identidad Usuarios Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Crear Usuario",
+        "description": "Escenario \"Un alta de usuario queda auditada\" (`identidad/service.py\n::crear_usuario`, tarea 8.9): sin envolver en bus de comandos todavía\n(`design.md` D6, deuda nominada del change 04). `RecursoNoEncontradoError`\nsi `rol_id` no pertenece a `contexto.organizacion_id` (SEG-07, INV-21,\ntarea 12.2).",
+        "operationId": "crear_usuario_api_v1_identidad_usuarios_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearUsuarioRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identidad/roles/{rol_id}/permisos": {
+      "put": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Cambiar Composicion Rol",
+        "description": "Escenario \"Una organización cambia la composición de un rol\"\n(tarea 8.9). `RecursoNoEncontradoError` si `rol_id` no pertenece a\n`contexto.organizacion_id` (SEG-07, INV-21, tarea 10.7).",
+        "operationId": "cambiar_composicion_rol_api_v1_identidad_roles__rol_id__permisos_put",
+        "parameters": [
+          {
+            "name": "rol_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rol Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComposicionRolRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RolResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identidad/usuarios/{usuario_id}/pin": {
+      "post": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Rotar Pin Autorizacion",
+        "description": "Escenarios \"Rotar el PIN invalida el anterior\" y \"La rotación queda\nauditada sin exponer el PIN\" (grupo 9). `RecursoNoEncontradoError` si\n`usuario_id` no pertenece a `contexto.organizacion_id` (SEG-07, INV-21).\nEl PIN nunca aparece en la respuesta (`status_code=204`, sin cuerpo).",
+        "operationId": "rotar_pin_autorizacion_api_v1_identidad_usuarios__usuario_id__pin_post",
+        "parameters": [
+          {
+            "name": "usuario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Usuario Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RotarPinRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identidad/usuarios/{usuario_id}/desbloqueo": {
+      "post": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Desbloquear Usuario",
+        "description": "Desbloqueo manual de un usuario bloqueado por intentos (tarea 11.4,\n`ADR-018`). `RecursoNoEncontradoError` si `usuario_id` no pertenece a\n`contexto.organizacion_id` (SEG-07, INV-21).",
+        "operationId": "desbloquear_usuario_api_v1_identidad_usuarios__usuario_id__desbloqueo_post",
+        "parameters": [
+          {
+            "name": "usuario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Usuario Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ComposicionRolRequest": {
+        "properties": {
+          "permisos": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Permisos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "permisos"
+        ],
+        "title": "ComposicionRolRequest"
+      },
+      "CrearUsuarioRequest": {
+        "properties": {
+          "usuario": {
+            "type": "string",
+            "title": "Usuario"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          },
+          "rol_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Rol Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "usuario",
+          "nombre",
+          "email",
+          "password",
+          "rol_id"
+        ],
+        "title": "CrearUsuarioRequest"
+      },
+      "DispositivoResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "prefijo": {
+            "type": "string",
+            "title": "Prefijo"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "ultimo_correlativo": {
+            "type": "integer",
+            "title": "Ultimo Correlativo"
+          },
+          "revocado_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revocado En"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "prefijo",
+          "estado",
+          "ultimo_correlativo",
+          "revocado_en"
+        ],
+        "title": "DispositivoResponse"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "LoginRequest": {
+        "properties": {
+          "organizacion_slug": {
+            "type": "string",
+            "title": "Organizacion Slug"
+          },
+          "usuario": {
+            "type": "string",
+            "title": "Usuario"
+          },
+          "contrasena": {
+            "type": "string",
+            "title": "Contrasena"
+          },
+          "dispositivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Dispositivo Id"
+          },
+          "nombre_dispositivo": {
+            "type": "string",
+            "title": "Nombre Dispositivo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "organizacion_slug",
+          "usuario",
+          "contrasena",
+          "dispositivo_id",
+          "nombre_dispositivo"
+        ],
+        "title": "LoginRequest"
+      },
+      "RefreshRequest": {
+        "properties": {
+          "dispositivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Dispositivo Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dispositivo_id"
+        ],
+        "title": "RefreshRequest"
+      },
+      "RolResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "permisos": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Permisos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "permisos"
+        ],
+        "title": "RolResponse"
+      },
+      "RotarPinRequest": {
+        "properties": {
+          "pin": {
+            "type": "string",
+            "title": "Pin"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pin"
+        ],
+        "title": "RotarPinRequest"
+      },
+      "SaludRespuesta": {
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error"
+            ],
+            "title": "Estado"
+          }
+        },
+        "type": "object",
+        "required": [
+          "estado"
+        ],
+        "title": "SaludRespuesta"
+      },
+      "TokenResponse": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "token_type": {
+            "type": "string",
+            "const": "bearer",
+            "title": "Token Type",
+            "default": "bearer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token"
+        ],
+        "title": "TokenResponse"
+      },
+      "UsuarioResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "usuario": {
+            "type": "string",
+            "title": "Usuario"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "rol_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Rol Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "usuario",
+          "nombre",
+          "email",
+          "rol_id",
+          "estado"
+        ],
+        "title": "UsuarioResponse",
+        "description": "Tarea 10.8: sin `password_hash` ni las tres columnas del PIN de\nautorización -- Pydantic solo serializa los campos declarados acá, así\nque omitirlos de este modelo es la garantía, no un filtro posterior."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VersionRespuesta": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "title": "VersionRespuesta"
+      }
+    }
+  }
+}

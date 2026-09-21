@@ -1,15 +1,37 @@
 """Punto de entrada de la aplicación FastAPI (`docs/02-arquitectura.md` §11)."""
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from app.api_v1 import dependencias, sistema
 from app.api_v1 import router as api_v1_router
-from app.api_v1 import sistema
 from app.core.access_log_middleware import AccessLogMiddleware
 from app.core.config import Settings
-from app.core.db import crear_engine
+from app.core.db import crear_engine, crear_session_factory
+from app.core.errors import DomainError
 from app.core.logging import configurar_logging
 from app.core.request_id_middleware import RequestIdMiddleware
+
+
+def _domain_error_a_problem_details(request: Request, exc: Exception) -> JSONResponse:
+    """Traduce cualquier `DomainError` a Problem Details (RFC 9457, `02`
+    §11): `codigo` es el campo de dominio estable (`PERMISO_REQUERIDO`,
+    etc.); nunca se filtra el detalle interno de la excepción más allá del
+    mensaje ya pensado para el usuario (`02` §17/§18: ni contraseñas, ni
+    PIN, ni tokens aparecen en un mensaje de error)."""
+    assert isinstance(exc, DomainError)
+    return JSONResponse(
+        status_code=exc.status_http,
+        media_type="application/problem+json",
+        content={
+            "type": "about:blank",
+            "title": exc.mensaje,
+            "status": exc.status_http,
+            "codigo": exc.codigo,
+            "instance": str(request.url.path),
+        },
+    )
 
 
 def crear_app(settings: Settings) -> FastAPI:
@@ -23,8 +45,13 @@ def crear_app(settings: Settings) -> FastAPI:
     app = FastAPI(title="Distribuidora API", version=settings.app_version)
 
     engine = crear_engine(settings.database_url)
+    session_factory = crear_session_factory(engine)
     app.dependency_overrides[sistema._get_engine] = lambda: engine
     app.dependency_overrides[sistema._get_settings] = lambda: settings
+    app.dependency_overrides[dependencias._get_settings] = lambda: settings
+    app.dependency_overrides[dependencias._get_session_factory] = lambda: session_factory
+
+    app.add_exception_handler(DomainError, _domain_error_a_problem_details)
 
     # El orden de agregado importa: Starlette envuelve en orden inverso, así
     # que el último agregado queda más externo. RequestIdMiddleware debe

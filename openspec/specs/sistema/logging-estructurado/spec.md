@@ -4,7 +4,7 @@ Define el formato y el contenido de los registros del backend: una línea JSON p
 
 Nota de trazabilidad: este change no implementa ninguna regla de negocio de `01-dominio.md`, por lo que los escenarios citan las secciones de `02-arquitectura.md` que los originan.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Registros en JSON con `request_id`
 El backend DEBE emitir cada registro como un único objeto JSON por línea, y toda petición HTTP DEBE tener un `request_id` presente en todos los registros que produce (`02` §17).

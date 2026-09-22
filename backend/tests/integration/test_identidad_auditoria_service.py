@@ -403,3 +403,118 @@ class TestUnRegistroDeAuditoriaNoContieneSecretos:
         assert contrasena not in texto
         assert resultado.access_token not in texto
         assert resultado.refresh_token not in texto
+
+
+class TestOrigenDeAuditoria:
+    """Grupo 10 (change 04, tareas 10.2, 10.3): `auditoria.origen`
+    distingue un evento generado por el bus de comandos (`COMANDO`, con
+    `operation_id` obligatorio) de uno generado fuera de él (`SISTEMA`,
+    sin `operation_id`), con la restricción de verificación
+    `ck_auditoria__operation_id_segun_origen` (migración `f6a7b8c9d0e1`)
+    exigiéndolo en la base, no solo en la aplicación."""
+
+    def test_un_registro_de_origen_comando_sin_operation_id_no_llega_a_la_base(
+        self, db_session: Session
+    ) -> None:
+        """Escenario "Un registro de origen comando sin identificador de
+        operación no llega a la base": el INSERT directo con
+        `origen='COMANDO'` y `operation_id=None` viola el CHECK de la base
+        (no una validación de Python -- por eso se espera `IntegrityError`,
+        no un `DomainError`)."""
+        organizacion = _crear_organizacion(db_session)
+
+        with pytest.raises(IntegrityError):
+            repository.crear_auditoria(
+                organizacion.id,
+                db_session,
+                auditoria_id=nuevo_id(),
+                accion="INICIO_SESION",
+                entidad="usuario",
+                occurred_at=MOMENTO_EVENTO,
+                registered_at=MOMENTO_REGISTRO,
+                origen="COMANDO",
+                operation_id=None,
+            )
+        db_session.rollback()
+
+    def test_un_registro_de_origen_sistema_con_operation_id_no_llega_a_la_base(
+        self, db_session: Session
+    ) -> None:
+        """Triangulación (10.2): el CHECK es una equivalencia, no una
+        implicación en un solo sentido -- `origen='SISTEMA'` con
+        `operation_id` presente también lo viola."""
+        organizacion = _crear_organizacion(db_session)
+
+        with pytest.raises(IntegrityError):
+            repository.crear_auditoria(
+                organizacion.id,
+                db_session,
+                auditoria_id=nuevo_id(),
+                accion="INICIO_SESION",
+                entidad="usuario",
+                occurred_at=MOMENTO_EVENTO,
+                registered_at=MOMENTO_REGISTRO,
+                origen="SISTEMA",
+                operation_id=nuevo_id(),
+            )
+        db_session.rollback()
+
+    def test_el_inicio_de_sesion_sigue_auditado_con_origen_sistema_y_sin_operation_id(
+        self, db_session: Session
+    ) -> None:
+        """Escenario "El inicio de sesión sigue auditado y sin
+        identificador de operación": `iniciar_sesion` (change 03) declara
+        `origen='SISTEMA'` explícitamente (tarea 10.5), sin depender del
+        `server_default` silencioso de la columna."""
+        organizacion = _crear_organizacion(db_session)
+        rol = repository.crear_rol(
+            organizacion.id,
+            db_session,
+            rol_id=nuevo_id(),
+            nombre="Vendedor",
+            tope_descuento=Decimal("0"),
+            activo=True,
+            momento=MOMENTO_EVENTO,
+        )
+        contrasena = "contrasena-de-prueba-origen-999"
+        from app.core.seguridad import hashear_password
+
+        repository.crear_usuario(
+            organizacion.id,
+            db_session,
+            usuario_id=nuevo_id(),
+            usuario="vendedor-origen-sistema",
+            nombre="Vendedor de prueba",
+            email=None,
+            password_hash=hashear_password(contrasena),
+            rol_id=rol.id,
+            estado="ACTIVO",
+            momento=MOMENTO_EVENTO,
+        )
+
+        service.iniciar_sesion(
+            db_session,
+            FixedClock(MOMENTO_REGISTRO),
+            organizacion_slug=organizacion.slug,
+            nombre_usuario="vendedor-origen-sistema",
+            password=contrasena,
+            dispositivo_id=nuevo_id(),
+            nombre_dispositivo="Dispositivo de prueba",
+            jwt_secreto="secreto-de-prueba-suficientemente-largo",
+            jwt_kid="1",
+            ip="127.0.0.1",
+        )
+
+        filas = list(
+            db_session.execute(
+                select(Auditoria).where(
+                    Auditoria.organizacion_id == organizacion.id,
+                    Auditoria.accion == "INICIO_SESION",
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(filas) == 1
+        assert filas[0].origen == "SISTEMA"
+        assert filas[0].operation_id is None

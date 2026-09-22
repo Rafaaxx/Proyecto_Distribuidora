@@ -148,7 +148,6 @@ Una fila por organización (`01` §4).
 | `estado_facturacion_default` | `text` | `NO_REQUIERE`, `PENDIENTE` |
 | `modalidad_iva_default` | `text` | `CLIENTE`, `ABSORBIDO` |
 | `intentos_pin_max` | `integer` | |
-| `app_version_minima` | `text` | `02` §6.6 |
 | `desvio_reloj_max_segundos` | `integer` | `02` §9 |
 
 ### `usuario`

@@ -19,6 +19,15 @@ from typing import Any, ClassVar
 # durante su procesamiento (`docs/02-arquitectura.md` §17).
 request_id_var: ContextVar[str | None] = ContextVar("request_id", default=None)
 
+# Contexto del comando en curso (change 04, grupo 12, tarea 12.2), propagado
+# a cada registro emitido durante su ejecución -- mismo mecanismo que
+# `request_id_var`, poblado por `sync/service.py::procesar_comando` antes de
+# invocar el handler y liberado (`reset`) al salir, para que un registro
+# emitido fuera de la ejecución de un comando no herede su contexto.
+comando_contexto_var: ContextVar[dict[str, str | None] | None] = ContextVar(
+    "comando_contexto", default=None
+)
+
 # Campos previstos por §17 que todo registro declara, aunque estén vacíos
 # hasta que exista sesión o comando asociado.
 _CAMPOS_DE_CONTEXTO_PREVISTOS = (
@@ -69,11 +78,29 @@ class RequestIdFilter(logging.Filter):
         return True
 
 
+class ComandoContextoFilter(logging.Filter):
+    """Inyecta el contexto del comando en curso (`operation_id`,
+    `organizacion_id`, `usuario_id`, `dispositivo_id`) en cada registro
+    emitido durante su ejecución (change 04, grupo 12, tarea 12.2), mismo
+    patrón que `RequestIdFilter`. No pisa un valor que el propio registro ya
+    trae explícito vía `extra=` (por ejemplo, `procesar_comando` ya lo pone
+    él mismo en su registro de cierre)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        contexto = comando_contexto_var.get()
+        if contexto is not None:
+            for campo in _CAMPOS_DE_CONTEXTO_PREVISTOS:
+                if not hasattr(record, campo):
+                    setattr(record, campo, contexto.get(campo))
+        return True
+
+
 def configurar_logging(nivel: str = "INFO") -> None:
     """Configura el logger raíz para emitir JSON estructurado por línea."""
     handler = logging.StreamHandler()
     handler.setFormatter(JsonFormatter())
     handler.addFilter(RequestIdFilter())
+    handler.addFilter(ComandoContextoFilter())
 
     root = logging.getLogger()
     root.handlers = [handler]

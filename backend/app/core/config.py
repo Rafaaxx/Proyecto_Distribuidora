@@ -18,6 +18,14 @@ class Settings(BaseSettings):
 
     database_url: str
     app_version: str = "dev"
+    # Versión mínima de aplicación admitida para confirmar operaciones
+    # nuevas (change 04, grupo 12, tarea 12.4, `design.md` D9, `02` §6.6):
+    # configuración de DESPLIEGUE, no por organización -- reemplaza la
+    # columna huérfana `configuracion_organizacion.app_version_minima`
+    # (eliminada en la migración de este grupo, nunca se leía). `None` por
+    # defecto: sin valor configurado, no restringe nada (ningún dispositivo
+    # queda "desactualizado").
+    app_version_minima: str | None = None
     log_level: str = "INFO"
     environment: str = "development"
 

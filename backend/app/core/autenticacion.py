@@ -41,6 +41,24 @@ class PermisoRequeridoError(DomainError):
     status_http = 403
 
 
+class OperationIdAusenteError(DomainError):
+    """Change 04, tarea 7.1 (`02` §6.2, SYN-01, TR-07): toda escritura de
+    negocio por REST DEBE llevar el encabezado `Operation-Id`. Se rechaza
+    antes de tocar la base -- esta dependencia corre antes que cualquier
+    handler."""
+
+    codigo = "OPERATION_ID_REQUERIDO"
+    status_http = 400
+
+
+class OperationIdInvalidoError(DomainError):
+    """Change 04, tarea 7.2 (SYN-06): el encabezado está presente pero no es
+    un identificador válido (UUID)."""
+
+    codigo = "OPERATION_ID_INVALIDO"
+    status_http = 400
+
+
 @dataclass(frozen=True)
 class ContextoAutenticado:
     usuario_id: UUID
@@ -92,6 +110,63 @@ def requiere_permiso(codigo_permiso: str) -> Callable[..., ContextoAutenticado]:
         if codigo_permiso not in permisos_del_usuario:
             raise PermisoRequeridoError(f"Falta el permiso {codigo_permiso}.")
         return contexto
+
+    _dependencia.permiso_requerido = codigo_permiso  # type: ignore[attr-defined]
+    return _dependencia
+
+
+@dataclass(frozen=True)
+class EntradaComandoOnline:
+    """Contexto autenticado más el `operation_id` ya validado (change 04,
+    `design.md` D4): lo que un endpoint de escritura necesita para armar su
+    `SobreComando` con `app.commands.sobre.construir_sobre_online` -- el
+    resto del sobre (tipo, versión, contenido, `occurred_at`, secuencia,
+    `app_version`) es propio de cada endpoint y no de esta dependencia."""
+
+    contexto: ContextoAutenticado
+    operation_id: UUID
+
+
+def requiere_comando_online(codigo_permiso: str) -> Callable[..., EntradaComandoOnline]:
+    """Fábrica de dependencia (tarea 7.3, `design.md` D4): compone
+    `requiere_permiso` (que ya resuelve `ContextoAutenticado` desde el
+    access token) con la exigencia y validación del encabezado
+    `Operation-Id`, sin reescribir la lógica de permisos existente.
+
+    Ausencia del encabezado -> `OperationIdAusenteError` (400, tarea 7.1).
+    Encabezado que no es un UUID válido -> `OperationIdInvalidoError` (400,
+    tarea 7.2). Ambas antes de que la petición toque la base: la dependencia
+    de permisos ya se resolvió, pero ningún handler llegó a ejecutarse.
+
+    Nota técnica: `contexto` usa `Depends(...)` como VALOR por defecto
+    (`= Depends(dependencia_permiso)`), no dentro de un `Annotated[...]`.
+    Con `from __future__ import annotations` (vigente en este módulo), toda
+    anotación se guarda como texto y FastAPI la evalúa recién al construir
+    las rutas -- si `Depends(requiere_permiso(codigo_permiso))` viviera
+    DENTRO de la anotación, esa evaluación tardía fallaría con
+    `NameError: codigo_permiso no está definido` (`codigo_permiso` es una
+    variable local de esta fábrica, invisible en los globals del módulo
+    donde se evalúa el texto). Los valores por defecto, en cambio, se
+    evalúan de inmediato -- por eso `dependencia_permiso` se resuelve acá
+    arriba, antes de definir `_dependencia`, capturado por clausura.
+    """
+    dependencia_permiso = requiere_permiso(codigo_permiso)
+
+    def _dependencia(
+        contexto: ContextoAutenticado = Depends(dependencia_permiso),  # noqa: B008
+        operation_id: Annotated[str | None, Header(alias="Operation-Id")] = None,
+    ) -> EntradaComandoOnline:
+        if operation_id is None:
+            raise OperationIdAusenteError(
+                "Falta el encabezado Operation-Id, obligatorio en toda escritura (SYN-01, TR-07)."
+            )
+        try:
+            operation_id_uuid = UUID(operation_id)
+        except ValueError as error:
+            raise OperationIdInvalidoError(
+                f"El encabezado Operation-Id no es un identificador válido: {operation_id!r}."
+            ) from error
+        return EntradaComandoOnline(contexto=contexto, operation_id=operation_id_uuid)
 
     _dependencia.permiso_requerido = codigo_permiso  # type: ignore[attr-defined]
     return _dependencia

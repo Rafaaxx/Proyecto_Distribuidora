@@ -82,6 +82,22 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("put", "/api/v1/identidad/roles/{rol_id}/permisos"),
         ("post", "/api/v1/identidad/usuarios/{usuario_id}/pin"),
         ("post", "/api/v1/identidad/usuarios/{usuario_id}/desbloqueo"),
+        # Change 04, grupo 8 (`sync/api.py`, tarea 8.6): a diferencia de las
+        # rutas de arriba, `POST /sync/comandos` no tiene un "recurso ajeno"
+        # por id -- `organizacion_id`/`usuario_id`/`dispositivo_id` salen
+        # siempre del token (nunca del cuerpo, `sobre.py`), así que no hay
+        # forma de pedir la cola de otra organización con esta ruta: el
+        # aislamiento es estructural, no una verificación en tiempo de
+        # ejecución sobre un id ajeno. Su prueba real de aislamiento no
+        # sigue el patrón de "recurso de otra organización -> 404" de las
+        # rutas de arriba, sino el de "cola ajena -> rechazada" (mismo
+        # principio, SEG-02/SEG-07): `test_bus_lote_sincronizacion.py::
+        # TestPropiedadDeLaCola` (otro usuario, otro dispositivo, sin
+        # sesión) y `test_cuarentena_comandos.py::
+        # test_la_cuarentena_de_otra_organizacion_no_es_alcanzable`
+        # (tarea 8.9, aislamiento de `comando_cuarentena` entre
+        # organizaciones).
+        ("post", "/api/v1/sync/comandos"),
     }
 )
 

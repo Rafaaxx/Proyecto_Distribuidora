@@ -33,7 +33,7 @@
           "sistema"
         ],
         "summary": "Version",
-        "description": "Devuelve la versión de la aplicación en ejecución (`02` §11).",
+        "description": "Devuelve la versión de la aplicación en ejecución y la versión mínima\nadmitida (`02` §11, `02` §6.6, tarea 12.4).",
         "operationId": "version_api_v1_version_get",
         "responses": {
           "200": {
@@ -251,7 +251,7 @@
           "identidad"
         ],
         "summary": "Revocar Dispositivo",
-        "description": "`revocar_dispositivo` del servicio devuelve `None` si `dispositivo_id`\nno pertenece a `contexto.organizacion_id` (INV-21): acá se traduce en\n`RecursoNoEncontradoError` (404, SEG-07), igual que el resto de las\nrutas de este archivo -- nunca un 204 silencioso, que dejaría creer que\nla revocación tuvo efecto sobre un recurso ajeno cuando en realidad no\ntocó nada (spec `dispositivos`, escenario \"Revocar un dispositivo de\notra organización no lo encuentra\").",
+        "description": "Change 04, grupo 11 (`design.md` D7): delega en el bus de comandos\n(`DISPOSITIVO_REVOCAR`, `identidad/commands.py`). `RecursoNoEncontradoError`\n(404, SEG-07) si el handler rechaza porque `dispositivo_id` no pertenece\na `entrada.contexto.organizacion_id` (INV-21) -- nunca un 204 silencioso\n(spec `dispositivos`, escenario \"Revocar un dispositivo de otra\norganización no lo encuentra\").",
         "operationId": "revocar_dispositivo_api_v1_identidad_dispositivos__dispositivo_id__delete",
         "parameters": [
           {
@@ -262,6 +262,22 @@
               "type": "string",
               "format": "uuid",
               "title": "Dispositivo Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
             }
           },
           {
@@ -356,9 +372,25 @@
           "identidad"
         ],
         "summary": "Crear Usuario",
-        "description": "Escenario \"Un alta de usuario queda auditada\" (`identidad/service.py\n::crear_usuario`, tarea 8.9): sin envolver en bus de comandos todavía\n(`design.md` D6, deuda nominada del change 04). `RecursoNoEncontradoError`\nsi `rol_id` no pertenece a `contexto.organizacion_id` (SEG-07, INV-21,\ntarea 12.2).",
+        "description": "Change 04, grupo 11 (`design.md` D7): delega en el bus de comandos\n(`USUARIO_CREAR`, `identidad/commands.py`) en vez de llamar directo a\n`identidad_service.crear_usuario` (deuda nominada por el change 03, D6).\n`RecursoNoEncontradoError` si `rol_id` no pertenece a\n`entrada.contexto.organizacion_id` (SEG-07, INV-21, tarea 12.2). Un\nreenvío idéntico (mismo `Operation-Id`, mismo contenido) resuelve el\nmismo usuario ya creado -- se relee de la base para que la respuesta\nsea el estado real, no un valor cacheado del primer intento.",
         "operationId": "crear_usuario_api_v1_identidad_usuarios_post",
         "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -486,7 +518,7 @@
           "identidad"
         ],
         "summary": "Rotar Pin Autorizacion",
-        "description": "Escenarios \"Rotar el PIN invalida el anterior\" y \"La rotación queda\nauditada sin exponer el PIN\" (grupo 9). `RecursoNoEncontradoError` si\n`usuario_id` no pertenece a `contexto.organizacion_id` (SEG-07, INV-21).\nEl PIN nunca aparece en la respuesta (`status_code=204`, sin cuerpo).",
+        "description": "Change 04, grupo 11 (`design.md` D7): delega en el bus de comandos\n(`PIN_AUTORIZACION_ROTAR`, `identidad/commands.py`). El PIN viaja en el\ncontenido del comando como texto (igual que en el cuerpo HTTP que ya\nrecibía) -- `identidad_commands.PinAutorizacionRotarContenidoV1` lo\nenvuelve en `SecretStr` recién al validarlo contra el esquema\n(`registro.validar_contenido`); `RecursoNoEncontradoError` si\n`usuario_id` no pertenece a `entrada.contexto.organizacion_id` (SEG-07,\nINV-21). El PIN nunca aparece en la respuesta (`status_code=204`, sin\ncuerpo).",
         "operationId": "rotar_pin_autorizacion_api_v1_identidad_usuarios__usuario_id__pin_post",
         "parameters": [
           {
@@ -497,6 +529,22 @@
               "type": "string",
               "format": "uuid",
               "title": "Usuario Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
             }
           },
           {
@@ -582,6 +630,66 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sync/comandos": {
+      "post": {
+        "tags": [
+          "sync"
+        ],
+        "summary": "Sincronizar Lote",
+        "description": "Procesa el lote de la cola del dispositivo (`02` §6.4, tareas 8.1 a\n8.10). `organizacion_id`, `usuario_id` y `dispositivo_id` de la sesión\nvienen siempre del token (`contexto`), nunca del cuerpo -- cada ítem\ndeclara los suyos solo para que `sync_service.procesar_lote` pueda\nrechazar una cola ajena (`ColaAjenaError`) en vez de reatribuirla en\nsilencio.",
+        "operationId": "sincronizar_lote_api_v1_sync_comandos_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoteComandosRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoteComandosResponse"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -716,6 +824,85 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "ItemLoteComandoRequest": {
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Operation Id"
+          },
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "modo": {
+            "type": "string",
+            "enum": [
+              "ONLINE",
+              "OFFLINE"
+            ],
+            "title": "Modo"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "dispositivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Dispositivo Id"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "secuencia": {
+            "type": "integer",
+            "title": "Secuencia"
+          },
+          "app_version": {
+            "type": "string",
+            "title": "App Version"
+          },
+          "contenido": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Contenido"
+          },
+          "jornada_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jornada Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "operation_id",
+          "tipo",
+          "version",
+          "modo",
+          "usuario_id",
+          "dispositivo_id",
+          "occurred_at",
+          "secuencia",
+          "app_version"
+        ],
+        "title": "ItemLoteComandoRequest",
+        "description": "Un comando de la cola local (`02` §13.2 `cola`), tal como el\ndispositivo lo generó. `usuario_id`/`dispositivo_id` son los que\ndeclaró al generarlo -- el servidor los compara contra la sesión que\nsincroniza (`ColaAjenaError`, tarea 8.5), nunca los usa tal cual para\nconstruir el sobre sin esa verificación."
+      },
       "LoginRequest": {
         "properties": {
           "organizacion_slug": {
@@ -750,6 +937,37 @@
         ],
         "title": "LoginRequest"
       },
+      "LoteComandosRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ItemLoteComandoRequest"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "LoteComandosRequest",
+        "description": "`02` §6.4: hasta 50 comandos por lote; un lote vacío es válido\n(tarea 8.2). `max_length=50` rechaza un lote de 51 con un 422 de\nPydantic ANTES de que la ruta se ejecute -- ninguno de sus comandos\nllega a procesarse, que es exactamente lo que pide el escenario \"Un\nlote que excede el máximo se rechaza entero\"."
+      },
+      "LoteComandosResponse": {
+        "properties": {
+          "resultados": {
+            "items": {
+              "$ref": "#/components/schemas/ResultadoItemLoteResponse"
+            },
+            "type": "array",
+            "title": "Resultados"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resultados"
+        ],
+        "title": "LoteComandosResponse"
+      },
       "RefreshRequest": {
         "properties": {
           "dispositivo_id": {
@@ -763,6 +981,50 @@
           "dispositivo_id"
         ],
         "title": "RefreshRequest"
+      },
+      "ResultadoItemLoteResponse": {
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Operation Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "resultado": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resultado"
+          },
+          "error_codigo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Codigo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "operation_id",
+          "estado",
+          "resultado",
+          "error_codigo"
+        ],
+        "title": "ResultadoItemLoteResponse"
       },
       "RolResponse": {
         "properties": {
@@ -933,6 +1195,17 @@
           "version": {
             "type": "string",
             "title": "Version"
+          },
+          "app_version_minima": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Version Minima"
           }
         },
         "type": "object",

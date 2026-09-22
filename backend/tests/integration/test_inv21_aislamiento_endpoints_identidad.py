@@ -186,7 +186,7 @@ class TestAislamientoDeDispositivos:
 
         respuesta = cliente.delete(
             f"/api/v1/identidad/dispositivos/{dispositivo_a.id}",
-            headers={"Authorization": f"Bearer {access_token}"},
+            headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
         )
 
         assert respuesta.status_code == 404
@@ -256,7 +256,7 @@ class TestAislamientoDeUsuarios:
                 "password": "otra-contrasena-larga-456",
                 "rol_id": str(rol_de_a.id),
             },
-            headers={"Authorization": f"Bearer {access_token}"},
+            headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
         )
 
         assert respuesta.status_code == 404
@@ -324,7 +324,7 @@ class TestLaFaltaDePermisoSeDistingueDeUnRecursoAjeno:
 
         respuesta = cliente.delete(
             f"/api/v1/identidad/dispositivos/{dispositivo_a.id}",
-            headers={"Authorization": f"Bearer {access_token}"},
+            headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
         )
 
         assert respuesta.status_code == 404

@@ -166,10 +166,10 @@ def _sembrar_datos_representativos(database_url: str) -> None:
                     "INSERT INTO auditoria "
                     "(id, organizacion_id, usuario_id, dispositivo_id, accion, entidad, "
                     "entidad_id, antes, despues, motivo_id, observacion, autorizador_id, "
-                    "operation_id, occurred_at, registered_at) "
+                    "operation_id, occurred_at, registered_at, origen) "
                     "VALUES (:id, :organizacion_id, :usuario_id, :dispositivo_id, "
                     "'INICIO_SESION', 'usuario', NULL, NULL, NULL, NULL, NULL, NULL, NULL, "
-                    ":momento, :momento)"
+                    ":momento, :momento, 'SISTEMA')"
                 ),
                 {
                     "id": uuid4(),
@@ -185,6 +185,85 @@ def _sembrar_datos_representativos(database_url: str) -> None:
                     "VALUES (:id, :usuario_id, '127.0.0.1', true, :momento)"
                 ),
                 {"id": uuid4(), "usuario_id": usuario_id, "momento": momento},
+            )
+
+            # --- change 04 (grupo 2): comando, comando_cuarentena,
+            # observacion, y un segundo registro de auditoria de origen
+            # COMANDO -- la migracion queda ejercitada con datos de AMBOS
+            # origenes (tarea 2.7, `04` §2.1 punto 4), no solo el SISTEMA
+            # del login de arriba.
+            comando_id = uuid4()
+            comando_operation_id = uuid4()
+            conexion.execute(
+                text(
+                    "INSERT INTO comando "
+                    "(id, organizacion_id, operation_id, tipo, version, modo, usuario_id, "
+                    "dispositivo_id, jornada_id, secuencia, huella, app_version, estado, "
+                    "resultado, error_codigo, occurred_at, registered_at) "
+                    "VALUES (:id, :organizacion_id, :operation_id, 'PRUEBA_14_4', 1, 'ONLINE', "
+                    ":usuario_id, :dispositivo_id, NULL, 1, 'huella-de-prueba-14-4', '1.0.0', "
+                    "'ACEPTADO', NULL, NULL, :momento, :momento)"
+                ),
+                {
+                    "id": comando_id,
+                    "organizacion_id": organizacion_id,
+                    "operation_id": comando_operation_id,
+                    "usuario_id": usuario_id,
+                    "dispositivo_id": dispositivo_id,
+                    "momento": momento,
+                },
+            )
+            conexion.execute(
+                text(
+                    "INSERT INTO comando_cuarentena "
+                    "(id, organizacion_id, dispositivo_id, usuario_id, operation_id, tipo, "
+                    "contenido, motivo, recibido_en, revisado_en, revisado_por_id) "
+                    "VALUES (:id, :organizacion_id, :dispositivo_id, :usuario_id, "
+                    ":operation_id, 'PRUEBA_CUARENTENA_14_4', '{}'::jsonb, "
+                    "'dispositivo revocado (prueba 14.4)', :momento, NULL, NULL)"
+                ),
+                {
+                    "id": uuid4(),
+                    "organizacion_id": organizacion_id,
+                    "dispositivo_id": dispositivo_id,
+                    "usuario_id": usuario_id,
+                    "operation_id": uuid4(),
+                    "momento": momento,
+                },
+            )
+            conexion.execute(
+                text(
+                    "INSERT INTO observacion "
+                    "(id, organizacion_id, comando_id, operacion_tipo, operacion_id, codigo, "
+                    "detalle, estado, resuelto_por_id, resuelto_en, comentario) "
+                    "VALUES (:id, :organizacion_id, :comando_id, 'VENTA', :operacion_id, "
+                    "'STOCK_NEGATIVO', NULL, 'PENDIENTE', NULL, NULL, NULL)"
+                ),
+                {
+                    "id": uuid4(),
+                    "organizacion_id": organizacion_id,
+                    "comando_id": comando_id,
+                    "operacion_id": uuid4(),
+                },
+            )
+            conexion.execute(
+                text(
+                    "INSERT INTO auditoria "
+                    "(id, organizacion_id, usuario_id, dispositivo_id, accion, entidad, "
+                    "entidad_id, antes, despues, motivo_id, observacion, autorizador_id, "
+                    "operation_id, occurred_at, registered_at, origen) "
+                    "VALUES (:id, :organizacion_id, :usuario_id, :dispositivo_id, "
+                    "'PRUEBA_COMANDO_14_4', 'comando', NULL, NULL, NULL, NULL, NULL, NULL, "
+                    ":operation_id, :momento, :momento, 'COMANDO')"
+                ),
+                {
+                    "id": uuid4(),
+                    "organizacion_id": organizacion_id,
+                    "usuario_id": usuario_id,
+                    "dispositivo_id": dispositivo_id,
+                    "operation_id": comando_operation_id,
+                    "momento": momento,
+                },
             )
     finally:
         engine.dispose()
@@ -238,6 +317,109 @@ def test_downgrade_y_upgrade_corren_limpios_con_datos_representativos(
     # Deja la base en `head`, compartida con el resto de la sesión de pytest.
     resultado_up_final = _alembic("upgrade", "head", database_url=database_url)
     assert resultado_up_final.returncode == 0, resultado_up_final.stderr
+
+
+def test_downgrade_y_upgrade_de_origen_no_pierde_ni_altera_auditoria_previa_al_bus(
+    database_url: str,
+) -> None:
+    """Tarea 10.4 (change 04, grupo 10), escenario "Los registros de
+    auditoría anteriores al bus no se pierden": la migración
+    `f6a7b8c9d0e1` agrega `auditoria.origen` (`server_default` `'SISTEMA'`,
+    con relleno explícito de las filas existentes) y sus dos restricciones
+    de verificación. Se siembra una fila de auditoría con el esquema DE
+    ANTES de esta migración (revisión `e5f6a7b8c9d0`, change 03 -- sin
+    `origen`, como cualquier `INICIO_SESION` histórico) y se ejerce el
+    ciclo `upgrade head` -> `downgrade` a esa revisión anterior (no a
+    `base`: acá interesa exclusivamente esta migración, no las de las
+    tablas del bus) -> `upgrade head` de nuevo. La fila original sigue
+    intacta después de cada paso, y termina con `origen='SISTEMA'` y
+    `operation_id=NULL` -- nunca `'COMANDO'`, que exigiría un
+    `operation_id` que este registro histórico nunca tuvo."""
+    _crear_roles_de_base(database_url)
+
+    resultado_up_previo = _alembic("upgrade", "e5f6a7b8c9d0", database_url=database_url)
+    assert resultado_up_previo.returncode == 0, resultado_up_previo.stderr
+
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    momento = datetime(2026, 1, 1, tzinfo=UTC)
+    organizacion_id = uuid4()
+    auditoria_id = uuid4()
+
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as conexion:
+            conexion.execute(
+                text(
+                    "INSERT INTO organizacion "
+                    "(id, nombre, slug, cuit, moneda, zona_horaria, estado, "
+                    "creado_en, actualizado_en, actualizado_por_id) "
+                    "VALUES (:id, 'Org 10.4', :slug, NULL, 'ARS', "
+                    "'America/Argentina/Mendoza', 'ACTIVA', :momento, :momento, NULL)"
+                ),
+                {"id": organizacion_id, "slug": f"org-104-{organizacion_id}", "momento": momento},
+            )
+            conexion.execute(
+                text(
+                    "INSERT INTO auditoria "
+                    "(id, organizacion_id, usuario_id, dispositivo_id, accion, entidad, "
+                    "entidad_id, antes, despues, motivo_id, observacion, autorizador_id, "
+                    "operation_id, occurred_at, registered_at) "
+                    "VALUES (:id, :organizacion_id, NULL, NULL, 'INICIO_SESION', 'usuario', "
+                    "NULL, NULL, NULL, NULL, NULL, NULL, NULL, :momento, :momento)"
+                ),
+                {"id": auditoria_id, "organizacion_id": organizacion_id, "momento": momento},
+            )
+    finally:
+        engine.dispose()
+
+    def _leer_fila() -> object:
+        engine_local = create_engine(database_url)
+        try:
+            with engine_local.connect() as conexion:
+                return conexion.execute(
+                    text("SELECT accion, origen, operation_id FROM auditoria WHERE id = :id"),
+                    {"id": auditoria_id},
+                ).one()
+        finally:
+            engine_local.dispose()
+
+    resultado_up = _alembic("upgrade", "head", database_url=database_url)
+    assert resultado_up.returncode == 0, resultado_up.stderr
+
+    fila = _leer_fila()
+    assert fila.accion == "INICIO_SESION"
+    assert fila.origen == "SISTEMA"
+    assert fila.operation_id is None
+
+    resultado_down = _alembic("downgrade", "e5f6a7b8c9d0", database_url=database_url)
+    assert resultado_down.returncode == 0, resultado_down.stderr
+
+    # Sin la columna `origen` (recién eliminada por el downgrade), la fila
+    # sigue existiendo con sus columnas originales intactas.
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as conexion:
+            fila_sin_origen = conexion.execute(
+                text("SELECT accion, operation_id FROM auditoria WHERE id = :id"),
+                {"id": auditoria_id},
+            ).one()
+    finally:
+        engine.dispose()
+    assert fila_sin_origen.accion == "INICIO_SESION"
+    assert fila_sin_origen.operation_id is None
+
+    resultado_up_2 = _alembic("upgrade", "head", database_url=database_url)
+    assert resultado_up_2.returncode == 0, resultado_up_2.stderr
+
+    fila_final = _leer_fila()
+    assert fila_final.accion == "INICIO_SESION"
+    assert fila_final.origen == "SISTEMA"
+    assert fila_final.operation_id is None
+
+    # Deja la base en `head` (docstring del módulo: es compartida con el
+    # resto de la sesión de pytest).
 
 
 def test_alembic_corre_como_app_migrations_no_como_app_runtime(database_url: str) -> None:

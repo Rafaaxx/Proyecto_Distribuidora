@@ -79,7 +79,6 @@ class DatosConfiguracionInicial:
     permite_consumidor_final: bool | None = None
     cliente_consumidor_final_id: UUID | None = None
     modalidad_iva_default: str | None = None
-    app_version_minima: str | None = None
     desvio_reloj_max_segundos: int | None = None
 
 
@@ -137,7 +136,6 @@ def crear_organizacion_con_configuracion(
         permite_consumidor_final=configuracion.permite_consumidor_final,
         cliente_consumidor_final_id=configuracion.cliente_consumidor_final_id,
         modalidad_iva_default=configuracion.modalidad_iva_default,
-        app_version_minima=configuracion.app_version_minima,
         desvio_reloj_max_segundos=configuracion.desvio_reloj_max_segundos,
         momento=momento,
     )
@@ -196,6 +194,7 @@ def registrar_auditoria(
     observacion: str | None = None,
     autorizador_id: UUID | None = None,
     operation_id: UUID | None = None,
+    origen: str = "SISTEMA",
 ) -> Auditoria:
     """Registra un evento de auditoría (AUD-02, tarea 8.1).
 
@@ -207,6 +206,13 @@ def registrar_auditoria(
 
     `antes`/`despues` quedan `None` si no se pasan: nunca se inventa un
     diccionario vacío para un evento sin cambio de valor.
+
+    `origen` (change 04, tarea 10.5, D2): `'COMANDO'` (con `operation_id`)
+    para lo que sale del bus de comandos, `'SISTEMA'` (sin `operation_id`)
+    para todo lo demás. Login y refresh (`iniciar_sesion`/`renovar_sesion`,
+    más abajo) lo declaran explícito; el default queda para el resto de
+    las escrituras de este módulo que todavía no pasan por el bus
+    (`design.md` D6).
     """
     return repository.crear_auditoria(
         organizacion_id,
@@ -225,6 +231,7 @@ def registrar_auditoria(
         observacion=observacion,
         autorizador_id=autorizador_id,
         operation_id=operation_id,
+        origen=origen,
     )
 
 
@@ -250,6 +257,7 @@ def crear_usuario(
     actor_id: UUID,
     dispositivo_id_actor: UUID | None = None,
     tope_descuento_override: object | None = None,
+    auditar: bool = True,
 ) -> Usuario | None:
     """Da de alta un usuario (tarea 8.9). `rol_id` es obligatorio: un
     usuario no puede quedar sin rol (`03` §4). La contraseña se deriva con
@@ -282,17 +290,18 @@ def crear_usuario(
         tope_descuento_override=tope_descuento_override,  # type: ignore[arg-type]
         actualizado_por_id=actor_id,
     )
-    registrar_auditoria(
-        organizacion_id,
-        sesion,
-        reloj,
-        accion="ALTA_USUARIO",
-        entidad="usuario",
-        entidad_id=fila.id,
-        ocurrido_en=momento,
-        usuario_id=actor_id,
-        dispositivo_id=dispositivo_id_actor,
-    )
+    if auditar:
+        registrar_auditoria(
+            organizacion_id,
+            sesion,
+            reloj,
+            accion="ALTA_USUARIO",
+            entidad="usuario",
+            entidad_id=fila.id,
+            ocurrido_en=momento,
+            usuario_id=actor_id,
+            dispositivo_id=dispositivo_id_actor,
+        )
     return fila
 
 
@@ -305,6 +314,7 @@ def cambiar_composicion_rol(
     permisos_nuevos: frozenset[str],
     actor_id: UUID,
     dispositivo_id_actor: UUID | None = None,
+    auditar: bool = True,
 ) -> Rol | None:
     """Reemplaza el conjunto de permisos de `rol_id` por `permisos_nuevos`
     (tarea 8.9). Valida que todos los códigos existan en el catálogo global
@@ -341,19 +351,20 @@ def cambiar_composicion_rol(
             organizacion_id, sesion, rol_id=rol_id, permiso_codigo=codigo
         )
 
-    registrar_auditoria(
-        organizacion_id,
-        sesion,
-        reloj,
-        accion="CAMBIAR_COMPOSICION_ROL",
-        entidad="rol",
-        entidad_id=rol_id,
-        ocurrido_en=momento,
-        usuario_id=actor_id,
-        dispositivo_id=dispositivo_id_actor,
-        antes={"permisos": sorted(permisos_actuales)},
-        despues={"permisos": sorted(permisos_nuevos)},
-    )
+    if auditar:
+        registrar_auditoria(
+            organizacion_id,
+            sesion,
+            reloj,
+            accion="CAMBIAR_COMPOSICION_ROL",
+            entidad="rol",
+            entidad_id=rol_id,
+            ocurrido_en=momento,
+            usuario_id=actor_id,
+            dispositivo_id=dispositivo_id_actor,
+            antes={"permisos": sorted(permisos_actuales)},
+            despues={"permisos": sorted(permisos_nuevos)},
+        )
 
     perdio_autorizacion = rol_confiere_autorizacion_excepcion(
         permisos_actuales
@@ -514,6 +525,17 @@ def listar_dispositivos(organizacion_id: UUID, sesion: Session) -> list[Disposit
     return repository.listar_dispositivos(organizacion_id, sesion)
 
 
+def obtener_dispositivo(
+    organizacion_id: UUID, sesion: Session, dispositivo_id: UUID
+) -> Dispositivo | None:
+    """Lectura pública de un dispositivo por su clave compuesta (change 04,
+    grupo 8, tarea 8.7): `sync/service.py` la usa para saber si el
+    dispositivo que envía un lote está `REVOCADO` (SYN-06), sin importar el
+    modelo ni el repositorio de `identidad` directamente (`CLAUDE.md` §4,
+    contrato `sync-solo-service`)."""
+    return repository.obtener_dispositivo_por_id(organizacion_id, dispositivo_id, sesion)
+
+
 def revocar_dispositivo(
     organizacion_id: UUID,
     sesion: Session,
@@ -522,6 +544,7 @@ def revocar_dispositivo(
     dispositivo_id: UUID,
     actor_id: UUID,
     dispositivo_id_actor: UUID | None = None,
+    auditar: bool = True,
 ) -> Dispositivo | None:
     """Revoca un dispositivo e invalida sus refresh tokens (tarea 8.10).
     Devuelve `None` si `dispositivo_id` no pertenece a `organizacion_id`
@@ -553,17 +576,18 @@ def revocar_dispositivo(
         momento=momento,
         motivo="DISPOSITIVO_REVOCADO",
     )
-    registrar_auditoria(
-        organizacion_id,
-        sesion,
-        reloj,
-        accion="REVOCAR_DISPOSITIVO",
-        entidad="dispositivo",
-        entidad_id=dispositivo_id,
-        ocurrido_en=momento,
-        usuario_id=actor_id,
-        dispositivo_id=dispositivo_id_actor,
-    )
+    if auditar:
+        registrar_auditoria(
+            organizacion_id,
+            sesion,
+            reloj,
+            accion="REVOCAR_DISPOSITIVO",
+            entidad="dispositivo",
+            entidad_id=dispositivo_id,
+            ocurrido_en=momento,
+            usuario_id=actor_id,
+            dispositivo_id=dispositivo_id_actor,
+        )
     return dispositivo
 
 
@@ -669,6 +693,7 @@ def establecer_pin_autorizacion(
     usuario_id: UUID,
     pin: str,
     actor_id: UUID,
+    auditar: bool = True,
 ) -> Usuario | None:
     """Define o rota el PIN de autorización de `usuario_id` (tareas 9.1 y
     9.2). Devuelve `None` si `usuario_id` no pertenece a `organizacion_id`
@@ -703,16 +728,17 @@ def establecer_pin_autorizacion(
     usuario.pin_autorizacion_iteraciones = iteraciones
     sesion.flush()
 
-    registrar_auditoria(
-        organizacion_id,
-        sesion,
-        reloj,
-        accion=accion,
-        entidad="usuario",
-        entidad_id=usuario_id,
-        ocurrido_en=momento,
-        usuario_id=actor_id,
-    )
+    if auditar:
+        registrar_auditoria(
+            organizacion_id,
+            sesion,
+            reloj,
+            accion=accion,
+            entidad="usuario",
+            entidad_id=usuario_id,
+            ocurrido_en=momento,
+            usuario_id=actor_id,
+        )
     return usuario
 
 
@@ -761,6 +787,7 @@ def desbloquear_usuario(
     *,
     usuario_id: UUID,
     actor_id: UUID,
+    auditar: bool = True,
 ) -> Usuario | None:
     """Desbloqueo manual de un usuario bloqueado por intentos (tarea 11.4,
     `ADR-018`: "un usuario con ADMIN_USUARIOS puede desbloquear manualmente
@@ -794,16 +821,17 @@ def desbloquear_usuario(
         exito=True,
         momento=momento,
     )
-    registrar_auditoria(
-        organizacion_id,
-        sesion,
-        reloj,
-        accion="DESBLOQUEO_MANUAL_LOGIN",
-        entidad="usuario",
-        entidad_id=usuario_id,
-        ocurrido_en=momento,
-        usuario_id=actor_id,
-    )
+    if auditar:
+        registrar_auditoria(
+            organizacion_id,
+            sesion,
+            reloj,
+            accion="DESBLOQUEO_MANUAL_LOGIN",
+            entidad="usuario",
+            entidad_id=usuario_id,
+            ocurrido_en=momento,
+            usuario_id=actor_id,
+        )
     return usuario
 
 
@@ -902,6 +930,7 @@ def iniciar_sesion(
             entidad="usuario",
             entidad_id=usuario.id,
             ocurrido_en=momento,
+            origen="SISTEMA",
             usuario_id=usuario.id,
         )
         desbloqueo_en = _desbloqueo_por_usuario(
@@ -934,6 +963,7 @@ def iniciar_sesion(
             entidad_id=usuario.id if usuario is not None else None,
             ocurrido_en=momento,
             usuario_id=usuario.id if usuario is not None else None,
+            origen="SISTEMA",
         )
         raise CredencialesInvalidasError("Usuario o contraseña incorrectos.")
     assert usuario is not None  # para mypy: ya lo verificó `credenciales_validas`.
@@ -949,6 +979,7 @@ def iniciar_sesion(
             entidad_id=usuario.id,
             ocurrido_en=momento,
             usuario_id=usuario.id,
+            origen="SISTEMA",
         )
         raise CredencialesInvalidasError("Usuario o contraseña incorrectos.")
 
@@ -967,6 +998,7 @@ def iniciar_sesion(
             ocurrido_en=momento,
             usuario_id=usuario.id,
             dispositivo_id=dispositivo_id,
+            origen="SISTEMA",
         )
         raise CredencialesInvalidasError("Usuario o contraseña incorrectos.")
 
@@ -1009,6 +1041,7 @@ def iniciar_sesion(
         ocurrido_en=momento,
         usuario_id=usuario.id,
         dispositivo_id=dispositivo.id,
+        origen="SISTEMA",
     )
 
     return ResultadoLogin(
@@ -1074,6 +1107,7 @@ def renovar_sesion(
             usuario_id=fila.usuario_id,
             dispositivo_id=fila.dispositivo_id,
             observacion="Reuso de refresh token detectado: familia revocada.",
+            origen="SISTEMA",
         )
         raise RefreshTokenInvalidoError("El refresh token no es válido.")
 

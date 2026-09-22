@@ -54,6 +54,16 @@ RUTAS_EXENTAS_DE_PERMISO = frozenset(
         ("POST", "/api/v1/auth/login"),
         ("POST", "/api/v1/auth/refresh"),
         ("POST", "/api/v1/auth/logout"),
+        # Change 04, grupo 8, tarea 8.6 (`sync/api.py`): un lote trae
+        # comandos de tipos distintos, cada uno con su propio permiso de
+        # negocio -- no hay UN permiso fijo que declarar en esta ruta.
+        # `requiere_permiso` exige exactamente uno por ruta (`design.md`
+        # D5); acá la validación de permiso corre por comando, dentro del
+        # bus, a través del handler resuelto por `app.commands.registro`
+        # (SEG-06, `02` §6.3 paso 4), no de esta ruta. Sí exige sesión
+        # (`Depends(obtener_contexto_autenticado)`, ver docstring de
+        # `sync/api.py`).
+        ("POST", "/api/v1/sync/comandos"),
     }
 )
 

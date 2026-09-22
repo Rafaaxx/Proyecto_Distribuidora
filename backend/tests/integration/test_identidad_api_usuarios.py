@@ -139,7 +139,7 @@ class TestCrearUsuario:
                 "password": "otra-contrasena-larga-456",
                 "rol_id": str(rol.id),
             },
-            headers={"Authorization": f"Bearer {access_token}"},
+            headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
         )
 
         assert respuesta.status_code == 201
@@ -234,7 +234,7 @@ class TestComposicionDeRol:
         respuesta = cliente.put(
             f"/api/v1/identidad/roles/{rol.id}/permisos",
             json={"permisos": ["GESTIONAR_CLIENTES", "VER_REPORTES"]},
-            headers={"Authorization": f"Bearer {access_token}"},
+            headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
         )
 
         assert respuesta.status_code == 200
@@ -264,7 +264,7 @@ class TestComposicionDeRol:
         respuesta = cliente.put(
             f"/api/v1/identidad/roles/{rol_ajeno.id}/permisos",
             json={"permisos": ["GESTIONAR_CLIENTES"]},
-            headers={"Authorization": f"Bearer {access_token}"},
+            headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
         )
 
         assert respuesta.status_code == 404
@@ -307,7 +307,7 @@ class TestRotacionDePin:
         respuesta = cliente.post(
             f"/api/v1/identidad/usuarios/{usuario_supervisor.id}/pin",
             json={"pin": "654321"},
-            headers={"Authorization": f"Bearer {access_token}"},
+            headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
         )
 
         assert respuesta.status_code == 204
@@ -357,7 +357,7 @@ class TestRotacionDePin:
         respuesta = cliente.post(
             f"/api/v1/identidad/usuarios/{usuario_supervisor_a.id}/pin",
             json={"pin": "654321"},
-            headers={"Authorization": f"Bearer {access_token}"},
+            headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
         )
 
         assert respuesta.status_code == 404
@@ -381,7 +381,7 @@ class TestDesbloqueoManualDeLogin:
 
         respuesta = cliente.post(
             f"/api/v1/identidad/usuarios/{usuario_bloqueado.id}/desbloqueo",
-            headers={"Authorization": f"Bearer {access_token}"},
+            headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
         )
 
         assert respuesta.status_code == 204
@@ -422,7 +422,7 @@ class TestDesbloqueoManualDeLogin:
 
         respuesta = cliente.post(
             f"/api/v1/identidad/usuarios/{usuario_a.id}/desbloqueo",
-            headers={"Authorization": f"Bearer {access_token}"},
+            headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
         )
 
         assert respuesta.status_code == 404

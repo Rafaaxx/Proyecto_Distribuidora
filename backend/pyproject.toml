@@ -55,6 +55,14 @@ ignore_imports = [
     "app.modules.configuracion.models -> sqlalchemy",
     "app.modules.configuracion.repository -> sqlalchemy",
     "app.modules.configuracion.service -> sqlalchemy",
+    "app.modules.sync.models -> app.core.db",
+    "app.modules.sync.models -> sqlalchemy",
+    "app.modules.sync.repository -> sqlalchemy",
+    "app.modules.sync.service -> sqlalchemy",
+    "app.modules.sync.api -> fastapi",
+    "app.modules.sync.api -> sqlalchemy",
+    "app.modules.sync.api -> app.api_v1.dependencias",
+    "app.modules.sync.api -> app.core.autenticacion",
 ]
 
 [[tool.importlinter.contracts]]
@@ -68,3 +76,60 @@ name = "identidad no importa modelos ni repositorio de configuracion"
 type = "forbidden"
 source_modules = ["app.modules.identidad"]
 forbidden_modules = ["app.modules.configuracion.models", "app.modules.configuracion.repository"]
+
+# Change 04 (`design.md` D3, `02` §5.3): límites del bus de comandos. El
+# mecanismo (`app/commands/`) no conoce los módulos que lo usan; el dominio
+# de cada módulo no conoce el bus que lo invoca; y `sync/` (dueño de
+# `comando`, `comando_cuarentena` y `observacion`, grupo 8 de este change)
+# alcanza a los demás módulos únicamente por su `service.py`, nunca por sus
+# modelos, repositorio, api o dominio -- mismo criterio que ya separa
+# `identidad` de `configuracion` arriba. `app/modules/sync/__init__.py`
+# existe desde este change (grupo 1) como paquete vacío para que este
+# contrato pueda declararse: import-linter no admite un contrato sobre un
+# módulo que no existe todavía. Cuando el grupo 8 agregue módulos nuevos con
+# comandos, sus `models`/`repository`/`api`/`domain` se suman a
+# `forbidden_modules` de la misma manera.
+[[tool.importlinter.contracts]]
+id = "commands-no-modulos"
+name = "commands no importa modulos de negocio"
+type = "forbidden"
+source_modules = ["app.commands"]
+forbidden_modules = ["app.modules"]
+
+[[tool.importlinter.contracts]]
+id = "domain-no-commands"
+name = "domain no importa el bus de comandos"
+type = "forbidden"
+source_modules = ["app.modules.identidad.domain", "app.modules.configuracion.domain"]
+forbidden_modules = ["app.commands"]
+
+[[tool.importlinter.contracts]]
+id = "sync-solo-service"
+name = "sync solo alcanza a los demas modulos por su service.py"
+type = "forbidden"
+source_modules = ["app.modules.sync"]
+forbidden_modules = [
+    "app.modules.identidad.models",
+    "app.modules.identidad.repository",
+    "app.modules.identidad.api",
+    "app.modules.identidad.domain",
+    "app.modules.configuracion.models",
+    "app.modules.configuracion.repository",
+    "app.modules.configuracion.api",
+    "app.modules.configuracion.domain",
+]
+# `allow_indirect_imports`: descubrimiento del grupo 8 (change 04, tarea
+# 8.7/8.8). `sync/service.py` importa `identidad.service` (permitido: es
+# exactamente el patrón que este contrato quiere exigir -- "solo por su
+# service.py"), pero `identidad/service.py` a su vez importa
+# `identidad.repository`, `identidad.models` y `identidad.domain.*` para
+# implementarse a sí mismo. Sin este campo, `import-linter` (tipo
+# `forbidden`) recorre el grafo TRANSITIVAMENTE y marca esas rutas
+# indirectas como violaciones, aunque `sync` nunca las importa
+# directamente -- lo cual haría estructuralmente imposible cumplir la regla
+# "un módulo usa a otro solo por su service.py" (`CLAUDE.md` §4) para
+# CUALQUIER módulo, porque todo `service.py` importa su propio
+# `repository`/`models`/`domain`. `allow_indirect_imports = "true"` restringe
+# el contrato a lo que de verdad se quiere prohibir: que `sync` importe esos
+# módulos DIRECTAMENTE, sin tocar el caso indirecto a través de `service.py`.
+allow_indirect_imports = "true"

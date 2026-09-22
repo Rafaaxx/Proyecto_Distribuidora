@@ -125,7 +125,6 @@ def crear_configuracion(
     permite_consumidor_final: bool | None = None,
     cliente_consumidor_final_id: UUID | None = None,
     modalidad_iva_default: str | None = None,
-    app_version_minima: str | None = None,
     desvio_reloj_max_segundos: int | None = None,
     actualizado_por_id: UUID | None = None,
 ) -> ConfiguracionOrganizacion:
@@ -152,7 +151,6 @@ def crear_configuracion(
         estado_facturacion_default=estado_facturacion_default,
         modalidad_iva_default=modalidad_iva_default,
         intentos_pin_max=intentos_pin_max,
-        app_version_minima=app_version_minima,
         desvio_reloj_max_segundos=desvio_reloj_max_segundos,
         creado_en=momento,
         actualizado_en=momento,
@@ -526,7 +524,18 @@ def crear_auditoria(
     observacion: str | None = None,
     autorizador_id: UUID | None = None,
     operation_id: UUID | None = None,
+    origen: str = "SISTEMA",
 ) -> Auditoria:
+    """`origen` (change 04, tarea 10.5, D2): `'COMANDO'` (con
+    `operation_id` obligatorio) para lo que sale del bus de comandos,
+    `'SISTEMA'` (sin `operation_id`) para todo lo demás -- el default
+    coincide con el `server_default` de la columna, pero quien conoce el
+    origen real (`sync/service.py::procesar_comando`, o `identidad/
+    service.py` para login/refresh) lo declara explícito en vez de
+    depender de él en silencio. La base valida la correspondencia con el
+    CHECK `ck_auditoria__operation_id_segun_origen` (migración
+    `f6a7b8c9d0e1`): un valor inconsistente aquí llega a la base y falla
+    ahí, no antes."""
     fila = Auditoria(
         id=auditoria_id,
         organizacion_id=organizacion_id,
@@ -541,6 +550,7 @@ def crear_auditoria(
         observacion=observacion,
         autorizador_id=autorizador_id,
         operation_id=operation_id,
+        origen=origen,
         occurred_at=occurred_at,
         registered_at=registered_at,
     )

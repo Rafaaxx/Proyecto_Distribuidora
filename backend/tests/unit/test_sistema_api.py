@@ -18,6 +18,10 @@ def _client(monkeypatch: pytest.MonkeyPatch, **env: str) -> TestClient:
         monkeypatch.setenv("APP_VERSION", env["APP_VERSION"])
     else:
         monkeypatch.delenv("APP_VERSION", raising=False)
+    if "APP_VERSION_MINIMA" in env:
+        monkeypatch.setenv("APP_VERSION_MINIMA", env["APP_VERSION_MINIMA"])
+    else:
+        monkeypatch.delenv("APP_VERSION_MINIMA", raising=False)
     settings = Settings(_env_file=None)
     app = crear_app(settings)
     return TestClient(app)
@@ -80,3 +84,46 @@ def test_openapi_incluye_salud_y_version(monkeypatch: pytest.MonkeyPatch) -> Non
 
     assert "/api/v1/salud" in openapi["paths"]
     assert "/api/v1/version" in openapi["paths"]
+
+
+class TestVersionMinimaDeAplicacion:
+    """Change 04, grupo 12, tarea 12.4 (`design.md` D9): el servidor publica
+    la versión mínima de aplicación admitida junto con la versión desplegada
+    -- configuración de despliegue (`Settings.app_version_minima`), no por
+    organización (columna huérfana eliminada en la migración de este grupo).
+
+    Spec `sistema/salud-y-version`, escenarios "La versión mínima se
+    consulta sin sesión" y "La versión mínima aparece en el contrato
+    publicado"."""
+
+    def test_version_incluye_la_version_minima_configurada_sin_sesion(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        client = _client(monkeypatch, APP_VERSION_MINIMA="2.0.0")
+
+        respuesta = client.get("/api/v1/version")
+
+        assert respuesta.status_code == 200
+        assert respuesta.json()["app_version_minima"] == "2.0.0"
+
+    def test_version_sin_minima_configurada_la_devuelve_nula(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Triangulación: sin `APP_VERSION_MINIMA` en el entorno, el campo
+        viaja como `null` -- no restringe nada por defecto (`design.md` D9)."""
+        client = _client(monkeypatch)
+
+        respuesta = client.get("/api/v1/version")
+
+        assert respuesta.status_code == 200
+        assert respuesta.json()["app_version_minima"] is None
+
+    def test_openapi_incluye_el_campo_de_version_minima_en_el_esquema(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        client = _client(monkeypatch)
+
+        openapi = client.get("/openapi.json").json()
+
+        esquema_version = openapi["components"]["schemas"]["VersionRespuesta"]
+        assert "app_version_minima" in esquema_version["properties"]

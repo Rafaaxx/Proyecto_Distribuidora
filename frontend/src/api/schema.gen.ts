@@ -33,7 +33,8 @@ export interface paths {
         };
         /**
          * Version
-         * @description Devuelve la versión de la aplicación en ejecución (`02` §11).
+         * @description Devuelve la versión de la aplicación en ejecución y la versión mínima
+         *     admitida (`02` §11, `02` §6.6, tarea 12.4).
          */
         get: operations["version_api_v1_version_get"];
         put?: never;
@@ -128,13 +129,12 @@ export interface paths {
         post?: never;
         /**
          * Revocar Dispositivo
-         * @description `revocar_dispositivo` del servicio devuelve `None` si `dispositivo_id`
-         *     no pertenece a `contexto.organizacion_id` (INV-21): acá se traduce en
-         *     `RecursoNoEncontradoError` (404, SEG-07), igual que el resto de las
-         *     rutas de este archivo -- nunca un 204 silencioso, que dejaría creer que
-         *     la revocación tuvo efecto sobre un recurso ajeno cuando en realidad no
-         *     tocó nada (spec `dispositivos`, escenario "Revocar un dispositivo de
-         *     otra organización no lo encuentra").
+         * @description Change 04, grupo 11 (`design.md` D7): delega en el bus de comandos
+         *     (`DISPOSITIVO_REVOCAR`, `identidad/commands.py`). `RecursoNoEncontradoError`
+         *     (404, SEG-07) si el handler rechaza porque `dispositivo_id` no pertenece
+         *     a `entrada.contexto.organizacion_id` (INV-21) -- nunca un 204 silencioso
+         *     (spec `dispositivos`, escenario "Revocar un dispositivo de otra
+         *     organización no lo encuentra").
          */
         delete: operations["revocar_dispositivo_api_v1_identidad_dispositivos__dispositivo_id__delete"];
         options?: never;
@@ -158,11 +158,14 @@ export interface paths {
         put?: never;
         /**
          * Crear Usuario
-         * @description Escenario "Un alta de usuario queda auditada" (`identidad/service.py
-         *     ::crear_usuario`, tarea 8.9): sin envolver en bus de comandos todavía
-         *     (`design.md` D6, deuda nominada del change 04). `RecursoNoEncontradoError`
-         *     si `rol_id` no pertenece a `contexto.organizacion_id` (SEG-07, INV-21,
-         *     tarea 12.2).
+         * @description Change 04, grupo 11 (`design.md` D7): delega en el bus de comandos
+         *     (`USUARIO_CREAR`, `identidad/commands.py`) en vez de llamar directo a
+         *     `identidad_service.crear_usuario` (deuda nominada por el change 03, D6).
+         *     `RecursoNoEncontradoError` si `rol_id` no pertenece a
+         *     `entrada.contexto.organizacion_id` (SEG-07, INV-21, tarea 12.2). Un
+         *     reenvío idéntico (mismo `Operation-Id`, mismo contenido) resuelve el
+         *     mismo usuario ya creado -- se relee de la base para que la respuesta
+         *     sea el estado real, no un valor cacheado del primer intento.
          */
         post: operations["crear_usuario_api_v1_identidad_usuarios_post"];
         delete?: never;
@@ -204,10 +207,15 @@ export interface paths {
         put?: never;
         /**
          * Rotar Pin Autorizacion
-         * @description Escenarios "Rotar el PIN invalida el anterior" y "La rotación queda
-         *     auditada sin exponer el PIN" (grupo 9). `RecursoNoEncontradoError` si
-         *     `usuario_id` no pertenece a `contexto.organizacion_id` (SEG-07, INV-21).
-         *     El PIN nunca aparece en la respuesta (`status_code=204`, sin cuerpo).
+         * @description Change 04, grupo 11 (`design.md` D7): delega en el bus de comandos
+         *     (`PIN_AUTORIZACION_ROTAR`, `identidad/commands.py`). El PIN viaja en el
+         *     contenido del comando como texto (igual que en el cuerpo HTTP que ya
+         *     recibía) -- `identidad_commands.PinAutorizacionRotarContenidoV1` lo
+         *     envuelve en `SecretStr` recién al validarlo contra el esquema
+         *     (`registro.validar_contenido`); `RecursoNoEncontradoError` si
+         *     `usuario_id` no pertenece a `entrada.contexto.organizacion_id` (SEG-07,
+         *     INV-21). El PIN nunca aparece en la respuesta (`status_code=204`, sin
+         *     cuerpo).
          */
         post: operations["rotar_pin_autorizacion_api_v1_identidad_usuarios__usuario_id__pin_post"];
         delete?: never;
@@ -232,6 +240,31 @@ export interface paths {
          *     `contexto.organizacion_id` (SEG-07, INV-21).
          */
         post: operations["desbloquear_usuario_api_v1_identidad_usuarios__usuario_id__desbloqueo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/comandos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sincronizar Lote
+         * @description Procesa el lote de la cola del dispositivo (`02` §6.4, tareas 8.1 a
+         *     8.10). `organizacion_id`, `usuario_id` y `dispositivo_id` de la sesión
+         *     vienen siempre del token (`contexto`), nunca del cuerpo -- cada ítem
+         *     declara los suyos solo para que `sync_service.procesar_lote` pueda
+         *     rechazar una cola ajena (`ColaAjenaError`) en vez de reatribuirla en
+         *     silencio.
+         */
+        post: operations["sincronizar_lote_api_v1_sync_comandos_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -286,6 +319,55 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /**
+         * ItemLoteComandoRequest
+         * @description Un comando de la cola local (`02` §13.2 `cola`), tal como el
+         *     dispositivo lo generó. `usuario_id`/`dispositivo_id` son los que
+         *     declaró al generarlo -- el servidor los compara contra la sesión que
+         *     sincroniza (`ColaAjenaError`, tarea 8.5), nunca los usa tal cual para
+         *     construir el sobre sin esa verificación.
+         */
+        ItemLoteComandoRequest: {
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /** Tipo */
+            tipo: string;
+            /** Version */
+            version: number;
+            /**
+             * Modo
+             * @enum {string}
+             */
+            modo: "ONLINE" | "OFFLINE";
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /**
+             * Dispositivo Id
+             * Format: uuid
+             */
+            dispositivo_id: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Secuencia */
+            secuencia: number;
+            /** App Version */
+            app_version: string;
+            /** Contenido */
+            contenido?: {
+                [key: string]: unknown;
+            };
+            /** Jornada Id */
+            jornada_id?: string | null;
+        };
         /** LoginRequest */
         LoginRequest: {
             /** Organizacion Slug */
@@ -302,6 +384,23 @@ export interface components {
             /** Nombre Dispositivo */
             nombre_dispositivo: string;
         };
+        /**
+         * LoteComandosRequest
+         * @description `02` §6.4: hasta 50 comandos por lote; un lote vacío es válido
+         *     (tarea 8.2). `max_length=50` rechaza un lote de 51 con un 422 de
+         *     Pydantic ANTES de que la ruta se ejecute -- ninguno de sus comandos
+         *     llega a procesarse, que es exactamente lo que pide el escenario "Un
+         *     lote que excede el máximo se rechaza entero".
+         */
+        LoteComandosRequest: {
+            /** Items */
+            items?: components["schemas"]["ItemLoteComandoRequest"][];
+        };
+        /** LoteComandosResponse */
+        LoteComandosResponse: {
+            /** Resultados */
+            resultados: components["schemas"]["ResultadoItemLoteResponse"][];
+        };
         /** RefreshRequest */
         RefreshRequest: {
             /**
@@ -309,6 +408,22 @@ export interface components {
              * Format: uuid
              */
             dispositivo_id: string;
+        };
+        /** ResultadoItemLoteResponse */
+        ResultadoItemLoteResponse: {
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /** Estado */
+            estado: string;
+            /** Resultado */
+            resultado: {
+                [key: string]: unknown;
+            } | null;
+            /** Error Codigo */
+            error_codigo: string | null;
         };
         /** RolResponse */
         RolResponse: {
@@ -389,6 +504,8 @@ export interface components {
         VersionRespuesta: {
             /** Version */
             version: string;
+            /** App Version Minima */
+            app_version_minima?: string | null;
         };
     };
     responses: never;
@@ -571,6 +688,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
+                "Operation-Id"?: string | null;
                 authorization?: string | null;
             };
             path: {
@@ -633,6 +751,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
+                "Operation-Id"?: string | null;
                 authorization?: string | null;
             };
             path?: never;
@@ -705,6 +824,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
+                "Operation-Id"?: string | null;
                 authorization?: string | null;
             };
             path: {
@@ -755,6 +875,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sincronizar_lote_api_v1_sync_comandos_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoteComandosRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoteComandosResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

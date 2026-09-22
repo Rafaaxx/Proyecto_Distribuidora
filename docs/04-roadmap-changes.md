@@ -93,9 +93,11 @@ La tabla indica qué changes deben estar archivados antes de empezar cada uno.
 | 01b | `dinero-fixtures-ci` | `core/money.py` y `lib/money.ts` con `ROUND_HALF_UP` explícito, arnés de fixtures compartidos, Testcontainers funcionando, CI completa (lint, tipos, unitarias, integración, build) | INV-03 (prueba que recorre catálogo de columnas) |
 | 02 | `organizacion-y-configuracion` | Tablas `organizacion`, `configuracion_organizacion`, catálogos (`alicuota_iva`, `medio_pago`, `motivo`); repositorios con `organizacion_id` obligatorio; prueba genérica de aislamiento que recorre todas las rutas | INV-02 |
 | 03 | `identidad-usuarios-permisos` | Usuarios, roles, permisos, login, access token en memoria, refresh rotativo en cookie, registro y revocación de dispositivos, PIN de autorización, dependencia de permisos en handlers, tabla de auditoría, rate limit de login (`02` §18) | INV-05 (permisos de base sobre tablas de libro), INV-21 (cerrado por completo) |
-| 04 | `pipeline-comandos` | Tabla `comando`, bus, sobre, huella canónica, reserva de idempotencia, `POST /sync/comandos`, `observacion`, `comando_cuarentena`, reintentos transitorios, logging de contexto de comando (`operation_id`, organización, usuario, dispositivo), compatibilidad de versiones de comando (`02` §6.6) | INV-06 |
+| 04 | `pipeline-comandos` | Tabla `comando`, bus, sobre, huella canónica, reserva de idempotencia, `POST /sync/comandos`, `observacion`, `comando_cuarentena`, reintentos transitorios, logging de contexto de comando (`operation_id`, organización, usuario, dispositivo), compatibilidad de versiones de comando (`02` §6.6) | INV-06 (cerrado por completo) |
 
 **Después del 04, ninguna escritura se implementa fuera del bus.**
+
+**INV-06 cerrado por el change 04 (`pipeline-comandos`, verificación grupo 16):** la reserva de idempotencia (`UNIQUE (organizacion_id, operation_id)` sobre `comando`, `INSERT ... ON CONFLICT` bloqueante) garantiza que dos envíos concurrentes del mismo comando producen un solo efecto, sin depender de una consulta previa desde la aplicación. Confirmado con `backend/tests/integration/test_inv06_reserva_idempotencia.py` (reserva, reenvío idéntico, contenido distinto, rechazo reenviado) y, con commits reales de dos sesiones/hilos independientes (no una transacción externa con rollback), `backend/tests/concurrency/test_inv06_reserva_idempotencia_concurrencia.py`. La mención de INV-06 en la fila del change 22b (`motor-sincronizacion`, "doble sync no duplica") no reabre este cierre: ese change ejercita la misma garantía de punta a punta desde el cliente offline (cola local, Web Locks, reintentos), apoyándose en la reserva que ya cierra el change 04 del lado del servidor.
 
 ## 6. Hito 2 — Maestros y libros
 
@@ -129,6 +131,8 @@ La tabla indica qué changes deben estar archivados antes de empezar cada uno.
 | 16 | `motor-de-descuentos` | Reglas de volumen, alcance, prioridad, acumulabilidad; motor en Python y TypeScript; descuento manual con tope y autorización; fixtures compartidos DSC-05 | — |
 | 17 | `cobranzas` | Cobranza independiente con varios medios, anulación, efecto en cuenta corriente | INV-08, CC-05 |
 
+**Deuda heredada del change 04 para el change 15 (`jornadas`):** `comando.jornada_id` quedó como columna sin FK porque la tabla `jornada` todavía no existe (`design.md` D8 del change 04-pipeline-comandos). Agregar la FK compuesta (`organizacion_id`, `jornada_id`) hacia `jornada` como parte de este change.
+
 ## 9. Hito 5 — Venta
 
 | # | Change | Entrega | Invariantes que cierra |
@@ -159,6 +163,8 @@ La tabla indica qué changes deben estar archivados antes de empezar cada uno.
 | 23 | `cobranza-offline` | Cobranza sin conexión y su efecto en el crédito disponible local | — |
 | 24 | `rendicion-de-jornada` | Conteo físico, diferencias auditadas, resumen de jornada, devolución de remanente, cierre | RUT-05 (cola vacía antes de rendir) |
 | 25 | `observaciones-y-revision` | Bandeja de observaciones pendientes, resolución con comentario, notificación de excesos detectados al sincronizar | SYN-08 (resolver no altera operación) |
+
+**Deuda heredada del change 04 para el change 25 (`observaciones-y-revision`):** `01` §19 no resuelve qué permiso gobierna la revisión de un comando en cuarentena ni si un comando en cuarentena puede reenviarse — `design.md` D6 del change 04-pipeline-comandos dejó esta decisión explícitamente fuera de alcance. Este change debe registrar un ADR con esa decisión antes de implementar la resolución de cuarentena, y define `OBSERVACION_RESOLVER` (SYN-08).
 
 **Probar en el teléfono real que va a usar el vendedor durante el change 21, no en el 28.** Si usa iPhone, las limitaciones de Safari (almacenamiento, Background Sync) aparecen ahí.
 

@@ -24,6 +24,7 @@ from sqlalchemy import (
     PrimaryKeyConstraint,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -71,7 +72,6 @@ class ConfiguracionOrganizacion(Base):
     estado_facturacion_default: Mapped[str] = mapped_column(Text, nullable=False)
     modalidad_iva_default: Mapped[str | None] = mapped_column(Text, nullable=True)
     intentos_pin_max: Mapped[int] = mapped_column(Integer, nullable=False)
-    app_version_minima: Mapped[str | None] = mapped_column(Text, nullable=True)
     desvio_reloj_max_segundos: Mapped[int | None] = mapped_column(Integer, nullable=True)
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     actualizado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -302,6 +302,14 @@ class Auditoria(Base):
     operation_id: Mapped[UUID | None] = mapped_column(nullable=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Change 04 (tarea 2.5, D2 de `design.md`, extensión de ADR-012):
+    # `COMANDO` | `SISTEMA`, con restricción de verificación en la base que
+    # exige `operation_id` no nulo si y solo si `origen = 'COMANDO'`. El
+    # `server_default` deja auditando el login (change 03,
+    # `identidad/repository.py::crear_auditoria`) sin cambios de código
+    # hasta la tarea 10.5 (grupo 10, fuera de esta sesión), que hace que el
+    # bus declare `origen='COMANDO'` explícitamente para lo que sale de él.
+    origen: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'SISTEMA'"))
 
 
 class IntentoLogin(Base):

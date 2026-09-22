@@ -40,7 +40,16 @@ def _limpiar_datos_confirmados(database_url: str) -> Iterator[None]:
     pytest y contaminan otras pruebas que asumen una tabla `organizacion`
     vacía (por ejemplo `test_seed.py`, que usa "existe alguna fila" como
     señal de "ya sembrado"). `TRUNCATE ... CASCADE` alcanza a toda tabla con
-    una FK (directa o transitiva) hacia `organizacion`."""
+    una FK (directa o transitiva) hacia `organizacion`.
+
+    Deuda nominada (change 04-pipeline-comandos, tarea 15.3, re-nominada de la
+    tarea 14.6.c del change 03): este engine propio produce un error de
+    teardown intermitente cuando estas pruebas corren aisladas fuera del
+    archivo completo (probable carrera con el ciclo de vida del contenedor de
+    Testcontainers). Corriendo el archivo completo o la suite entera siempre
+    da verde. El fix real requiere tocar `conftest.py` (ciclo de vida del
+    engine/contenedor compartido); se deja para el próximo change que toque
+    el arnés de integración."""
     yield
     engine = crear_engine(database_url)
     with engine.begin() as conexion:
@@ -603,14 +612,18 @@ def test_el_dispositivo_del_contexto_es_el_del_token(cliente: TestClient, sesion
     respuesta = cliente.delete(
         f"/api/v1/identidad/dispositivos/{dispositivo_objetivo.id}"
         f"?dispositivo_id={dispositivo_declarado_en_la_peticion}",
-        headers={"Authorization": f"Bearer {access_token}"},
+        headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
     )
     assert respuesta.status_code == 204
 
+    # Change 04 (grupo 11, ADR-022): la revocación pasa a auditarse desde el
+    # bus con `accion=sobre.tipo` ("DISPOSITIVO_REVOCAR"), no con el nombre
+    # interno del servicio ("REVOCAR_DISPOSITIVO") -- una sola fila, la del
+    # bus; la interna quedó desactivada con `auditar=False`.
     fila_auditoria = sesion.execute(
         select(Auditoria).where(
             Auditoria.organizacion_id == organizacion.id,
-            Auditoria.accion == "REVOCAR_DISPOSITIVO",
+            Auditoria.accion == "DISPOSITIVO_REVOCAR",
         )
     ).scalar_one()
     assert str(fila_auditoria.dispositivo_id) == dispositivo_actor_id

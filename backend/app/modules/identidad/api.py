@@ -11,10 +11,18 @@ columnas del PIN de autorización: son campos que Pydantic simplemente no
 declara, no campos que se excluyan al serializar (`model_config
 from_attributes`, `03` §4, `02` §17).
 
-Las tres escrituras de este archivo (alta de usuario, composición de rol,
-rotación de PIN) van directo por `identidad/service.py`, fuera del bus de
-comandos (`design.md` D6, deuda nominada del change 04): el endpoint hace su
-propio `commit`.
+Alta de usuario, revocación de dispositivo, rotación de PIN (change 04,
+grupo 11, `design.md` D7), cambio de composición de rol y desbloqueo manual
+de usuario (change 04, grupo 14, decisión del usuario 2026-09-22, `tasks.md`
+14.3-14.6) pasan a delegar en el bus de comandos: exigen `Operation-Id`
+(`requiere_comando_online`) y llaman a `sync_service.procesar_comando`, que
+hace su propio `commit`. El import de `app.modules.identidad.commands` (sin
+uso directo en este archivo) puebla el registro de handlers al arrancar la
+aplicación (`registro.py`, docstring: "el arranque puebla este registro
+importando los módulos de negocio que declaran sus handlers") -- sin él,
+`USUARIO_CREAR`, `DISPOSITIVO_REVOCAR`, `PIN_AUTORIZACION_ROTAR`,
+`ROL_PERMISOS_CAMBIAR` y `USUARIO_DESBLOQUEAR` serían tipos "nunca
+importados", indistinguibles de un tipo que no existe (`registro.py`).
 """
 
 from __future__ import annotations
@@ -28,11 +36,21 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api_v1.dependencias import get_session
-from app.core.autenticacion import ContextoAutenticado, requiere_permiso
+from app.commands import registro
+from app.commands.huella import ContenidoComando, calcular_huella
+from app.commands.sobre import construir_sobre_online
+from app.core.autenticacion import (
+    ContextoAutenticado,
+    EntradaComandoOnline,
+    requiere_comando_online,
+    requiere_permiso,
+)
 from app.core.clock import SystemClock
 from app.core.errors import DomainError
+from app.modules.identidad import commands as identidad_commands  # noqa: F401
 from app.modules.identidad import repository
 from app.modules.identidad import service as identidad_service
+from app.modules.sync import service as sync_service
 
 router = APIRouter(prefix="/identidad", tags=["identidad"])
 
@@ -73,29 +91,48 @@ def listar_dispositivos(
 @router.delete("/dispositivos/{dispositivo_id}", status_code=204)
 def revocar_dispositivo(
     dispositivo_id: UUID,
-    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso("GESTIONAR_DISPOSITIVOS"))],
+    entrada: Annotated[
+        EntradaComandoOnline, Depends(requiere_comando_online("GESTIONAR_DISPOSITIVOS"))
+    ],
     sesion: Annotated[Session, Depends(get_session)],
 ) -> None:
-    """`revocar_dispositivo` del servicio devuelve `None` si `dispositivo_id`
-    no pertenece a `contexto.organizacion_id` (INV-21): acá se traduce en
-    `RecursoNoEncontradoError` (404, SEG-07), igual que el resto de las
-    rutas de este archivo -- nunca un 204 silencioso, que dejaría creer que
-    la revocación tuvo efecto sobre un recurso ajeno cuando en realidad no
-    tocó nada (spec `dispositivos`, escenario "Revocar un dispositivo de
-    otra organización no lo encuentra")."""
-    dispositivo = identidad_service.revocar_dispositivo(
-        contexto.organizacion_id,
-        sesion,
-        SystemClock(),
-        dispositivo_id=dispositivo_id,
-        actor_id=contexto.usuario_id,
-        dispositivo_id_actor=contexto.dispositivo_id,
+    """Change 04, grupo 11 (`design.md` D7): delega en el bus de comandos
+    (`DISPOSITIVO_REVOCAR`, `identidad/commands.py`). `RecursoNoEncontradoError`
+    (404, SEG-07) si el handler rechaza porque `dispositivo_id` no pertenece
+    a `entrada.contexto.organizacion_id` (INV-21) -- nunca un 204 silencioso
+    (spec `dispositivos`, escenario "Revocar un dispositivo de otra
+    organización no lo encuentra")."""
+    reloj = SystemClock()
+    contenido: dict[str, ContenidoComando] = {"dispositivo_id": str(dispositivo_id)}
+    sobre = construir_sobre_online(
+        operation_id=entrada.operation_id,
+        tipo="DISPOSITIVO_REVOCAR",
+        version=1,
+        modo="ONLINE",
+        organizacion_id=entrada.contexto.organizacion_id,
+        usuario_id=entrada.contexto.usuario_id,
+        dispositivo_id=entrada.contexto.dispositivo_id,
+        occurred_at=reloj.now(),
+        secuencia=1,
+        app_version="server",
+        contenido=contenido,
     )
-    if dispositivo is None:
+    huella = calcular_huella(sobre.contenido)
+    handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
+    contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
+
+    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_dispositivo_revocar(
+            sobre, contenido_validado, sesion=sesion_protegida, reloj=reloj  # type: ignore[arg-type]
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO":
         raise RecursoNoEncontradoError(
             f"El dispositivo {dispositivo_id} no existe en esta organización."
         )
-    sesion.commit()
 
 
 # --- Usuarios (tarea 10.7/10.8) --------------------------------------------
@@ -138,29 +175,58 @@ def listar_usuarios(
 @router.post("/usuarios", response_model=UsuarioResponse, status_code=201)
 def crear_usuario(
     datos: CrearUsuarioRequest,
-    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso("ADMIN_USUARIOS"))],
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_USUARIOS"))],
     sesion: Annotated[Session, Depends(get_session)],
 ) -> UsuarioResponse:
-    """Escenario "Un alta de usuario queda auditada" (`identidad/service.py
-    ::crear_usuario`, tarea 8.9): sin envolver en bus de comandos todavía
-    (`design.md` D6, deuda nominada del change 04). `RecursoNoEncontradoError`
-    si `rol_id` no pertenece a `contexto.organizacion_id` (SEG-07, INV-21,
-    tarea 12.2)."""
-    usuario = identidad_service.crear_usuario(
-        contexto.organizacion_id,
-        sesion,
-        SystemClock(),
-        usuario=datos.usuario,
-        nombre=datos.nombre,
-        email=datos.email,
-        password=datos.password,
-        rol_id=datos.rol_id,
-        actor_id=contexto.usuario_id,
-        dispositivo_id_actor=contexto.dispositivo_id,
+    """Change 04, grupo 11 (`design.md` D7): delega en el bus de comandos
+    (`USUARIO_CREAR`, `identidad/commands.py`) en vez de llamar directo a
+    `identidad_service.crear_usuario` (deuda nominada por el change 03, D6).
+    `RecursoNoEncontradoError` si `rol_id` no pertenece a
+    `entrada.contexto.organizacion_id` (SEG-07, INV-21, tarea 12.2). Un
+    reenvío idéntico (mismo `Operation-Id`, mismo contenido) resuelve el
+    mismo usuario ya creado -- se relee de la base para que la respuesta
+    sea el estado real, no un valor cacheado del primer intento."""
+    reloj = SystemClock()
+    contenido: dict[str, ContenidoComando] = {
+        "usuario": datos.usuario,
+        "nombre": datos.nombre,
+        "email": datos.email,
+        "password": datos.password,
+        "rol_id": str(datos.rol_id),
+    }
+    sobre = construir_sobre_online(
+        operation_id=entrada.operation_id,
+        tipo="USUARIO_CREAR",
+        version=1,
+        modo="ONLINE",
+        organizacion_id=entrada.contexto.organizacion_id,
+        usuario_id=entrada.contexto.usuario_id,
+        dispositivo_id=entrada.contexto.dispositivo_id,
+        occurred_at=reloj.now(),
+        secuencia=1,
+        app_version="server",
+        contenido=contenido,
     )
-    if usuario is None:
+    huella = calcular_huella(sobre.contenido)
+    handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
+    contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
+
+    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_usuario_crear(
+            sobre, contenido_validado, sesion=sesion_protegida, reloj=reloj  # type: ignore[arg-type]
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO":
         raise RecursoNoEncontradoError(f"El rol {datos.rol_id} no existe en esta organización.")
-    sesion.commit()
+    assert comando.resultado is not None
+    usuario_id = UUID(str(comando.resultado["usuario_id"]))
+    usuario = repository.obtener_usuario_por_id(
+        entrada.contexto.organizacion_id, usuario_id, sesion
+    )
+    assert usuario is not None
     return UsuarioResponse.model_validate(usuario)
 
 
@@ -181,25 +247,53 @@ class RolResponse(BaseModel):
 def cambiar_composicion_rol(
     rol_id: UUID,
     datos: ComposicionRolRequest,
-    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso("ADMIN_USUARIOS"))],
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_USUARIOS"))],
     sesion: Annotated[Session, Depends(get_session)],
 ) -> RolResponse:
-    """Escenario "Una organización cambia la composición de un rol"
-    (tarea 8.9). `RecursoNoEncontradoError` si `rol_id` no pertenece a
-    `contexto.organizacion_id` (SEG-07, INV-21, tarea 10.7)."""
-    rol = identidad_service.cambiar_composicion_rol(
-        contexto.organizacion_id,
-        sesion,
-        SystemClock(),
-        rol_id=rol_id,
-        permisos_nuevos=frozenset(datos.permisos),
-        actor_id=contexto.usuario_id,
-        dispositivo_id_actor=contexto.dispositivo_id,
+    """Change 04, grupo 14 (decisión del usuario 2026-09-22, `tasks.md`
+    14.3/14.4): delega en el bus de comandos (`ROL_PERMISOS_CAMBIAR`,
+    `identidad/commands.py`) en vez de llamar directo a
+    `identidad_service.cambiar_composicion_rol` (deuda encontrada por la
+    tarea 14.2). `RecursoNoEncontradoError` si `rol_id` no pertenece a
+    `entrada.contexto.organizacion_id` (SEG-07, INV-21, tarea 10.7). Un
+    reenvío idéntico resuelve el mismo rol ya modificado -- se relee de la
+    base para que la respuesta sea el estado real (mismo criterio que
+    `crear_usuario`)."""
+    reloj = SystemClock()
+    contenido: dict[str, ContenidoComando] = {
+        "rol_id": str(rol_id),
+        "permisos": list(datos.permisos),
+    }
+    sobre = construir_sobre_online(
+        operation_id=entrada.operation_id,
+        tipo="ROL_PERMISOS_CAMBIAR",
+        version=1,
+        modo="ONLINE",
+        organizacion_id=entrada.contexto.organizacion_id,
+        usuario_id=entrada.contexto.usuario_id,
+        dispositivo_id=entrada.contexto.dispositivo_id,
+        occurred_at=reloj.now(),
+        secuencia=1,
+        app_version="server",
+        contenido=contenido,
     )
-    if rol is None:
+    huella = calcular_huella(sobre.contenido)
+    handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
+    contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
+
+    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_rol_permisos_cambiar(
+            sobre, contenido_validado, sesion=sesion_protegida, reloj=reloj  # type: ignore[arg-type]
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO":
         raise RecursoNoEncontradoError(f"El rol {rol_id} no existe en esta organización.")
-    sesion.commit()
-    permisos = repository.listar_permisos_de_rol(contexto.organizacion_id, rol_id, sesion)
+    rol = repository.obtener_rol_por_id(entrada.contexto.organizacion_id, rol_id, sesion)
+    assert rol is not None
+    permisos = repository.listar_permisos_de_rol(entrada.contexto.organizacion_id, rol_id, sesion)
     return RolResponse(id=rol.id, nombre=rol.nombre, permisos=sorted(permisos))
 
 
@@ -214,42 +308,87 @@ class RotarPinRequest(BaseModel):
 def rotar_pin_autorizacion(
     usuario_id: UUID,
     datos: RotarPinRequest,
-    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso("ADMIN_USUARIOS"))],
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_USUARIOS"))],
     sesion: Annotated[Session, Depends(get_session)],
 ) -> None:
-    """Escenarios "Rotar el PIN invalida el anterior" y "La rotación queda
-    auditada sin exponer el PIN" (grupo 9). `RecursoNoEncontradoError` si
-    `usuario_id` no pertenece a `contexto.organizacion_id` (SEG-07, INV-21).
-    El PIN nunca aparece en la respuesta (`status_code=204`, sin cuerpo)."""
-    usuario = identidad_service.establecer_pin_autorizacion(
-        contexto.organizacion_id,
-        sesion,
-        SystemClock(),
-        usuario_id=usuario_id,
-        pin=datos.pin,
-        actor_id=contexto.usuario_id,
+    """Change 04, grupo 11 (`design.md` D7): delega en el bus de comandos
+    (`PIN_AUTORIZACION_ROTAR`, `identidad/commands.py`). El PIN viaja en el
+    contenido del comando como texto (igual que en el cuerpo HTTP que ya
+    recibía) -- `identidad_commands.PinAutorizacionRotarContenidoV1` lo
+    envuelve en `SecretStr` recién al validarlo contra el esquema
+    (`registro.validar_contenido`); `RecursoNoEncontradoError` si
+    `usuario_id` no pertenece a `entrada.contexto.organizacion_id` (SEG-07,
+    INV-21). El PIN nunca aparece en la respuesta (`status_code=204`, sin
+    cuerpo)."""
+    reloj = SystemClock()
+    contenido: dict[str, ContenidoComando] = {"usuario_id": str(usuario_id), "pin": datos.pin}
+    sobre = construir_sobre_online(
+        operation_id=entrada.operation_id,
+        tipo="PIN_AUTORIZACION_ROTAR",
+        version=1,
+        modo="ONLINE",
+        organizacion_id=entrada.contexto.organizacion_id,
+        usuario_id=entrada.contexto.usuario_id,
+        dispositivo_id=entrada.contexto.dispositivo_id,
+        occurred_at=reloj.now(),
+        secuencia=1,
+        app_version="server",
+        contenido=contenido,
     )
-    if usuario is None:
+    huella = calcular_huella(sobre.contenido)
+    handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
+    contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
+
+    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_pin_autorizacion_rotar(
+            sobre, contenido_validado, sesion=sesion_protegida, reloj=reloj  # type: ignore[arg-type]
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO":
         raise RecursoNoEncontradoError(f"El usuario {usuario_id} no existe en esta organización.")
-    sesion.commit()
 
 
 @router.post("/usuarios/{usuario_id}/desbloqueo", status_code=204)
 def desbloquear_usuario(
     usuario_id: UUID,
-    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso("ADMIN_USUARIOS"))],
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_USUARIOS"))],
     sesion: Annotated[Session, Depends(get_session)],
 ) -> None:
     """Desbloqueo manual de un usuario bloqueado por intentos (tarea 11.4,
-    `ADR-018`). `RecursoNoEncontradoError` si `usuario_id` no pertenece a
-    `contexto.organizacion_id` (SEG-07, INV-21)."""
-    usuario = identidad_service.desbloquear_usuario(
-        contexto.organizacion_id,
-        sesion,
-        SystemClock(),
-        usuario_id=usuario_id,
-        actor_id=contexto.usuario_id,
+    `ADR-018`). Change 04, grupo 14 (decisión del usuario 2026-09-22,
+    `tasks.md` 14.5/14.6): delega en el bus de comandos
+    (`USUARIO_DESBLOQUEAR`, `identidad/commands.py`). `RecursoNoEncontradoError`
+    si `usuario_id` no pertenece a `entrada.contexto.organizacion_id`
+    (SEG-07, INV-21)."""
+    reloj = SystemClock()
+    contenido: dict[str, ContenidoComando] = {"usuario_id": str(usuario_id)}
+    sobre = construir_sobre_online(
+        operation_id=entrada.operation_id,
+        tipo="USUARIO_DESBLOQUEAR",
+        version=1,
+        modo="ONLINE",
+        organizacion_id=entrada.contexto.organizacion_id,
+        usuario_id=entrada.contexto.usuario_id,
+        dispositivo_id=entrada.contexto.dispositivo_id,
+        occurred_at=reloj.now(),
+        secuencia=1,
+        app_version="server",
+        contenido=contenido,
     )
-    if usuario is None:
+    huella = calcular_huella(sobre.contenido)
+    handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
+    contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
+
+    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_usuario_desbloquear(
+            sobre, contenido_validado, sesion=sesion_protegida, reloj=reloj  # type: ignore[arg-type]
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO":
         raise RecursoNoEncontradoError(f"El usuario {usuario_id} no existe en esta organización.")
-    sesion.commit()

@@ -1,5 +1,6 @@
 import { fijarAccessToken, limpiarAccessToken, obtenerAccessToken } from '../auth/tokenStore'
 import { obtenerOGenerarDispositivoId } from '../dispositivo/dispositivoId'
+import { generarOperationId } from './operationId'
 
 /**
  * Cliente HTTP del área `/admin` sobre la API (`docs/02-arquitectura.md`
@@ -15,12 +16,40 @@ import { obtenerOGenerarDispositivoId } from '../dispositivo/dispositivoId'
  * la misma renovación en vuelo (`renovacionEnCurso`): la segunda y
  * siguientes esperan la misma promesa en vez de disparar su propio
  * `/auth/refresh`.
+ *
+ * Toda escritura (cualquier método distinto de `GET`/`HEAD`) recibe un
+ * encabezado `Operation-Id` (UUIDv7) generado una sola vez por petición y
+ * reutilizado si hay que reintentarla tras renovar el token, para que el
+ * reintento no cuente como una operación distinta ante el bus de comandos
+ * (`openspec/changes/04-pipeline-comandos/design.md` D4, D7 -- tarea 13.1
+ * y 13.2). Quien llama puede fijar su propio `Operation-Id`; en ese caso no
+ * se lo pisa.
  */
 
 const BASE_URL = '/api/v1'
 
+const METODOS_DE_LECTURA = new Set(['GET', 'HEAD'])
+
 interface RespuestaTokenRenovado {
   access_token: string
+}
+
+function esEscritura(metodo: string | undefined): boolean {
+  return !METODOS_DE_LECTURA.has((metodo ?? 'GET').toUpperCase())
+}
+
+/**
+ * Fija el `RequestInit` con su `Operation-Id` definitivo (uno nuevo si es
+ * una escritura sin encabezado propio; ninguno si es lectura) para que
+ * ambos intentos de `apiFetch` (el original y el reintento tras renovar el
+ * token) usen exactamente el mismo valor.
+ */
+function conOperationIdFijo(init: RequestInit): RequestInit {
+  const headers = new Headers(init.headers)
+  if (esEscritura(init.method) && !headers.has('Operation-Id')) {
+    headers.set('Operation-Id', generarOperationId())
+  }
+  return { ...init, headers }
 }
 
 let renovacionEnCurso: Promise<string | null> | null = null
@@ -69,13 +98,14 @@ function construirPeticion(path: string, init: RequestInit, token: string | null
  * token una sola vez si hace falta.
  */
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const [url, opciones] = construirPeticion(path, init, obtenerAccessToken())
+  const initConOperationId = conOperationIdFijo(init)
+  const [url, opciones] = construirPeticion(path, initConOperationId, obtenerAccessToken())
   let respuesta = await fetch(url, opciones)
 
   if (respuesta.status === 401) {
     const tokenNuevo = await renovarAccessToken()
     if (tokenNuevo) {
-      const [urlReintento, opcionesReintento] = construirPeticion(path, init, tokenNuevo)
+      const [urlReintento, opcionesReintento] = construirPeticion(path, initConOperationId, tokenNuevo)
       respuesta = await fetch(urlReintento, opcionesReintento)
     }
   }

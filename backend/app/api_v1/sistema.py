@@ -21,6 +21,14 @@ class SaludRespuesta(BaseModel):
 
 class VersionRespuesta(BaseModel):
     version: str
+    # Change 04, grupo 12, tarea 12.4 (`design.md` D9, `02` §6.6): la
+    # versión mínima de aplicación que el servidor admite para confirmar
+    # OPERACIONES NUEVAS. Un dispositivo por debajo de esta versión puede
+    # seguir sincronizando su cola pendiente (esta etapa no bloquea nada
+    # todavía -- el bloqueo de operaciones nuevas para una app desactualizada
+    # es responsabilidad del frontend, grupo 13, fuera de este grupo). `None`
+    # si no hay una mínima configurada.
+    app_version_minima: str | None = None
 
 
 def _get_engine() -> Engine:
@@ -48,5 +56,8 @@ def salud(
 
 @router.get("/version", response_model=VersionRespuesta)
 def version(settings: Annotated[Settings, Depends(_get_settings)]) -> VersionRespuesta:
-    """Devuelve la versión de la aplicación en ejecución (`02` §11)."""
-    return VersionRespuesta(version=settings.app_version)
+    """Devuelve la versión de la aplicación en ejecución y la versión mínima
+    admitida (`02` §11, `02` §6.6, tarea 12.4)."""
+    return VersionRespuesta(
+        version=settings.app_version, app_version_minima=settings.app_version_minima
+    )

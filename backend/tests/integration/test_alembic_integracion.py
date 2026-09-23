@@ -442,3 +442,191 @@ def test_alembic_corre_como_app_migrations_no_como_app_runtime(database_url: str
         engine.dispose()
 
     assert dueno == NOMBRE_ROL_MIGRACIONES
+
+
+def _sembrar_datos_de_catalogo(database_url: str) -> None:
+    """Change 05, tarea 11.4: una fila por cada una de las cuatro tablas
+    nuevas de `c1d2e3f4a5b6` (`categoria`, `marca`, `producto`,
+    `presentacion`), con sus relaciones reales entre sí (`producto` FK a
+    `categoria`, `marca` y `alicuota_iva`; `presentacion` FK a `producto`),
+    para que el `downgrade -1` de esta migración específica (no un
+    `downgrade base`) tenga datos y restricciones reales que atravesar al
+    hacer `DROP TABLE`/`DROP CONSTRAINT` en el orden correcto."""
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    engine = create_engine(database_url)
+    momento = datetime(2026, 1, 1, tzinfo=UTC)
+    organizacion_id = uuid4()
+    categoria_id = uuid4()
+    marca_id = uuid4()
+    alicuota_id = uuid4()
+    producto_id = uuid4()
+    try:
+        with engine.begin() as conexion:
+            conexion.execute(
+                text(
+                    "INSERT INTO organizacion "
+                    "(id, nombre, slug, cuit, moneda, zona_horaria, estado, "
+                    "creado_en, actualizado_en, actualizado_por_id) "
+                    "VALUES (:id, 'Org 11.4', :slug, NULL, 'ARS', "
+                    "'America/Argentina/Mendoza', 'ACTIVA', :momento, :momento, NULL)"
+                ),
+                {"id": organizacion_id, "slug": f"org-114-{organizacion_id}", "momento": momento},
+            )
+            conexion.execute(
+                text(
+                    "INSERT INTO categoria "
+                    "(id, organizacion_id, nombre, activo, creado_en, actualizado_en, "
+                    "actualizado_por_id) "
+                    "VALUES (:id, :organizacion_id, 'Categoria 11.4', true, :momento, :momento, "
+                    "NULL)"
+                ),
+                {"id": categoria_id, "organizacion_id": organizacion_id, "momento": momento},
+            )
+            conexion.execute(
+                text(
+                    "INSERT INTO marca "
+                    "(id, organizacion_id, nombre, activo, creado_en, actualizado_en, "
+                    "actualizado_por_id) "
+                    "VALUES (:id, :organizacion_id, 'Marca 11.4', true, :momento, :momento, NULL)"
+                ),
+                {"id": marca_id, "organizacion_id": organizacion_id, "momento": momento},
+            )
+            conexion.execute(
+                text(
+                    "INSERT INTO alicuota_iva "
+                    "(id, organizacion_id, nombre, valor, activo, creado_en, actualizado_en) "
+                    "VALUES (:id, :organizacion_id, 'Alicuota 11.4', 0.210000, true, :momento, "
+                    ":momento)"
+                ),
+                {"id": alicuota_id, "organizacion_id": organizacion_id, "momento": momento},
+            )
+            conexion.execute(
+                text(
+                    "INSERT INTO producto "
+                    "(id, organizacion_id, codigo, nombre, categoria_id, marca_id, "
+                    "proveedor_id, unidad_base, alicuota_id, activo, creado_en, "
+                    "actualizado_en, actualizado_por_id) "
+                    "VALUES (:id, :organizacion_id, 'VA-114', 'Vino 11.4', :categoria_id, "
+                    ":marca_id, NULL, 'botella', :alicuota_id, true, :momento, :momento, NULL)"
+                ),
+                {
+                    "id": producto_id,
+                    "organizacion_id": organizacion_id,
+                    "categoria_id": categoria_id,
+                    "marca_id": marca_id,
+                    "alicuota_id": alicuota_id,
+                    "momento": momento,
+                },
+            )
+            conexion.execute(
+                text(
+                    "INSERT INTO presentacion "
+                    "(id, organizacion_id, producto_id, nombre, unidades_base, "
+                    "usar_en_venta, usar_en_compra, es_referencia, activo, creado_en, "
+                    "actualizado_en, actualizado_por_id) "
+                    "VALUES (:id, :organizacion_id, :producto_id, 'Botella', 1, true, true, "
+                    "true, true, :momento, :momento, NULL)"
+                ),
+                {
+                    "id": uuid4(),
+                    "organizacion_id": organizacion_id,
+                    "producto_id": producto_id,
+                    "momento": momento,
+                },
+            )
+    finally:
+        engine.dispose()
+
+
+def test_downgrade_menos_uno_y_upgrade_corren_limpios_con_datos_de_catalogo_sembrados(
+    database_url: str,
+) -> None:
+    """Tarea 11.4 (`04` §2.1, criterio 4, change 05): `upgrade head` ->
+    `downgrade -1` -> `upgrade head` sobre la migración de catálogo
+    (`c1d2e3f4a5b6`) CON datos sembrados en sus cuatro tablas nuevas
+    (`categoria`, `marca`, `producto`, `presentacion`), no vacías -- a
+    diferencia de `test_downgrade_y_upgrade_corren_limpios_con_datos_
+    representativos` (tarea 14.4 del change 04, `downgrade base` completo),
+    acá el `downgrade -1` revierte EXCLUSIVAMENTE esta migración: las
+    tablas de `organizacion`/`identidad`/`sync` de los changes anteriores
+    quedan intactas, así que la prueba también confirma que no se
+    perdieron ni se alteraron (`organizacion` sigue existiendo con su
+    fila)."""
+    _crear_roles_de_base(database_url)
+
+    resultado_up = _alembic("upgrade", "head", database_url=database_url)
+    assert resultado_up.returncode == 0, resultado_up.stderr
+
+    _sembrar_datos_de_catalogo(database_url)
+
+    engine_previo = create_engine(database_url)
+    try:
+        with engine_previo.connect() as conexion:
+            organizacion_id_previa = conexion.execute(
+                text("SELECT id FROM organizacion WHERE nombre = 'Org 11.4'")
+            ).scalar_one()
+    finally:
+        engine_previo.dispose()
+
+    resultado_down = _alembic("downgrade", "-1", database_url=database_url)
+    assert resultado_down.returncode == 0, resultado_down.stderr
+
+    # Las cuatro tablas de catálogo ya no existen tras el downgrade de ESTA
+    # migración -- confirma que el `downgrade -1` efectivamente revirtió
+    # `c1d2e3f4a5b6`, no otra cosa.
+    engine_sin_catalogo = create_engine(database_url)
+    try:
+        with engine_sin_catalogo.connect() as conexion:
+            tablas_de_catalogo = (
+                conexion.execute(
+                    text(
+                        "SELECT tablename FROM pg_tables WHERE tablename IN "
+                        "('categoria', 'marca', 'producto', 'presentacion')"
+                    )
+                )
+                .scalars()
+                .all()
+            )
+    finally:
+        engine_sin_catalogo.dispose()
+    assert tablas_de_catalogo == []
+
+    # La organización sembrada ANTES del downgrade sigue existiendo: el
+    # `downgrade -1` de catálogo no tocó tablas de changes anteriores.
+    engine_intacto = create_engine(database_url)
+    try:
+        with engine_intacto.connect() as conexion:
+            organizacion_sigue_existiendo = conexion.execute(
+                text("SELECT count(*) FROM organizacion WHERE id = :id"),
+                {"id": organizacion_id_previa},
+            ).scalar_one()
+    finally:
+        engine_intacto.dispose()
+    assert organizacion_sigue_existiendo == 1
+
+    resultado_up_2 = _alembic("upgrade", "head", database_url=database_url)
+    assert resultado_up_2.returncode == 0, resultado_up_2.stderr
+
+    # Tras el segundo `upgrade head`, las cuatro tablas de catálogo vuelven
+    # a existir, vacías (la migración no reinserta datos de un downgrade
+    # parcial -- eso es la pérdida ESPERADA de las filas de catálogo que
+    # dependían de las tablas borradas, no la "inesperada" que la tarea
+    # 11.4 pide descartar).
+    engine_final = create_engine(database_url)
+    try:
+        with engine_final.connect() as conexion:
+            cantidad_categorias = conexion.execute(
+                text("SELECT count(*) FROM categoria")
+            ).scalar_one()
+            cantidad_productos = conexion.execute(
+                text("SELECT count(*) FROM producto")
+            ).scalar_one()
+    finally:
+        engine_final.dispose()
+    assert cantidad_categorias == 0
+    assert cantidad_productos == 0
+
+    # Deja la base en `head`, compartida con el resto de la sesión de
+    # pytest (docstring del módulo).

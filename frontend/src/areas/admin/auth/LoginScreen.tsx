@@ -2,6 +2,9 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 
+import { Alert } from '../../../components/ui/Alert'
+import { Boton } from '../../../components/ui/Button'
+import { Campo } from '../../../components/ui/Field'
 import { esquemaLogin, type DatosLogin } from '../../../domain/identidad/loginSchema'
 import { useLogin } from './useLogin'
 
@@ -25,39 +28,44 @@ export function LoginScreen() {
     })
   })
 
+  const clasesInput =
+    'rounded-md border border-border px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40'
+
   return (
-    <main>
-      <h1>Iniciar sesión</h1>
-      <form onSubmit={alEnviar} noValidate>
-        <div>
-          <label htmlFor="organizacionSlug">Organización</label>
-          <input id="organizacionSlug" autoComplete="organization" {...register('organizacionSlug')} />
-          {errors.organizacionSlug && <p role="alert">{errors.organizacionSlug.message}</p>}
-        </div>
+    <main className="flex min-h-dvh items-center justify-center bg-surface-muted p-4">
+      <div className="w-full max-w-sm rounded-md border border-border bg-surface p-6 shadow-sm">
+        <h1 className="mb-4 text-lg font-semibold text-primary">Iniciar sesión</h1>
+        <form onSubmit={alEnviar} noValidate className="flex flex-col gap-4">
+          <Campo id="organizacionSlug" etiqueta="Organización" error={errors.organizacionSlug?.message}>
+            <input
+              id="organizacionSlug"
+              autoComplete="organization"
+              className={clasesInput}
+              {...register('organizacionSlug')}
+            />
+          </Campo>
 
-        <div>
-          <label htmlFor="usuario">Usuario</label>
-          <input id="usuario" autoComplete="username" {...register('usuario')} />
-          {errors.usuario && <p role="alert">{errors.usuario.message}</p>}
-        </div>
+          <Campo id="usuario" etiqueta="Usuario" error={errors.usuario?.message}>
+            <input id="usuario" autoComplete="username" className={clasesInput} {...register('usuario')} />
+          </Campo>
 
-        <div>
-          <label htmlFor="contrasena">Contraseña</label>
-          <input
-            id="contrasena"
-            type="password"
-            autoComplete="current-password"
-            {...register('contrasena')}
-          />
-          {errors.contrasena && <p role="alert">{errors.contrasena.message}</p>}
-        </div>
+          <Campo id="contrasena" etiqueta="Contraseña" error={errors.contrasena?.message}>
+            <input
+              id="contrasena"
+              type="password"
+              autoComplete="current-password"
+              className={clasesInput}
+              {...register('contrasena')}
+            />
+          </Campo>
 
-        <button type="submit" disabled={login.isPending}>
-          Iniciar sesión
-        </button>
+          <Boton type="submit" disabled={login.isPending} className="w-full">
+            Iniciar sesión
+          </Boton>
 
-        {login.isError && <p role="alert">{login.error.message}</p>}
-      </form>
+          {login.isError && <Alert>{login.error.message}</Alert>}
+        </form>
+      </div>
     </main>
   )
 }

@@ -98,6 +98,29 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         # (tarea 8.9, aislamiento de `comando_cuarentena` entre
         # organizaciones).
         ("post", "/api/v1/sync/comandos"),
+        # Change 05, grupo 9 (`catalogo/api.py`, tarea 9.1/9.2), cobertura
+        # de tarea 11.1: las trece rutas nuevas, cada una con su prueba de
+        # aislamiento real -- incluida la referencia ajena EN EL CONTENIDO
+        # (categoría/marca/alícuota de otra organización), no solo el id
+        # de la ruta -- en `test_inv21_aislamiento_endpoints_catalogo.py`.
+        ("post", "/api/v1/catalogo/categorias"),
+        ("get", "/api/v1/catalogo/categorias"),
+        ("put", "/api/v1/catalogo/categorias/{categoria_id}"),
+        ("post", "/api/v1/catalogo/marcas"),
+        ("get", "/api/v1/catalogo/marcas"),
+        ("put", "/api/v1/catalogo/marcas/{marca_id}"),
+        ("post", "/api/v1/catalogo/productos"),
+        ("get", "/api/v1/catalogo/productos"),
+        ("put", "/api/v1/catalogo/productos/{producto_id}"),
+        ("get", "/api/v1/catalogo/productos/{producto_id}"),
+        ("post", "/api/v1/catalogo/productos/{producto_id}/presentaciones"),
+        ("put", "/api/v1/catalogo/presentaciones/{presentacion_id}"),
+        ("put", "/api/v1/catalogo/productos/{producto_id}/referencia"),
+        # Change 05, grupo 9/11 (tarea 9.6/11.5, D12): la ruta de solo
+        # lectura de `configuracion/api.py` -- cada organización lista solo
+        # sus propias alícuotas, `test_configuracion_api.py::
+        # TestAislamientoInv21`.
+        ("get", "/api/v1/configuracion/alicuotas"),
     }
 )
 

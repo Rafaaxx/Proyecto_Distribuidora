@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from app.api_v1 import sistema
 from app.core.clock import FixedClock
 from app.core.config import Settings
 from app.core.db import crear_engine, crear_session_factory
@@ -106,25 +107,42 @@ def _crear_usuario(
 
 
 @pytest.fixture
-def cliente(database_url: str) -> TestClient:
+def cliente(database_url: str) -> Iterator[TestClient]:
+    """Cada prueba arma su propia app (`crear_app` crea un `Engine` propio,
+    sin `dispose` automático). Si no se libera acá, el pool de conexiones
+    queda vivo hasta que el recolector de ciclos de CPython lo alcance --
+    indeterminado -- y una corrida completa de la suite (cientos de estas
+    fixtures) agota `max_connections` de Postgres antes de eso. Se recupera
+    el `Engine` ya inyectado vía `dependency_overrides` (no se crea uno
+    aparte) para poder cerrarlo explícitamente al terminar la prueba."""
     settings = Settings(
         _env_file=None, database_url=database_url, jwt_secret=JWT_SECRET, jwt_kid="1"
     )
-    return TestClient(crear_app(settings))
+    app = crear_app(settings)
+    engine = app.dependency_overrides[sistema._get_engine]()
+    try:
+        yield TestClient(app)
+    finally:
+        engine.dispose()
 
 
 @pytest.fixture
-def sesion(database_url: str, _engine_de_sesion):
+def sesion(database_url: str, _engine_de_sesion) -> Iterator[Session]:
     """Sesión con `commit` real (no la transaccional `db_session`): los
     datos deben quedar visibles para el motor propio que arma la app
     (`crear_app` construye su propio `Engine`/`sessionmaker` a partir de
     `database_url`, distinto del de `db_session`) -- una fila que solo
     vive en un SAVEPOINT de `db_session` nunca sería visible ahí. Depende
     de `_engine_de_sesion` únicamente para que las migraciones ya hayan
-    corrido (no usa ese motor: abre el suyo propio)."""
-    factory = crear_session_factory(crear_engine(database_url))
-    with factory() as sesion_real:
-        yield sesion_real
+    corrido (no usa ese motor: abre el suyo propio, que cierra explícitamente
+    al final -- ver `cliente` arriba)."""
+    engine = crear_engine(database_url)
+    try:
+        factory = crear_session_factory(engine)
+        with factory() as sesion_real:
+            yield sesion_real
+    finally:
+        engine.dispose()
 
 
 def test_login_devuelve_access_token_y_cookie_de_refresh(

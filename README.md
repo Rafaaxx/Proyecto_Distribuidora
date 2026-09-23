@@ -54,6 +54,23 @@ Administrador. La contraseña del administrador sale de `ADMIN_PASSWORD`
 siembra falla antes de crear nada. Repetir la siembra nunca pisa la
 contraseña de un administrador ya existente.
 
+`ADMIN_PASSWORD` **no** está declarada en `environment:` del servicio
+`backend` de `docker-compose.yml` (a diferencia de `JWT_SECRET` y las
+contraseñas de los roles de base), así que ponerla en `.env` no alcanza
+para que la vea el contenedor al correr la siembra: hay que pasarla con
+`-e` en el propio comando `docker compose exec`:
+
+```bash
+docker compose exec -e ADMIN_PASSWORD=CAMBIAR_ESTA_CLAVE backend python -m app.seed
+```
+
+Para reiniciar el entorno con una contraseña de administrador distinta
+(por ejemplo, si no se recuerda la anterior), no alcanza con volver a
+correr la siembra (no pisa la contraseña existente): hay que recrear el
+volumen de Postgres (`docker compose down -v`, vuelve a `docker compose up`
+y a aplicar migraciones) y recién ahí sembrar de nuevo con el
+`ADMIN_PASSWORD` nuevo.
+
 ## Cómo levantar el entorno
 
 ```bash
@@ -67,11 +84,12 @@ Esto levanta tres servicios:
 - `backend` — FastAPI con recarga automática en `http://localhost:8000`
 - `frontend` — Vite (React + TypeScript) en `http://localhost:5173`
 
-Verificar que el backend responde:
+Verificar que el backend responde (en PowerShell, `curl` es un alias de
+`Invoke-WebRequest` — usar `curl.exe`; en bash, `curl` funciona tal cual):
 
 ```bash
-curl http://localhost:8000/api/v1/salud
-curl http://localhost:8000/api/v1/version
+curl.exe http://localhost:8000/api/v1/salud
+curl.exe http://localhost:8000/api/v1/version
 ```
 
 Aplicar migraciones (Alembic corre como `app_migrations`, nunca como

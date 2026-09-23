@@ -1,8 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
+import { AdminLayout } from './AdminLayout'
 import { LoginScreen } from './auth/LoginScreen'
 import { DispositivosScreen } from './dispositivos/DispositivosScreen'
+
+// Carga diferida: el bundle de catálogo no se descarga hasta que alguien
+// navega a `/admin/catalogo` (tarea 10.1, mismo criterio que `AppRoutes.tsx`
+// entre `/ruta` y `/admin`).
+const CatalogoArea = lazy(() => import('./catalogo/CatalogoArea'))
 
 /**
  * `docs/02-arquitectura.md` §13.1: `/admin` usa TanStack Query contra la
@@ -23,7 +30,17 @@ export function AdminScreen() {
       <Routes>
         <Route path="/" element={<Navigate to="login" replace />} />
         <Route path="login" element={<LoginScreen />} />
-        <Route path="dispositivos" element={<DispositivosScreen />} />
+        <Route element={<AdminLayout />}>
+          <Route path="dispositivos" element={<DispositivosScreen />} />
+          <Route
+            path="catalogo/*"
+            element={
+              <Suspense fallback={null}>
+                <CatalogoArea />
+              </Suspense>
+            }
+          />
+        </Route>
       </Routes>
     </QueryClientProvider>
   )

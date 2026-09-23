@@ -35,6 +35,17 @@ def listar_alicuotas_activas(organizacion_id: UUID, sesion: Session) -> list[Ali
     return repository.listar_alicuotas_activas(organizacion_id, sesion)
 
 
+def obtener_alicuota_por_id(
+    organizacion_id: UUID, alicuota_id: UUID, sesion: Session
+) -> AlicuotaIva | None:
+    """Lectura pública de una alícuota por id (change 05, `design.md`:
+    "`catalogo` la consume por `configuracion/service.py`", `CLAUDE.md` §4:
+    un módulo usa a otro solo a través de su `service.py`). Nunca devuelve
+    la fila de otra organización: el filtro va siempre por
+    `organizacion_id`."""
+    return repository.obtener_alicuota_por_id(organizacion_id, sesion, alicuota_id)
+
+
 def desactivar_alicuota(
     organizacion_id: UUID, sesion: Session, reloj: Clock, alicuota_id: UUID
 ) -> AlicuotaIva | None:

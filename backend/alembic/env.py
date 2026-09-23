@@ -15,6 +15,7 @@ from app.core.db import Base  # noqa: E402
 
 # Importar los `models.py` de cada módulo registra sus tablas en
 # `Base.metadata` (import por efecto secundario, único lugar donde se hace).
+from app.modules.catalogo import models as catalogo_models  # noqa: E402,F401
 from app.modules.configuracion import models as configuracion_models  # noqa: E402,F401
 from app.modules.identidad import models as identidad_models  # noqa: E402,F401
 from app.modules.sync import models as sync_models  # noqa: E402,F401

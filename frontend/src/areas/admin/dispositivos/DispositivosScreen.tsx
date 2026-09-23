@@ -1,3 +1,7 @@
+import { Badge } from '../../../components/ui/Badge'
+import { Boton } from '../../../components/ui/Button'
+import { Card } from '../../../components/ui/Card'
+import { PageHeader } from '../../../components/ui/PageHeader'
 import { PermisoRequeridoError, useDispositivos } from './useDispositivos'
 import { useRevocarDispositivo } from './useRevocarDispositivo'
 
@@ -17,9 +21,9 @@ export function DispositivosScreen() {
 
   if (dispositivos.isPending) {
     return (
-      <main>
-        <h1>Dispositivos</h1>
-        <p>Cargando…</p>
+      <main className="flex flex-col gap-4">
+        <PageHeader titulo="Dispositivos" />
+        <p className="text-sm text-primary/70">Cargando…</p>
       </main>
     )
   }
@@ -27,53 +31,61 @@ export function DispositivosScreen() {
   if (dispositivos.isError) {
     if (dispositivos.error instanceof PermisoRequeridoError) {
       return (
-        <main>
-          <h1>Dispositivos</h1>
-          <p>No tenés permiso para gestionar dispositivos.</p>
+        <main className="flex flex-col gap-4">
+          <PageHeader titulo="Dispositivos" />
+          <p className="text-sm text-primary/70">No tenés permiso para gestionar dispositivos.</p>
         </main>
       )
     }
     return (
-      <main>
-        <h1>Dispositivos</h1>
-        <p role="alert">No se pudieron obtener los dispositivos.</p>
+      <main className="flex flex-col gap-4">
+        <PageHeader titulo="Dispositivos" />
+        <p role="alert" className="text-sm text-danger">
+          No se pudieron obtener los dispositivos.
+        </p>
       </main>
     )
   }
 
   return (
-    <main>
-      <h1>Dispositivos</h1>
-      <table>
-        <thead>
-          <tr>
-            <th>Nombre</th>
-            <th>Prefijo</th>
-            <th>Estado</th>
-            <th>Último correlativo</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {dispositivos.data.map((dispositivo) => (
-            <tr key={dispositivo.id}>
-              <td>{dispositivo.nombre}</td>
-              <td>{dispositivo.prefijo}</td>
-              <td>{dispositivo.estado}</td>
-              <td>{dispositivo.ultimo_correlativo}</td>
-              <td>
-                <button
-                  type="button"
-                  disabled={dispositivo.estado === 'REVOCADO' || revocar.isPending}
-                  onClick={() => revocar.mutate(dispositivo.id)}
-                >
-                  Revocar
-                </button>
-              </td>
+    <main className="flex flex-col gap-4">
+      <PageHeader titulo="Dispositivos" />
+      <Card className="overflow-x-auto p-0">
+        <table className="w-full border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="px-3 py-2 font-medium text-primary">Nombre</th>
+              <th className="px-3 py-2 font-medium text-primary">Prefijo</th>
+              <th className="px-3 py-2 font-medium text-primary">Estado</th>
+              <th className="px-3 py-2 font-medium text-primary">Último correlativo</th>
+              <th className="px-3 py-2"></th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {dispositivos.data.map((dispositivo) => (
+              <tr key={dispositivo.id} className="border-b border-border last:border-0">
+                <td className="px-3 py-2">{dispositivo.nombre}</td>
+                <td className="px-3 py-2">{dispositivo.prefijo}</td>
+                <td className="px-3 py-2">
+                  <Badge variante={dispositivo.estado === 'REVOCADO' ? 'negativo' : 'positivo'}>
+                    {dispositivo.estado}
+                  </Badge>
+                </td>
+                <td className="px-3 py-2">{dispositivo.ultimo_correlativo}</td>
+                <td className="px-3 py-2">
+                  <Boton
+                    variante="peligro"
+                    disabled={dispositivo.estado === 'REVOCADO' || revocar.isPending}
+                    onClick={() => revocar.mutate(dispositivo.id)}
+                  >
+                    Revocar
+                  </Boton>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
     </main>
   )
 }

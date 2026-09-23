@@ -1,1 +1,18 @@
 @import 'tailwindcss';
+
+/**
+ * Tokens de `/admin` (`design.md` D10): "un conjunto chico de tokens en
+ * `@theme` (color primario, superficie, borde, peligro, radio)". Sin
+ * identidad visual definida todavía (decisión abierta y no bloqueante en
+ * D10) -- paleta neutra, se ajusta después sin tocar lógica.
+ */
+@theme {
+  --color-primary: oklch(41% 0.14 258);
+  --color-primary-foreground: oklch(98% 0.01 258);
+  --color-surface: oklch(100% 0 0);
+  --color-surface-muted: oklch(97% 0.005 258);
+  --color-border: oklch(88% 0.01 258);
+  --color-danger: oklch(53% 0.22 27);
+  --color-danger-foreground: oklch(98% 0.01 27);
+  --radius-md: 0.375rem;
+}

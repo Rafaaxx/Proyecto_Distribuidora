@@ -64,7 +64,14 @@ from app.core.ids import nuevo_id
 from app.core.logging import comando_contexto_var
 from app.modules.identidad import service as identidad_service
 from app.modules.sync import repository
-from app.modules.sync.models import CODIGOS_OBSERVACION, Comando, ComandoCuarentena, Observacion
+from app.modules.sync.models import CODIGOS_OBSERVACION, ComandoCuarentena, Observacion
+
+# Re-export explícito de `Comando` (`Comando as Comando`, mypy
+# `implicit_reexport = False` bajo `strict`): `catalogo/api.py` anota con
+# `sync_service.Comando` en vez de importar `sync.models` directamente
+# (tarea 13.4, aprobado 2026-09-23) y necesita que este módulo lo exponga
+# a propósito, no por accidente de import.
+from app.modules.sync.models import Comando as Comando
 
 # Change 04, grupo 12 (tarea 12.2/12.3, `02` §17): logger dedicado al bus de
 # comandos. Nunca recibe el CONTENIDO de un comando como argumento -- solo

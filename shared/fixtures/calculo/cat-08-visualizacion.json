@@ -1,0 +1,44 @@
+[
+  {
+    "id": "CAT08-vino-a-caja-x6-31-unidades",
+    "reglas": ["CAT-08"],
+    "entrada": { "motor": "cat08", "operacion": "visualizar_cantidad", "cantidad_base": 31, "unidades_referencia": 6 },
+    "salida_esperada": { "cajas": 5, "unidades": 1, "negativo": false }
+  },
+  {
+    "id": "CAT08-cerveza-b-caja-x12-31-unidades",
+    "reglas": ["CAT-08"],
+    "entrada": { "motor": "cat08", "operacion": "visualizar_cantidad", "cantidad_base": 31, "unidades_referencia": 12 },
+    "salida_esperada": { "cajas": 2, "unidades": 7, "negativo": false }
+  },
+  {
+    "id": "CAT08-cantidad-negativa-menos-8-sobre-6",
+    "reglas": ["CAT-08"],
+    "entrada": { "motor": "cat08", "operacion": "visualizar_cantidad", "cantidad_base": -8, "unidades_referencia": 6 },
+    "salida_esperada": { "cajas": 1, "unidades": 2, "negativo": true }
+  },
+  {
+    "id": "CAT08-cantidad-cero-sin-signo",
+    "reglas": ["CAT-08"],
+    "entrada": { "motor": "cat08", "operacion": "visualizar_cantidad", "cantidad_base": 0, "unidades_referencia": 6 },
+    "salida_esperada": { "cajas": 0, "unidades": 0, "negativo": false }
+  },
+  {
+    "id": "CAT08-referencia-de-una-unidad-siete",
+    "reglas": ["CAT-08"],
+    "entrada": { "motor": "cat08", "operacion": "visualizar_cantidad", "cantidad_base": 7, "unidades_referencia": 1 },
+    "salida_esperada": { "cajas": 7, "unidades": 0, "negativo": false }
+  },
+  {
+    "id": "CAT08-unidades-de-referencia-cero-es-invalido",
+    "reglas": ["CAT-08", "CAT-02"],
+    "entrada": { "motor": "cat08", "operacion": "visualizar_cantidad", "cantidad_base": 10, "unidades_referencia": 0 },
+    "salida_esperada": { "error": true }
+  },
+  {
+    "id": "CAT08-unidades-de-referencia-negativas-es-invalido",
+    "reglas": ["CAT-08", "CAT-02"],
+    "entrada": { "motor": "cat08", "operacion": "visualizar_cantidad", "cantidad_base": 10, "unidades_referencia": -6 },
+    "salida_esperada": { "error": true }
+  }
+]

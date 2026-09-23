@@ -103,12 +103,16 @@ La tabla indica qué changes deben estar archivados antes de empezar cada uno.
 
 | # | Change | Entrega | Invariantes que cierra |
 | --- | --- | --- | --- |
-| 05 | `catalogo` | Categorías, marcas, productos, presentaciones, presentación de referencia, alta y edición por comandos, pantalla de administración, visualización cajas + unidades | INV-18 (unidades congeladas), CAT-03 (índice único) |
+| 05 | `catalogo` | Categorías, marcas, productos, presentaciones, presentación de referencia, alta y edición por comandos, pantalla de administración, visualización cajas + unidades | INV-18 (cerrado por completo), CAT-03 (cerrado por completo) |
 | 06 | `proveedores-y-costos-informados` | Proveedores, carga de costo en cualquier presentación con o sin IVA y bonificación, vigencias, historial, costo base derivado | — |
 | 07 | `clientes` | Ficha completa, estados, lista asignada, campos de crédito sin evaluación, consumidor final | — |
 | 08 | `cuentas-corrientes` | `cuenta_movimiento`, `saldo_cuenta`, comando de saldo inicial, estado de cuenta de cliente y proveedor, bloqueo de fila de saldo | INV-13 (Hypothesis), INV-05 (solo inserción) |
 | 09 | `stock-y-costeo` | Ubicaciones, `stock_saldo`, `stock_movimiento`, `costo_producto` con `stock_total`, `costo_producto_mov`, comando de stock inicial valorizado, kardex, orden de bloqueo global (`02` §7.3) | INV-12 (Hypothesis), INV-04 |
 | 10 | `importacion-inicial` | Importación de productos, clientes, proveedores y costos desde CSV/Excel; stock inicial y saldos iniciales; informe de errores por fila | — |
+
+**CAT-03 e INV-18 cerrados por el change 05 (`catalogo`, verificación grupo 13):** CAT-03 (exactamente una presentación de referencia por producto, activa y usada en venta) queda garantizado en tres capas — el servicio (`catalogo/service.py`, validado antes de escribir), el índice único parcial `ux_presentacion__referencia` (`03` §5, que rechaza una segunda referencia escrita por fuera del servicio, incluso ante escrituras concurrentes) y el `CHECK` `ck_presentacion__referencia_venta` (una referencia siempre tiene `usar_en_venta = true`). Confirmado con `backend/tests/unit/test_catalogo_domain_presentaciones.py` (servicio, incluida la propiedad Hypothesis "todo conjunto aceptado tiene exactamente una referencia de venta"), `backend/tests/integration/test_catalogo_migracion.py::test_cat03_ux_presentacion_referencia_rechaza_segunda_referencia_directa` y `test_cat03_ck_referencia_venta_rechaza_referencia_sin_venta` (base), y `backend/tests/concurrency/test_catalogo_concurrencia.py::test_dos_cambios_de_referencia_simultaneos_dejan_exactamente_una_referencia` (dos transacciones con commits reales). INV-18 (las unidades base de una presentación ya usada no cambian) se resuelve con el puerto de verificadores de uso de `design.md` D2 del change 05-catalogo (ver ADR-023, vigente): `PRESENTACION_MODIFICAR` consulta a todos los verificadores registrados y rechaza con `UNIDADES_CONGELADAS` si alguno confirma uso. Confirmado con `backend/tests/unit/test_catalogo_domain_presentaciones.py::test_inv18_cambiar_unidades_de_presentacion_usada_es_congelado`, `backend/tests/integration/test_catalogo_service.py::test_inv18_cambiar_unidades_de_presentacion_usada_es_congelado` y, en la pantalla, `frontend/tests/unit/areas/admin/catalogo/ProductoFormScreen.test.tsx` (mensaje del servidor mostrado al usuario). En este change no existe ningún módulo de operaciones (nace en 06, 11 y 18a): la lista de verificadores está vacía en producción y las pruebas registran uno de prueba. Este cierre no se reabre por las deudas nominadas abajo (que solo piden a los changes futuros registrar su propio verificador); es un cierre del mecanismo, no del universo de verificadores registrados.
+
+**Deuda nominada por el change 05 (`catalogo`) para el change 06 (`proveedores-y-costos-informados`):** completar la FK compuesta y el `NOT NULL` de `producto.proveedor_id` (hoy columna `uuid` nulable y sin FK, `design.md` D1 del change 05-catalogo) — FK `NOT VALID` + `VALIDATE`, completar los productos sin proveedor y recién entonces `SET NOT NULL`, antes de que el change 10 cargue datos reales. Además, decidir si `costo_informado` debe registrar su verificador de uso de presentaciones (INV-18, `design.md` D2 del change 05-catalogo): ¿un costo informado cuenta como "uso" que congela las unidades de la presentación? `01` no lo resuelve.
 
 **Al terminar el hito 2, cargar los datos reales de la distribuidora.** Los problemas de datos aparecen temprano y sin presión de venta. Es el momento más barato para descubrirlos.
 
@@ -119,6 +123,10 @@ La tabla indica qué changes deben estar archivados antes de empezar cada uno.
 | 11 | `compras-y-deuda-proveedor` | Compra con líneas en cualquier presentación, ingreso de stock, recálculo de promedio, deuda o pago de contado, anulación con reversión | INV-01 (atómica), INV-07 (al menos una línea), CST-11 |
 | 12 | `pagos-a-proveedores` | Pago con varios medios, anulación, saldo de proveedor | INV-08 |
 | 13 | `listas-de-precios` | Listas, reglas de margen con precedencia, redondeo, generación de borrador, publicación, versiones anteriores, resolución de precio | INV-11 (versión inmutable), fixtures compartidos PRC-22 |
+
+**Deuda nominada por el change 05 (`catalogo`) para el change 11 (`compras-y-deuda-proveedor`):** registrar el verificador de uso de presentaciones de `compra_linea` vía `catalogo/service.py::registrar_verificador_uso` (`design.md` D2 del change 05-catalogo), con una prueba que cite INV-18.
+
+**Deuda nominada por el change 05 (`catalogo`) para el change 13 (`listas-de-precios`):** decidir por ADR qué pasa al cambiar la presentación de referencia de un producto con precios publicados — `precio_item` no congela las unidades de referencia, y el cambio altera el significado de `precio_referencia` (PRC-10, PRC-22; `design.md` D5 del change 05-catalogo). El ADR debe optar entre bloquear el cambio de referencia o congelar las unidades en `precio_item`.
 
 **Punto de validación con el cliente después del change 13:** mostrarle cómo un costo nuevo genera una lista y qué precios salen. Es el momento más barato para corregir márgenes o redondeos.
 
@@ -133,6 +141,8 @@ La tabla indica qué changes deben estar archivados antes de empezar cada uno.
 
 **Deuda heredada del change 04 para el change 15 (`jornadas`):** `comando.jornada_id` quedó como columna sin FK porque la tabla `jornada` todavía no existe (`design.md` D8 del change 04-pipeline-comandos). Agregar la FK compuesta (`organizacion_id`, `jornada_id`) hacia `jornada` como parte de este change.
 
+**Deuda nominada por el change 05 (`catalogo`) para el change 17 (`cobranzas`):** resolver la firma de `registro.HandlerFuncion` (hoy sin contexto: la plantilla D7 del change 04 pasa `sesion`/`reloj` como kwargs con `# type: ignore[arg-type]`) para que el despacho por lote (`_procesar_item_de_lote`) reciba `sesion`/`reloj` en forma tipada, antes de declarar `COBRANZA_REGISTRAR`, el primer tipo de comando que admite `OFFLINE` (`design.md` D3 del change 05-catalogo).
+
 ## 9. Hito 5 — Venta
 
 | # | Change | Entrega | Invariantes que cierra |
@@ -141,6 +151,8 @@ La tabla indica qué changes deben estar archivados antes de empezar cada uno.
 | 18b | `venta-online-descuentos-credito` | Descuentos automáticos y manuales en la venta, evaluación de crédito con las tres políticas, PIN de supervisor, snapshot de crédito congelado | INV-10 (snapshot inmutable), fixtures compartidos CRE-01 |
 | 19 | `venta-anulacion` | Anulación con motivo, reversión de stock y cuenta corriente, decisión sobre el dinero cobrado | INV-19 |
 | 20 | `nota-de-venta` | Generación del comprobante en el dispositivo, Web Share API, descarga de respaldo, reimpresión desde administración | VTA-13 |
+
+**Deuda nominada por el change 05 (`catalogo`) para el change 18a (`venta-online-core`):** registrar el verificador de uso de presentaciones de `venta_linea` vía `catalogo/service.py::registrar_verificador_uso` (`design.md` D2 del change 05-catalogo), con una prueba que cite INV-18, y leer la presentación con `SELECT … FOR KEY SHARE` al congelar `unidades_presentacion` en la línea de venta (INV-18, PRC-23).
 
 **Al terminar el hito 5, el sistema puede usarse en producción con conexión.** El despliegue básico (27a) va aquí, no al final.
 

@@ -184,9 +184,15 @@ export interface paths {
         get?: never;
         /**
          * Cambiar Composicion Rol
-         * @description Escenario "Una organización cambia la composición de un rol"
-         *     (tarea 8.9). `RecursoNoEncontradoError` si `rol_id` no pertenece a
-         *     `contexto.organizacion_id` (SEG-07, INV-21, tarea 10.7).
+         * @description Change 04, grupo 14 (decisión del usuario 2026-09-22, `tasks.md`
+         *     14.3/14.4): delega en el bus de comandos (`ROL_PERMISOS_CAMBIAR`,
+         *     `identidad/commands.py`) en vez de llamar directo a
+         *     `identidad_service.cambiar_composicion_rol` (deuda encontrada por la
+         *     tarea 14.2). `RecursoNoEncontradoError` si `rol_id` no pertenece a
+         *     `entrada.contexto.organizacion_id` (SEG-07, INV-21, tarea 10.7). Un
+         *     reenvío idéntico resuelve el mismo rol ya modificado -- se relee de la
+         *     base para que la respuesta sea el estado real (mismo criterio que
+         *     `crear_usuario`).
          */
         put: operations["cambiar_composicion_rol_api_v1_identidad_roles__rol_id__permisos_put"];
         post?: never;
@@ -236,10 +242,191 @@ export interface paths {
         /**
          * Desbloquear Usuario
          * @description Desbloqueo manual de un usuario bloqueado por intentos (tarea 11.4,
-         *     `ADR-018`). `RecursoNoEncontradoError` si `usuario_id` no pertenece a
-         *     `contexto.organizacion_id` (SEG-07, INV-21).
+         *     `ADR-018`). Change 04, grupo 14 (decisión del usuario 2026-09-22,
+         *     `tasks.md` 14.5/14.6): delega en el bus de comandos
+         *     (`USUARIO_DESBLOQUEAR`, `identidad/commands.py`). `RecursoNoEncontradoError`
+         *     si `usuario_id` no pertenece a `entrada.contexto.organizacion_id`
+         *     (SEG-07, INV-21).
          */
         post: operations["desbloquear_usuario_api_v1_identidad_usuarios__usuario_id__desbloqueo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalogo/categorias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Categorias */
+        get: operations["listar_categorias_api_v1_catalogo_categorias_get"];
+        put?: never;
+        /** Crear Categoria */
+        post: operations["crear_categoria_api_v1_catalogo_categorias_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalogo/categorias/{categoria_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Modificar Categoria */
+        put: operations["modificar_categoria_api_v1_catalogo_categorias__categoria_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalogo/marcas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Marcas */
+        get: operations["listar_marcas_api_v1_catalogo_marcas_get"];
+        put?: never;
+        /** Crear Marca */
+        post: operations["crear_marca_api_v1_catalogo_marcas_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalogo/marcas/{marca_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Modificar Marca */
+        put: operations["modificar_marca_api_v1_catalogo_marcas__marca_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalogo/productos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Productos */
+        get: operations["listar_productos_api_v1_catalogo_productos_get"];
+        put?: never;
+        /** Crear Producto */
+        post: operations["crear_producto_api_v1_catalogo_productos_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalogo/productos/{producto_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Producto
+         * @description 404 (INV-21/SEG-07) si `producto_id` no existe en
+         *     `contexto.organizacion_id` o pertenece a otra organización.
+         */
+        get: operations["obtener_producto_api_v1_catalogo_productos__producto_id__get"];
+        /** Modificar Producto */
+        put: operations["modificar_producto_api_v1_catalogo_productos__producto_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalogo/productos/{producto_id}/presentaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Agregar Presentacion */
+        post: operations["agregar_presentacion_api_v1_catalogo_productos__producto_id__presentaciones_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalogo/presentaciones/{presentacion_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Modificar Presentacion */
+        put: operations["modificar_presentacion_api_v1_catalogo_presentaciones__presentacion_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalogo/productos/{producto_id}/referencia": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Cambiar Referencia */
+        put: operations["cambiar_referencia_api_v1_catalogo_productos__producto_id__referencia_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/configuracion/alicuotas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Alicuotas */
+        get: operations["listar_alicuotas_api_v1_configuracion_alicuotas_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -275,6 +462,54 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AlicuotaResponse */
+        AlicuotaResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Valor */
+            valor: string;
+            /** Activo */
+            activo: boolean;
+        };
+        /** CategoriaCrearRequest */
+        CategoriaCrearRequest: {
+            /** Nombre */
+            nombre: string;
+        };
+        /** CategoriaModificarRequest */
+        CategoriaModificarRequest: {
+            /** Nombre */
+            nombre: string;
+            /** Activo */
+            activo: boolean;
+        };
+        /** CategoriaResponse */
+        CategoriaResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Activo */
+            activo: boolean;
+            /**
+             * Creado En
+             * Format: date-time
+             */
+            creado_en: string;
+            /**
+             * Actualizado En
+             * Format: date-time
+             */
+            actualizado_en: string;
+        };
         /** ComposicionRolRequest */
         ComposicionRolRequest: {
             /** Permisos */
@@ -400,6 +635,281 @@ export interface components {
         LoteComandosResponse: {
             /** Resultados */
             resultados: components["schemas"]["ResultadoItemLoteResponse"][];
+        };
+        /** MarcaCrearRequest */
+        MarcaCrearRequest: {
+            /** Nombre */
+            nombre: string;
+        };
+        /** MarcaModificarRequest */
+        MarcaModificarRequest: {
+            /** Nombre */
+            nombre: string;
+            /** Activo */
+            activo: boolean;
+        };
+        /** MarcaResponse */
+        MarcaResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Activo */
+            activo: boolean;
+            /**
+             * Creado En
+             * Format: date-time
+             */
+            creado_en: string;
+            /**
+             * Actualizado En
+             * Format: date-time
+             */
+            actualizado_en: string;
+        };
+        /** PaginaAlicuotas */
+        PaginaAlicuotas: {
+            /** Items */
+            items: components["schemas"]["AlicuotaResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
+        /** PaginaCategorias */
+        PaginaCategorias: {
+            /** Items */
+            items: components["schemas"]["CategoriaResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
+        /** PaginaMarcas */
+        PaginaMarcas: {
+            /** Items */
+            items: components["schemas"]["MarcaResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
+        /** PaginaProductos */
+        PaginaProductos: {
+            /** Items */
+            items: components["schemas"]["ProductoResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
+        /** PresentacionAgregarRequest */
+        PresentacionAgregarRequest: {
+            /** Nombre */
+            nombre: string;
+            /** Unidades Base */
+            unidades_base: number;
+            /** Usar En Venta */
+            usar_en_venta: boolean;
+            /** Usar En Compra */
+            usar_en_compra: boolean;
+        };
+        /**
+         * PresentacionInicialRequest
+         * @description Presentación inicial dentro de un `ProductoCrearRequest` (CAT-02,
+         *     CAT-03: el alta ya trae sus presentaciones, exactamente una de
+         *     referencia).
+         */
+        PresentacionInicialRequest: {
+            /** Nombre */
+            nombre: string;
+            /** Unidades Base */
+            unidades_base: number;
+            /** Usar En Venta */
+            usar_en_venta: boolean;
+            /** Usar En Compra */
+            usar_en_compra: boolean;
+            /** Es Referencia */
+            es_referencia: boolean;
+        };
+        /** PresentacionModificarRequest */
+        PresentacionModificarRequest: {
+            /** Nombre */
+            nombre: string;
+            /** Unidades Base */
+            unidades_base: number;
+            /** Usar En Venta */
+            usar_en_venta: boolean;
+            /** Usar En Compra */
+            usar_en_compra: boolean;
+            /** Activo */
+            activo: boolean;
+        };
+        /** PresentacionReferenciaCambiarRequest */
+        PresentacionReferenciaCambiarRequest: {
+            /**
+             * Presentacion Id
+             * Format: uuid
+             */
+            presentacion_id: string;
+        };
+        /** PresentacionResponse */
+        PresentacionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Nombre */
+            nombre: string;
+            /** Unidades Base */
+            unidades_base: number;
+            /** Usar En Venta */
+            usar_en_venta: boolean;
+            /** Usar En Compra */
+            usar_en_compra: boolean;
+            /** Es Referencia */
+            es_referencia: boolean;
+            /** Activo */
+            activo: boolean;
+            /**
+             * Creado En
+             * Format: date-time
+             */
+            creado_en: string;
+            /**
+             * Actualizado En
+             * Format: date-time
+             */
+            actualizado_en: string;
+        };
+        /** ProductoCrearRequest */
+        ProductoCrearRequest: {
+            /** Codigo */
+            codigo: string;
+            /** Nombre */
+            nombre: string;
+            /**
+             * Categoria Id
+             * Format: uuid
+             */
+            categoria_id: string;
+            /** Marca Id */
+            marca_id?: string | null;
+            /** Unidad Base */
+            unidad_base: string;
+            /**
+             * Alicuota Id
+             * Format: uuid
+             */
+            alicuota_id: string;
+            /** Presentaciones */
+            presentaciones: components["schemas"]["PresentacionInicialRequest"][];
+        };
+        /** ProductoDetalleResponse */
+        ProductoDetalleResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Codigo */
+            codigo: string;
+            /** Nombre */
+            nombre: string;
+            /**
+             * Categoria Id
+             * Format: uuid
+             */
+            categoria_id: string;
+            /** Marca Id */
+            marca_id: string | null;
+            /** Unidad Base */
+            unidad_base: string;
+            /**
+             * Alicuota Id
+             * Format: uuid
+             */
+            alicuota_id: string;
+            /** Activo */
+            activo: boolean;
+            /**
+             * Creado En
+             * Format: date-time
+             */
+            creado_en: string;
+            /**
+             * Actualizado En
+             * Format: date-time
+             */
+            actualizado_en: string;
+            /** Presentaciones */
+            presentaciones: components["schemas"]["PresentacionResponse"][];
+        };
+        /** ProductoModificarRequest */
+        ProductoModificarRequest: {
+            /** Codigo */
+            codigo: string;
+            /** Nombre */
+            nombre: string;
+            /**
+             * Categoria Id
+             * Format: uuid
+             */
+            categoria_id: string;
+            /** Marca Id */
+            marca_id?: string | null;
+            /** Unidad Base */
+            unidad_base: string;
+            /**
+             * Alicuota Id
+             * Format: uuid
+             */
+            alicuota_id: string;
+            /** Activo */
+            activo: boolean;
+        };
+        /**
+         * ProductoResponse
+         * @description Fila de listado (tarea 9.2): sin presentaciones -- para el detalle
+         *     completo (incluidas sus presentaciones) ver `ProductoDetalleResponse`.
+         */
+        ProductoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Codigo */
+            codigo: string;
+            /** Nombre */
+            nombre: string;
+            /**
+             * Categoria Id
+             * Format: uuid
+             */
+            categoria_id: string;
+            /** Marca Id */
+            marca_id: string | null;
+            /** Unidad Base */
+            unidad_base: string;
+            /**
+             * Alicuota Id
+             * Format: uuid
+             */
+            alicuota_id: string;
+            /** Activo */
+            activo: boolean;
+            /**
+             * Creado En
+             * Format: date-time
+             */
+            creado_en: string;
+            /**
+             * Actualizado En
+             * Format: date-time
+             */
+            actualizado_en: string;
         };
         /** RefreshRequest */
         RefreshRequest: {
@@ -787,6 +1297,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
+                "Operation-Id"?: string | null;
                 authorization?: string | null;
             };
             path: {
@@ -860,6 +1371,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
+                "Operation-Id"?: string | null;
                 authorization?: string | null;
             };
             path: {
@@ -875,6 +1387,517 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_categorias_api_v1_catalogo_categorias_get: {
+        parameters: {
+            query?: {
+                limite?: number;
+                cursor?: string | null;
+                solo_activas?: boolean;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaCategorias"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_categoria_api_v1_catalogo_categorias_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoriaCrearRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoriaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    modificar_categoria_api_v1_catalogo_categorias__categoria_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                categoria_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoriaModificarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoriaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_marcas_api_v1_catalogo_marcas_get: {
+        parameters: {
+            query?: {
+                limite?: number;
+                cursor?: string | null;
+                solo_activas?: boolean;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaMarcas"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_marca_api_v1_catalogo_marcas_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarcaCrearRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarcaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    modificar_marca_api_v1_catalogo_marcas__marca_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                marca_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarcaModificarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarcaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_productos_api_v1_catalogo_productos_get: {
+        parameters: {
+            query?: {
+                limite?: number;
+                cursor?: string | null;
+                texto?: string | null;
+                categoria_id?: string | null;
+                marca_id?: string | null;
+                activo?: boolean | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaProductos"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_producto_api_v1_catalogo_productos_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductoCrearRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductoDetalleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_producto_api_v1_catalogo_productos__producto_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                producto_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductoDetalleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    modificar_producto_api_v1_catalogo_productos__producto_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                producto_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductoModificarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductoResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agregar_presentacion_api_v1_catalogo_productos__producto_id__presentaciones_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                producto_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PresentacionAgregarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresentacionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    modificar_presentacion_api_v1_catalogo_presentaciones__presentacion_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                presentacion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PresentacionModificarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresentacionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cambiar_referencia_api_v1_catalogo_productos__producto_id__referencia_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                producto_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PresentacionReferenciaCambiarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresentacionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_alicuotas_api_v1_configuracion_alicuotas_get: {
+        parameters: {
+            query?: {
+                limite?: number;
+                cursor?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaAlicuotas"];
+                };
             };
             /** @description Validation Error */
             422: {

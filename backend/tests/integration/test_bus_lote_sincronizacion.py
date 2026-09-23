@@ -30,6 +30,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.api_v1 import sistema
 from app.commands import catalogo, registro
 from app.commands.sobre import SobreComando
 from app.core.clock import FixedClock
@@ -508,18 +509,32 @@ class TestPropiedadDeLaColaAnivelServicio:
 
 
 @pytest.fixture
-def cliente(database_url: str) -> TestClient:
+def cliente(database_url: str) -> Iterator[TestClient]:
+    """Cierra explícitamente el `Engine` propio de `crear_app` al terminar
+    (recuperado vía `dependency_overrides`): sin esto, el pool de conexiones
+    queda vivo hasta que el recolector de ciclos de CPython lo alcance, y una
+    corrida completa de la suite agota `max_connections` de Postgres antes
+    de eso."""
     settings = Settings(
         _env_file=None, database_url=database_url, jwt_secret=JWT_SECRET, jwt_kid="1"
     )
-    return TestClient(crear_app(settings))
+    app = crear_app(settings)
+    engine = app.dependency_overrides[sistema._get_engine]()
+    try:
+        yield TestClient(app)
+    finally:
+        engine.dispose()
 
 
 @pytest.fixture
 def sesion_http(database_url: str, _engine_de_sesion) -> Iterator[Session]:
-    factory = crear_session_factory(crear_engine(database_url))
-    with factory() as sesion_real:
-        yield sesion_real
+    engine = crear_engine(database_url)
+    try:
+        factory = crear_session_factory(engine)
+        with factory() as sesion_real:
+            yield sesion_real
+    finally:
+        engine.dispose()
 
 
 def _crear_usuario_y_dispositivo_http(

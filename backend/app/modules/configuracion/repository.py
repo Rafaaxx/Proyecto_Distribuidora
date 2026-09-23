@@ -9,6 +9,7 @@ desactiva, nunca se elimina (`docs/03` §2.5).
 
 from __future__ import annotations
 
+import base64
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -17,6 +18,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.configuracion.models import AlicuotaIva, MedioPago, Motivo
+
+LIMITE_PAGINA_MAXIMO = 100
+LIMITE_PAGINA_DEFAULT = 50
 
 # --- alicuota_iva ---------------------------------------------------------
 
@@ -59,6 +63,43 @@ def listar_alicuotas_activas(organizacion_id: UUID, sesion: Session) -> list[Ali
         AlicuotaIva.organizacion_id == organizacion_id, AlicuotaIva.activo.is_(True)
     )
     return list(sesion.execute(consulta).scalars().all())
+
+
+def _codificar_cursor(valor: str) -> str:
+    return base64.urlsafe_b64encode(valor.encode("utf-8")).decode("ascii")
+
+
+def _decodificar_cursor(cursor: str) -> str:
+    return base64.urlsafe_b64decode(cursor.encode("ascii")).decode("utf-8")
+
+
+def listar_alicuotas_paginado(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    limite: int = LIMITE_PAGINA_DEFAULT,
+    cursor: str | None = None,
+) -> tuple[list[AlicuotaIva], str | None]:
+    """Paginación por cursor (`02` §11; change 05, `design.md` D12): ordenada
+    por `nombre`, con límite máximo `LIMITE_PAGINA_MAXIMO`. Devuelve todas
+    las alícuotas (activas e inactivas, con su `activo`) de la organización
+    -- el cliente filtra a activas (D12). Nunca una fila de otra
+    organización. Devuelve `(alicuotas, cursor_siguiente)`; `cursor_siguiente`
+    es `None` en la última página."""
+    limite_efectivo = min(max(limite, 1), LIMITE_PAGINA_MAXIMO)
+    consulta = select(AlicuotaIva).where(AlicuotaIva.organizacion_id == organizacion_id)
+    if cursor is not None:
+        consulta = consulta.where(AlicuotaIva.nombre > _decodificar_cursor(cursor))
+    consulta = consulta.order_by(AlicuotaIva.nombre).limit(limite_efectivo + 1)
+
+    filas = list(sesion.scalars(consulta).all())
+    if len(filas) > limite_efectivo:
+        pagina = filas[:limite_efectivo]
+        cursor_siguiente: str | None = _codificar_cursor(pagina[-1].nombre)
+    else:
+        pagina = filas
+        cursor_siguiente = None
+    return pagina, cursor_siguiente
 
 
 def desactivar_alicuota(

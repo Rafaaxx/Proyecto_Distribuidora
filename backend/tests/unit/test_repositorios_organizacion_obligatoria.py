@@ -15,6 +15,7 @@ from typing import Any
 
 import pytest
 
+from app.modules.catalogo import repository as catalogo_repository
 from app.modules.configuracion import repository as configuracion_repository
 from app.modules.identidad import repository as identidad_repository
 
@@ -84,6 +85,16 @@ def test_sin_la_exencion_las_funciones_de_permiso_si_serian_detectadas() -> None
 
 def test_configuracion_repository_exige_organizacion_id_primero_en_todo_metodo() -> None:
     _verificar_organizacion_id_primer_parametro(configuracion_repository)
+
+
+def test_catalogo_repository_exige_organizacion_id_primero_en_todo_metodo() -> None:
+    """Change 05, tarea 6.1: `catalogo` no declara ninguna excepción
+    (`FUNCIONES_SIN_ORGANIZACION_ID` vacío, `design.md` D7) -- toda función
+    pública recibe `organizacion_id` primero, sin catálogo global propio."""
+    _verificar_organizacion_id_primer_parametro(
+        catalogo_repository,
+        exentas=catalogo_repository.FUNCIONES_SIN_ORGANIZACION_ID,
+    )
 
 
 def test_una_funcion_sin_organizacion_id_primero_es_detectada() -> None:

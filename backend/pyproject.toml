@@ -55,6 +55,11 @@ ignore_imports = [
     "app.modules.configuracion.models -> sqlalchemy",
     "app.modules.configuracion.repository -> sqlalchemy",
     "app.modules.configuracion.service -> sqlalchemy",
+    "app.modules.configuracion.queries -> sqlalchemy",
+    "app.modules.configuracion.api -> fastapi",
+    "app.modules.configuracion.api -> sqlalchemy",
+    "app.modules.configuracion.api -> app.api_v1.dependencias",
+    "app.modules.configuracion.api -> app.core.autenticacion",
     "app.modules.sync.models -> app.core.db",
     "app.modules.sync.models -> sqlalchemy",
     "app.modules.sync.repository -> sqlalchemy",
@@ -63,13 +68,35 @@ ignore_imports = [
     "app.modules.sync.api -> sqlalchemy",
     "app.modules.sync.api -> app.api_v1.dependencias",
     "app.modules.sync.api -> app.core.autenticacion",
+    "app.modules.catalogo.models -> app.core.db",
+    "app.modules.catalogo.models -> sqlalchemy",
+    "app.modules.catalogo.repository -> sqlalchemy",
+    "app.modules.catalogo.service -> sqlalchemy",
+    "app.modules.catalogo.queries -> sqlalchemy",
+    "app.modules.catalogo.api -> fastapi",
+    "app.modules.catalogo.api -> sqlalchemy",
+    "app.modules.catalogo.api -> app.api_v1.dependencias",
+    "app.modules.catalogo.api -> app.core.autenticacion",
 ]
 
+# `allow_indirect_imports`: descubrimiento de la tarea 9.6 (change 05, D12).
+# `configuracion.api` importa `app.core.autenticacion` (`requiere_permiso`,
+# mismo patrón que `catalogo.api`/`identidad.api`), que a su vez importa
+# `identidad.service` (para resolver el contexto autenticado) y este, para
+# implementarse a sí mismo, importa `identidad.models`/`identidad.repository`.
+# Sin este campo, el contrato (tipo `forbidden`) recorre el grafo
+# TRANSITIVAMENTE y marca esa ruta indirecta como violacion, aunque
+# `configuracion` nunca importa `identidad.models`/`identidad.repository`
+# directamente -- mismo caso ya resuelto para `sync-solo-service` y
+# `catalogo-solo-por-service-ajeno` arriba. `allow_indirect_imports` en este
+# contrato fue revisado y aceptado por el usuario 2026-09-23 (tarea 13.4):
+# no introduce un mecanismo nuevo, reaplica el ya usado arriba.
 [[tool.importlinter.contracts]]
 name = "configuracion no importa modelos ni repositorio de identidad"
 type = "forbidden"
 source_modules = ["app.modules.configuracion"]
 forbidden_modules = ["app.modules.identidad.models", "app.modules.identidad.repository"]
+allow_indirect_imports = "true"
 
 [[tool.importlinter.contracts]]
 name = "identidad no importa modelos ni repositorio de configuracion"
@@ -100,7 +127,11 @@ forbidden_modules = ["app.modules"]
 id = "domain-no-commands"
 name = "domain no importa el bus de comandos"
 type = "forbidden"
-source_modules = ["app.modules.identidad.domain", "app.modules.configuracion.domain"]
+source_modules = [
+    "app.modules.identidad.domain",
+    "app.modules.configuracion.domain",
+    "app.modules.catalogo.domain",
+]
 forbidden_modules = ["app.commands"]
 
 [[tool.importlinter.contracts]]
@@ -132,4 +163,52 @@ forbidden_modules = [
 # `repository`/`models`/`domain`. `allow_indirect_imports = "true"` restringe
 # el contrato a lo que de verdad se quiere prohibir: que `sync` importe esos
 # módulos DIRECTAMENTE, sin tocar el caso indirecto a través de `service.py`.
+allow_indirect_imports = "true"
+
+# Change 05 (`design.md`, `02` §5.3): `catalogo` es el primer maestro de
+# negocio sobre el bus. Su `domain/` es puro (ni infraestructura ni el bus).
+# Ademas, `catalogo` no depende de ningun otro modulo de negocio salvo por
+# el `service.py` de `configuracion` (alicuota_iva) e `identidad`
+# (auditoria/permisos) -- nunca por sus modelos/repositorio/dominio/api.
+[[tool.importlinter.contracts]]
+id = "catalogo-domain-no-infraestructura"
+name = "catalogo domain no importa infraestructura ni el bus de comandos"
+type = "forbidden"
+source_modules = ["app.modules.catalogo.domain"]
+forbidden_modules = ["fastapi", "sqlalchemy", "app.commands"]
+
+# `app.modules.sync` está en `forbidden_modules` (no solo sus
+# `models`/`repository`/`api`/`domain` como con `identidad`/`configuracion`)
+# porque, a diferencia de esos dos, `catalogo` no consume dato de negocio de
+# `sync` -- lo único que existe es la ruta `catalogo.api -> sync.service`
+# (`procesar_comando`) que el grupo 9 (`design.md` D4, `CLAUDE.md` §4: "Toda
+# escritura de negocio pasa por el bus de comandos") reproduce igual que
+# `identidad.api -> sync.service` (ese caso no tiene contrato equivalente
+# porque `identidad` no declaró este contrato en el change 04). `catalogo/
+# api.py` anota el resultado de `procesar_comando` con `sync_service.Comando`
+# (atributo del propio módulo `sync.service`, que ya importa `Comando` de
+# `sync.models` para su uso interno) en vez de importar `sync.models`
+# directamente -- mismo criterio que `identidad.api`, que no anota ese tipo
+# y por eso nunca necesitó esta segunda ruta (hallazgo de la tarea 13.4,
+# aprobado por el usuario 2026-09-23: se retira `sync.models` de
+# `ignore_imports`, solo queda `sync.service`).
+[[tool.importlinter.contracts]]
+id = "catalogo-solo-por-service-ajeno"
+name = "catalogo solo alcanza a otros modulos de negocio por su service.py"
+type = "forbidden"
+source_modules = ["app.modules.catalogo"]
+forbidden_modules = [
+    "app.modules.identidad.models",
+    "app.modules.identidad.repository",
+    "app.modules.identidad.api",
+    "app.modules.identidad.domain",
+    "app.modules.configuracion.models",
+    "app.modules.configuracion.repository",
+    "app.modules.configuracion.api",
+    "app.modules.configuracion.domain",
+    "app.modules.sync",
+]
+ignore_imports = [
+    "app.modules.catalogo.api -> app.modules.sync.service",
+]
 allow_indirect_imports = "true"

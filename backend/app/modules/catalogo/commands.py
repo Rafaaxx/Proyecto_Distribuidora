@@ -25,6 +25,15 @@ revierte TODA la transacción, incluida la reserva del `operation_id`, y el
 Los ids de entidades nuevas se generan en el servidor (UUIDv7,
 `core/ids.py`, dentro de `catalogo/service.py`) y se devuelven en el
 resultado del comando (D4, mismo criterio que `USUARIO_CREAR`).
+
+Change 06, grupo 9 (`design.md` D6 del 06): `PRODUCTO_CREAR` y
+`PRODUCTO_MODIFICAR` pasan a **v2**, con `proveedor_id` obligatorio; v1 se
+retira (sin comandos pendientes: ambos tipos son `admite_offline=False`).
+Un envío v1 recibe `VersionDeComandoSinHandlerError`. Los endpoints REST de
+`catalogo/api.py` siguen construyendo el sobre v1 hasta que el change 06
+grupo 10 amplíe el contrato de la API (`ProductoCrearRequest`/
+`ProductoModificarRequest` con `proveedor_id`) -- deuda nominada, no
+resuelta acá.
 """
 
 from __future__ import annotations
@@ -172,23 +181,26 @@ class PresentacionInicialContenidoV1(BaseModel):
     es_referencia: bool
 
 
-class ProductoCrearContenidoV1(BaseModel):
+class ProductoCrearContenidoV2(BaseModel):
+    """D6 (change 06): v2 retira v1 y hace `proveedor_id` obligatorio --
+    `02` §6.6 permite retirar una versión sin comandos pendientes, y
+    `PRODUCTO_CREAR` es `admite_offline=False`, así que no hay cola v1 que
+    proteger. Un envío v1 recibe `VersionDeComandoSinHandlerError` (`app/
+    commands/registro.py`), no se reescribe el esquema v1 en el lugar."""
+
     codigo: str
     nombre: str
     categoria_id: UUID
     marca_id: UUID | None = None
+    proveedor_id: UUID
     unidad_base: str
     alicuota_id: UUID
     presentaciones: list[PresentacionInicialContenidoV1]
 
 
 def manejar_producto_crear(
-    sobre: SobreComando, contenido: ProductoCrearContenidoV1, *, sesion: object, reloj: Clock
+    sobre: SobreComando, contenido: ProductoCrearContenidoV2, *, sesion: object, reloj: Clock
 ) -> ResultadoHandler:
-    """D1 opción A (aprobada 2026-09-22): el contenido no trae
-    `proveedor_id` -- no puede validarse ni informarse hasta el change 06,
-    así que `catalogo_service.crear_producto` recibe `proveedor_id=None`
-    explícito, no un campo que este esquema todavía no puede exigir."""
     producto, presentaciones = catalogo_service.crear_producto(
         sobre.organizacion_id,
         sesion,  # type: ignore[arg-type]
@@ -197,7 +209,7 @@ def manejar_producto_crear(
         nombre=contenido.nombre,
         categoria_id=contenido.categoria_id,
         marca_id=contenido.marca_id,
-        proveedor_id=None,
+        proveedor_id=contenido.proveedor_id,
         unidad_base=contenido.unidad_base,
         alicuota_id=contenido.alicuota_id,
         presentaciones=[
@@ -222,25 +234,28 @@ def manejar_producto_crear(
     )
 
 
-registrar_handler("PRODUCTO_CREAR", 1, ProductoCrearContenidoV1)(
+registrar_handler("PRODUCTO_CREAR", 2, ProductoCrearContenidoV2)(
     manejar_producto_crear  # type: ignore[arg-type]
 )
 declarar_tipo("PRODUCTO_CREAR", admite_online=True, admite_offline=False)
 
 
-class ProductoModificarContenidoV1(BaseModel):
+class ProductoModificarContenidoV2(BaseModel):
+    """D6 (change 06): mismo criterio que `ProductoCrearContenidoV2`."""
+
     producto_id: UUID
     codigo: str
     nombre: str
     categoria_id: UUID
     marca_id: UUID | None = None
+    proveedor_id: UUID
     unidad_base: str
     alicuota_id: UUID
     activo: bool
 
 
 def manejar_producto_modificar(
-    sobre: SobreComando, contenido: ProductoModificarContenidoV1, *, sesion: object, reloj: Clock
+    sobre: SobreComando, contenido: ProductoModificarContenidoV2, *, sesion: object, reloj: Clock
 ) -> ResultadoHandler:
     producto = catalogo_service.modificar_producto(
         sobre.organizacion_id,
@@ -251,6 +266,7 @@ def manejar_producto_modificar(
         nombre=contenido.nombre,
         categoria_id=contenido.categoria_id,
         marca_id=contenido.marca_id,
+        proveedor_id=contenido.proveedor_id,
         unidad_base=contenido.unidad_base,
         alicuota_id=contenido.alicuota_id,
         activo=contenido.activo,
@@ -259,7 +275,7 @@ def manejar_producto_modificar(
     return "ACEPTADO", {"producto_id": str(producto.id)}, None
 
 
-registrar_handler("PRODUCTO_MODIFICAR", 1, ProductoModificarContenidoV1)(
+registrar_handler("PRODUCTO_MODIFICAR", 2, ProductoModificarContenidoV2)(
     manejar_producto_modificar  # type: ignore[arg-type]
 )
 declarar_tipo("PRODUCTO_MODIFICAR", admite_online=True, admite_offline=False)

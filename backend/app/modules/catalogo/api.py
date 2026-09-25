@@ -315,6 +315,7 @@ def crear_producto(
         "nombre": datos.nombre,
         "categoria_id": str(datos.categoria_id),
         "marca_id": str(datos.marca_id) if datos.marca_id is not None else None,
+        "proveedor_id": str(datos.proveedor_id),
         "unidad_base": datos.unidad_base,
         "alicuota_id": str(datos.alicuota_id),
         "presentaciones": [
@@ -331,7 +332,7 @@ def crear_producto(
     sobre = construir_sobre_online(
         operation_id=entrada.operation_id,
         tipo="PRODUCTO_CREAR",
-        version=1,
+        version=2,
         modo="ONLINE",
         organizacion_id=entrada.contexto.organizacion_id,
         usuario_id=entrada.contexto.usuario_id,
@@ -361,10 +362,11 @@ def crear_producto(
         entrada.contexto.organizacion_id, producto_id, sesion
     )
     assert detalle is not None
-    producto, presentaciones = detalle
+    producto, presentaciones, proveedor_nombre = detalle
     return ProductoDetalleResponse(
         **ProductoResponse.model_validate(producto).model_dump(),
         presentaciones=[PresentacionResponse.model_validate(p) for p in presentaciones],
+        proveedor_nombre=proveedor_nombre,
     )
 
 
@@ -382,6 +384,7 @@ def modificar_producto(
         "nombre": datos.nombre,
         "categoria_id": str(datos.categoria_id),
         "marca_id": str(datos.marca_id) if datos.marca_id is not None else None,
+        "proveedor_id": str(datos.proveedor_id),
         "unidad_base": datos.unidad_base,
         "alicuota_id": str(datos.alicuota_id),
         "activo": datos.activo,
@@ -389,7 +392,7 @@ def modificar_producto(
     sobre = construir_sobre_online(
         operation_id=entrada.operation_id,
         tipo="PRODUCTO_MODIFICAR",
-        version=1,
+        version=2,
         modo="ONLINE",
         organizacion_id=entrada.contexto.organizacion_id,
         usuario_id=entrada.contexto.usuario_id,
@@ -461,10 +464,11 @@ def obtener_producto(
     )
     if detalle is None:
         raise RecursoNoEncontradoError(f"El producto {producto_id} no existe en esta organización.")
-    producto, presentaciones = detalle
+    producto, presentaciones, proveedor_nombre = detalle
     return ProductoDetalleResponse(
         **ProductoResponse.model_validate(producto).model_dump(),
         presentaciones=[PresentacionResponse.model_validate(p) for p in presentaciones],
+        proveedor_nombre=proveedor_nombre,
     )
 
 

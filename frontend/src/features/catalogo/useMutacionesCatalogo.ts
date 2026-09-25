@@ -2,6 +2,7 @@ import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-quer
 import { useRef } from 'react'
 
 import { generarOperationId } from '../../lib/api/operationId'
+import { debeReintentar } from '../../lib/api/reintentoDeRed'
 import {
   agregarPresentacion,
   cambiarReferencia,
@@ -42,9 +43,13 @@ import { clavesCatalogo } from './claves'
  * `mutationFn` sí se re-ejecuta en cada reintento. Quien llama puede fijar
  * su propio `operationId` en las variables (por ejemplo, para reintentar a
  * mano con los mismos datos tras cerrar y reabrir el formulario).
+ *
+ * `retry` usa `debeReintentar` (`lib/api/reintentoDeRed.ts`) en vez de un
+ * número fijo: solo reintenta un error de RED (nunca llegó a haber una
+ * respuesta HTTP), no un rechazo de dominio ya resuelto por el servidor
+ * (409/422 con `codigo`) -- bug de la verificación manual 13.5, corregido
+ * en la tarea 14.2.
  */
-
-const REINTENTOS_POR_ERROR_DE_RED = 2
 
 function useMutacionConOperationId<TVariables extends { operationId?: string }, TResultado>(opciones: {
   ejecutar: (variables: TVariables, operationId: string) => Promise<TResultado>
@@ -52,7 +57,7 @@ function useMutacionConOperationId<TVariables extends { operationId?: string }, 
 }) {
   const operationIdRef = useRef<string | null>(null)
   return useMutation<TResultado, Error, TVariables>({
-    retry: REINTENTOS_POR_ERROR_DE_RED,
+    retry: debeReintentar,
     retryDelay: 0,
     onMutate: (variables) => {
       operationIdRef.current = variables.operationId ?? generarOperationId()
@@ -142,6 +147,7 @@ export function useCrearProducto() {
           nombre: variables.nombre,
           categoria_id: variables.categoria_id,
           marca_id: variables.marca_id,
+          proveedor_id: variables.proveedor_id,
           unidad_base: variables.unidad_base,
           alicuota_id: variables.alicuota_id,
           presentaciones: variables.presentaciones,
@@ -168,6 +174,7 @@ export function useModificarProducto() {
           nombre: variables.nombre,
           categoria_id: variables.categoria_id,
           marca_id: variables.marca_id,
+          proveedor_id: variables.proveedor_id,
           unidad_base: variables.unidad_base,
           alicuota_id: variables.alicuota_id,
           activo: variables.activo,

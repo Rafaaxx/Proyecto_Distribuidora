@@ -4,6 +4,7 @@ import { esquemaProducto } from '../../../../src/domain/catalogo/productoSchema'
 
 const CATEGORIA_ID = '11111111-1111-4111-8111-111111111111'
 const ALICUOTA_ID = '22222222-2222-4222-8222-222222222222'
+const PROVEEDOR_ID = '33333333-3333-4333-8333-333333333333'
 
 function productoValido(overrides: Partial<Parameters<typeof esquemaProducto.parse>[0]> = {}) {
   return {
@@ -11,6 +12,7 @@ function productoValido(overrides: Partial<Parameters<typeof esquemaProducto.par
     nombre: 'Gaseosa cola',
     categoriaId: CATEGORIA_ID,
     marcaId: null,
+    proveedorId: PROVEEDOR_ID,
     unidadBase: 'unidad',
     alicuotaId: ALICUOTA_ID,
     presentaciones: [
@@ -51,6 +53,16 @@ describe('esquemaProducto (tarea 10.3)', () => {
 
     it('rechaza una categoría con id inválido', () => {
       const resultado = esquemaProducto.safeParse(productoValido({ categoriaId: 'no-es-un-uuid' }))
+      expect(resultado.success).toBe(false)
+    })
+
+    it('rechaza un proveedor ausente (D8/D9/D13, tarea 11.6)', () => {
+      const resultado = esquemaProducto.safeParse(productoValido({ proveedorId: '' }))
+      expect(resultado.success).toBe(false)
+    })
+
+    it('rechaza un proveedor con id inválido', () => {
+      const resultado = esquemaProducto.safeParse(productoValido({ proveedorId: 'no-es-un-uuid' }))
       expect(resultado.success).toBe(false)
     })
   })

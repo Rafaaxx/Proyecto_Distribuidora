@@ -31,6 +31,7 @@ import {
   useModificarProducto,
 } from '../../../features/catalogo/useMutacionesCatalogo'
 import { useAlicuotas } from '../../../features/configuracion/useAlicuotas'
+import { useCostoVigente, useOpcionesDeProveedores } from '../../../features/proveedores/useListados'
 
 /**
  * Detalle + alta/edición de producto y presentaciones (tarea 10.5).
@@ -92,6 +93,7 @@ function ProductoAlta() {
   const categorias = useCategorias()
   const marcas = useMarcas()
   const alicuotas = useAlicuotas()
+  const proveedores = useOpcionesDeProveedores()
   const crear = useCrearProducto()
 
   const {
@@ -109,6 +111,7 @@ function ProductoAlta() {
       nombre: '',
       categoriaId: '',
       marcaId: null,
+      proveedorId: '',
       unidadBase: 'unidad',
       alicuotaId: '',
       presentaciones: [PRESENTACION_VACIA],
@@ -137,6 +140,8 @@ function ProductoAlta() {
   const opcionesAlicuota = (alicuotas.data?.pages.flatMap((pagina) => pagina.items) ?? []).filter(
     (alicuota) => alicuota.activo,
   )
+  // D8: solo proveedores activos (`GET /proveedores/opciones`, `GESTIONAR_CATALOGO`).
+  const opcionesProveedor = proveedores.data?.pages.flatMap((pagina) => pagina.items) ?? []
 
   const alEnviar = handleSubmit(async (datos) => {
     try {
@@ -145,6 +150,7 @@ function ProductoAlta() {
         nombre: datos.nombre,
         categoria_id: datos.categoriaId,
         marca_id: datos.marcaId,
+        proveedor_id: datos.proveedorId,
         unidad_base: datos.unidadBase,
         alicuota_id: datos.alicuotaId,
         presentaciones: datos.presentaciones.map((presentacion) => ({
@@ -194,6 +200,16 @@ function ProductoAlta() {
             {opcionesMarca.map((marca) => (
               <option key={marca.id} value={marca.id}>
                 {marca.nombre}
+              </option>
+            ))}
+          </select>
+        </Campo>
+        <Campo id="proveedorId" etiqueta="Proveedor" error={errors.proveedorId?.message}>
+          <select id="proveedorId" className="rounded-md border border-border px-2 py-1 text-sm" {...register('proveedorId')}>
+            <option value="">Elegí un proveedor</option>
+            {opcionesProveedor.map((proveedor) => (
+              <option key={proveedor.id} value={proveedor.id}>
+                {proveedor.nombre}
               </option>
             ))}
           </select>
@@ -321,8 +337,16 @@ function ProductoAlta() {
 
 function ProductoEdicion({ productoId }: { productoId: string }) {
   const producto = useProducto(productoId)
+  // Se espera también a `proveedores` acá (no dentro de `ProductoBaseForm`)
+  // para que el primer montaje del formulario ya tenga las opciones
+  // completas: si `useForm({ values })` intenta fijar el proveedor actual
+  // antes de que exista su `<option>` (D8/D9/D13, tarea 11.6), el
+  // `<select>` nativo ignora la asignación y cae en la primera opción --
+  // React Hook Form no lo reintenta porque el contenido de `values` no
+  // cambió entre el primer y el segundo render.
+  const proveedores = useOpcionesDeProveedores()
 
-  if (producto.isPending) {
+  if (producto.isPending || proveedores.isPending) {
     return (
       <main>
         <p>Cargando…</p>
@@ -340,18 +364,37 @@ function ProductoEdicion({ productoId }: { productoId: string }) {
 
   return (
     <main className="flex flex-col gap-6">
-      <ProductoBaseForm detalle={producto.data} />
+      <ProductoBaseForm detalle={producto.data} proveedores={proveedores} />
       <PresentacionesSeccion detalle={producto.data} />
     </main>
   )
 }
 
-function ProductoBaseForm({ detalle }: { detalle: ProductoDetalle }) {
+function ProductoBaseForm({
+  detalle,
+  proveedores,
+}: {
+  detalle: ProductoDetalle
+  proveedores: ReturnType<typeof useOpcionesDeProveedores>
+}) {
   const navigate = useNavigate()
   const categorias = useCategorias()
   const marcas = useMarcas()
   const alicuotas = useAlicuotas()
   const modificar = useModificarProducto()
+  // Bug 13.5 (14.3): la pantalla de historial de costos
+  // (`CostosHistorialScreen`) estaba huérfana -- ningún enlace llevaba a
+  // ella. No existe en el frontend un mecanismo propio de permisos (el
+  // access token no los lleva, ADR-017/`tokenStore.ts`): el único criterio
+  // establecido es el reactivo que ya usa `CostosHistorialScreen` y
+  // `ProveedoresListScreen` -- intentar la consulta real y distinguir
+  // `PermisoRequeridoProveedoresError` del resto. Se reutiliza acá esa
+  // misma consulta (`GET /costos/productos/{id}/vigente`, `VER_COSTOS`)
+  // solo para decidir si el enlace se muestra; mientras está pendiente o
+  // si falla por cualquier motivo, el enlace se oculta (no se asume
+  // permiso sin confirmación).
+  const costoVigente = useCostoVigente(detalle.id)
+  const tieneVerCostos = costoVigente.isSuccess
 
   const {
     register,
@@ -365,6 +408,7 @@ function ProductoBaseForm({ detalle }: { detalle: ProductoDetalle }) {
       nombre: detalle.nombre,
       categoriaId: detalle.categoria_id,
       marcaId: detalle.marca_id,
+      proveedorId: detalle.proveedor_id,
       unidadBase: detalle.unidad_base,
       alicuotaId: detalle.alicuota_id,
       activo: detalle.activo,
@@ -380,6 +424,17 @@ function ProductoBaseForm({ detalle }: { detalle: ProductoDetalle }) {
   const opcionesAlicuota = (alicuotas.data?.pages.flatMap((pagina) => pagina.items) ?? []).filter(
     (alicuota) => alicuota.activo,
   )
+  // D8/D9/D13 (opción B, tarea 11.6): solo proveedores activos, salvo el
+  // proveedor actual del producto si quedó inactivo -- ahí se agrega como
+  // opción adicional con su nombre real (`detalle.proveedor_nombre`, de
+  // `GET /productos/{id}`, ADR-025) seguido de "(inactivo)", nunca un
+  // texto genérico.
+  const opcionesProveedorActivas = proveedores.data?.pages.flatMap((pagina) => pagina.items) ?? []
+  const proveedorActualInactivo =
+    proveedores.isSuccess && !opcionesProveedorActivas.some((proveedor) => proveedor.id === detalle.proveedor_id)
+  const opcionesProveedor = proveedorActualInactivo
+    ? [...opcionesProveedorActivas, { id: detalle.proveedor_id, nombre: `${detalle.proveedor_nombre} (inactivo)` }]
+    : opcionesProveedorActivas
 
   const alEnviar = handleSubmit(async (datos) => {
     try {
@@ -389,6 +444,7 @@ function ProductoBaseForm({ detalle }: { detalle: ProductoDetalle }) {
         nombre: datos.nombre,
         categoria_id: datos.categoriaId,
         marca_id: datos.marcaId,
+        proveedor_id: datos.proveedorId,
         unidad_base: datos.unidadBase,
         alicuota_id: datos.alicuotaId,
         activo: datos.activo,
@@ -404,7 +460,17 @@ function ProductoBaseForm({ detalle }: { detalle: ProductoDetalle }) {
 
   return (
     <form onSubmit={alEnviar} noValidate className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold text-primary">{detalle.codigo} — {detalle.nombre}</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-lg font-semibold text-primary">{detalle.codigo} — {detalle.nombre}</h1>
+        {tieneVerCostos && (
+          <Link
+            to={`/admin/proveedores/productos/${detalle.id}/historial`}
+            className="text-sm text-primary/70 hover:text-primary hover:underline"
+          >
+            Ver historial de costos
+          </Link>
+        )}
+      </div>
       <Campo id="codigo" etiqueta="Código" error={errors.codigo?.message}>
         <input id="codigo" className="rounded-md border border-border px-2 py-1 text-sm" {...register('codigo')} />
       </Campo>
@@ -430,6 +496,15 @@ function ProductoBaseForm({ detalle }: { detalle: ProductoDetalle }) {
           {opcionesMarca.map((marca) => (
             <option key={marca.id} value={marca.id}>
               {marca.nombre}
+            </option>
+          ))}
+        </select>
+      </Campo>
+      <Campo id="proveedorId" etiqueta="Proveedor" error={errors.proveedorId?.message}>
+        <select id="proveedorId" className="rounded-md border border-border px-2 py-1 text-sm" {...register('proveedorId')}>
+          {opcionesProveedor.map((proveedor) => (
+            <option key={proveedor.id} value={proveedor.id}>
+              {proveedor.nombre}
             </option>
           ))}
         </select>

@@ -433,6 +433,124 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/proveedores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Proveedores */
+        get: operations["listar_proveedores_api_v1_proveedores_get"];
+        put?: never;
+        /** Crear Proveedor */
+        post: operations["crear_proveedor_api_v1_proveedores_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/proveedores/{proveedor_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtener Proveedor */
+        get: operations["obtener_proveedor_api_v1_proveedores__proveedor_id__get"];
+        /** Modificar Proveedor */
+        put: operations["modificar_proveedor_api_v1_proveedores__proveedor_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/proveedores/opciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Opciones De Proveedores */
+        get: operations["listar_opciones_de_proveedores_api_v1_proveedores_opciones_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/costos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Informar Costos */
+        post: operations["informar_costos_api_v1_costos_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/costos/productos/{producto_id}/vigente": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Costo Vigente
+         * @description P7 (aprobado 2026-09-24): 200 con `costo: null` si el producto no
+         *     tiene costo vigente para `fecha`; 404 solo si `producto_id` no existe
+         *     en la organización o es ajeno (INV-21).
+         *
+         *     P11 (`contrato-api.md`, aprobado en la verificación manual 13.5,
+         *     opción B): suma `por_presentacion` -- el último costo informado (D4)
+         *     de CADA presentación con costo a `fecha`, resuelto con la única
+         *     consulta de `proveedores_service.listar_ultimo_costo_por_presentacion`
+         *     (nunca trayendo el historial completo a Python). Los nombres de
+         *     usuario se resuelven por lote junto con los del costo vigente (evita
+         *     N+1); la lista se ordena por `presentacion_nombre` una vez resueltos
+         *     los nombres para mostrar (mismo patrón que P4).
+         */
+        get: operations["obtener_costo_vigente_api_v1_costos_productos__producto_id__vigente_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/costos/productos/{producto_id}/historial": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Historial De Costos */
+        get: operations["listar_historial_de_costos_api_v1_costos_productos__producto_id__historial_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sync/comandos": {
         parameters: {
             query?: never;
@@ -514,6 +632,156 @@ export interface components {
         ComposicionRolRequest: {
             /** Permisos */
             permisos: string[];
+        };
+        /**
+         * CostoDelLoteRequest
+         * @description Un costo dentro del lote de `POST /costos` (D12). `valor` y
+         *     `bonificacion` viajan como string estricto (P3); la cantidad de
+         *     decimales la valida el dominio, no el patrón de este campo.
+         */
+        CostoDelLoteRequest: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /**
+             * Presentacion Id
+             * Format: uuid
+             */
+            presentacion_id: string;
+            /** Valor */
+            valor: string;
+            /** Incluye Iva */
+            incluye_iva: boolean;
+            /**
+             * Bonificacion
+             * @default 0
+             */
+            bonificacion: string;
+            /**
+             * Vigencia Desde
+             * Format: date
+             */
+            vigencia_desde: string;
+            /** Observacion */
+            observacion?: string | null;
+        };
+        /**
+         * CostoDelResultadoResponse
+         * @description Un elemento de la respuesta de `POST /costos` (P6, aprobado
+         *     2026-09-24): sale de `comando.resultado`, no de una relectura de las
+         *     filas -- un reenvío idempotente del mismo `Operation-Id` devuelve
+         *     exactamente lo mismo.
+         */
+        CostoDelResultadoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Costo Base */
+            costo_base: string;
+        };
+        /**
+         * CostoInformadoResponse
+         * @description Respuesta de `GET .../vigente` y `GET .../historial` (`contrato-
+         *     api.md` §2.2). `proveedor_nombre` y `presentacion_nombre` (P4, aprobado
+         *     2026-09-24) se resuelven en `api.py`, no vienen de `model_validate`
+         *     directo del modelo `CostoInformado` -- por eso este esquema NO declara
+         *     `from_attributes`: `api.py` arma cada instancia explícitamente.
+         */
+        CostoInformadoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Proveedor Id
+             * Format: uuid
+             */
+            proveedor_id: string;
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /**
+             * Presentacion Id
+             * Format: uuid
+             */
+            presentacion_id: string;
+            /** Valor */
+            valor: string;
+            /** Incluye Iva */
+            incluye_iva: boolean;
+            /** Bonificacion */
+            bonificacion: string;
+            /** Alicuota Aplicada */
+            alicuota_aplicada: string;
+            /** Costo Base */
+            costo_base: string;
+            /**
+             * Vigencia Desde
+             * Format: date
+             */
+            vigencia_desde: string;
+            /** Observacion */
+            observacion: string | null;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /**
+             * Creado En
+             * Format: date-time
+             */
+            creado_en: string;
+            /** Proveedor Nombre */
+            proveedor_nombre: string;
+            /** Presentacion Nombre */
+            presentacion_nombre: string;
+            /** Usuario Nombre */
+            usuario_nombre: string;
+        };
+        /** CostoInformarRequest */
+        CostoInformarRequest: {
+            /**
+             * Proveedor Id
+             * Format: uuid
+             */
+            proveedor_id: string;
+            /** Costos */
+            costos: components["schemas"]["CostoDelLoteRequest"][];
+        };
+        /** CostoInformarResponse */
+        CostoInformarResponse: {
+            /** Costos */
+            costos: components["schemas"]["CostoDelResultadoResponse"][];
+        };
+        /**
+         * CostoVigenteResponse
+         * @description `GET .../vigente` (P7, aprobado 2026-09-24): 200 siempre que el
+         *     producto exista en la organización, con `costo: null` cuando no hay
+         *     costo vigente para `fecha` -- el 404 queda solo para un producto
+         *     inexistente o ajeno (INV-21).
+         */
+        CostoVigenteResponse: {
+            /**
+             * Fecha
+             * Format: date
+             */
+            fecha: string;
+            costo: components["schemas"]["CostoInformadoResponse"] | null;
+            /** Por Presentacion */
+            por_presentacion: components["schemas"]["CostoInformadoResponse"][];
         };
         /** CrearUsuarioRequest */
         CrearUsuarioRequest: {
@@ -684,6 +952,13 @@ export interface components {
             /** Cursor Siguiente */
             cursor_siguiente: string | null;
         };
+        /** PaginaCostosInformados */
+        PaginaCostosInformados: {
+            /** Items */
+            items: components["schemas"]["CostoInformadoResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
         /** PaginaMarcas */
         PaginaMarcas: {
             /** Items */
@@ -695,6 +970,23 @@ export interface components {
         PaginaProductos: {
             /** Items */
             items: components["schemas"]["ProductoResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
+        /**
+         * PaginaProveedorOpciones
+         * @description Paginada (`contrato-api.md` P2, aprobado 2026-09-24).
+         */
+        PaginaProveedorOpciones: {
+            /** Items */
+            items: components["schemas"]["ProveedorOpcionResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
+        /** PaginaProveedores */
+        PaginaProveedores: {
+            /** Items */
+            items: components["schemas"]["ProveedorResponse"][];
             /** Cursor Siguiente */
             cursor_siguiente: string | null;
         };
@@ -796,6 +1088,11 @@ export interface components {
             categoria_id: string;
             /** Marca Id */
             marca_id?: string | null;
+            /**
+             * Proveedor Id
+             * Format: uuid
+             */
+            proveedor_id: string;
             /** Unidad Base */
             unidad_base: string;
             /**
@@ -824,6 +1121,11 @@ export interface components {
             categoria_id: string;
             /** Marca Id */
             marca_id: string | null;
+            /**
+             * Proveedor Id
+             * Format: uuid
+             */
+            proveedor_id: string;
             /** Unidad Base */
             unidad_base: string;
             /**
@@ -845,6 +1147,8 @@ export interface components {
             actualizado_en: string;
             /** Presentaciones */
             presentaciones: components["schemas"]["PresentacionResponse"][];
+            /** Proveedor Nombre */
+            proveedor_nombre: string;
         };
         /** ProductoModificarRequest */
         ProductoModificarRequest: {
@@ -859,6 +1163,11 @@ export interface components {
             categoria_id: string;
             /** Marca Id */
             marca_id?: string | null;
+            /**
+             * Proveedor Id
+             * Format: uuid
+             */
+            proveedor_id: string;
             /** Unidad Base */
             unidad_base: string;
             /**
@@ -873,6 +1182,12 @@ export interface components {
          * ProductoResponse
          * @description Fila de listado (tarea 9.2): sin presentaciones -- para el detalle
          *     completo (incluidas sus presentaciones) ver `ProductoDetalleResponse`.
+         *
+         *     `proveedor_id` (change 06, contrato-api.md P1 aprobado 2026-09-24): va
+         *     en el listado, el `PUT` y el detalle -- es una columna propia del
+         *     producto. `proveedor_nombre`, en cambio, solo va en el detalle
+         *     (`ProductoDetalleResponse`), para no llamar al puerto de ADR-025 una
+         *     vez por fila de una página.
          */
         ProductoResponse: {
             /**
@@ -891,6 +1206,11 @@ export interface components {
             categoria_id: string;
             /** Marca Id */
             marca_id: string | null;
+            /**
+             * Proveedor Id
+             * Format: uuid
+             */
+            proveedor_id: string;
             /** Unidad Base */
             unidad_base: string;
             /**
@@ -898,6 +1218,82 @@ export interface components {
              * Format: uuid
              */
             alicuota_id: string;
+            /** Activo */
+            activo: boolean;
+            /**
+             * Creado En
+             * Format: date-time
+             */
+            creado_en: string;
+            /**
+             * Actualizado En
+             * Format: date-time
+             */
+            actualizado_en: string;
+        };
+        /** ProveedorCrearRequest */
+        ProveedorCrearRequest: {
+            /** Nombre */
+            nombre: string;
+            /** Cuit */
+            cuit?: string | null;
+            /** Contacto */
+            contacto?: string | null;
+            /** Telefono */
+            telefono?: string | null;
+            /** Email */
+            email?: string | null;
+        };
+        /**
+         * ProveedorModificarRequest
+         * @description `PUT` reemplaza el estado completo (spec, `contrato-api.md` §2.1):
+         *     un opcional ausente o `null` se guarda como `null`.
+         */
+        ProveedorModificarRequest: {
+            /** Nombre */
+            nombre: string;
+            /** Cuit */
+            cuit?: string | null;
+            /** Contacto */
+            contacto?: string | null;
+            /** Telefono */
+            telefono?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Activo */
+            activo: boolean;
+        };
+        /**
+         * ProveedorOpcionResponse
+         * @description `GET /proveedores/opciones` (D8): solo proveedores activos, sin
+         *     CUIT ni contacto.
+         */
+        ProveedorOpcionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+        };
+        /** ProveedorResponse */
+        ProveedorResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Cuit */
+            cuit: string | null;
+            /** Contacto */
+            contacto: string | null;
+            /** Telefono */
+            telefono: string | null;
+            /** Email */
+            email: string | null;
             /** Activo */
             activo: boolean;
             /**
@@ -1897,6 +2293,290 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaginaAlicuotas"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_proveedores_api_v1_proveedores_get: {
+        parameters: {
+            query?: {
+                limite?: number;
+                cursor?: string | null;
+                texto?: string | null;
+                activo?: boolean | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaProveedores"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_proveedor_api_v1_proveedores_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProveedorCrearRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProveedorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_proveedor_api_v1_proveedores__proveedor_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                proveedor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProveedorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    modificar_proveedor_api_v1_proveedores__proveedor_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                proveedor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProveedorModificarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProveedorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_opciones_de_proveedores_api_v1_proveedores_opciones_get: {
+        parameters: {
+            query?: {
+                limite?: number;
+                cursor?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaProveedorOpciones"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    informar_costos_api_v1_costos_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CostoInformarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CostoInformarResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_costo_vigente_api_v1_costos_productos__producto_id__vigente_get: {
+        parameters: {
+            query?: {
+                fecha?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                producto_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CostoVigenteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_historial_de_costos_api_v1_costos_productos__producto_id__historial_get: {
+        parameters: {
+            query?: {
+                limite?: number;
+                cursor?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                producto_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaCostosInformados"];
                 };
             };
             /** @description Validation Error */

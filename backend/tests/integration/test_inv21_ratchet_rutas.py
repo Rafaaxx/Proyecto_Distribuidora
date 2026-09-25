@@ -121,6 +121,24 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         # sus propias alícuotas, `test_configuracion_api.py::
         # TestAislamientoInv21`.
         ("get", "/api/v1/configuracion/alicuotas"),
+        # Change 06, grupo 10/12 (`proveedores/api.py`, tarea 10.2),
+        # cobertura de tarea 12.1: las ocho rutas nuevas, cada una con su
+        # prueba de aislamiento real -- incluida la referencia ajena EN EL
+        # CONTENIDO de `COSTO_INFORMAR` (`proveedor_id`, `producto_id`,
+        # `presentacion_id` de otra organización) -- en
+        # `test_inv21_aislamiento_endpoints_proveedores.py`. La misma
+        # prueba cubre además `proveedor_id` ajeno en `PRODUCTO_CREAR`/
+        # `PRODUCTO_MODIFICAR` v2 (`catalogo/api.py`, ya cubiertas arriba,
+        # caso que las pruebas de la tarea 11.1 del change 05 no llegaban a
+        # ejercitar porque `proveedor_id` no existía en el contrato).
+        ("post", "/api/v1/proveedores"),
+        ("get", "/api/v1/proveedores"),
+        ("get", "/api/v1/proveedores/opciones"),
+        ("get", "/api/v1/proveedores/{proveedor_id}"),
+        ("put", "/api/v1/proveedores/{proveedor_id}"),
+        ("post", "/api/v1/costos"),
+        ("get", "/api/v1/costos/productos/{producto_id}/vigente"),
+        ("get", "/api/v1/costos/productos/{producto_id}/historial"),
     }
 )
 

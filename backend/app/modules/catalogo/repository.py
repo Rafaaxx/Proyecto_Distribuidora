@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from app.modules.catalogo.domain.errores import (
     CodigoDuplicadoError,
     NombreDuplicadoError,
+    RecursoNoEncontradoError,
     ReferenciaInvalidaError,
 )
 from app.modules.catalogo.models import Categoria, Marca, Presentacion, Producto
@@ -83,6 +84,14 @@ def guardar_con_traduccion_de_integridad(
             raise ReferenciaInvalidaError(
                 "El producto ya tiene una presentación de referencia, o la "
                 "referencia debe usarse en venta."
+            ) from error
+        if "fk_producto__proveedor" in mensaje:
+            # Change 06, tarea 8.1: existencia y pertenencia del proveedor a
+            # la organización ya las garantiza la FK compuesta (`design.md`
+            # D9-A) -- un proveedor inexistente (o de otra organización)
+            # responde 404, nunca un 500 (SEG-07/INV-21).
+            raise RecursoNoEncontradoError(
+                "El proveedor indicado no existe en esta organización."
             ) from error
         raise
 
@@ -174,6 +183,27 @@ def existen_productos_activos_en_categoria(
     return int(sesion.execute(consulta).scalar_one()) > 0
 
 
+def existen_productos_activos_de_proveedor(
+    organizacion_id: UUID, proveedor_id: UUID, sesion: Session
+) -> bool:
+    """Change 06, tarea 8.1 (`design.md` D5, ADR-026): usado por
+    `proveedores/service.py` (vía este `service.py`, `CLAUDE.md` §4 -- un
+    módulo usa a otro solo por su `service.py`) para rechazar la
+    desactivación de un proveedor con productos activos
+    (`PROVEEDOR_CON_PRODUCTOS_ACTIVOS`). Cuenta en la base, nunca trae
+    filas a Python."""
+    consulta = (
+        select(func.count())
+        .select_from(Producto)
+        .where(
+            Producto.organizacion_id == organizacion_id,
+            Producto.proveedor_id == proveedor_id,
+            Producto.activo.is_(True),
+        )
+    )
+    return int(sesion.execute(consulta).scalar_one()) > 0
+
+
 # --- marca -------------------------------------------------------------
 
 
@@ -253,7 +283,7 @@ def crear_producto(
     nombre: str,
     categoria_id: UUID,
     marca_id: UUID | None,
-    proveedor_id: UUID | None,
+    proveedor_id: UUID,
     unidad_base: str,
     alicuota_id: UUID,
     activo: bool,
@@ -303,6 +333,21 @@ def obtener_producto_por_id_para_actualizar(
     return sesion.scalars(consulta).one_or_none()
 
 
+def obtener_producto_por_id_para_compartir(
+    organizacion_id: UUID, producto_id: UUID, sesion: Session
+) -> Producto | None:
+    """`SELECT ... FOR SHARE` (change 06, `design.md` D14): usada por
+    `proveedores` (`COSTO_INFORMAR`) para leer el producto sin bloquear en
+    exclusiva, serializando contra una modificación concurrente
+    (`FOR UPDATE`, D5 del 05) en vez de correr una carrera silenciosa."""
+    consulta = (
+        select(Producto)
+        .where(Producto.organizacion_id == organizacion_id, Producto.id == producto_id)
+        .with_for_update(read=True)
+    )
+    return sesion.scalars(consulta).one_or_none()
+
+
 def actualizar_producto(
     organizacion_id: UUID,
     sesion: Session,
@@ -312,6 +357,7 @@ def actualizar_producto(
     nombre: str,
     categoria_id: UUID,
     marca_id: UUID | None,
+    proveedor_id: UUID,
     unidad_base: str,
     alicuota_id: UUID,
     activo: bool,
@@ -327,6 +373,7 @@ def actualizar_producto(
         producto.nombre = nombre
         producto.categoria_id = categoria_id
         producto.marca_id = marca_id
+        producto.proveedor_id = proveedor_id
         producto.unidad_base = unidad_base
         producto.alicuota_id = alicuota_id
         producto.activo = activo

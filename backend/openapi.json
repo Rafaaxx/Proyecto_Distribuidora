@@ -1849,6 +1849,640 @@
         }
       }
     },
+    "/api/v1/proveedores": {
+      "post": {
+        "tags": [
+          "proveedores"
+        ],
+        "summary": "Crear Proveedor",
+        "operationId": "crear_proveedor_api_v1_proveedores_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProveedorCrearRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProveedorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "proveedores"
+        ],
+        "summary": "Listar Proveedores",
+        "operationId": "listar_proveedores_api_v1_proveedores_get",
+        "parameters": [
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "texto",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Texto"
+            }
+          },
+          {
+            "name": "activo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Activo"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaProveedores"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/proveedores/{proveedor_id}": {
+      "put": {
+        "tags": [
+          "proveedores"
+        ],
+        "summary": "Modificar Proveedor",
+        "operationId": "modificar_proveedor_api_v1_proveedores__proveedor_id__put",
+        "parameters": [
+          {
+            "name": "proveedor_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Proveedor Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProveedorModificarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProveedorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "proveedores"
+        ],
+        "summary": "Obtener Proveedor",
+        "operationId": "obtener_proveedor_api_v1_proveedores__proveedor_id__get",
+        "parameters": [
+          {
+            "name": "proveedor_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Proveedor Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProveedorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/proveedores/opciones": {
+      "get": {
+        "tags": [
+          "proveedores"
+        ],
+        "summary": "Listar Opciones De Proveedores",
+        "operationId": "listar_opciones_de_proveedores_api_v1_proveedores_opciones_get",
+        "parameters": [
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaProveedorOpciones"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/costos": {
+      "post": {
+        "tags": [
+          "proveedores"
+        ],
+        "summary": "Informar Costos",
+        "operationId": "informar_costos_api_v1_costos_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CostoInformarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CostoInformarResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/costos/productos/{producto_id}/vigente": {
+      "get": {
+        "tags": [
+          "proveedores"
+        ],
+        "summary": "Obtener Costo Vigente",
+        "description": "P7 (aprobado 2026-09-24): 200 con `costo: null` si el producto no\ntiene costo vigente para `fecha`; 404 solo si `producto_id` no existe\nen la organización o es ajeno (INV-21).\n\nP11 (`contrato-api.md`, aprobado en la verificación manual 13.5,\nopción B): suma `por_presentacion` -- el último costo informado (D4)\nde CADA presentación con costo a `fecha`, resuelto con la única\nconsulta de `proveedores_service.listar_ultimo_costo_por_presentacion`\n(nunca trayendo el historial completo a Python). Los nombres de\nusuario se resuelven por lote junto con los del costo vigente (evita\nN+1); la lista se ordena por `presentacion_nombre` una vez resueltos\nlos nombres para mostrar (mismo patrón que P4).",
+        "operationId": "obtener_costo_vigente_api_v1_costos_productos__producto_id__vigente_get",
+        "parameters": [
+          {
+            "name": "producto_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Producto Id"
+            }
+          },
+          {
+            "name": "fecha",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fecha"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CostoVigenteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/costos/productos/{producto_id}/historial": {
+      "get": {
+        "tags": [
+          "proveedores"
+        ],
+        "summary": "Listar Historial De Costos",
+        "operationId": "listar_historial_de_costos_api_v1_costos_productos__producto_id__historial_get",
+        "parameters": [
+          {
+            "name": "producto_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Producto Id"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaCostosInformados"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sync/comandos": {
       "post": {
         "tags": [
@@ -2023,6 +2657,264 @@
           "permisos"
         ],
         "title": "ComposicionRolRequest"
+      },
+      "CostoDelLoteRequest": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "presentacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Presentacion Id"
+          },
+          "valor": {
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Valor"
+          },
+          "incluye_iva": {
+            "type": "boolean",
+            "title": "Incluye Iva"
+          },
+          "bonificacion": {
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Bonificacion",
+            "default": "0"
+          },
+          "vigencia_desde": {
+            "type": "string",
+            "format": "date",
+            "title": "Vigencia Desde"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto_id",
+          "presentacion_id",
+          "valor",
+          "incluye_iva",
+          "vigencia_desde"
+        ],
+        "title": "CostoDelLoteRequest",
+        "description": "Un costo dentro del lote de `POST /costos` (D12). `valor` y\n`bonificacion` viajan como string estricto (P3); la cantidad de\ndecimales la valida el dominio, no el patrón de este campo."
+      },
+      "CostoDelResultadoResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "costo_base": {
+            "type": "string",
+            "title": "Costo Base"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "costo_base"
+        ],
+        "title": "CostoDelResultadoResponse",
+        "description": "Un elemento de la respuesta de `POST /costos` (P6, aprobado\n2026-09-24): sale de `comando.resultado`, no de una relectura de las\nfilas -- un reenvío idempotente del mismo `Operation-Id` devuelve\nexactamente lo mismo."
+      },
+      "CostoInformadoResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "proveedor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Proveedor Id"
+          },
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "presentacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Presentacion Id"
+          },
+          "valor": {
+            "type": "string",
+            "title": "Valor"
+          },
+          "incluye_iva": {
+            "type": "boolean",
+            "title": "Incluye Iva"
+          },
+          "bonificacion": {
+            "type": "string",
+            "title": "Bonificacion"
+          },
+          "alicuota_aplicada": {
+            "type": "string",
+            "title": "Alicuota Aplicada"
+          },
+          "costo_base": {
+            "type": "string",
+            "title": "Costo Base"
+          },
+          "vigencia_desde": {
+            "type": "string",
+            "format": "date",
+            "title": "Vigencia Desde"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "operation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Operation Id"
+          },
+          "creado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Creado En"
+          },
+          "proveedor_nombre": {
+            "type": "string",
+            "title": "Proveedor Nombre"
+          },
+          "presentacion_nombre": {
+            "type": "string",
+            "title": "Presentacion Nombre"
+          },
+          "usuario_nombre": {
+            "type": "string",
+            "title": "Usuario Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "proveedor_id",
+          "producto_id",
+          "presentacion_id",
+          "valor",
+          "incluye_iva",
+          "bonificacion",
+          "alicuota_aplicada",
+          "costo_base",
+          "vigencia_desde",
+          "observacion",
+          "usuario_id",
+          "operation_id",
+          "creado_en",
+          "proveedor_nombre",
+          "presentacion_nombre",
+          "usuario_nombre"
+        ],
+        "title": "CostoInformadoResponse",
+        "description": "Respuesta de `GET .../vigente` y `GET .../historial` (`contrato-\napi.md` §2.2). `proveedor_nombre` y `presentacion_nombre` (P4, aprobado\n2026-09-24) se resuelven en `api.py`, no vienen de `model_validate`\ndirecto del modelo `CostoInformado` -- por eso este esquema NO declara\n`from_attributes`: `api.py` arma cada instancia explícitamente."
+      },
+      "CostoInformarRequest": {
+        "properties": {
+          "proveedor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Proveedor Id"
+          },
+          "costos": {
+            "items": {
+              "$ref": "#/components/schemas/CostoDelLoteRequest"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Costos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "proveedor_id",
+          "costos"
+        ],
+        "title": "CostoInformarRequest"
+      },
+      "CostoInformarResponse": {
+        "properties": {
+          "costos": {
+            "items": {
+              "$ref": "#/components/schemas/CostoDelResultadoResponse"
+            },
+            "type": "array",
+            "title": "Costos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "costos"
+        ],
+        "title": "CostoInformarResponse"
+      },
+      "CostoVigenteResponse": {
+        "properties": {
+          "fecha": {
+            "type": "string",
+            "format": "date",
+            "title": "Fecha"
+          },
+          "costo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CostoInformadoResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "por_presentacion": {
+            "items": {
+              "$ref": "#/components/schemas/CostoInformadoResponse"
+            },
+            "type": "array",
+            "title": "Por Presentacion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fecha",
+          "costo",
+          "por_presentacion"
+        ],
+        "title": "CostoVigenteResponse",
+        "description": "`GET .../vigente` (P7, aprobado 2026-09-24): 200 siempre que el\nproducto exista en la organización, con `costo: null` cuando no hay\ncosto vigente para `fecha` -- el 404 queda solo para un producto\ninexistente o ajeno (INV-21)."
       },
       "CrearUsuarioRequest": {
         "properties": {
@@ -2392,6 +3284,34 @@
         ],
         "title": "PaginaCategorias"
       },
+      "PaginaCostosInformados": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CostoInformadoResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "cursor_siguiente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Siguiente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "cursor_siguiente"
+        ],
+        "title": "PaginaCostosInformados"
+      },
       "PaginaMarcas": {
         "properties": {
           "items": {
@@ -2447,6 +3367,63 @@
           "cursor_siguiente"
         ],
         "title": "PaginaProductos"
+      },
+      "PaginaProveedorOpciones": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProveedorOpcionResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "cursor_siguiente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Siguiente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "cursor_siguiente"
+        ],
+        "title": "PaginaProveedorOpciones",
+        "description": "Paginada (`contrato-api.md` P2, aprobado 2026-09-24)."
+      },
+      "PaginaProveedores": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProveedorResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "cursor_siguiente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Siguiente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "cursor_siguiente"
+        ],
+        "title": "PaginaProveedores"
       },
       "PresentacionAgregarRequest": {
         "properties": {
@@ -2646,6 +3623,11 @@
             ],
             "title": "Marca Id"
           },
+          "proveedor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Proveedor Id"
+          },
           "unidad_base": {
             "type": "string",
             "title": "Unidad Base"
@@ -2668,6 +3650,7 @@
           "codigo",
           "nombre",
           "categoria_id",
+          "proveedor_id",
           "unidad_base",
           "alicuota_id",
           "presentaciones"
@@ -2706,6 +3689,11 @@
             ],
             "title": "Marca Id"
           },
+          "proveedor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Proveedor Id"
+          },
           "unidad_base": {
             "type": "string",
             "title": "Unidad Base"
@@ -2735,6 +3723,10 @@
             },
             "type": "array",
             "title": "Presentaciones"
+          },
+          "proveedor_nombre": {
+            "type": "string",
+            "title": "Proveedor Nombre"
           }
         },
         "type": "object",
@@ -2744,12 +3736,14 @@
           "nombre",
           "categoria_id",
           "marca_id",
+          "proveedor_id",
           "unidad_base",
           "alicuota_id",
           "activo",
           "creado_en",
           "actualizado_en",
-          "presentaciones"
+          "presentaciones",
+          "proveedor_nombre"
         ],
         "title": "ProductoDetalleResponse"
       },
@@ -2780,6 +3774,11 @@
             ],
             "title": "Marca Id"
           },
+          "proveedor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Proveedor Id"
+          },
           "unidad_base": {
             "type": "string",
             "title": "Unidad Base"
@@ -2799,6 +3798,7 @@
           "codigo",
           "nombre",
           "categoria_id",
+          "proveedor_id",
           "unidad_base",
           "alicuota_id",
           "activo"
@@ -2837,6 +3837,11 @@
             ],
             "title": "Marca Id"
           },
+          "proveedor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Proveedor Id"
+          },
           "unidad_base": {
             "type": "string",
             "title": "Unidad Base"
@@ -2868,6 +3873,7 @@
           "nombre",
           "categoria_id",
           "marca_id",
+          "proveedor_id",
           "unidad_base",
           "alicuota_id",
           "activo",
@@ -2875,7 +3881,231 @@
           "actualizado_en"
         ],
         "title": "ProductoResponse",
-        "description": "Fila de listado (tarea 9.2): sin presentaciones -- para el detalle\ncompleto (incluidas sus presentaciones) ver `ProductoDetalleResponse`."
+        "description": "Fila de listado (tarea 9.2): sin presentaciones -- para el detalle\ncompleto (incluidas sus presentaciones) ver `ProductoDetalleResponse`.\n\n`proveedor_id` (change 06, contrato-api.md P1 aprobado 2026-09-24): va\nen el listado, el `PUT` y el detalle -- es una columna propia del\nproducto. `proveedor_nombre`, en cambio, solo va en el detalle\n(`ProductoDetalleResponse`), para no llamar al puerto de ADR-025 una\nvez por fila de una página."
+      },
+      "ProveedorCrearRequest": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "cuit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cuit"
+          },
+          "contacto": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contacto"
+          },
+          "telefono": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telefono"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre"
+        ],
+        "title": "ProveedorCrearRequest"
+      },
+      "ProveedorModificarRequest": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "cuit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cuit"
+          },
+          "contacto": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contacto"
+          },
+          "telefono": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telefono"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "activo"
+        ],
+        "title": "ProveedorModificarRequest",
+        "description": "`PUT` reemplaza el estado completo (spec, `contrato-api.md` §2.1):\nun opcional ausente o `null` se guarda como `null`."
+      },
+      "ProveedorOpcionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre"
+        ],
+        "title": "ProveedorOpcionResponse",
+        "description": "`GET /proveedores/opciones` (D8): solo proveedores activos, sin\nCUIT ni contacto."
+      },
+      "ProveedorResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "cuit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cuit"
+          },
+          "contacto": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contacto"
+          },
+          "telefono": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telefono"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          },
+          "creado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Creado En"
+          },
+          "actualizado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Actualizado En"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "cuit",
+          "contacto",
+          "telefono",
+          "email",
+          "activo",
+          "creado_en",
+          "actualizado_en"
+        ],
+        "title": "ProveedorResponse"
       },
       "RefreshRequest": {
         "properties": {

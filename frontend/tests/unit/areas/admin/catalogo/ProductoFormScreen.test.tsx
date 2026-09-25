@@ -17,12 +17,19 @@ function respuesta(status: number, cuerpo: unknown) {
 const PAGINA_VACIA = { items: [], cursor_siguiente: null }
 const CATEGORIA_ID = '11111111-1111-4111-8111-111111111111'
 const ALICUOTA_ID = '22222222-2222-4222-8222-222222222222'
+// Change 06 (D8/D9/D13, tarea 11.6): el selector de proveedor del
+// formulario de producto usa `GET /proveedores/opciones`.
+const PROVEEDOR_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const PAGINA_CATEGORIAS = {
   items: [{ id: CATEGORIA_ID, nombre: 'Bebidas', activo: true, creado_en: '2026-01-01T00:00:00Z', actualizado_en: '2026-01-01T00:00:00Z' }],
   cursor_siguiente: null,
 }
 const PAGINA_ALICUOTAS = {
   items: [{ id: ALICUOTA_ID, nombre: '21%', valor: '0.210000', activo: true }],
+  cursor_siguiente: null,
+}
+const PAGINA_PROVEEDOR_OPCIONES = {
+  items: [{ id: PROVEEDOR_ID, nombre: 'Bodega Andina' }],
   cursor_siguiente: null,
 }
 
@@ -62,11 +69,13 @@ const PRODUCTO_DETALLE = {
   nombre: 'Gaseosa cola',
   categoria_id: CATEGORIA_ID,
   marca_id: null,
+  proveedor_id: PROVEEDOR_ID,
   unidad_base: 'unidad',
   alicuota_id: ALICUOTA_ID,
   activo: true,
   creado_en: '2026-01-01T00:00:00Z',
   actualizado_en: '2026-01-01T00:00:00Z',
+  proveedor_nombre: 'Bodega Andina',
   presentaciones: [
     {
       id: '44444444-4444-4444-8444-444444444444',
@@ -136,6 +145,7 @@ describe('ProductoFormScreen — alta (tarea 10.5)', () => {
    */
   it('crea un producto con una presentación de referencia y navega al detalle', async () => {
     apiFetchMock.mockImplementation((ruta: string) => {
+      if (ruta.startsWith('/proveedores/opciones')) return Promise.resolve(respuesta(200, PAGINA_PROVEEDOR_OPCIONES))
       if (ruta.startsWith('/catalogo/categorias')) return Promise.resolve(respuesta(200, PAGINA_CATEGORIAS))
       if (ruta.startsWith('/catalogo/marcas')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
       if (ruta.startsWith('/configuracion/alicuotas')) return Promise.resolve(respuesta(200, PAGINA_ALICUOTAS))
@@ -153,6 +163,8 @@ describe('ProductoFormScreen — alta (tarea 10.5)', () => {
     // comparten etiqueta: el primero es el del producto.
     await usuarioEvento.type(screen.getAllByLabelText(/^nombre$/i)[0], 'Gaseosa cola')
     await usuarioEvento.selectOptions(screen.getByLabelText(/categoría/i), CATEGORIA_ID)
+    await screen.findByRole('option', { name: 'Bodega Andina' })
+    await usuarioEvento.selectOptions(screen.getByLabelText(/proveedor/i), PROVEEDOR_ID)
     await screen.findByRole('option', { name: '21%' })
     await usuarioEvento.selectOptions(screen.getByLabelText(/alícuota/i), ALICUOTA_ID)
     await usuarioEvento.type(screen.getAllByLabelText(/^nombre$/i)[1], 'Caja x12')
@@ -176,6 +188,7 @@ describe('ProductoFormScreen — alta (tarea 10.5)', () => {
 
   it('muestra CODIGO_DUPLICADO junto al campo código y conserva el resto de los datos cargados', async () => {
     apiFetchMock.mockImplementation((ruta: string) => {
+      if (ruta.startsWith('/proveedores/opciones')) return Promise.resolve(respuesta(200, PAGINA_PROVEEDOR_OPCIONES))
       if (ruta.startsWith('/catalogo/categorias')) return Promise.resolve(respuesta(200, PAGINA_CATEGORIAS))
       if (ruta.startsWith('/catalogo/marcas')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
       if (ruta.startsWith('/configuracion/alicuotas')) return Promise.resolve(respuesta(200, PAGINA_ALICUOTAS))
@@ -192,6 +205,8 @@ describe('ProductoFormScreen — alta (tarea 10.5)', () => {
     await screen.findByRole('option', { name: 'Bebidas' })
     await usuarioEvento.type(screen.getAllByLabelText(/^nombre$/i)[0], 'Gaseosa cola')
     await usuarioEvento.selectOptions(screen.getByLabelText(/categoría/i), CATEGORIA_ID)
+    await screen.findByRole('option', { name: 'Bodega Andina' })
+    await usuarioEvento.selectOptions(screen.getByLabelText(/proveedor/i), PROVEEDOR_ID)
     await screen.findByRole('option', { name: '21%' })
     await usuarioEvento.selectOptions(screen.getByLabelText(/alícuota/i), ALICUOTA_ID)
     await usuarioEvento.type(screen.getAllByLabelText(/^nombre$/i)[1], 'Caja x12')
@@ -228,6 +243,7 @@ describe('ProductoFormScreen — selector de alícuota (tarea 10.7, D12)', () =>
 
   it('el selector ofrece las alícuotas activas y no una desactivada', async () => {
     apiFetchMock.mockImplementation((ruta: string) => {
+      if (ruta.startsWith('/proveedores/opciones')) return Promise.resolve(respuesta(200, PAGINA_PROVEEDOR_OPCIONES))
       if (ruta.startsWith('/catalogo/categorias')) return Promise.resolve(respuesta(200, PAGINA_CATEGORIAS))
       if (ruta.startsWith('/catalogo/marcas')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
       if (ruta.startsWith('/configuracion/alicuotas')) return Promise.resolve(respuesta(200, PAGINA_ALICUOTAS_MIXTA))
@@ -243,6 +259,7 @@ describe('ProductoFormScreen — selector de alícuota (tarea 10.7, D12)', () =>
 
   it('el alta con la alícuota 21% elegida envía su alicuota_id en el comando', async () => {
     apiFetchMock.mockImplementation((ruta: string) => {
+      if (ruta.startsWith('/proveedores/opciones')) return Promise.resolve(respuesta(200, PAGINA_PROVEEDOR_OPCIONES))
       if (ruta.startsWith('/catalogo/categorias')) return Promise.resolve(respuesta(200, PAGINA_CATEGORIAS))
       if (ruta.startsWith('/catalogo/marcas')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
       if (ruta.startsWith('/configuracion/alicuotas')) return Promise.resolve(respuesta(200, PAGINA_ALICUOTAS_MIXTA))
@@ -257,6 +274,8 @@ describe('ProductoFormScreen — selector de alícuota (tarea 10.7, D12)', () =>
     await screen.findByRole('option', { name: 'Bebidas' })
     await usuarioEvento.type(screen.getAllByLabelText(/^nombre$/i)[0], 'Gaseosa cola')
     await usuarioEvento.selectOptions(screen.getByLabelText(/categoría/i), CATEGORIA_ID)
+    await screen.findByRole('option', { name: 'Bodega Andina' })
+    await usuarioEvento.selectOptions(screen.getByLabelText(/proveedor/i), PROVEEDOR_ID)
     await screen.findByRole('option', { name: '21%' })
     await usuarioEvento.selectOptions(screen.getByLabelText(/alícuota/i), ALICUOTA_ID)
     await usuarioEvento.type(screen.getAllByLabelText(/^nombre$/i)[1], 'Caja x12')
@@ -282,6 +301,7 @@ describe('ProductoFormScreen — solo categorías/marcas activas (tarea 10.6, CA
 
   it('no ofrece una categoría inactiva en el selector', async () => {
     apiFetchMock.mockImplementation((ruta: string) => {
+      if (ruta.startsWith('/proveedores/opciones')) return Promise.resolve(respuesta(200, PAGINA_PROVEEDOR_OPCIONES))
       if (ruta.startsWith('/catalogo/categorias')) {
         return Promise.resolve(
           respuesta(200, {
@@ -306,6 +326,7 @@ describe('ProductoFormScreen — solo categorías/marcas activas (tarea 10.6, CA
 
   it('no ofrece una marca desactivada en el selector (13.1, spec administracion-de-catalogo)', async () => {
     apiFetchMock.mockImplementation((ruta: string) => {
+      if (ruta.startsWith('/proveedores/opciones')) return Promise.resolve(respuesta(200, PAGINA_PROVEEDOR_OPCIONES))
       if (ruta.startsWith('/catalogo/categorias')) return Promise.resolve(respuesta(200, PAGINA_CATEGORIAS))
       if (ruta.startsWith('/catalogo/marcas')) {
         return Promise.resolve(
@@ -329,6 +350,97 @@ describe('ProductoFormScreen — solo categorías/marcas activas (tarea 10.6, CA
   })
 })
 
+describe('ProductoFormScreen — selector de proveedor (tarea 11.6, D8/D9/D13)', () => {
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('el proveedor es obligatorio: sin elegirlo, no se envía el alta', async () => {
+    apiFetchMock.mockImplementation((ruta: string) => {
+      if (ruta.startsWith('/proveedores/opciones')) return Promise.resolve(respuesta(200, PAGINA_PROVEEDOR_OPCIONES))
+      if (ruta.startsWith('/catalogo/categorias')) return Promise.resolve(respuesta(200, PAGINA_CATEGORIAS))
+      if (ruta.startsWith('/catalogo/marcas')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
+      if (ruta.startsWith('/configuracion/alicuotas')) return Promise.resolve(respuesta(200, PAGINA_ALICUOTAS))
+      throw new Error(`ruta inesperada: ${ruta}`)
+    })
+
+    const usuarioEvento = userEvent.setup()
+    renderAlta()
+
+    await usuarioEvento.type(screen.getByLabelText(/^código$/i), 'GAS-001')
+    await usuarioEvento.type(screen.getAllByLabelText(/^nombre$/i)[0], 'Gaseosa cola')
+    await usuarioEvento.selectOptions(screen.getByLabelText(/categoría/i), CATEGORIA_ID)
+    await screen.findByRole('option', { name: '21%' })
+    await usuarioEvento.selectOptions(screen.getByLabelText(/alícuota/i), ALICUOTA_ID)
+    await usuarioEvento.type(screen.getAllByLabelText(/^nombre$/i)[1], 'Caja x12')
+
+    await usuarioEvento.click(screen.getByRole('button', { name: /crear producto/i }))
+
+    expect(await screen.findByText('Elegí un proveedor.')).toBeInTheDocument()
+    expect(apiFetchMock.mock.calls.some(([ruta, opciones]) => ruta === '/catalogo/productos' && (opciones as RequestInit)?.method === 'POST')).toBe(false)
+  })
+
+  it('PROVEEDOR_INACTIVO informado por el servidor se muestra junto al campo proveedor', async () => {
+    apiFetchMock.mockImplementation((ruta: string) => {
+      if (ruta.startsWith('/proveedores/opciones')) return Promise.resolve(respuesta(200, PAGINA_PROVEEDOR_OPCIONES))
+      if (ruta.startsWith('/catalogo/categorias')) return Promise.resolve(respuesta(200, PAGINA_CATEGORIAS))
+      if (ruta.startsWith('/catalogo/marcas')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
+      if (ruta.startsWith('/configuracion/alicuotas')) return Promise.resolve(respuesta(200, PAGINA_ALICUOTAS))
+      if (ruta === '/catalogo/productos') {
+        return Promise.resolve(
+          respuesta(422, { title: 'El proveedor está inactivo.', codigo: 'PROVEEDOR_INACTIVO' }),
+        )
+      }
+      throw new Error(`ruta inesperada: ${ruta}`)
+    })
+
+    const usuarioEvento = userEvent.setup()
+    renderAlta()
+
+    await usuarioEvento.type(screen.getByLabelText(/^código$/i), 'GAS-001')
+    await usuarioEvento.type(screen.getAllByLabelText(/^nombre$/i)[0], 'Gaseosa cola')
+    await usuarioEvento.selectOptions(screen.getByLabelText(/categoría/i), CATEGORIA_ID)
+    await screen.findByRole('option', { name: 'Bodega Andina' })
+    await usuarioEvento.selectOptions(screen.getByLabelText(/proveedor/i), PROVEEDOR_ID)
+    await screen.findByRole('option', { name: '21%' })
+    await usuarioEvento.selectOptions(screen.getByLabelText(/alícuota/i), ALICUOTA_ID)
+    await usuarioEvento.type(screen.getAllByLabelText(/^nombre$/i)[1], 'Caja x12')
+
+    await usuarioEvento.click(screen.getByRole('button', { name: /crear producto/i }))
+
+    const mensaje = await screen.findByText('El proveedor está inactivo.')
+    // Junto al campo proveedor, no como error general (`errors.root`).
+    expect(mensaje.closest('div')?.querySelector('#proveedorId')).not.toBeNull()
+  })
+
+  it('en edición, si el proveedor actual está inactivo se ofrece con su nombre real seguido de "(inactivo)"', async () => {
+    const PROVEEDOR_INACTIVO_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+    const detalleConProveedorInactivo = {
+      ...PRODUCTO_DETALLE,
+      proveedor_id: PROVEEDOR_INACTIVO_ID,
+      proveedor_nombre: 'Bodega Sur',
+    }
+    apiFetchMock.mockImplementation((ruta: string) => {
+      if (ruta.startsWith('/proveedores/opciones')) return Promise.resolve(respuesta(200, PAGINA_PROVEEDOR_OPCIONES))
+      if (ruta.startsWith('/catalogo/categorias')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
+      if (ruta.startsWith('/catalogo/marcas')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
+      if (ruta.startsWith('/configuracion/alicuotas')) return Promise.resolve(respuesta(200, PAGINA_ALICUOTAS))
+      return Promise.resolve(respuesta(200, detalleConProveedorInactivo))
+    })
+
+    renderEdicion()
+
+    expect(await screen.findByRole('option', { name: 'Bodega Sur (inactivo)' })).toBeInTheDocument()
+    expect(screen.getByLabelText(/proveedor/i)).toHaveValue(PROVEEDOR_INACTIVO_ID)
+    // El proveedor activo sigue disponible para poder cambiarlo.
+    expect(screen.getByRole('option', { name: 'Bodega Andina' })).toBeInTheDocument()
+  })
+})
+
 describe('ProductoFormScreen — edición (tarea 10.5)', () => {
   beforeEach(() => {
     apiFetchMock.mockReset()
@@ -340,6 +452,7 @@ describe('ProductoFormScreen — edición (tarea 10.5)', () => {
 
   function mockearDetalle() {
     apiFetchMock.mockImplementation((ruta: string) => {
+      if (ruta.startsWith('/proveedores/opciones')) return Promise.resolve(respuesta(200, PAGINA_PROVEEDOR_OPCIONES))
       if (ruta.startsWith('/catalogo/categorias')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
       if (ruta.startsWith('/catalogo/marcas')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
       if (ruta.startsWith('/configuracion/alicuotas')) return Promise.resolve(respuesta(200, PAGINA_ALICUOTAS))
@@ -387,6 +500,7 @@ describe('ProductoFormScreen — edición (tarea 10.5)', () => {
 
     await screen.findByText('Pack x24')
     apiFetchMock.mockImplementation((ruta: string, opciones?: RequestInit) => {
+      if (ruta.startsWith('/proveedores/opciones')) return Promise.resolve(respuesta(200, PAGINA_PROVEEDOR_OPCIONES))
       if (ruta.includes('/presentaciones/') && opciones?.method === 'PUT') {
         return Promise.resolve(
           respuesta(409, {
@@ -435,8 +549,71 @@ describe('ProductoFormScreen — edición (tarea 10.5)', () => {
     expect(screen.queryByRole('heading', { name: `${PRODUCTO_DETALLE.codigo} — ${PRODUCTO_DETALLE.nombre}` })).not.toBeInTheDocument()
   })
 
+  /**
+   * Bug 13.5 (14.3): `CostosHistorialScreen` (`/admin/proveedores/productos/:productoId/historial`)
+   * estaba huérfana -- ningún enlace llevaba a ella. La spec
+   * `administracion-de-proveedores` exige que el historial se muestre
+   * solo con `VER_COSTOS`; no existe en el frontend un mecanismo propio
+   * de permisos (el access token no los lleva), así que se reutiliza el
+   * mismo criterio reactivo que ya usa `CostosHistorialScreen`: intentar
+   * la consulta real de costo vigente (`GET
+   * /costos/productos/{id}/vigente`) y mostrar el enlace solo si esa
+   * consulta tiene éxito.
+   */
+  it('con VER_COSTOS, muestra el enlace "Ver historial de costos" con el href correcto', async () => {
+    apiFetchMock.mockImplementation((ruta: string) => {
+      if (ruta.startsWith('/proveedores/opciones')) return Promise.resolve(respuesta(200, PAGINA_PROVEEDOR_OPCIONES))
+      if (ruta.startsWith('/catalogo/categorias')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
+      if (ruta.startsWith('/catalogo/marcas')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
+      if (ruta.startsWith('/configuracion/alicuotas')) return Promise.resolve(respuesta(200, PAGINA_ALICUOTAS))
+      if (ruta.startsWith(`/costos/productos/${PRODUCTO_DETALLE.id}/vigente`)) {
+        return Promise.resolve(respuesta(200, { costo: null, fecha: '2026-09-25' }))
+      }
+      return Promise.resolve(respuesta(200, PRODUCTO_DETALLE))
+    })
+
+    renderEdicion()
+
+    const enlace = await screen.findByRole('link', { name: /ver historial de costos/i })
+    expect(enlace).toHaveAttribute('href', `/admin/proveedores/productos/${PRODUCTO_DETALLE.id}/historial`)
+  })
+
+  it('sin VER_COSTOS (403 del servidor), no muestra el enlace "Ver historial de costos"', async () => {
+    apiFetchMock.mockImplementation((ruta: string) => {
+      if (ruta.startsWith('/proveedores/opciones')) return Promise.resolve(respuesta(200, PAGINA_PROVEEDOR_OPCIONES))
+      if (ruta.startsWith('/catalogo/categorias')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
+      if (ruta.startsWith('/catalogo/marcas')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
+      if (ruta.startsWith('/configuracion/alicuotas')) return Promise.resolve(respuesta(200, PAGINA_ALICUOTAS))
+      if (ruta.startsWith(`/costos/productos/${PRODUCTO_DETALLE.id}/vigente`)) {
+        return Promise.resolve(respuesta(403, { title: 'No tenés permiso.', codigo: 'PERMISO_REQUERIDO' }))
+      }
+      return Promise.resolve(respuesta(200, PRODUCTO_DETALLE))
+    })
+
+    renderEdicion()
+
+    await screen.findByText('Pack x24')
+    expect(screen.queryByRole('link', { name: /ver historial de costos/i })).not.toBeInTheDocument()
+  })
+
+  it('en modo alta (sin producto existente), no muestra el enlace "Ver historial de costos"', async () => {
+    apiFetchMock.mockImplementation((ruta: string) => {
+      if (ruta.startsWith('/proveedores/opciones')) return Promise.resolve(respuesta(200, PAGINA_PROVEEDOR_OPCIONES))
+      if (ruta.startsWith('/catalogo/categorias')) return Promise.resolve(respuesta(200, PAGINA_CATEGORIAS))
+      if (ruta.startsWith('/catalogo/marcas')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
+      if (ruta.startsWith('/configuracion/alicuotas')) return Promise.resolve(respuesta(200, PAGINA_ALICUOTAS))
+      throw new Error(`ruta inesperada: ${ruta}`)
+    })
+
+    renderAlta()
+
+    await screen.findByRole('option', { name: 'Bebidas' })
+    expect(screen.queryByRole('link', { name: /ver historial de costos/i })).not.toBeInTheDocument()
+  })
+
   it('si falla el guardado de cambios (código duplicado), no navega y muestra el error', async () => {
     apiFetchMock.mockImplementation((ruta: string, opciones?: RequestInit) => {
+      if (ruta.startsWith('/proveedores/opciones')) return Promise.resolve(respuesta(200, PAGINA_PROVEEDOR_OPCIONES))
       if (ruta === `/catalogo/productos/${PRODUCTO_DETALLE.id}` && opciones?.method === 'PUT') {
         return Promise.resolve(respuesta(409, { title: 'El código ya está en uso.', codigo: 'CODIGO_DUPLICADO' }))
       }

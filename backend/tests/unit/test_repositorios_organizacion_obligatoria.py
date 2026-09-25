@@ -18,6 +18,7 @@ import pytest
 from app.modules.catalogo import repository as catalogo_repository
 from app.modules.configuracion import repository as configuracion_repository
 from app.modules.identidad import repository as identidad_repository
+from app.modules.proveedores import repository as proveedores_repository
 
 
 def _funciones_publicas_del_modulo(modulo: Any) -> list[tuple[str, Callable[..., Any]]]:
@@ -94,6 +95,16 @@ def test_catalogo_repository_exige_organizacion_id_primero_en_todo_metodo() -> N
     _verificar_organizacion_id_primer_parametro(
         catalogo_repository,
         exentas=catalogo_repository.FUNCIONES_SIN_ORGANIZACION_ID,
+    )
+
+
+def test_proveedores_repository_exige_organizacion_id_primero_en_todo_metodo() -> None:
+    """Change 06, tarea 7.1: `proveedores` tampoco declara ninguna excepción
+    (`FUNCIONES_SIN_ORGANIZACION_ID` vacío, mismo criterio que `catalogo`) --
+    toda función pública recibe `organizacion_id` primero."""
+    _verificar_organizacion_id_primer_parametro(
+        proveedores_repository,
+        exentas=proveedores_repository.FUNCIONES_SIN_ORGANIZACION_ID,
     )
 
 

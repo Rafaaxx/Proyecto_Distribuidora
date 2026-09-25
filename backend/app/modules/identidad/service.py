@@ -1178,3 +1178,18 @@ def listar_permisos_del_usuario(
     if usuario is None:
         return frozenset()
     return frozenset(repository.listar_permisos_de_rol(organizacion_id, usuario.rol_id, sesion))
+
+
+def obtener_nombres_de_usuarios(
+    organizacion_id: UUID, usuario_ids: set[UUID] | frozenset[UUID], sesion: Session
+) -> dict[UUID, str]:
+    """Nombre para mostrar de cada `usuario_id` (`Usuario.nombre`), por
+    lote (change 06, tarea 14.4, `contrato-api.md` P4 enmendado): quien
+    necesita mostrar "quién registró" un dato (por ejemplo, `proveedores`
+    en el historial de costos informados) no importa `identidad.models` ni
+    `identidad.repository` (`CLAUDE.md` §4) -- pasa por este único punto,
+    que resuelve todos los ids pedidos en una sola consulta en vez de una
+    por id (evita N+1). Un id que no pertenece a `organizacion_id`
+    (INV-21) o que no existe simplemente no aparece en el resultado."""
+    usuarios = repository.listar_usuarios_por_ids(organizacion_id, frozenset(usuario_ids), sesion)
+    return {usuario.id: usuario.nombre for usuario in usuarios}

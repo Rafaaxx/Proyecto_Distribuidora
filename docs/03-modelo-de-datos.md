@@ -248,6 +248,10 @@ La presentación de referencia se resuelve por este indicador y no con una clave
 
 **No tiene columna de saldo** (CC-04, INV-13): el saldo vive en `saldo_cuenta`.
 
+**Unicidades** (`design.md` D7 del change 06, aprobadas 2026-09-23):
+- `ux_proveedor__nombre` — única `(organizacion_id, nombre)`: el nombre no se repite entre proveedores de la misma organización, activos o no.
+- `ux_proveedor__cuit` — índice único parcial `(organizacion_id, cuit) WHERE cuit IS NOT NULL`: el CUIT, cuando se informa, no se repite en la organización; varios proveedores sin CUIT en la misma organización son válidos (la parcialidad los excluye del índice).
+
 ### `costo_informado`
 
 | Columna | Tipo | Notas |
@@ -263,7 +267,7 @@ La presentación de referencia se resuelve por este indicador y no con una clave
 | `observacion` | `text` | |
 | `operation_id`, `usuario_id`, `creado_en` | | |
 
-Índice `ix_costo_informado__producto_vigencia (organizacion_id, producto_id, vigencia_desde DESC)` para CST-03.
+Índice `ix_costo_informado__producto_vigencia (organizacion_id, producto_id, vigencia_desde DESC, creado_en DESC, id DESC)` para CST-03: el desempate por `creado_en DESC, id DESC` (`design.md` D4 del change 06, aprobado 2026-09-23) resuelve qué costo prevalece cuando dos tienen la misma `vigencia_desde` — el registrado último.
 
 ### `compra` y `compra_linea`
 

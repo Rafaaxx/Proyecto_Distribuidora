@@ -483,6 +483,7 @@ Agrupación de endpoints de la etapa 1:
 - **Refresh token:** opaco, rotativo en cada uso, guardado en base como hash, vinculado a usuario y dispositivo, con vencimiento deslizante de 30 días. Se envía en cookie `HttpOnly`, `Secure`, `SameSite=Strict`, restringida a `/api/v1/auth`.
 - Reutilizar un refresh token ya rotado revoca toda la familia de tokens de ese dispositivo.
 - **DEBE:** los permisos no viajan en el token. Se cargan por petición (con caché breve en memoria del proceso), para que una revocación tenga efecto inmediato con conexión.
+- **Permisos para la interfaz (ADR-027):** `/admin` los obtiene de `GET /api/v1/yo`, que se vuelve a consultar en cada renovación del access token; `/ruta` usa los del bootstrap (SYN-10, SYN-11). Ocultar una acción nunca reemplaza la validación del servidor (SEG-06).
 
 ### 12.2 Dispositivos
 

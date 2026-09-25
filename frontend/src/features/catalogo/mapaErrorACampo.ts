@@ -6,7 +6,14 @@
  * campo"). `null` cuando el error no corresponde a un campo puntual del
  * formulario de producto (se muestra entonces como mensaje general).
  */
-export type CampoProducto = 'codigo' | 'nombre' | 'categoriaId' | 'marcaId' | 'alicuotaId' | 'presentaciones'
+export type CampoProducto =
+  | 'codigo'
+  | 'nombre'
+  | 'categoriaId'
+  | 'marcaId'
+  | 'proveedorId'
+  | 'alicuotaId'
+  | 'presentaciones'
 
 const MAPA_CODIGO_A_CAMPO: Record<string, CampoProducto> = {
   CODIGO_INVALIDO: 'codigo',
@@ -14,6 +21,9 @@ const MAPA_CODIGO_A_CAMPO: Record<string, CampoProducto> = {
   NOMBRE_INVALIDO: 'nombre',
   CATEGORIA_INACTIVA: 'categoriaId',
   MARCA_INACTIVA: 'marcaId',
+  // Change 06 (D9, ADR-025, tarea 11.6): proveedor inexistente, inactivo o
+  // ajeno -- mismo código que usa `proveedores` (`PROVEEDOR_INACTIVO`).
+  PROVEEDOR_INACTIVO: 'proveedorId',
   ALICUOTA_INACTIVA: 'alicuotaId',
   PRODUCTO_SIN_PRESENTACIONES: 'presentaciones',
   REFERENCIA_INVALIDA: 'presentaciones',

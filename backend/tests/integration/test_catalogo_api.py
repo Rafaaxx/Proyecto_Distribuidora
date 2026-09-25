@@ -30,6 +30,7 @@ from app.main import crear_app
 from app.modules.catalogo import repository as catalogo_repository
 from app.modules.identidad import repository
 from app.modules.identidad.models import Organizacion
+from app.modules.proveedores import repository as proveedores_repository
 
 MOMENTO = datetime(2026, 1, 1, tzinfo=UTC)
 PASSWORD = "una-contrasena-larga-123"
@@ -418,6 +419,22 @@ class TestMarcas:
 
 
 class TestProductosYPresentaciones:
+    def _crear_proveedor(self, sesion: Session, organizacion_id: UUID):
+        proveedor = proveedores_repository.crear_proveedor(
+            organizacion_id,
+            sesion,
+            proveedor_id=nuevo_id(),
+            nombre="Proveedor de prueba",
+            cuit=None,
+            contacto=None,
+            telefono=None,
+            email=None,
+            activo=True,
+            momento=MOMENTO,
+        )
+        sesion.commit()
+        return proveedor
+
     def _crear_producto(
         self, cliente: TestClient, sesion: Session, access_token: str, organizacion_id: UUID
     ) -> tuple[str, str]:
@@ -442,6 +459,7 @@ class TestProductosYPresentaciones:
         )
         sesion.add(alicuota)
         sesion.commit()
+        proveedor = self._crear_proveedor(sesion, organizacion_id)
 
         respuesta = cliente.post(
             "/api/v1/catalogo/productos",
@@ -450,6 +468,7 @@ class TestProductosYPresentaciones:
                 "nombre": "Vino A",
                 "categoria_id": str(categoria.id),
                 "marca_id": None,
+                "proveedor_id": str(proveedor.id),
                 "unidad_base": "botella",
                 "alicuota_id": str(alicuota.id),
                 "presentaciones": [
@@ -492,6 +511,11 @@ class TestProductosYPresentaciones:
         assert detalle.status_code == 200
         assert detalle.json()["codigo"] == "VA-001"
         assert len(detalle.json()["presentaciones"]) == 2
+        # Change 06, contrato-api.md P1/D13 (aprobado 2026-09-24):
+        # `proveedor_id` en el detalle y `proveedor_nombre` resuelto vía
+        # el puerto de ADR-025.
+        assert detalle.json()["proveedor_id"] is not None
+        assert detalle.json()["proveedor_nombre"] == "Proveedor de prueba"
 
     def test_producto_de_otra_organizacion_responde_404(
         self, cliente: TestClient, sesion: Session

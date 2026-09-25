@@ -461,6 +461,7 @@ def _sembrar_datos_de_catalogo(database_url: str) -> None:
     categoria_id = uuid4()
     marca_id = uuid4()
     alicuota_id = uuid4()
+    proveedor_id = uuid4()
     producto_id = uuid4()
     try:
         with engine.begin() as conexion:
@@ -504,17 +505,33 @@ def _sembrar_datos_de_catalogo(database_url: str) -> None:
             )
             conexion.execute(
                 text(
+                    # `proveedor` existe desde `70dcb6dce507` (change 06) y
+                    # `producto.proveedor_id` es NOT NULL desde
+                    # `producto_proveedor_obligatorio` (change 06, grupo 4):
+                    # un producto sembrado en `head` necesita un proveedor
+                    # real, aunque esta prueba lo revierta junto con el
+                    # resto del catálogo un par de pasos más abajo.
+                    "INSERT INTO proveedor "
+                    "(id, organizacion_id, nombre, activo, actualizado_en) "
+                    "VALUES (:id, :organizacion_id, 'Proveedor 11.4', true, :momento)"
+                ),
+                {"id": proveedor_id, "organizacion_id": organizacion_id, "momento": momento},
+            )
+            conexion.execute(
+                text(
                     "INSERT INTO producto "
                     "(id, organizacion_id, codigo, nombre, categoria_id, marca_id, "
                     "proveedor_id, unidad_base, alicuota_id, activo, creado_en, "
                     "actualizado_en, actualizado_por_id) "
                     "VALUES (:id, :organizacion_id, 'VA-114', 'Vino 11.4', :categoria_id, "
-                    ":marca_id, NULL, 'botella', :alicuota_id, true, :momento, :momento, NULL)"
+                    ":marca_id, :proveedor_id, 'botella', :alicuota_id, true, :momento, "
+                    ":momento, NULL)"
                 ),
                 {
                     "id": producto_id,
                     "organizacion_id": organizacion_id,
                     "categoria_id": categoria_id,
+                    "proveedor_id": proveedor_id,
                     "marca_id": marca_id,
                     "alicuota_id": alicuota_id,
                     "momento": momento,
@@ -544,16 +561,23 @@ def test_downgrade_menos_uno_y_upgrade_corren_limpios_con_datos_de_catalogo_semb
     database_url: str,
 ) -> None:
     """Tarea 11.4 (`04` §2.1, criterio 4, change 05): `upgrade head` ->
-    `downgrade -1` -> `upgrade head` sobre la migración de catálogo
-    (`c1d2e3f4a5b6`) CON datos sembrados en sus cuatro tablas nuevas
-    (`categoria`, `marca`, `producto`, `presentacion`), no vacías -- a
-    diferencia de `test_downgrade_y_upgrade_corren_limpios_con_datos_
-    representativos` (tarea 14.4 del change 04, `downgrade base` completo),
-    acá el `downgrade -1` revierte EXCLUSIVAMENTE esta migración: las
-    tablas de `organizacion`/`identidad`/`sync` de los changes anteriores
-    quedan intactas, así que la prueba también confirma que no se
-    perdieron ni se alteraron (`organizacion` sigue existiendo con su
-    fila)."""
+    `downgrade` hasta la revisión anterior a catálogo (`a7b8c9d0e1f2`) ->
+    `upgrade head` sobre la migración de catálogo (`c1d2e3f4a5b6`) CON datos
+    sembrados en sus cuatro tablas nuevas (`categoria`, `marca`, `producto`,
+    `presentacion`), no vacías -- a diferencia de
+    `test_downgrade_y_upgrade_corren_limpios_con_datos_representativos`
+    (tarea 14.4 del change 04, `downgrade base` completo), acá el
+    `downgrade` revierte EXCLUSIVAMENTE la migración de catálogo (y
+    cualquier migración posterior que dependa de ella, como
+    `70dcb6dce507` del change 06): las tablas de
+    `organizacion`/`identidad`/`sync` de los changes anteriores quedan
+    intactas, así que la prueba también confirma que no se perdieron ni se
+    alteraron (`organizacion` sigue existiendo con su fila).
+
+    Se apunta a la revisión exacta `a7b8c9d0e1f2` en vez de `downgrade -1`
+    a propósito: `-1` es relativo al head, así que dejaría de revertir
+    catálogo en cuanto una migración posterior (como `70dcb6dce507`) se
+    agregara encima -- exactamente lo que pasó al escribir el change 06."""
     _crear_roles_de_base(database_url)
 
     resultado_up = _alembic("upgrade", "head", database_url=database_url)
@@ -570,12 +594,12 @@ def test_downgrade_menos_uno_y_upgrade_corren_limpios_con_datos_de_catalogo_semb
     finally:
         engine_previo.dispose()
 
-    resultado_down = _alembic("downgrade", "-1", database_url=database_url)
+    resultado_down = _alembic("downgrade", "a7b8c9d0e1f2", database_url=database_url)
     assert resultado_down.returncode == 0, resultado_down.stderr
 
-    # Las cuatro tablas de catálogo ya no existen tras el downgrade de ESTA
-    # migración -- confirma que el `downgrade -1` efectivamente revirtió
-    # `c1d2e3f4a5b6`, no otra cosa.
+    # Las cuatro tablas de catálogo ya no existen tras el downgrade -- confirma
+    # que revirtió efectivamente `c1d2e3f4a5b6` (y `70dcb6dce507` encima, si
+    # ya está aplicada), no otra cosa.
     engine_sin_catalogo = create_engine(database_url)
     try:
         with engine_sin_catalogo.connect() as conexion:
@@ -594,7 +618,7 @@ def test_downgrade_menos_uno_y_upgrade_corren_limpios_con_datos_de_catalogo_semb
     assert tablas_de_catalogo == []
 
     # La organización sembrada ANTES del downgrade sigue existiendo: el
-    # `downgrade -1` de catálogo no tocó tablas de changes anteriores.
+    # `downgrade` hasta `a7b8c9d0e1f2` no tocó tablas de changes anteriores.
     engine_intacto = create_engine(database_url)
     try:
         with engine_intacto.connect() as conexion:

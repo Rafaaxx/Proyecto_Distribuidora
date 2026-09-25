@@ -11,8 +11,15 @@
 
 import Decimal from 'decimal.js'
 
-/** Instancia de decimal.js dedicada a dinero: `ROUND_HALF_UP` explícito. */
-const DecimalDinero = Decimal.clone({ rounding: Decimal.ROUND_HALF_UP })
+/**
+ * Instancia de decimal.js dedicada a dinero: `ROUND_HALF_UP` explícito y
+ * `precision: 50` (change 06, tarea 11.1) para que los cocientes
+ * intermedios de CST-02 (`domain/proveedores/costoBase.ts`) tengan la misma
+ * precisión ampliada que `_PRECISION_INTERMEDIA` en
+ * `backend/app/modules/proveedores/domain/costo_base.py` -- la única
+ * cuantización real sigue siendo la de `redondearCosto` al final.
+ */
+const DecimalDinero = Decimal.clone({ rounding: Decimal.ROUND_HALF_UP, precision: 50 })
 
 export type Importe = InstanceType<typeof DecimalDinero>
 
@@ -87,4 +94,37 @@ export function parsearImporteDesdeApi(valorApi: string): Importe {
  */
 export function formatearImporte(importe: Importe): string {
   return importe.toFixed(2)
+}
+
+/**
+ * Formatea un costo ya redondeado para mostrarlo en pantalla (tarea 11.4,
+ * `CostosCargaScreen.tsx` y `CostosHistorialScreen.tsx`): seis decimales
+ * fijos, miles agrupados con `.` y `,` como separador decimal (es-AR;
+ * spec `administracion-de-proveedores`, "1.239,669421"). Manipulación de
+ * cadenas sobre `toFixed(6)` -- nunca pasa por `number` (INV-03), igual
+ * criterio que `formatearImporte`.
+ */
+export function formatearCosto(importe: Importe): string {
+  const partes = importe.toFixed(6).split('.')
+  const entero = partes[0] ?? '0'
+  const decimales = partes[1] ?? '000000'
+  const negativo = entero.startsWith('-')
+  const digitos = negativo ? entero.slice(1) : entero
+  const enteroAgrupado = digitos.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return `${negativo ? '-' : ''}${enteroAgrupado},${decimales}`
+}
+
+/**
+ * Formatea una fracción (`alicuota_aplicada`, `bonificacion` -- TR-02) como
+ * porcentaje para mostrar (tarea 14.5, corrección de la verificación
+ * manual 13.5): multiplica por 100 con decimal.js (nunca `number`) y
+ * muestra hasta cuatro decimales, sin ceros de relleno -- `0.21` ->
+ * `"21 %"`, `0.105` -> `"10,5 %"`, `0` -> `"0 %"`. Separador decimal `,`
+ * (es-AR), igual criterio que `formatearCosto`.
+ */
+export function formatearPorcentaje(fraccion: Importe): string {
+  const porcentaje = fraccion.mul(100)
+  const [entero = '0', decimales = ''] = porcentaje.toFixed(4).split('.')
+  const decimalesSinCeros = decimales.replace(/0+$/, '')
+  return decimalesSinCeros ? `${entero},${decimalesSinCeros} %` : `${entero} %`
 }

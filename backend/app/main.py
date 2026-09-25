@@ -1,5 +1,7 @@
 """Punto de entrada de la aplicación FastAPI (`docs/02-arquitectura.md` §11)."""
 
+from typing import Any
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
@@ -21,16 +23,21 @@ def _domain_error_a_problem_details(request: Request, exc: Exception) -> JSONRes
     mensaje ya pensado para el usuario (`02` §17/§18: ni contraseñas, ni
     PIN, ni tokens aparecen en un mensaje de error)."""
     assert isinstance(exc, DomainError)
+    content: dict[str, Any] = {
+        "type": "about:blank",
+        "title": exc.mensaje,
+        "status": exc.status_http,
+        "codigo": exc.codigo,
+        "instance": str(request.url.path),
+    }
+    # contrato-api.md P9 (aprobado 2026-09-24): errores puntuales de fila
+    # (p.ej. `COSTO_INFORMAR`) agregan `fila` vía `DomainError.extension`.
+    if exc.extension:
+        content.update(exc.extension)
     return JSONResponse(
         status_code=exc.status_http,
         media_type="application/problem+json",
-        content={
-            "type": "about:blank",
-            "title": exc.mensaje,
-            "status": exc.status_http,
-            "codigo": exc.codigo,
-            "instance": str(request.url.path),
-        },
+        content=content,
     )
 
 

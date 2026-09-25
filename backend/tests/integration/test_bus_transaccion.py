@@ -401,13 +401,9 @@ class TestAuditoriaAutomaticaDelComando:
     `operation_id` del sobre, dentro de la MISMA transacción que confirma
     los efectos del comando."""
 
-    def _auditoria_del_operation_id(
-        self, sesion: Session, operation_id: UUID
-    ) -> list[Auditoria]:
+    def _auditoria_del_operation_id(self, sesion: Session, operation_id: UUID) -> list[Auditoria]:
         return list(
-            sesion.execute(
-                select(Auditoria).where(Auditoria.operation_id == operation_id)
-            )
+            sesion.execute(select(Auditoria).where(Auditoria.operation_id == operation_id))
             .scalars()
             .all()
         )

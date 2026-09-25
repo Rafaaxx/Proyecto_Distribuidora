@@ -28,6 +28,12 @@ from app.modules.catalogo.models import Categoria, Marca, Presentacion, Producto
 from app.modules.configuracion.models import AlicuotaIva
 from app.modules.identidad.models import Organizacion
 
+# Change 06, grupo 5: mismo patrón que
+# `tests/integration/test_proveedores_migracion.py` -- sin este import,
+# SQLAlchemy no resuelve `fk_producto__proveedor` al configurar el mapper
+# de `Producto` y revienta con `NoReferencedTableError`.
+from app.modules.proveedores.models import CostoInformado, Proveedor  # noqa: F401
+
 pytestmark = pytest.mark.usefixtures("_engine_de_sesion")
 
 
@@ -68,6 +74,30 @@ def alicuota_id(db_session: Session, organizacion_id: uuid.UUID) -> uuid.UUID:
 
 
 @pytest.fixture
+def proveedor_id(db_session: Session, organizacion_id: uuid.UUID) -> uuid.UUID:
+    """`producto.proveedor_id` es `NOT NULL` desde change 06 grupo 4 (D2):
+    toda fixture de este archivo que crea un producto directo por modelo
+    necesita un proveedor real."""
+    momento = datetime.now(UTC)
+    proveedor = Proveedor(
+        id=uuid.uuid4(),
+        organizacion_id=organizacion_id,
+        nombre=f"Proveedor-{uuid.uuid4().hex[:6]}",
+        cuit=None,
+        contacto=None,
+        telefono=None,
+        email=None,
+        activo=True,
+        creado_en=momento,
+        actualizado_en=momento,
+        actualizado_por_id=None,
+    )
+    db_session.add(proveedor)
+    db_session.flush()
+    return proveedor.id
+
+
+@pytest.fixture
 def categoria_id(db_session: Session, organizacion_id: uuid.UUID) -> uuid.UUID:
     momento = datetime.now(UTC)
     categoria = Categoria(
@@ -89,6 +119,7 @@ def _crear_producto(
     organizacion_id: uuid.UUID,
     categoria_id: uuid.UUID,
     alicuota_id: uuid.UUID,
+    proveedor_id: uuid.UUID,
     codigo: str,
 ) -> Producto:
     momento = datetime.now(UTC)
@@ -99,7 +130,7 @@ def _crear_producto(
         nombre="Vino A",
         categoria_id=categoria_id,
         marca_id=None,
-        proveedor_id=None,
+        proveedor_id=proveedor_id,
         unidad_base="botella",
         alicuota_id=alicuota_id,
         activo=True,
@@ -280,7 +311,11 @@ def test_cat01_ux_marca_nombre_rechaza_duplicado_en_la_misma_organizacion(
 
 
 def test_cat01_ux_producto_codigo_rechaza_duplicado(
-    db_session: Session, organizacion_id: uuid.UUID, categoria_id: uuid.UUID, alicuota_id: uuid.UUID
+    db_session: Session,
+    organizacion_id: uuid.UUID,
+    categoria_id: uuid.UUID,
+    alicuota_id: uuid.UUID,
+    proveedor_id: uuid.UUID,
 ) -> None:
     codigo = f"VA-{uuid.uuid4().hex[:8]}"
     _crear_producto(
@@ -288,6 +323,7 @@ def test_cat01_ux_producto_codigo_rechaza_duplicado(
         organizacion_id=organizacion_id,
         categoria_id=categoria_id,
         alicuota_id=alicuota_id,
+        proveedor_id=proveedor_id,
         codigo=codigo,
     )
     with db_session.begin_nested():
@@ -300,7 +336,7 @@ def test_cat01_ux_producto_codigo_rechaza_duplicado(
                 nombre="Otro producto",
                 categoria_id=categoria_id,
                 marca_id=None,
-                proveedor_id=None,
+                proveedor_id=proveedor_id,
                 unidad_base="botella",
                 alicuota_id=alicuota_id,
                 activo=True,
@@ -316,13 +352,18 @@ def test_cat01_ux_producto_codigo_rechaza_duplicado(
 
 
 def test_cat03_ux_presentacion_referencia_rechaza_segunda_referencia_directa(
-    db_session: Session, organizacion_id: uuid.UUID, categoria_id: uuid.UUID, alicuota_id: uuid.UUID
+    db_session: Session,
+    organizacion_id: uuid.UUID,
+    categoria_id: uuid.UUID,
+    alicuota_id: uuid.UUID,
+    proveedor_id: uuid.UUID,
 ) -> None:
     producto = _crear_producto(
         db_session,
         organizacion_id=organizacion_id,
         categoria_id=categoria_id,
         alicuota_id=alicuota_id,
+        proveedor_id=proveedor_id,
         codigo=f"VA-{uuid.uuid4().hex[:8]}",
     )
     _crear_presentacion(
@@ -348,13 +389,18 @@ def test_cat03_ux_presentacion_referencia_rechaza_segunda_referencia_directa(
 
 
 def test_cat03_ck_referencia_venta_rechaza_referencia_sin_venta(
-    db_session: Session, organizacion_id: uuid.UUID, categoria_id: uuid.UUID, alicuota_id: uuid.UUID
+    db_session: Session,
+    organizacion_id: uuid.UUID,
+    categoria_id: uuid.UUID,
+    alicuota_id: uuid.UUID,
+    proveedor_id: uuid.UUID,
 ) -> None:
     producto = _crear_producto(
         db_session,
         organizacion_id=organizacion_id,
         categoria_id=categoria_id,
         alicuota_id=alicuota_id,
+        proveedor_id=proveedor_id,
         codigo=f"VA-{uuid.uuid4().hex[:8]}",
     )
     with db_session.begin_nested():
@@ -373,13 +419,18 @@ def test_cat03_ck_referencia_venta_rechaza_referencia_sin_venta(
 
 
 def test_cat02_ck_unidades_base_rechaza_cero(
-    db_session: Session, organizacion_id: uuid.UUID, categoria_id: uuid.UUID, alicuota_id: uuid.UUID
+    db_session: Session,
+    organizacion_id: uuid.UUID,
+    categoria_id: uuid.UUID,
+    alicuota_id: uuid.UUID,
+    proveedor_id: uuid.UUID,
 ) -> None:
     producto = _crear_producto(
         db_session,
         organizacion_id=organizacion_id,
         categoria_id=categoria_id,
         alicuota_id=alicuota_id,
+        proveedor_id=proveedor_id,
         codigo=f"VA-{uuid.uuid4().hex[:8]}",
     )
     with db_session.begin_nested():

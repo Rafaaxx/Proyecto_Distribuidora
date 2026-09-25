@@ -4,6 +4,8 @@ estable, no excepciones genéricas).
 
 from __future__ import annotations
 
+from typing import Any
+
 
 class DomainError(Exception):
     """Base de todo error de dominio del sistema.
@@ -19,6 +21,12 @@ class DomainError(Exception):
     # representa una condición HTTP distinta (401, 403, 404...) lo declara.
     status_http: int = 400
 
-    def __init__(self, mensaje: str) -> None:
+    def __init__(self, mensaje: str, *, extension: dict[str, Any] | None = None) -> None:
+        """`extension` (change 06, contrato-api.md P9, aprobado 2026-09-24):
+        campos adicionales que un error puntual necesita exponer en el
+        Problem Details (por ejemplo `fila`, el índice 0-based de la fila
+        del lote de `COSTO_INFORMAR` que lo causó). Aditivo: `None` por
+        defecto, no cambia el comportamiento de ningún error existente."""
         super().__init__(mensaje)
         self.mensaje = mensaje
+        self.extension = extension

@@ -18,6 +18,7 @@ handlers.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -30,6 +31,7 @@ from app.modules.catalogo.domain.errores import (
     CategoriaConProductosActivosError,
     CategoriaInactivaError,
     MarcaInactivaError,
+    ProveedorInactivoError,
     RecursoNoEncontradoError,
 )
 from app.modules.catalogo.domain.nombres import normalizar_codigo, normalizar_nombre
@@ -73,6 +75,87 @@ def presentacion_fue_usada(organizacion_id: UUID, presentacion_id: UUID, sesion:
         funcion(organizacion_id, presentacion_id, sesion)
         for funcion in _REGISTRO_VERIFICADORES.values()
     )
+
+
+# --- D9/ADR-025: puerto de consulta de proveedor ----------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class EstadoProveedor:
+    """Resultado de la consulta que `proveedores` registra en este puerto
+    (`design.md` D9-A, ADR-025). Incluye `nombre` (Open Question resuelta
+    opción B, 2026-09-23) para que `GET /productos/{id}` muestre el nombre
+    real de un proveedor inactivo sin que `catalogo` lea la tabla
+    `proveedor` ni se amplíe el permiso de `/proveedores/opciones`
+    (`design.md` D8, D13)."""
+
+    activo: bool
+    nombre: str
+
+
+ConsultaProveedor = Callable[[UUID, UUID, Session], "EstadoProveedor | None"]
+"""`funcion(organizacion_id, proveedor_id, sesion) -> EstadoProveedor | None`
+(`design.md` D9-A): `None` si el proveedor no existe en la organización."""
+
+_CONSULTA_PROVEEDOR: ConsultaProveedor | None = None
+
+
+def registrar_consulta_proveedor(funcion: ConsultaProveedor) -> None:
+    """`proveedores` la registra al importar su `service.py` (tarea 8.2),
+    igual que `registrar_verificador_uso` (ADR-023). Sin ciclo: `catalogo`
+    nunca importa `proveedores` (`02` §5.3)."""
+    global _CONSULTA_PROVEEDOR
+    _CONSULTA_PROVEEDOR = funcion
+
+
+def consultar_proveedor(
+    organizacion_id: UUID, proveedor_id: UUID, sesion: Session
+) -> EstadoProveedor | None:
+    """Lectura pública (D13: la usa también la consulta de detalle de
+    producto para resolver `proveedor_nombre`). Falla cerrado (D9-A) si no
+    hay consulta registrada -- un error de configuración nunca deja pasar
+    un proveedor sin validar."""
+    if _CONSULTA_PROVEEDOR is None:
+        raise RuntimeError(
+            "No hay consulta de proveedor registrada (ADR-025): catalogo falla cerrado."
+        )
+    return _CONSULTA_PROVEEDOR(organizacion_id, proveedor_id, sesion)
+
+
+def _resolver_proveedor(
+    organizacion_id: UUID,
+    proveedor_id: UUID,
+    sesion: Session,
+    *,
+    proveedor_actual_id: UUID | None,
+) -> None:
+    """D9-A: existencia -> 404; inactivo y distinto del proveedor actual
+    del producto -> `PROVEEDOR_INACTIVO`; conservar el proveedor actual
+    aunque esté inactivo se acepta (D5)."""
+    estado = consultar_proveedor(organizacion_id, proveedor_id, sesion)
+    if estado is None:
+        raise RecursoNoEncontradoError(
+            f"El proveedor {proveedor_id} no existe en esta organización."
+        )
+    if not estado.activo and proveedor_id != proveedor_actual_id:
+        raise ProveedorInactivoError(f"El proveedor {proveedor_id} está inactivo.")
+
+
+def existen_productos_activos_de_proveedor(
+    organizacion_id: UUID, proveedor_id: UUID, sesion: Session
+) -> bool:
+    """Lectura pública (D5, ADR-026): usada por `proveedores/service.py`
+    para rechazar la desactivación de un proveedor con productos
+    activos."""
+    return repository.existen_productos_activos_de_proveedor(organizacion_id, proveedor_id, sesion)
+
+
+def obtener_producto_para_compartir(
+    organizacion_id: UUID, producto_id: UUID, sesion: Session
+) -> Producto | None:
+    """Lectura pública `FOR SHARE` (D14): usada por `COSTO_INFORMAR` para
+    leer y bloquear el producto sin impedir otras lecturas concurrentes."""
+    return repository.obtener_producto_por_id_para_compartir(organizacion_id, producto_id, sesion)
 
 
 # --- categoria (CAT-01, CAT-05, D11) ---------------------------------------
@@ -249,24 +332,25 @@ def crear_producto(
     nombre: str,
     categoria_id: UUID,
     marca_id: UUID | None,
-    proveedor_id: UUID | None,
+    proveedor_id: UUID,
     unidad_base: str,
     alicuota_id: UUID,
     presentaciones: list[DatosPresentacion],
     actor_id: UUID | None,
 ) -> tuple[Producto, list[Presentacion]]:
     """`PRODUCTO_CREAR` (spec productos-y-presentaciones): valida todo
-    ANTES de escribir (código, referencias, presentaciones) y escribe el
-    producto y sus presentaciones dentro de la misma transacción -- si algo
-    fallara a mitad de camino, el handler que llama a esta función se
-    revierte entero (INV-01), porque quien confirma la transacción es el
-    bus, no esta función."""
+    ANTES de escribir (código, referencias, presentaciones, proveedor) y
+    escribe el producto y sus presentaciones dentro de la misma transacción
+    -- si algo fallara a mitad de camino, el handler que llama a esta
+    función se revierte entero (INV-01), porque quien confirma la
+    transacción es el bus, no esta función."""
     codigo_normalizado = normalizar_codigo(codigo)
     validar_alta_presentaciones(presentaciones)
 
     _resolver_categoria_activa(organizacion_id, categoria_id, sesion)
     _resolver_marca_activa(organizacion_id, marca_id, sesion)
     _resolver_alicuota_activa(organizacion_id, alicuota_id, sesion)
+    _resolver_proveedor(organizacion_id, proveedor_id, sesion, proveedor_actual_id=None)
 
     momento = reloj.now()
     producto = repository.crear_producto(
@@ -315,6 +399,7 @@ def modificar_producto(
     nombre: str,
     categoria_id: UUID,
     marca_id: UUID | None,
+    proveedor_id: UUID,
     unidad_base: str,
     alicuota_id: UUID,
     activo: bool,
@@ -322,7 +407,9 @@ def modificar_producto(
 ) -> Producto:
     """`PRODUCTO_MODIFICAR` (estado completo deseado, `design.md` D4): no
     toca presentaciones (CAT-05: "Desactivar un producto NO DEBE cambiar el
-    estado de sus presentaciones")."""
+    estado de sus presentaciones"). D9-A: conservar el proveedor actual
+    aunque esté inactivo se acepta; cambiar a otro proveedor inactivo se
+    rechaza (`PROVEEDOR_INACTIVO`)."""
     producto = repository.obtener_producto_por_id(organizacion_id, producto_id, sesion)
     if producto is None:
         raise RecursoNoEncontradoError(f"El producto {producto_id} no existe en esta organización.")
@@ -331,6 +418,9 @@ def modificar_producto(
     _resolver_categoria_activa(organizacion_id, categoria_id, sesion)
     _resolver_marca_activa(organizacion_id, marca_id, sesion)
     _resolver_alicuota_activa(organizacion_id, alicuota_id, sesion)
+    _resolver_proveedor(
+        organizacion_id, proveedor_id, sesion, proveedor_actual_id=producto.proveedor_id
+    )
 
     actualizado = repository.actualizar_producto(
         organizacion_id,
@@ -340,6 +430,7 @@ def modificar_producto(
         nombre=nombre,
         categoria_id=categoria_id,
         marca_id=marca_id,
+        proveedor_id=proveedor_id,
         unidad_base=unidad_base,
         alicuota_id=alicuota_id,
         activo=activo,

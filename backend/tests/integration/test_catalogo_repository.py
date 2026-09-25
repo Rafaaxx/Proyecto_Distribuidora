@@ -20,6 +20,11 @@ from app.modules.catalogo.domain.errores import (
 from app.modules.configuracion.models import AlicuotaIva
 from app.modules.identidad.models import Organizacion
 
+# Change 06, grupo 5: mismo patrón que `test_proveedores_migracion.py` --
+# sin este import, SQLAlchemy no resuelve `fk_producto__proveedor` al
+# configurar el mapper de `Producto`.
+from app.modules.proveedores.models import CostoInformado, Proveedor  # noqa: F401
+
 pytestmark = pytest.mark.usefixtures("_engine_de_sesion")
 
 _MOMENTO = datetime.now(UTC)
@@ -75,6 +80,29 @@ def alicuota_id(db_session: Session, organizacion_id: uuid.UUID) -> uuid.UUID:
     db_session.add(alicuota)
     db_session.flush()
     return alicuota.id
+
+
+@pytest.fixture
+def proveedor_id(db_session: Session, organizacion_id: uuid.UUID) -> uuid.UUID:
+    """`producto.proveedor_id` es `NOT NULL` desde change 06 grupo 4 (D2):
+    toda fixture de este archivo que crea un producto por repositorio
+    necesita un proveedor real."""
+    proveedor = Proveedor(
+        id=uuid.uuid4(),
+        organizacion_id=organizacion_id,
+        nombre=f"Proveedor-{uuid.uuid4().hex[:6]}",
+        cuit=None,
+        contacto=None,
+        telefono=None,
+        email=None,
+        activo=True,
+        creado_en=_MOMENTO,
+        actualizado_en=_MOMENTO,
+        actualizado_por_id=None,
+    )
+    db_session.add(proveedor)
+    db_session.flush()
+    return proveedor.id
 
 
 # --- tarea 6.1: alta y lectura por id filtrando por organización ---------
@@ -143,7 +171,10 @@ def test_nombre_duplicado_de_categoria_se_traduce_a_error_de_dominio(
 
 
 def test_codigo_duplicado_de_producto_se_traduce_a_error_de_dominio(
-    db_session: Session, organizacion_id: uuid.UUID, alicuota_id: uuid.UUID
+    db_session: Session,
+    organizacion_id: uuid.UUID,
+    alicuota_id: uuid.UUID,
+    proveedor_id: uuid.UUID,
 ) -> None:
     categoria = catalogo_repository.crear_categoria(
         organizacion_id,
@@ -162,7 +193,7 @@ def test_codigo_duplicado_de_producto_se_traduce_a_error_de_dominio(
         nombre="Vino A",
         categoria_id=categoria.id,
         marca_id=None,
-        proveedor_id=None,
+        proveedor_id=proveedor_id,
         unidad_base="botella",
         alicuota_id=alicuota_id,
         activo=True,
@@ -177,7 +208,7 @@ def test_codigo_duplicado_de_producto_se_traduce_a_error_de_dominio(
             nombre="Otro",
             categoria_id=categoria.id,
             marca_id=None,
-            proveedor_id=None,
+            proveedor_id=proveedor_id,
             unidad_base="botella",
             alicuota_id=alicuota_id,
             activo=True,
@@ -186,7 +217,10 @@ def test_codigo_duplicado_de_producto_se_traduce_a_error_de_dominio(
 
 
 def test_segunda_referencia_directa_se_traduce_a_referencia_invalida(
-    db_session: Session, organizacion_id: uuid.UUID, alicuota_id: uuid.UUID
+    db_session: Session,
+    organizacion_id: uuid.UUID,
+    alicuota_id: uuid.UUID,
+    proveedor_id: uuid.UUID,
 ) -> None:
     categoria = catalogo_repository.crear_categoria(
         organizacion_id,
@@ -204,7 +238,7 @@ def test_segunda_referencia_directa_se_traduce_a_referencia_invalida(
         nombre="Vino A",
         categoria_id=categoria.id,
         marca_id=None,
-        proveedor_id=None,
+        proveedor_id=proveedor_id,
         unidad_base="botella",
         alicuota_id=alicuota_id,
         activo=True,
@@ -243,7 +277,10 @@ def test_segunda_referencia_directa_se_traduce_a_referencia_invalida(
 
 
 def test_obtener_producto_para_actualizar_bloquea_la_fila(
-    db_session: Session, organizacion_id: uuid.UUID, alicuota_id: uuid.UUID
+    db_session: Session,
+    organizacion_id: uuid.UUID,
+    alicuota_id: uuid.UUID,
+    proveedor_id: uuid.UUID,
 ) -> None:
     categoria = catalogo_repository.crear_categoria(
         organizacion_id,
@@ -261,7 +298,7 @@ def test_obtener_producto_para_actualizar_bloquea_la_fila(
         nombre="Vino A",
         categoria_id=categoria.id,
         marca_id=None,
-        proveedor_id=None,
+        proveedor_id=proveedor_id,
         unidad_base="botella",
         alicuota_id=alicuota_id,
         activo=True,
@@ -275,7 +312,10 @@ def test_obtener_producto_para_actualizar_bloquea_la_fila(
 
 
 def test_existen_productos_activos_en_categoria(
-    db_session: Session, organizacion_id: uuid.UUID, alicuota_id: uuid.UUID
+    db_session: Session,
+    organizacion_id: uuid.UUID,
+    alicuota_id: uuid.UUID,
+    proveedor_id: uuid.UUID,
 ) -> None:
     categoria = catalogo_repository.crear_categoria(
         organizacion_id,
@@ -299,7 +339,7 @@ def test_existen_productos_activos_en_categoria(
         nombre="Vino A",
         categoria_id=categoria.id,
         marca_id=None,
-        proveedor_id=None,
+        proveedor_id=proveedor_id,
         unidad_base="botella",
         alicuota_id=alicuota_id,
         activo=True,
@@ -317,7 +357,10 @@ def test_existen_productos_activos_en_categoria(
 
 
 def test_listar_productos_paginado_recorre_todos_sin_repetir(
-    db_session: Session, organizacion_id: uuid.UUID, alicuota_id: uuid.UUID
+    db_session: Session,
+    organizacion_id: uuid.UUID,
+    alicuota_id: uuid.UUID,
+    proveedor_id: uuid.UUID,
 ) -> None:
     categoria = catalogo_repository.crear_categoria(
         organizacion_id,
@@ -338,7 +381,7 @@ def test_listar_productos_paginado_recorre_todos_sin_repetir(
             nombre="Vino",
             categoria_id=categoria.id,
             marca_id=None,
-            proveedor_id=None,
+            proveedor_id=proveedor_id,
             unidad_base="botella",
             alicuota_id=alicuota_id,
             activo=True,
@@ -360,7 +403,10 @@ def test_listar_productos_paginado_recorre_todos_sin_repetir(
 
 
 def test_listar_productos_paginado_filtra_por_categoria(
-    db_session: Session, organizacion_id: uuid.UUID, alicuota_id: uuid.UUID
+    db_session: Session,
+    organizacion_id: uuid.UUID,
+    alicuota_id: uuid.UUID,
+    proveedor_id: uuid.UUID,
 ) -> None:
     categoria_a = catalogo_repository.crear_categoria(
         organizacion_id,
@@ -388,7 +434,7 @@ def test_listar_productos_paginado_filtra_por_categoria(
         nombre="Producto A",
         categoria_id=categoria_a.id,
         marca_id=None,
-        proveedor_id=None,
+        proveedor_id=proveedor_id,
         unidad_base="botella",
         alicuota_id=alicuota_id,
         activo=True,
@@ -402,7 +448,7 @@ def test_listar_productos_paginado_filtra_por_categoria(
         nombre="Producto B",
         categoria_id=categoria_b.id,
         marca_id=None,
-        proveedor_id=None,
+        proveedor_id=proveedor_id,
         unidad_base="botella",
         alicuota_id=alicuota_id,
         activo=True,
@@ -417,7 +463,10 @@ def test_listar_productos_paginado_filtra_por_categoria(
 
 
 def test_listar_productos_paginado_filtra_por_texto_excluye_no_coincidentes(
-    db_session: Session, organizacion_id: uuid.UUID, alicuota_id: uuid.UUID
+    db_session: Session,
+    organizacion_id: uuid.UUID,
+    alicuota_id: uuid.UUID,
+    proveedor_id: uuid.UUID,
 ) -> None:
     """Spec `administracion-de-catalogo`, escenario "Buscar por código": dado
     `VA-001` y `CB-001`, buscar `VA-` devuelve solo `VA-001` (CAT-01)."""
@@ -441,7 +490,7 @@ def test_listar_productos_paginado_filtra_por_texto_excluye_no_coincidentes(
             nombre=nombre,
             categoria_id=categoria.id,
             marca_id=None,
-            proveedor_id=None,
+            proveedor_id=proveedor_id,
             unidad_base="unidad",
             alicuota_id=alicuota_id,
             activo=True,

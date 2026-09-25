@@ -119,3 +119,15 @@ class CategoriaConProductosActivosError(DomainError):
 
     codigo = "CATEGORIA_CON_PRODUCTOS_ACTIVOS"
     status_http = 409
+
+
+class ProveedorInactivoError(DomainError):
+    """Change 06, `design.md` D9/ADR-025: un proveedor inactivo asignado a
+    un producto nuevo, o a un producto modificado con un proveedor distinto
+    del actual (D5: conservar el proveedor actual, aunque esté inactivo, sí
+    se acepta). Mismo código estable que
+    `proveedores.domain.errores.ProveedorInactivoError` -- ambos expresan
+    la misma regla de negocio desde dos módulos."""
+
+    codigo = "PROVEEDOR_INACTIVO"
+    status_http = 422

@@ -126,6 +126,7 @@ class ProductoCrearRequest(BaseModel):
     nombre: str
     categoria_id: UUID
     marca_id: UUID | None = None
+    proveedor_id: UUID
     unidad_base: str
     alicuota_id: UUID
     presentaciones: list[PresentacionInicialRequest]
@@ -136,6 +137,7 @@ class ProductoModificarRequest(BaseModel):
     nombre: str
     categoria_id: UUID
     marca_id: UUID | None = None
+    proveedor_id: UUID
     unidad_base: str
     alicuota_id: UUID
     activo: bool
@@ -143,13 +145,20 @@ class ProductoModificarRequest(BaseModel):
 
 class ProductoResponse(BaseModel):
     """Fila de listado (tarea 9.2): sin presentaciones -- para el detalle
-    completo (incluidas sus presentaciones) ver `ProductoDetalleResponse`."""
+    completo (incluidas sus presentaciones) ver `ProductoDetalleResponse`.
+
+    `proveedor_id` (change 06, contrato-api.md P1 aprobado 2026-09-24): va
+    en el listado, el `PUT` y el detalle -- es una columna propia del
+    producto. `proveedor_nombre`, en cambio, solo va en el detalle
+    (`ProductoDetalleResponse`), para no llamar al puerto de ADR-025 una
+    vez por fila de una página."""
 
     id: UUID
     codigo: str
     nombre: str
     categoria_id: UUID
     marca_id: UUID | None
+    proveedor_id: UUID
     unidad_base: str
     alicuota_id: UUID
     activo: bool
@@ -161,6 +170,7 @@ class ProductoResponse(BaseModel):
 
 class ProductoDetalleResponse(ProductoResponse):
     presentaciones: list[PresentacionResponse]
+    proveedor_nombre: str
 
 
 # --- paginación (tarea 9.2, `02` §11: cursor) -------------------------------

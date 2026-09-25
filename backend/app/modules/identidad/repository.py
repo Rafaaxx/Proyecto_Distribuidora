@@ -316,6 +316,21 @@ def obtener_usuario_por_id(
     return fila
 
 
+def listar_usuarios_por_ids(
+    organizacion_id: UUID, usuario_ids: frozenset[UUID], sesion: Session
+) -> list[Usuario]:
+    """Búsqueda por lote (change 06, tarea 14.4): un único `SELECT ... IN`
+    en vez de `N` llamados a `obtener_usuario_por_id`. Filtra siempre por
+    `organizacion_id` (INV-21): un id de otra organización no aparece en el
+    resultado. Con `usuario_ids` vacío no consulta nada."""
+    if not usuario_ids:
+        return []
+    consulta = select(Usuario).where(
+        Usuario.organizacion_id == organizacion_id, Usuario.id.in_(usuario_ids)
+    )
+    return list(sesion.scalars(consulta).all())
+
+
 def obtener_usuario_por_nombre_usuario(
     organizacion_id: UUID, nombre_usuario: str, sesion: Session
 ) -> Usuario | None:

@@ -5,6 +5,8 @@ consistente con que sus handlers exigen `sesion`/`reloj` obligatorios)."""
 
 from __future__ import annotations
 
+import pytest
+
 from app.commands import catalogo as catalogo_bus
 from app.commands.verificacion import verificar_catalogo_y_registro
 from app.modules.catalogo import commands as catalogo_commands  # noqa: F401
@@ -42,3 +44,18 @@ def test_los_nueve_tipos_de_catalogo_son_online_y_no_admiten_offline() -> None:
         assert declarado is not None, f"{tipo} no está declarado en el catálogo de comandos."
         assert declarado.admite_online is True
         assert declarado.admite_offline is False
+
+
+def test_producto_crear_y_modificar_solo_tienen_handler_en_version_2() -> None:
+    """Change 06, tarea 9.2 (`design.md` D6 del 06): v1 se retira -- un
+    envío v1 recibe `VersionDeComandoSinHandlerError` (SYN-06, `02` §6.6),
+    distinto de `TipoDeComandoDesconocidoError` porque el TIPO existe (con
+    handler en v2), solo la versión 1 no tiene handler."""
+    from app.commands import registro as registro_bus
+    from app.commands.errores import VersionDeComandoSinHandlerError
+
+    for tipo in ("PRODUCTO_CREAR", "PRODUCTO_MODIFICAR"):
+        with pytest.raises(VersionDeComandoSinHandlerError):
+            registro_bus.resolver_handler(tipo, 1)
+        handler_v2 = registro_bus.resolver_handler(tipo, 2)
+        assert handler_v2.version == 2

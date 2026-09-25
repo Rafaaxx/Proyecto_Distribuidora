@@ -18,6 +18,7 @@ from app.core.db import Base  # noqa: E402
 from app.modules.catalogo import models as catalogo_models  # noqa: E402,F401
 from app.modules.configuracion import models as configuracion_models  # noqa: E402,F401
 from app.modules.identidad import models as identidad_models  # noqa: E402,F401
+from app.modules.proveedores import models as proveedores_models  # noqa: E402,F401
 from app.modules.sync import models as sync_models  # noqa: E402,F401
 
 # this is the Alembic Config object, which provides

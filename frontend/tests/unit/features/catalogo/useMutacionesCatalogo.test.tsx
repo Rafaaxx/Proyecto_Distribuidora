@@ -85,6 +85,18 @@ describe('useCrearCategoria: Operation-Id en reintentos (tarea 10.2, INV-06)', (
     expect(segundoId).not.toBe(primerId)
   })
 
+  it('un rechazo de dominio (409 NOMBRE_DUPLICADO) NO se reintenta (tarea 14.2, bug 13.5)', async () => {
+    apiFetchMock.mockResolvedValue(respuesta(409, { title: 'El nombre ya está en uso.', codigo: 'CODIGO_DUPLICADO' }))
+
+    const { wrapper } = envoltorio()
+    const { result } = renderHook(() => useCrearCategoria(), { wrapper })
+
+    result.current.mutate({ nombre: 'Bebidas' })
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(apiFetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('al aceptarse, invalida la clave de categorías', async () => {
     apiFetchMock.mockResolvedValueOnce(respuesta(201, CATEGORIA))
     const { wrapper, queryClient } = envoltorio()

@@ -101,6 +101,11 @@ class Producto(Base):
             name="fk_producto__alicuota",
         ),
         ForeignKeyConstraint(
+            ["organizacion_id", "proveedor_id"],
+            ["proveedor.organizacion_id", "proveedor.id"],
+            name="fk_producto__proveedor",
+        ),
+        ForeignKeyConstraint(
             ["organizacion_id", "actualizado_por_id"],
             ["usuario.organizacion_id", "usuario.id"],
             name="fk_producto__actualizado_por",
@@ -117,9 +122,9 @@ class Producto(Base):
     nombre: Mapped[str] = mapped_column(Text, nullable=False)
     categoria_id: Mapped[UUID] = mapped_column(nullable=False)
     marca_id: Mapped[UUID | None] = mapped_column(nullable=True)
-    # D1 opcion A (design.md, aprobada 2026-09-22): nulable, sin FK hasta que
-    # el change 06 cree `proveedor` y agregue la FK compuesta + NOT NULL.
-    proveedor_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    # Change 06 (D2, D9, D10): FK compuesta a `proveedor` y `NOT NULL`
+    # (migraciones `70dcb6dce507` y `8b9c0d1e2f3a`). Ya no es opcional.
+    proveedor_id: Mapped[UUID] = mapped_column(nullable=False)
     unidad_base: Mapped[str] = mapped_column(Text, nullable=False)
     alicuota_id: Mapped[UUID] = mapped_column(nullable=False)
     activo: Mapped[bool] = mapped_column(Boolean, nullable=False)

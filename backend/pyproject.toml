@@ -77,6 +77,14 @@ ignore_imports = [
     "app.modules.catalogo.api -> sqlalchemy",
     "app.modules.catalogo.api -> app.api_v1.dependencias",
     "app.modules.catalogo.api -> app.core.autenticacion",
+    "app.modules.proveedores.models -> app.core.db",
+    "app.modules.proveedores.models -> sqlalchemy",
+    "app.modules.proveedores.repository -> sqlalchemy",
+    "app.modules.proveedores.service -> sqlalchemy",
+    "app.modules.proveedores.api -> fastapi",
+    "app.modules.proveedores.api -> sqlalchemy",
+    "app.modules.proveedores.api -> app.api_v1.dependencias",
+    "app.modules.proveedores.api -> app.core.autenticacion",
 ]
 
 # `allow_indirect_imports`: descubrimiento de la tarea 9.6 (change 05, D12).
@@ -131,6 +139,7 @@ source_modules = [
     "app.modules.identidad.domain",
     "app.modules.configuracion.domain",
     "app.modules.catalogo.domain",
+    "app.modules.proveedores.domain",
 ]
 forbidden_modules = ["app.commands"]
 
@@ -207,8 +216,62 @@ forbidden_modules = [
     "app.modules.configuracion.api",
     "app.modules.configuracion.domain",
     "app.modules.sync",
+    # Change 06 (ADR-025, `design.md` D9): `catalogo` no puede importar
+    # `proveedores` en absoluto (ni siquiera por su `service.py`) -- la
+    # direccion de dependencia de `02` SS5.3 es
+    # `proveedores -> catalogo`, nunca al reves. `catalogo` valida el
+    # proveedor con la FK compuesta (existencia/pertenencia) y con el
+    # puerto de consulta que `proveedores` registra en
+    # `catalogo/service.py` (`registrar_consulta_proveedor`), nunca
+    # importando `app.modules.proveedores`.
+    "app.modules.proveedores",
 ]
 ignore_imports = [
     "app.modules.catalogo.api -> app.modules.sync.service",
+]
+allow_indirect_imports = "true"
+
+# Change 06 (`design.md`, `02` SS5.3): `proveedores` es el segundo maestro
+# de negocio sobre el bus. Su `domain/` es puro (ni infraestructura ni el
+# bus) -- mismo criterio que `catalogo-domain-no-infraestructura`.
+[[tool.importlinter.contracts]]
+id = "proveedores-domain-no-infraestructura"
+name = "proveedores domain no importa infraestructura ni el bus de comandos"
+type = "forbidden"
+source_modules = ["app.modules.proveedores.domain"]
+forbidden_modules = ["fastapi", "sqlalchemy", "app.commands"]
+
+# `proveedores` depende de `catalogo`, `configuracion` e `identidad`
+# (`02` SS5.3: `proveedores -> catalogo, stock, costeo, cuentas_corrientes`),
+# pero solo por su `service.py`, nunca por sus
+# modelos/repositorio/dominio/api -- mismo criterio que
+# `catalogo-solo-por-service-ajeno`. La unica excepcion es
+# `proveedores.api -> sync.service` (`procesar_comando`, grupo 9), igual
+# que `catalogo.api -> sync.service`.
+[[tool.importlinter.contracts]]
+id = "proveedores-solo-por-service-ajeno"
+name = "proveedores solo alcanza a otros modulos de negocio por su service.py"
+type = "forbidden"
+source_modules = ["app.modules.proveedores"]
+forbidden_modules = [
+    "app.modules.identidad.models",
+    "app.modules.identidad.repository",
+    "app.modules.identidad.api",
+    "app.modules.identidad.domain",
+    "app.modules.configuracion.models",
+    "app.modules.configuracion.repository",
+    "app.modules.configuracion.api",
+    "app.modules.configuracion.domain",
+    "app.modules.catalogo.models",
+    "app.modules.catalogo.repository",
+    "app.modules.catalogo.api",
+    "app.modules.catalogo.domain",
+    "app.modules.sync",
+]
+# Grupo 10 (tarea 10.2): `proveedores/api.py` ya existe y llama a
+# `sync_service.procesar_comando` (mismo patron que `catalogo-solo-por-
+# service-ajeno`, ver ese contrato mas arriba).
+ignore_imports = [
+    "app.modules.proveedores.api -> app.modules.sync.service",
 ]
 allow_indirect_imports = "true"

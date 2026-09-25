@@ -17,6 +17,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.modules.catalogo import repository
+from app.modules.catalogo import service as catalogo_service
 from app.modules.catalogo.models import Categoria, Marca, Presentacion, Producto
 
 
@@ -71,13 +72,23 @@ def listar_productos_paginado(
 
 def obtener_producto_con_presentaciones(
     organizacion_id: UUID, producto_id: UUID, sesion: Session
-) -> tuple[Producto, list[Presentacion]] | None:
-    """Detalle de producto (tarea 9.2): `None` si no existe en la
-    organización (la ruta lo traduce a 404, INV-21/SEG-07)."""
+) -> tuple[Producto, list[Presentacion], str] | None:
+    """Detalle de producto (tarea 9.2, change 06 tarea 10.2 -- contrato-api.md
+    §3.2, D13 opción B): `None` si no existe en la organización (la ruta lo
+    traduce a 404, INV-21/SEG-07). El tercer elemento es `proveedor_nombre`,
+    resuelto vía el puerto de consulta de ADR-025 (`catalogo_service.
+    consultar_proveedor`) -- viene siempre, con el proveedor activo o
+    inactivo, sin que este módulo lea la tabla `proveedor`. La FK
+    `fk_producto__proveedor` garantiza que el proveedor existe: un `None`
+    del puerto es un error interno (`assert`), no un 404."""
     producto = repository.obtener_producto_por_id(organizacion_id, producto_id, sesion)
     if producto is None:
         return None
     presentaciones = repository.listar_presentaciones_de_producto(
         organizacion_id, producto_id, sesion
     )
-    return producto, presentaciones
+    estado_proveedor = catalogo_service.consultar_proveedor(
+        organizacion_id, producto.proveedor_id, sesion
+    )
+    assert estado_proveedor is not None  # la FK del producto garantiza su existencia.
+    return producto, presentaciones, estado_proveedor.nombre

@@ -55,6 +55,10 @@ export const camposProductoBase = {
   nombre: z.string().trim().min(1, MENSAJE_REQUERIDO),
   categoriaId: z.uuid('Elegí una categoría.'),
   marcaId: z.uuid('Marca inválida.').nullable(),
+  // Change 06 (D8/D9/D13, tarea 11.6): proveedor obligatorio, igual
+  // criterio que el servidor (`PRODUCTO_CREAR`/`PRODUCTO_MODIFICAR` v2 lo
+  // exigen; la versión sin proveedor deja de aceptarse, `design.md` D6).
+  proveedorId: z.uuid('Elegí un proveedor.'),
   unidadBase: z.string().trim().min(1, MENSAJE_REQUERIDO),
   alicuotaId: z.uuid('Elegí una alícuota.'),
 }

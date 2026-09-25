@@ -10,6 +10,7 @@ import { DispositivosScreen } from './dispositivos/DispositivosScreen'
 // navega a `/admin/catalogo` (tarea 10.1, mismo criterio que `AppRoutes.tsx`
 // entre `/ruta` y `/admin`).
 const CatalogoArea = lazy(() => import('./catalogo/CatalogoArea'))
+const ProveedoresArea = lazy(() => import('./proveedores/ProveedoresArea'))
 
 /**
  * `docs/02-arquitectura.md` §13.1: `/admin` usa TanStack Query contra la
@@ -37,6 +38,14 @@ export function AdminScreen() {
             element={
               <Suspense fallback={null}>
                 <CatalogoArea />
+              </Suspense>
+            }
+          />
+          <Route
+            path="proveedores/*"
+            element={
+              <Suspense fallback={null}>
+                <ProveedoresArea />
               </Suspense>
             }
           />

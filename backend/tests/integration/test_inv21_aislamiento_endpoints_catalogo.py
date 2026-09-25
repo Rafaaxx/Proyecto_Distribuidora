@@ -35,6 +35,8 @@ from app.modules.catalogo import repository as catalogo_repository
 from app.modules.configuracion.models import AlicuotaIva
 from app.modules.identidad import repository
 from app.modules.identidad.models import Organizacion
+from app.modules.proveedores import repository as proveedores_repository
+from app.modules.proveedores.models import Proveedor
 
 MOMENTO = datetime(2026, 1, 1, tzinfo=UTC)
 PASSWORD = "una-contrasena-larga-123"
@@ -189,12 +191,32 @@ def _crear_alicuota(sesion: Session, organizacion_id: UUID, *, nombre: str) -> A
     return alicuota
 
 
-def _payload_producto(*, codigo: str, categoria_id: UUID, alicuota_id: UUID) -> dict[str, object]:
+def _crear_proveedor(sesion: Session, organizacion_id: UUID, *, nombre: str) -> Proveedor:
+    proveedor = proveedores_repository.crear_proveedor(
+        organizacion_id,
+        sesion,
+        proveedor_id=nuevo_id(),
+        nombre=nombre,
+        cuit=None,
+        contacto=None,
+        telefono=None,
+        email=None,
+        activo=True,
+        momento=MOMENTO,
+    )
+    sesion.flush()
+    return proveedor
+
+
+def _payload_producto(
+    *, codigo: str, categoria_id: UUID, alicuota_id: UUID, proveedor_id: UUID
+) -> dict[str, object]:
     return {
         "codigo": codigo,
         "nombre": "Vino A",
         "categoria_id": str(categoria_id),
         "marca_id": None,
+        "proveedor_id": str(proveedor_id),
         "unidad_base": "botella",
         "alicuota_id": str(alicuota_id),
         "presentaciones": [
@@ -216,10 +238,16 @@ def _crear_producto_por_http(
     codigo: str,
     categoria_id: UUID,
     alicuota_id: UUID,
+    proveedor_id: UUID,
 ) -> dict[str, object]:
     respuesta = cliente.post(
         "/api/v1/catalogo/productos",
-        json=_payload_producto(codigo=codigo, categoria_id=categoria_id, alicuota_id=alicuota_id),
+        json=_payload_producto(
+            codigo=codigo,
+            categoria_id=categoria_id,
+            alicuota_id=alicuota_id,
+            proveedor_id=proveedor_id,
+        ),
         headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
     )
     assert respuesta.status_code == 201, respuesta.text
@@ -385,6 +413,7 @@ class TestAislamientoDeProductos:
         org_b = _crear_organizacion(sesion, "org-iso-prod-1b")
         categoria_a = _crear_categoria(sesion, org_a.id, nombre="Vinos de A")
         alicuota_b = _crear_alicuota(sesion, org_b.id, nombre="21%")
+        proveedor_b = _crear_proveedor(sesion, org_b.id, nombre="Proveedor de B")
         _con_gestionar_catalogo(sesion, org_b.id, nombre_usuario="admin_b")
         sesion.commit()
         token_b = _login(cliente, "org-iso-prod-1b", "admin_b")
@@ -392,7 +421,10 @@ class TestAislamientoDeProductos:
         respuesta = cliente.post(
             "/api/v1/catalogo/productos",
             json=_payload_producto(
-                codigo="VA-001", categoria_id=categoria_a.id, alicuota_id=alicuota_b.id
+                codigo="VA-001",
+                categoria_id=categoria_a.id,
+                alicuota_id=alicuota_b.id,
+                proveedor_id=proveedor_b.id,
             ),
             headers={"Authorization": f"Bearer {token_b}", "Operation-Id": str(uuid4())},
         )
@@ -414,12 +446,16 @@ class TestAislamientoDeProductos:
         marca_a = _crear_marca(sesion, org_a.id, nombre="Marca de A")
         categoria_b = _crear_categoria(sesion, org_b.id, nombre="Vinos de B")
         alicuota_b = _crear_alicuota(sesion, org_b.id, nombre="21%")
+        proveedor_b = _crear_proveedor(sesion, org_b.id, nombre="Proveedor de B")
         _con_gestionar_catalogo(sesion, org_b.id, nombre_usuario="admin_b")
         sesion.commit()
         token_b = _login(cliente, "org-iso-prod-2b", "admin_b")
 
         payload = _payload_producto(
-            codigo="VA-002", categoria_id=categoria_b.id, alicuota_id=alicuota_b.id
+            codigo="VA-002",
+            categoria_id=categoria_b.id,
+            alicuota_id=alicuota_b.id,
+            proveedor_id=proveedor_b.id,
         )
         payload["marca_id"] = str(marca_a.id)
 
@@ -439,6 +475,7 @@ class TestAislamientoDeProductos:
         org_b = _crear_organizacion(sesion, "org-iso-prod-3b")
         alicuota_a = _crear_alicuota(sesion, org_a.id, nombre="21%")
         categoria_b = _crear_categoria(sesion, org_b.id, nombre="Vinos de B")
+        proveedor_b = _crear_proveedor(sesion, org_b.id, nombre="Proveedor de B")
         _con_gestionar_catalogo(sesion, org_b.id, nombre_usuario="admin_b")
         sesion.commit()
         token_b = _login(cliente, "org-iso-prod-3b", "admin_b")
@@ -446,7 +483,10 @@ class TestAislamientoDeProductos:
         respuesta = cliente.post(
             "/api/v1/catalogo/productos",
             json=_payload_producto(
-                codigo="VA-003", categoria_id=categoria_b.id, alicuota_id=alicuota_a.id
+                codigo="VA-003",
+                categoria_id=categoria_b.id,
+                alicuota_id=alicuota_a.id,
+                proveedor_id=proveedor_b.id,
             ),
             headers={"Authorization": f"Bearer {token_b}", "Operation-Id": str(uuid4())},
         )
@@ -463,6 +503,7 @@ class TestAislamientoDeProductos:
         _con_gestionar_catalogo(sesion, org_b.id, nombre_usuario="admin_b")
         categoria_a = _crear_categoria(sesion, org_a.id, nombre="Vinos de A")
         alicuota_a = _crear_alicuota(sesion, org_a.id, nombre="21%")
+        proveedor_a = _crear_proveedor(sesion, org_a.id, nombre="Proveedor de A")
         sesion.commit()
         token_a = _login(cliente, "org-iso-prod-4a", "admin_a")
         token_b = _login(cliente, "org-iso-prod-4b", "admin_b")
@@ -472,6 +513,7 @@ class TestAislamientoDeProductos:
             codigo="VA-004",
             categoria_id=categoria_a.id,
             alicuota_id=alicuota_a.id,
+            proveedor_id=proveedor_a.id,
         )
 
         respuesta = cliente.get(
@@ -490,6 +532,7 @@ class TestAislamientoDeProductos:
         _con_gestionar_catalogo(sesion, org_b.id, nombre_usuario="admin_b")
         categoria_a = _crear_categoria(sesion, org_a.id, nombre="Vinos de A")
         alicuota_a = _crear_alicuota(sesion, org_a.id, nombre="21%")
+        proveedor_a = _crear_proveedor(sesion, org_a.id, nombre="Proveedor de A")
         sesion.commit()
         token_a = _login(cliente, "org-iso-prod-5a", "admin_a")
         token_b = _login(cliente, "org-iso-prod-5b", "admin_b")
@@ -499,6 +542,7 @@ class TestAislamientoDeProductos:
             codigo="VA-005",
             categoria_id=categoria_a.id,
             alicuota_id=alicuota_a.id,
+            proveedor_id=proveedor_a.id,
         )
 
         respuesta = cliente.get(
@@ -520,8 +564,10 @@ class TestAislamientoDeProductos:
         _con_gestionar_catalogo(sesion, org_b.id, nombre_usuario="admin_b")
         categoria_a = _crear_categoria(sesion, org_a.id, nombre="Vinos de A")
         alicuota_a = _crear_alicuota(sesion, org_a.id, nombre="21%")
+        proveedor_a = _crear_proveedor(sesion, org_a.id, nombre="Proveedor de A")
         categoria_b = _crear_categoria(sesion, org_b.id, nombre="Vinos de B")
         alicuota_b = _crear_alicuota(sesion, org_b.id, nombre="21%")
+        proveedor_b = _crear_proveedor(sesion, org_b.id, nombre="Proveedor de B")
         sesion.commit()
         token_a = _login(cliente, "org-iso-prod-6a", "admin_a")
         token_b = _login(cliente, "org-iso-prod-6b", "admin_b")
@@ -531,6 +577,7 @@ class TestAislamientoDeProductos:
             codigo="VA-006",
             categoria_id=categoria_a.id,
             alicuota_id=alicuota_a.id,
+            proveedor_id=proveedor_a.id,
         )
 
         respuesta = cliente.put(
@@ -540,6 +587,7 @@ class TestAislamientoDeProductos:
                 "nombre": "Secuestrado",
                 "categoria_id": str(categoria_b.id),
                 "marca_id": None,
+                "proveedor_id": str(proveedor_b.id),
                 "unidad_base": "botella",
                 "alicuota_id": str(alicuota_b.id),
                 "activo": True,
@@ -561,6 +609,7 @@ class TestAislamientoDeProductos:
         categoria_a = _crear_categoria(sesion, org_a.id, nombre="Vinos de A")
         categoria_b = _crear_categoria(sesion, org_b.id, nombre="Vinos de B")
         alicuota_b = _crear_alicuota(sesion, org_b.id, nombre="21%")
+        proveedor_b = _crear_proveedor(sesion, org_b.id, nombre="Proveedor de B")
         sesion.commit()
         token_b = _login(cliente, "org-iso-prod-7b", "admin_b")
         producto_b = _crear_producto_por_http(
@@ -569,6 +618,7 @@ class TestAislamientoDeProductos:
             codigo="VA-007",
             categoria_id=categoria_b.id,
             alicuota_id=alicuota_b.id,
+            proveedor_id=proveedor_b.id,
         )
 
         respuesta = cliente.put(
@@ -578,6 +628,7 @@ class TestAislamientoDeProductos:
                 "nombre": "Vino A",
                 "categoria_id": str(categoria_a.id),
                 "marca_id": None,
+                "proveedor_id": str(proveedor_b.id),
                 "unidad_base": "botella",
                 "alicuota_id": str(alicuota_b.id),
                 "activo": True,
@@ -601,10 +652,16 @@ class TestAislamientoDePresentaciones:
         _con_gestionar_catalogo(sesion, organizacion.id, nombre_usuario=nombre_usuario)
         categoria = _crear_categoria(sesion, organizacion.id, nombre=f"Categoria-{codigo}")
         alicuota = _crear_alicuota(sesion, organizacion.id, nombre="21%")
+        proveedor = _crear_proveedor(sesion, organizacion.id, nombre=f"Proveedor-{codigo}")
         sesion.commit()
         token = _login(cliente, slug, nombre_usuario)
         producto = _crear_producto_por_http(
-            cliente, token, codigo=codigo, categoria_id=categoria.id, alicuota_id=alicuota.id
+            cliente,
+            token,
+            codigo=codigo,
+            categoria_id=categoria.id,
+            alicuota_id=alicuota.id,
+            proveedor_id=proveedor.id,
         )
         return organizacion, token, producto
 

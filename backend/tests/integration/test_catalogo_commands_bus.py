@@ -40,6 +40,13 @@ from app.modules.catalogo.domain.errores import (
 from app.modules.configuracion.models import AlicuotaIva
 from app.modules.identidad import repository as identidad_repository
 from app.modules.identidad.models import Auditoria, Organizacion
+from app.modules.proveedores import repository as proveedores_repository
+
+# Change 06, grupo 9: registra el puerto D9/ADR-025 que `catalogo_service.
+# crear_producto`/`modificar_producto` consultan para validar `proveedor_id`
+# (v2, D6) -- sin este import, "No hay consulta de proveedor registrada"
+# (falla cerrado) en vez del escenario de negocio que cada prueba ejercita.
+from app.modules.proveedores import service as proveedores_service  # noqa: F401
 from app.modules.sync import service as sync_service
 from app.modules.sync.models import Comando
 
@@ -110,11 +117,12 @@ def _sobre(
     dispositivo_id: UUID,
     operation_id: UUID,
     contenido: dict[str, object],
+    version: int = 1,
 ) -> SobreComando:
     return SobreComando(
         operation_id=operation_id,
         tipo=tipo,
-        version=1,
+        version=version,
         modo="ONLINE",
         organizacion_id=organizacion_id,
         usuario_id=usuario_id,
@@ -287,7 +295,7 @@ def test_error_de_dominio_revierte_la_reserva_y_permite_reintentar_corregido(
 
 def _procesar_producto_crear(sesion: Session, sobre: SobreComando) -> Comando:
     huella = calcular_huella(sobre.contenido)
-    contenido_validado = catalogo_commands.ProductoCrearContenidoV1.model_validate(sobre.contenido)
+    contenido_validado = catalogo_commands.ProductoCrearContenidoV2.model_validate(sobre.contenido)
 
     def _ejecutar(sesion_protegida: object) -> sync_service.ResultadoHandler:
         return catalogo_commands.manejar_producto_crear(
@@ -322,6 +330,7 @@ def test_producto_crear_aceptado_deja_producto_y_presentaciones_con_una_auditori
         activo=True,
         momento=MOMENTO,
     )
+    proveedor = _crear_proveedor(db_session, organizacion.id)
     db_session.commit()
 
     operation_id = uuid4()
@@ -331,11 +340,13 @@ def test_producto_crear_aceptado_deja_producto_y_presentaciones_con_una_auditori
         usuario_id=usuario_id,
         dispositivo_id=dispositivo_id,
         operation_id=operation_id,
+        version=2,
         contenido={
             "codigo": "VA-001",
             "nombre": "Vino A",
             "categoria_id": str(categoria.id),
             "marca_id": None,
+            "proveedor_id": str(proveedor.id),
             "unidad_base": "botella",
             "alicuota_id": str(alicuota.id),
             "presentaciones": [
@@ -431,15 +442,34 @@ def _crear_alicuota(sesion: Session, organizacion_id: UUID) -> AlicuotaIva:
     return alicuota
 
 
+def _crear_proveedor(
+    sesion: Session, organizacion_id: UUID, *, nombre: str = "Proveedor de prueba"
+):
+    """`producto.proveedor_id` es `NOT NULL` desde change 06 grupo 4: toda
+    fixture que crea un producto directo por repositorio necesita un
+    proveedor real, no `None` (D2 del 06)."""
+    return proveedores_repository.crear_proveedor(
+        organizacion_id,
+        sesion,
+        proveedor_id=nuevo_id(),
+        nombre=nombre,
+        cuit=None,
+        contacto=None,
+        telefono=None,
+        email=None,
+        activo=True,
+        momento=MOMENTO,
+    )
+
+
 def _crear_producto_con_presentaciones(
     sesion: Session, organizacion_id: UUID, *, codigo: str = "VA-100"
-) -> tuple[UUID, UUID, UUID, UUID]:
+) -> tuple[UUID, UUID, UUID, UUID, UUID]:
     """Crea (fuera del bus, directo por repositorio, como ya hacen las
-    pruebas de arriba) categoría + alícuota + producto con dos
+    pruebas de arriba) categoría + alícuota + proveedor + producto con dos
     presentaciones: una referencia ("Caja x6", activa, de venta) y una
-    presentación simple ("Botella"). Devuelve
-    `(categoria_id, alicuota_id, producto_id, presentacion_no_referencia_id)`.
-    """
+    presentación simple ("Botella"). Devuelve `(categoria_id, alicuota_id,
+    producto_id, presentacion_no_referencia_id, proveedor_id)`."""
     categoria = catalogo_repository.crear_categoria(
         organizacion_id,
         sesion,
@@ -449,6 +479,7 @@ def _crear_producto_con_presentaciones(
         momento=MOMENTO,
     )
     alicuota = _crear_alicuota(sesion, organizacion_id)
+    proveedor = _crear_proveedor(sesion, organizacion_id, nombre=f"Proveedor {codigo}")
     producto = catalogo_repository.crear_producto(
         organizacion_id,
         sesion,
@@ -457,7 +488,7 @@ def _crear_producto_con_presentaciones(
         nombre="Producto de prueba",
         categoria_id=categoria.id,
         marca_id=None,
-        proveedor_id=None,
+        proveedor_id=proveedor.id,
         unidad_base="botella",
         alicuota_id=alicuota.id,
         activo=True,
@@ -489,7 +520,7 @@ def _crear_producto_con_presentaciones(
         activo=True,
         momento=MOMENTO,
     )
-    return categoria.id, alicuota.id, producto.id, presentacion_simple.id
+    return categoria.id, alicuota.id, producto.id, presentacion_simple.id, proveedor.id
 
 
 class TestCategoriaModificarContraElBus:
@@ -779,9 +810,13 @@ class TestProductoModificarContraElBus:
     def test_aceptado_deja_auditoria_y_reenvio_no_duplica(self, db_session: Session) -> None:
         organizacion = _crear_organizacion(db_session)
         usuario_id, dispositivo_id = _crear_usuario_y_dispositivo(db_session, organizacion.id)
-        categoria_id, alicuota_id, producto_id, _ = _crear_producto_con_presentaciones(
-            db_session, organizacion.id, codigo="VA-200"
-        )
+        (
+            categoria_id,
+            alicuota_id,
+            producto_id,
+            _,
+            proveedor_id,
+        ) = _crear_producto_con_presentaciones(db_session, organizacion.id, codigo="VA-200")
         db_session.commit()
 
         operation_id = uuid4()
@@ -791,12 +826,14 @@ class TestProductoModificarContraElBus:
             usuario_id=usuario_id,
             dispositivo_id=dispositivo_id,
             operation_id=operation_id,
+            version=2,
             contenido={
                 "producto_id": str(producto_id),
                 "codigo": "VA-200",
                 "nombre": "Producto renombrado",
                 "categoria_id": str(categoria_id),
                 "marca_id": None,
+                "proveedor_id": str(proveedor_id),
                 "unidad_base": "botella",
                 "alicuota_id": str(alicuota_id),
                 "activo": True,
@@ -807,13 +844,13 @@ class TestProductoModificarContraElBus:
             db_session,
             sobre,
             handler=catalogo_commands.manejar_producto_modificar,
-            contenido_cls=catalogo_commands.ProductoModificarContenidoV1,
+            contenido_cls=catalogo_commands.ProductoModificarContenidoV2,
         )
         segundo = _procesar(
             db_session,
             sobre,
             handler=catalogo_commands.manejar_producto_modificar,
-            contenido_cls=catalogo_commands.ProductoModificarContenidoV1,
+            contenido_cls=catalogo_commands.ProductoModificarContenidoV2,
         )
 
         assert primero.estado == "ACEPTADO"
@@ -830,9 +867,13 @@ class TestProductoModificarContraElBus:
     ) -> None:
         organizacion = _crear_organizacion(db_session)
         usuario_id, dispositivo_id = _crear_usuario_y_dispositivo(db_session, organizacion.id)
-        categoria_id, alicuota_id, producto_id, _ = _crear_producto_con_presentaciones(
-            db_session, organizacion.id, codigo="VA-300"
-        )
+        (
+            categoria_id,
+            alicuota_id,
+            producto_id,
+            _,
+            proveedor_id,
+        ) = _crear_producto_con_presentaciones(db_session, organizacion.id, codigo="VA-300")
         # Un segundo producto cuyo código se intentará "robar" para el primero.
         catalogo_repository.crear_producto(
             organizacion.id,
@@ -842,7 +883,7 @@ class TestProductoModificarContraElBus:
             nombre="Otro producto",
             categoria_id=categoria_id,
             marca_id=None,
-            proveedor_id=None,
+            proveedor_id=proveedor_id,
             unidad_base="botella",
             alicuota_id=alicuota_id,
             activo=True,
@@ -857,12 +898,14 @@ class TestProductoModificarContraElBus:
             usuario_id=usuario_id,
             dispositivo_id=dispositivo_id,
             operation_id=operation_id_fallido,
+            version=2,
             contenido={
                 "producto_id": str(producto_id),
                 "codigo": "VA-301",
                 "nombre": "Producto renombrado",
                 "categoria_id": str(categoria_id),
                 "marca_id": None,
+                "proveedor_id": str(proveedor_id),
                 "unidad_base": "botella",
                 "alicuota_id": str(alicuota_id),
                 "activo": True,
@@ -873,7 +916,7 @@ class TestProductoModificarContraElBus:
                 db_session,
                 sobre_fallido,
                 handler=catalogo_commands.manejar_producto_modificar,
-                contenido_cls=catalogo_commands.ProductoModificarContenidoV1,
+                contenido_cls=catalogo_commands.ProductoModificarContenidoV2,
             )
 
         assert _contar_auditoria(db_session, operation_id_fallido) == 0
@@ -885,12 +928,14 @@ class TestProductoModificarContraElBus:
             usuario_id=usuario_id,
             dispositivo_id=dispositivo_id,
             operation_id=operation_id_fallido,
+            version=2,
             contenido={
                 "producto_id": str(producto_id),
                 "codigo": "VA-300B",
                 "nombre": "Producto renombrado",
                 "categoria_id": str(categoria_id),
                 "marca_id": None,
+                "proveedor_id": str(proveedor_id),
                 "unidad_base": "botella",
                 "alicuota_id": str(alicuota_id),
                 "activo": True,
@@ -900,7 +945,7 @@ class TestProductoModificarContraElBus:
             db_session,
             sobre_corregido,
             handler=catalogo_commands.manejar_producto_modificar,
-            contenido_cls=catalogo_commands.ProductoModificarContenidoV1,
+            contenido_cls=catalogo_commands.ProductoModificarContenidoV2,
         )
         assert comando.estado == "ACEPTADO"
 
@@ -909,7 +954,7 @@ class TestPresentacionAgregarContraElBus:
     def test_aceptado_deja_auditoria_y_reenvio_no_duplica(self, db_session: Session) -> None:
         organizacion = _crear_organizacion(db_session)
         usuario_id, dispositivo_id = _crear_usuario_y_dispositivo(db_session, organizacion.id)
-        _, _, producto_id, _ = _crear_producto_con_presentaciones(
+        _, _, producto_id, _, _ = _crear_producto_con_presentaciones(
             db_session, organizacion.id, codigo="VA-400"
         )
         db_session.commit()
@@ -956,7 +1001,7 @@ class TestPresentacionAgregarContraElBus:
     ) -> None:
         organizacion = _crear_organizacion(db_session)
         usuario_id, dispositivo_id = _crear_usuario_y_dispositivo(db_session, organizacion.id)
-        _, _, producto_id, _ = _crear_producto_con_presentaciones(
+        _, _, producto_id, _, _ = _crear_producto_con_presentaciones(
             db_session, organizacion.id, codigo="VA-500"
         )
         db_session.commit()
@@ -1018,7 +1063,7 @@ class TestPresentacionModificarContraElBus:
     def test_aceptado_deja_auditoria_y_reenvio_no_duplica(self, db_session: Session) -> None:
         organizacion = _crear_organizacion(db_session)
         usuario_id, dispositivo_id = _crear_usuario_y_dispositivo(db_session, organizacion.id)
-        _, _, _, presentacion_id = _crear_producto_con_presentaciones(
+        _, _, _, presentacion_id, _ = _crear_producto_con_presentaciones(
             db_session, organizacion.id, codigo="VA-600"
         )
         db_session.commit()
@@ -1071,7 +1116,7 @@ class TestPresentacionModificarContraElBus:
         asumir el orden de creación."""
         organizacion = _crear_organizacion(db_session)
         usuario_id, dispositivo_id = _crear_usuario_y_dispositivo(db_session, organizacion.id)
-        _, _, producto_id, _ = _crear_producto_con_presentaciones(
+        _, _, producto_id, _, _ = _crear_producto_con_presentaciones(
             db_session, organizacion.id, codigo="VA-700"
         )
         referencia = catalogo_repository.obtener_referencia_de_producto(
@@ -1140,7 +1185,7 @@ class TestPresentacionReferenciaCambiarContraElBus:
     def test_aceptado_deja_auditoria_y_reenvio_no_duplica(self, db_session: Session) -> None:
         organizacion = _crear_organizacion(db_session)
         usuario_id, dispositivo_id = _crear_usuario_y_dispositivo(db_session, organizacion.id)
-        _, _, producto_id, presentacion_simple_id = _crear_producto_con_presentaciones(
+        _, _, producto_id, presentacion_simple_id, _ = _crear_producto_con_presentaciones(
             db_session, organizacion.id, codigo="VA-800"
         )
         db_session.commit()
@@ -1185,7 +1230,7 @@ class TestPresentacionReferenciaCambiarContraElBus:
     ) -> None:
         organizacion = _crear_organizacion(db_session)
         usuario_id, dispositivo_id = _crear_usuario_y_dispositivo(db_session, organizacion.id)
-        _, _, producto_id, presentacion_simple_id = _crear_producto_con_presentaciones(
+        _, _, producto_id, presentacion_simple_id, _ = _crear_producto_con_presentaciones(
             db_session, organizacion.id, codigo="VA-900"
         )
         referencia_original = catalogo_repository.obtener_referencia_de_producto(

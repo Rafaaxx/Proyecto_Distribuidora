@@ -1,0 +1,198 @@
+[
+  {
+    "id": "CST02-caja-x12-sin-iva",
+    "reglas": ["CST-02"],
+    "entrada": {
+      "motor": "cst02",
+      "operacion": "calcular_costo_base",
+      "valor": "18000.00",
+      "incluye_iva": false,
+      "alicuota": "0",
+      "bonificacion": "0",
+      "unidades": 12
+    },
+    "salida_esperada": { "costo_base": "1500.000000" }
+  },
+  {
+    "id": "CST02-botella-sin-iva",
+    "reglas": ["CST-02"],
+    "entrada": {
+      "motor": "cst02",
+      "operacion": "calcular_costo_base",
+      "valor": "1000.00",
+      "incluye_iva": false,
+      "alicuota": "0",
+      "bonificacion": "0",
+      "unidades": 1
+    },
+    "salida_esperada": { "costo_base": "1000.000000" }
+  },
+  {
+    "id": "CST02-caja-x12-con-iva-21",
+    "reglas": ["CST-02"],
+    "entrada": {
+      "motor": "cst02",
+      "operacion": "calcular_costo_base",
+      "valor": "18000.00",
+      "incluye_iva": true,
+      "alicuota": "0.21",
+      "bonificacion": "0",
+      "unidades": 12
+    },
+    "salida_esperada": { "costo_base": "1239.669421" }
+  },
+  {
+    "id": "CST02-caja-x12-con-bonificacion-10",
+    "reglas": ["CST-02"],
+    "entrada": {
+      "motor": "cst02",
+      "operacion": "calcular_costo_base",
+      "valor": "18000.00",
+      "incluye_iva": false,
+      "alicuota": "0",
+      "bonificacion": "0.10",
+      "unidades": 12
+    },
+    "salida_esperada": { "costo_base": "1350.000000" }
+  },
+  {
+    "id": "CST02-diez-mil-sobre-doce-ADR-010",
+    "reglas": ["CST-02", "ADR-010"],
+    "entrada": {
+      "motor": "cst02",
+      "operacion": "calcular_costo_base",
+      "valor": "10000.00",
+      "incluye_iva": false,
+      "alicuota": "0",
+      "bonificacion": "0",
+      "unidades": 12
+    },
+    "salida_esperada": { "costo_base": "833.333333" }
+  },
+  {
+    "id": "CST02-redondeo-medio-hacia-arriba-septimo-decimal",
+    "reglas": ["CST-02", "INV-03"],
+    "entrada": {
+      "motor": "cst02",
+      "operacion": "calcular_costo_base",
+      "valor": "16.41",
+      "incluye_iva": false,
+      "alicuota": "0",
+      "bonificacion": "0",
+      "unidades": 32
+    },
+    "salida_esperada": { "costo_base": "0.512813" }
+  },
+  {
+    "id": "CST02-iva-y-bonificacion-combinados",
+    "reglas": ["CST-02", "TR-02", "TR-03"],
+    "entrada": {
+      "motor": "cst02",
+      "operacion": "calcular_costo_base",
+      "valor": "1000.00",
+      "incluye_iva": true,
+      "alicuota": "0.21",
+      "bonificacion": "0.15",
+      "unidades": 6
+    },
+    "salida_esperada": { "costo_base": "117.079890" }
+  },
+  {
+    "id": "CST02-alicuota-cero-con-iva-incluido",
+    "reglas": ["CST-02"],
+    "entrada": {
+      "motor": "cst02",
+      "operacion": "calcular_costo_base",
+      "valor": "500.00",
+      "incluye_iva": true,
+      "alicuota": "0",
+      "bonificacion": "0",
+      "unidades": 5
+    },
+    "salida_esperada": { "costo_base": "100.000000" }
+  },
+  {
+    "id": "CST02-valor-maximo-numeric-14-2",
+    "reglas": ["CST-02", "TR-03"],
+    "entrada": {
+      "motor": "cst02",
+      "operacion": "calcular_costo_base",
+      "valor": "999999999999.99",
+      "incluye_iva": true,
+      "alicuota": "0.21",
+      "bonificacion": "0.50",
+      "unidades": 7
+    },
+    "salida_esperada": { "costo_base": "59031877213.694805" }
+  },
+  {
+    "id": "CST02-valor-cero-es-invalido",
+    "reglas": ["CST-02", "TR-01"],
+    "entrada": {
+      "motor": "cst02",
+      "operacion": "calcular_costo_base",
+      "valor": "0.00",
+      "incluye_iva": false,
+      "alicuota": "0",
+      "bonificacion": "0",
+      "unidades": 12
+    },
+    "salida_esperada": { "error": true }
+  },
+  {
+    "id": "CST02-valor-negativo-es-invalido",
+    "reglas": ["CST-02", "TR-01"],
+    "entrada": {
+      "motor": "cst02",
+      "operacion": "calcular_costo_base",
+      "valor": "-5.00",
+      "incluye_iva": false,
+      "alicuota": "0",
+      "bonificacion": "0",
+      "unidades": 12
+    },
+    "salida_esperada": { "error": true }
+  },
+  {
+    "id": "CST02-bonificacion-uno-es-invalida",
+    "reglas": ["CST-02", "TR-02"],
+    "entrada": {
+      "motor": "cst02",
+      "operacion": "calcular_costo_base",
+      "valor": "18000.00",
+      "incluye_iva": false,
+      "alicuota": "0",
+      "bonificacion": "1.000000",
+      "unidades": 12
+    },
+    "salida_esperada": { "error": true }
+  },
+  {
+    "id": "CST02-bonificacion-negativa-es-invalida",
+    "reglas": ["CST-02", "TR-02"],
+    "entrada": {
+      "motor": "cst02",
+      "operacion": "calcular_costo_base",
+      "valor": "18000.00",
+      "incluye_iva": false,
+      "alicuota": "0",
+      "bonificacion": "-0.000001",
+      "unidades": 12
+    },
+    "salida_esperada": { "error": true }
+  },
+  {
+    "id": "CST02-unidades-cero-es-invalida",
+    "reglas": ["CST-02"],
+    "entrada": {
+      "motor": "cst02",
+      "operacion": "calcular_costo_base",
+      "valor": "18000.00",
+      "incluye_iva": false,
+      "alicuota": "0",
+      "bonificacion": "0",
+      "unidades": 0
+    },
+    "salida_esperada": { "error": true }
+  }
+]

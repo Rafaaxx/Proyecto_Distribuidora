@@ -26,6 +26,9 @@ export function AdminLayout() {
           <NavLink to="/admin/catalogo" className={({ isActive }) => (isActive ? CLASE_ENLACE_ACTIVO : CLASE_ENLACE)}>
             Catálogo
           </NavLink>
+          <NavLink to="/admin/proveedores" className={({ isActive }) => (isActive ? CLASE_ENLACE_ACTIVO : CLASE_ENLACE)}>
+            Proveedores
+          </NavLink>
           <NavLink
             to="/admin/dispositivos"
             className={({ isActive }) => (isActive ? CLASE_ENLACE_ACTIVO : CLASE_ENLACE)}

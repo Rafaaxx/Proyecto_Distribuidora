@@ -35,6 +35,20 @@ from app.modules.catalogo.domain.presentaciones import DatosPresentacion
 from app.modules.catalogo.models import Presentacion, Producto
 from app.modules.configuracion.models import AlicuotaIva
 from app.modules.identidad.models import Organizacion
+from app.modules.proveedores import repository as proveedores_repository
+
+# Change 06, grupo 9: registra el puerto D9/ADR-025 que `catalogo_service.
+# crear_producto` consulta para validar `proveedor_id` -- sin este import,
+# "No hay consulta de proveedor registrada" (falla cerrado) en vez del
+# escenario de concurrencia que esta prueba ejercita.
+from app.modules.proveedores import service as proveedores_service  # noqa: F401
+
+# Change 06, grupo 5: sin importar `proveedores/models.py`, SQLAlchemy no
+# puede resolver la tabla `proveedor` al configurar el mapper de
+# `Producto` (`fk_producto__proveedor`), lo que revienta con
+# `NoReferencedTableError` en vez del error de negocio esperado. Mismo
+# patrón que `tests/integration/test_proveedores_migracion.py`.
+from app.modules.proveedores.models import CostoInformado, Proveedor  # noqa: F401
 
 MOMENTO = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -105,6 +119,29 @@ def _preparar_categoria_y_alicuota(database_url: str, organizacion_id: UUID) -> 
         sesion.close()
 
 
+def _preparar_proveedor(database_url: str, organizacion_id: UUID) -> UUID:
+    """`producto.proveedor_id` es `NOT NULL` desde change 06 grupo 4 (D2):
+    ambos escenarios de concurrencia necesitan un proveedor activo real."""
+    sesion = _sesion_independiente(database_url)
+    try:
+        proveedor = proveedores_repository.crear_proveedor(
+            organizacion_id,
+            sesion,
+            proveedor_id=nuevo_id(),
+            nombre=f"Proveedor-{uuid4().hex[:8]}",
+            cuit=None,
+            contacto=None,
+            telefono=None,
+            email=None,
+            activo=True,
+            momento=MOMENTO,
+        )
+        sesion.commit()
+        return proveedor.id
+    finally:
+        sesion.close()
+
+
 class TestCat01DosAltasSimultaneasConElMismoCodigo:
     """Tarea 11.2: dos `PRODUCTO_CREAR` simultáneos con el mismo código ->
     uno aceptado, el otro `CODIGO_DUPLICADO` (CAT-01, `03` §5: `UNIQUE
@@ -116,6 +153,7 @@ class TestCat01DosAltasSimultaneasConElMismoCodigo:
     ) -> None:
         organizacion_id = _preparar_organizacion(database_url)
         categoria_id, alicuota_id = _preparar_categoria_y_alicuota(database_url, organizacion_id)
+        proveedor_id = _preparar_proveedor(database_url, organizacion_id)
         codigo_compartido = f"VA-CONC-{uuid4().hex[:8]}"
 
         barrera = threading.Barrier(2)
@@ -145,7 +183,7 @@ class TestCat01DosAltasSimultaneasConElMismoCodigo:
                     nombre=f"Vino {indice_hilo}",
                     categoria_id=categoria_id,
                     marca_id=None,
-                    proveedor_id=None,
+                    proveedor_id=proveedor_id,
                     unidad_base="botella",
                     alicuota_id=alicuota_id,
                     presentaciones=_presentaciones(),
@@ -203,7 +241,12 @@ class TestCat03DosCambiosDeReferenciaSimultaneos:
     el primero confirma, en vez de abortar)."""
 
     def _preparar_producto_con_dos_presentaciones(
-        self, database_url: str, organizacion_id: UUID, categoria_id: UUID, alicuota_id: UUID
+        self,
+        database_url: str,
+        organizacion_id: UUID,
+        categoria_id: UUID,
+        alicuota_id: UUID,
+        proveedor_id: UUID,
     ) -> tuple[UUID, UUID, UUID]:
         sesion = _sesion_independiente(database_url)
         try:
@@ -215,7 +258,7 @@ class TestCat03DosCambiosDeReferenciaSimultaneos:
                 nombre="Vino con dos presentaciones",
                 categoria_id=categoria_id,
                 marca_id=None,
-                proveedor_id=None,
+                proveedor_id=proveedor_id,
                 unidad_base="botella",
                 alicuota_id=alicuota_id,
                 presentaciones=[
@@ -248,8 +291,9 @@ class TestCat03DosCambiosDeReferenciaSimultaneos:
     ) -> None:
         organizacion_id = _preparar_organizacion(database_url)
         categoria_id, alicuota_id = _preparar_categoria_y_alicuota(database_url, organizacion_id)
+        proveedor_id = _preparar_proveedor(database_url, organizacion_id)
         producto_id, botella_id, caja_id = self._preparar_producto_con_dos_presentaciones(
-            database_url, organizacion_id, categoria_id, alicuota_id
+            database_url, organizacion_id, categoria_id, alicuota_id, proveedor_id
         )
         # Empieza en "Botella" (referencia inicial); un hilo la cambia a
         # "Caja x6", el otro la vuelve a cambiar a "Botella" -- ambos

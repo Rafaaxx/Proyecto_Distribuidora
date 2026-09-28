@@ -6,19 +6,54 @@ import { Boton } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { PageHeader } from '../../../components/ui/PageHeader'
 import { Tabla } from '../../../components/ui/Table'
+import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { PermisoRequeridoCatalogoError } from '../../../features/catalogo/errores'
 import { useCategorias, useMarcas, useProductos } from '../../../features/catalogo/useListados'
 import type { Producto } from '../../../features/catalogo/api'
 
+const SIN_PERMISO_DE_CATALOGO = 'No tenés permiso para gestionar el catálogo.'
+
 /**
  * Listado de productos de `/admin/catalogo` (tarea 10.4). Búsqueda por
  * texto, filtro por categoría/marca/activo y "cargar más" (cursor,
- * `useInfiniteQuery` de `useListados.ts`, tarea 10.2). Ante
- * `PERMISO_REQUERIDO` (403 de `GET /catalogo/productos`, D9) muestra el
- * mismo criterio que `DispositivosScreen`: la interfaz solo refleja la
- * respuesta real del servidor, nunca una copia local del permiso.
+ * `useInfiniteQuery` de `useListados.ts`, tarea 10.2).
+ *
+ * Qué se muestra lo decide **solo** la consulta de sesión `['yo']`, con el
+ * mecanismo compartido `<SiTienePermiso>` (tarea 8.2 del change 06b,
+ * `design.md` D4-A / **B2**): sin `GESTIONAR_CATALOGO` los hijos no se
+ * montan, así que la pantalla no pide productos, categorías ni marcas para
+ * averiguar si el usuario puede verlos.
+ *
+ * El 403 del servidor (`PermisoRequeridoCatalogoError`) se sigue
+ * tratando, pero **solo como red de seguridad**: pasa cuando el permiso se
+ * quitó del rol entre dos renovaciones del access token. En ese caso se
+ * muestra la falta de permiso sin listado ni acciones de escritura, y no un
+ * error genérico (SEG-06: el servidor sigue validando cada petición).
  */
 export function ProductosListScreen() {
+  return (
+    <SiTienePermiso permiso="GESTIONAR_CATALOGO" fallback={<CatalogoSinPermiso />}>
+      <ProductosListado />
+    </SiTienePermiso>
+  )
+}
+
+/** Estado sin permiso (y red de seguridad del 403): mismo texto en los dos
+ * casos, para que el mensaje no revele por qué el usuario no ve la
+ * pantalla. */
+function CatalogoSinPermiso() {
+  return (
+    <main className="flex flex-col gap-4">
+      <PageHeader titulo="Productos" />
+      <p className="text-sm text-primary/70">{SIN_PERMISO_DE_CATALOGO}</p>
+    </main>
+  )
+}
+
+/** Componente interno: es el único que consulta y filtra. Al vivir dentro
+ * de `<SiTienePermiso>`, sin permiso nunca se monta y por eso no dispara
+ * ninguna consulta (**B2**). */
+function ProductosListado() {
   const [texto, setTexto] = useState('')
   const [categoriaId, setCategoriaId] = useState('')
   const [marcaId, setMarcaId] = useState('')
@@ -36,6 +71,20 @@ export function ProductosListScreen() {
   const opcionesCategoria = categorias.data?.pages.flatMap((pagina) => pagina.items) ?? []
   const opcionesMarca = marcas.data?.pages.flatMap((pagina) => pagina.items) ?? []
   const filas = productos.data?.pages.flatMap((pagina) => pagina.items) ?? []
+
+  if (productos.isError) {
+    if (productos.error instanceof PermisoRequeridoCatalogoError) {
+      return <CatalogoSinPermiso />
+    }
+    return (
+      <main className="flex flex-col gap-4">
+        <PageHeader titulo="Productos" />
+        <p role="alert" className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+          No se pudieron obtener los productos.
+        </p>
+      </main>
+    )
+  }
 
   return (
     <main className="flex flex-col gap-4">
@@ -123,15 +172,6 @@ export function ProductosListScreen() {
       </form>
 
       {productos.isPending && <p className="text-sm text-primary/70">Cargando…</p>}
-
-      {productos.isError &&
-        (productos.error instanceof PermisoRequeridoCatalogoError ? (
-          <p className="text-sm text-primary/70">No tenés permiso para gestionar el catálogo.</p>
-        ) : (
-          <p role="alert" className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
-            No se pudieron obtener los productos.
-          </p>
-        ))}
 
       {productos.isSuccess && (
         <Card className="overflow-x-auto p-0">

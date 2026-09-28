@@ -23,6 +23,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI
 from fastapi.routing import APIRoute
+from fastapi.testclient import TestClient
 
 # `app.main` primero: importa la cadena completa de routers (`identidad.api`
 # -> `core.autenticacion`) antes de que este módulo pida `requiere_permiso`
@@ -64,6 +65,14 @@ RUTAS_EXENTAS_DE_PERMISO = frozenset(
         # (`Depends(obtener_contexto_autenticado)`, ver docstring de
         # `sync/api.py`).
         ("POST", "/api/v1/sync/comandos"),
+        # Change 06b, grupo 4 (`identidad/api.py::router_yo`, ADR-027): la
+        # consulta de la propia sesión exige un access token válido
+        # (`Depends(obtener_contexto_autenticado)`) pero ningún permiso en
+        # particular -- su propósito es informar cuáles tiene el usuario,
+        # así que no hay un permiso fijo que declarar sin volverse
+        # circular (spec `autorizacion-por-permiso`, escenario "La consulta
+        # de la propia sesión no exige permiso pero sí sesión").
+        ("GET", "/api/v1/yo"),
     }
 )
 
@@ -163,6 +172,34 @@ def test_las_rutas_de_sistema_y_autenticacion_no_exigen_permiso(database_url: st
     }
     for ruta_exenta in RUTAS_EXENTAS_DE_PERMISO:
         assert ruta_exenta in rutas_presentes, f"Ruta exenta {ruta_exenta} no está registrada."
+
+
+def test_la_consulta_de_la_propia_sesion_no_exige_permiso_pero_si_sesion(
+    database_url: str,
+) -> None:
+    """Escenario "La consulta de la propia sesión no exige permiso pero sí
+    sesión" (spec `autorizacion-por-permiso`): `GET /api/v1/yo` no se marca
+    como infractora del ratchet de permiso por ruta (está en
+    `RUTAS_EXENTAS_DE_PERMISO`), pero una petición sin access token igual se
+    rechaza como no autenticada -- la exención es de PERMISO, nunca de
+    SESIÓN (ADR-027)."""
+    app = crear_app(
+        Settings(
+            _env_file=None,
+            database_url=database_url,
+            jwt_secret="secreto-de-prueba",
+            jwt_kid="1",
+        )
+    )
+
+    sin_permiso = rutas_de_negocio_sin_permiso(app, exentas=RUTAS_EXENTAS_DE_PERMISO)
+    assert ("GET", "/api/v1/yo") not in sin_permiso
+
+    cliente = TestClient(app)
+    respuesta = cliente.get("/api/v1/yo")
+
+    assert respuesta.status_code == 401
+    assert respuesta.json()["codigo"] == "IDENTIDAD_ACCESS_TOKEN_AUSENTE"
 
 
 def test_el_ratchet_detecta_una_ruta_de_negocio_sin_permiso_declarado() -> None:

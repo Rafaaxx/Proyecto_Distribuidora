@@ -1,7 +1,30 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+/**
+ * `/admin` consulta `GET /api/v1/yo` para armar el menú (tarea 7.3, B1) y
+ * falla cerrada: sin esa respuesta el menú queda vacío, así que las pruebas
+ * de ruteo que buscan enlaces del menú sembrarían un caso imposible. Se
+ * intercepta **solo** `/yo` con el cuerpo de un Administrador de `01` §19
+ * (que tiene los tres permisos de las secciones) y todo lo demás sigue
+ * pasando por el `apiFetch` real, igual que en la línea base: estas pruebas
+ * verifican ruteo, no permisos. La visibilidad por permiso se prueba en
+ * `areas/admin/AdminLayout.test.tsx`.
+ */
+vi.mock('../../src/lib/api/httpClient', async () => {
+  const real = await vi.importActual<typeof import('../../src/lib/api/httpClient')>('../../src/lib/api/httpClient')
+  const { yoDePrueba } = await import('./utils/permisosDePrueba')
+  return {
+    apiFetch: (ruta: string, init?: RequestInit) => {
+      if (ruta === '/yo') {
+        return Promise.resolve({ ok: true, status: 200, json: async () => yoDePrueba('ADM') })
+      }
+      return real.apiFetch(ruta, init)
+    },
+  }
+})
 
 import { AppRoutes } from '../../src/app/AppRoutes'
 
@@ -48,6 +71,26 @@ describe('ruteo de áreas (docs/02 §13.1: /ruta y /admin cargadas de forma dife
     // nada más que el `fallback={null}` del `Suspense`.
     expect(await screen.findByRole('link', { name: /catálogo/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /dispositivos/i })).toBeInTheDocument()
+  })
+
+  /**
+   * Tarea 7.6 (**B3**, `design.md` D5-A): `/admin/inicio` es la ruta índice
+   * dentro del layout, adonde lleva el login, y desde ahí se salta a la
+   * primera sección que el usuario puede usar. Con un Administrador (Catálogo
+   * y Proveedores, sin Dispositivos -- `01` §19) esa primera sección es
+   * Catálogo. Esta prueba verifica el ruteo real de `AdminScreen`, no el
+   * criterio de elección (que está en `AdminLayout.test.tsx`).
+   */
+  it('navegar a /admin/inicio lleva a la primera sección permitida, sin quedarse en el índice', async () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/inicio']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    )
+
+    // Catálogo es la primera sección del menú para este usuario, así que
+    // `/admin/inicio` no debe quedar en la pantalla "Cargando…" del índice.
+    expect(await screen.findByRole('heading', { name: /productos/i })).toBeInTheDocument()
   })
 
   it('redirige la raíz a /ruta', async () => {

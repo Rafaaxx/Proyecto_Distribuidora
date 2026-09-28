@@ -105,7 +105,7 @@ Estas reglas no se discuten ni se omiten. Si una implementación las viola, es u
 - Backend: `Decimal` de Python siempre; redondeo solo desde `core/money.py` con `ROUND_HALF_UP`.
 - Frontend: `decimal.js` siempre; redondeo solo desde `lib/money.ts`.
 - API: importes, costos y porcentajes viajan como **string** en JSON (`"31250.00"`).
-- Columnas: `NUMERIC(14,2)` para importes, `NUMERIC(18,6)` para costos unitarios y porcentajes.
+- Columnas: `NUMERIC(14,2)` para importes, `NUMERIC(18,6)` para costos por unidad base, `NUMERIC(9,6)` para porcentajes y alícuotas.
 - Cantidades en unidad base: `integer` siempre.
 
 ### Base de datos

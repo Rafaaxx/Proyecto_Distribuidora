@@ -11,9 +11,23 @@ import {
   type DatosProveedorModificar,
 } from '../../../domain/proveedores/proveedorSchema'
 import { ErrorDeProveedores } from '../../../features/proveedores/errores'
+import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { campoDeProveedorParaCodigo, type CampoProveedor } from '../../../features/proveedores/mapaErrorACampo'
 import { useProveedor } from '../../../features/proveedores/useListados'
 import { useCrearProveedor, useModificarProveedor } from '../../../features/proveedores/useMutaciones'
+
+const SIN_PERMISO_DE_PROVEEDORES = 'No tenés permiso para gestionar proveedores.'
+
+/** Estado sin permiso: mismo texto que la red de seguridad del 403, para
+ * que el mensaje no revele por qué el usuario no ve la pantalla. */
+function ProveedoresSinPermiso() {
+  return (
+    <main className="flex flex-col gap-4">
+      <h1 className="text-lg font-semibold text-primary">Proveedor</h1>
+      <p className="text-sm text-primary/70">{SIN_PERMISO_DE_PROVEEDORES}</p>
+    </main>
+  )
+}
 
 /**
  * Alta y edición de proveedor (tarea 11.3). Sin `proveedorId` en la ruta
@@ -21,13 +35,22 @@ import { useCrearProveedor, useModificarProveedor } from '../../../features/prov
  * (`/admin/proveedores/:proveedorId`) es la ficha: edición y
  * activar/desactivar (D5, `ProveedorConProductosActivosError` si tiene
  * productos activos).
+ *
+ * Tarea 8.4 del change 06b: la pantalla se decide **solo** con
+ * `GESTIONAR_PROVEEDORES` de la consulta de sesión `['yo']`, con el
+ * mecanismo compartido `<SiTienePermiso>` (ADR-027, `design.md` D4-A /
+ * **B2**). Los formularios viven en componentes internos, así que sin
+ * permiso no se montan y la pantalla no pide la ficha del proveedor para
+ * averiguar si el usuario puede verla. El enlace "Cargar costos" se decide
+ * por separado, con `EDITAR_COSTOS` (`01` §19).
  */
 export function ProveedorFormScreen() {
   const { proveedorId } = useParams<{ proveedorId?: string }>()
-  if (proveedorId) {
-    return <ProveedorEdicion proveedorId={proveedorId} />
-  }
-  return <ProveedorAlta />
+  return (
+    <SiTienePermiso permiso="GESTIONAR_PROVEEDORES" fallback={<ProveedoresSinPermiso />}>
+      {proveedorId ? <ProveedorEdicion proveedorId={proveedorId} /> : <ProveedorAlta />}
+    </SiTienePermiso>
+  )
 }
 
 function mensajeDeError(error: unknown): { campo: CampoProveedor | null; mensaje: string } {
@@ -246,9 +269,14 @@ function ProveedorEdicionFormulario({
             Volver
           </Link>
           {detalle.activo && (
-            <Link to={`/admin/proveedores/${proveedorId}/costos`} className="text-sm text-primary/70 hover:text-primary">
-              Cargar costos
-            </Link>
+            /* `EDITAR_COSTOS` de `['yo']`, no una consulta al servidor para
+               averiguarlo (ADR-027; escenario "Enlace 'Cargar costos' desde
+               la ficha del proveedor según el permiso"). */
+            <SiTienePermiso permiso="EDITAR_COSTOS">
+              <Link to={`/admin/proveedores/${proveedorId}/costos`} className="text-sm text-primary/70 hover:text-primary">
+                Cargar costos
+              </Link>
+            </SiTienePermiso>
           )}
         </div>
       </form>

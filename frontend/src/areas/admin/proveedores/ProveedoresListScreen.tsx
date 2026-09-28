@@ -6,18 +6,50 @@ import { Card } from '../../../components/ui/Card'
 import { Boton } from '../../../components/ui/Button'
 import { PageHeader } from '../../../components/ui/PageHeader'
 import { Tabla } from '../../../components/ui/Table'
+import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import type { Proveedor } from '../../../features/proveedores/api'
 import { PermisoRequeridoProveedoresError } from '../../../features/proveedores/errores'
 import { useProveedores } from '../../../features/proveedores/useListados'
 
+const SIN_PERMISO_DE_PROVEEDORES = 'No tenés permiso para gestionar proveedores.'
+
+/** Estado sin permiso (y red de seguridad del 403): mismo texto en los dos
+ * casos, para que el mensaje no revele por qué el usuario no ve la
+ * pantalla. */
+function ProveedoresSinPermiso() {
+  return (
+    <main className="flex flex-col gap-4">
+      <PageHeader titulo="Proveedores" />
+      <p className="text-sm text-primary/70">{SIN_PERMISO_DE_PROVEEDORES}</p>
+    </main>
+  )
+}
+
 /**
  * Listado de proveedores de `/admin/proveedores` (tarea 11.3). Búsqueda
  * por nombre/CUIT, filtro por actividad y "cargar más" (cursor,
- * `useInfiniteQuery`); ante `PERMISO_REQUERIDO` (403 de
- * `GET /proveedores`, `GESTIONAR_PROVEEDORES`) la pantalla solo refleja la
- * respuesta real del servidor, mismo criterio que `ProductosListScreen`.
+ * `useInfiniteQuery`).
+ *
+ * Qué se muestra lo decide **solo** la consulta de sesión `['yo']`, con el
+ * mecanismo compartido `<SiTienePermiso>` (tarea 8.4 del change 06b,
+ * `design.md` D4-A / **B2**): sin `GESTIONAR_PROVEEDORES` los hijos no se
+ * montan, así que la pantalla no pide proveedores para averiguar si el
+ * usuario puede verlos. El 403 del servidor
+ * (`PermisoRequeridoProveedoresError`) se sigue tratando, pero **solo como
+ * red de seguridad**: ocurre si el permiso se quitó del rol entre dos
+ * renovaciones del access token (SEG-06).
  */
 export function ProveedoresListScreen() {
+  return (
+    <SiTienePermiso permiso="GESTIONAR_PROVEEDORES" fallback={<ProveedoresSinPermiso />}>
+      <ProveedoresListado />
+    </SiTienePermiso>
+  )
+}
+
+/** Componente interno: es el único que consulta y filtra. Sin permiso no se
+ * monta, así que no dispara ninguna petición (**B2**). */
+function ProveedoresListado() {
   const [texto, setTexto] = useState('')
   const [soloActivos, setSoloActivos] = useState(true)
 
@@ -27,6 +59,20 @@ export function ProveedoresListScreen() {
   })
 
   const filas = proveedores.data?.pages.flatMap((pagina) => pagina.items) ?? []
+
+  if (proveedores.isError) {
+    if (proveedores.error instanceof PermisoRequeridoProveedoresError) {
+      return <ProveedoresSinPermiso />
+    }
+    return (
+      <main className="flex flex-col gap-4">
+        <PageHeader titulo="Proveedores" />
+        <p role="alert" className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+          No se pudieron obtener los proveedores.
+        </p>
+      </main>
+    )
+  }
 
   return (
     <main className="flex flex-col gap-4">
@@ -69,15 +115,6 @@ export function ProveedoresListScreen() {
       </form>
 
       {proveedores.isPending && <p className="text-sm text-primary/70">Cargando…</p>}
-
-      {proveedores.isError &&
-        (proveedores.error instanceof PermisoRequeridoProveedoresError ? (
-          <p className="text-sm text-primary/70">No tenés permiso para gestionar proveedores.</p>
-        ) : (
-          <p role="alert" className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
-            No se pudieron obtener los proveedores.
-          </p>
-        ))}
 
       {proveedores.isSuccess && (
         <Card className="overflow-x-auto p-0">

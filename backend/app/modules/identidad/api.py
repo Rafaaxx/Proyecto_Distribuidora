@@ -42,6 +42,7 @@ from app.commands.sobre import construir_sobre_online
 from app.core.autenticacion import (
     ContextoAutenticado,
     EntradaComandoOnline,
+    obtener_contexto_autenticado,
     requiere_comando_online,
     requiere_permiso,
 )
@@ -123,7 +124,10 @@ def revocar_dispositivo(
 
     def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
         return identidad_commands.manejar_dispositivo_revocar(
-            sobre, contenido_validado, sesion=sesion_protegida, reloj=reloj  # type: ignore[arg-type]
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
         )
 
     comando = sync_service.procesar_comando(
@@ -213,7 +217,10 @@ def crear_usuario(
 
     def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
         return identidad_commands.manejar_usuario_crear(
-            sobre, contenido_validado, sesion=sesion_protegida, reloj=reloj  # type: ignore[arg-type]
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
         )
 
     comando = sync_service.procesar_comando(
@@ -283,7 +290,10 @@ def cambiar_composicion_rol(
 
     def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
         return identidad_commands.manejar_rol_permisos_cambiar(
-            sobre, contenido_validado, sesion=sesion_protegida, reloj=reloj  # type: ignore[arg-type]
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
         )
 
     comando = sync_service.procesar_comando(
@@ -341,7 +351,10 @@ def rotar_pin_autorizacion(
 
     def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
         return identidad_commands.manejar_pin_autorizacion_rotar(
-            sobre, contenido_validado, sesion=sesion_protegida, reloj=reloj  # type: ignore[arg-type]
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
         )
 
     comando = sync_service.procesar_comando(
@@ -384,7 +397,10 @@ def desbloquear_usuario(
 
     def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
         return identidad_commands.manejar_usuario_desbloquear(
-            sobre, contenido_validado, sesion=sesion_protegida, reloj=reloj  # type: ignore[arg-type]
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
         )
 
     comando = sync_service.procesar_comando(
@@ -392,3 +408,67 @@ def desbloquear_usuario(
     )
     if comando.estado == "RECHAZADO":
         raise RecursoNoEncontradoError(f"El usuario {usuario_id} no existe en esta organización.")
+
+
+# --- `GET /api/v1/yo` (change 06b, grupo 4, D1) -----------------------------
+#
+# Sin prefijo (`design.md` D1-A: `GET /api/v1/yo`, no `/api/v1/identidad/yo`):
+# router aparte, agregado en `api_v1/__init__.py` junto al de `identidad`.
+# Exenta de permiso en `RUTAS_EXENTAS_DE_PERMISO`
+# (`tests/integration/test_ratchet_permiso_por_ruta.py`, ADR-027): exige
+# sesión (`obtener_contexto_autenticado`) pero ningún permiso en particular,
+# porque su propósito es informar cuáles tiene el usuario.
+
+router_yo = APIRouter(tags=["identidad"])
+
+
+class UsuarioYoResponse(BaseModel):
+    id: UUID
+    nombre: str
+
+
+class OrganizacionYoResponse(BaseModel):
+    id: UUID
+    nombre: str
+
+
+class RolYoResponse(BaseModel):
+    id: UUID
+    nombre: str
+
+
+class YoResponse(BaseModel):
+    """Forma exacta del contrato aprobado el 2026-09-25 (tarea 4.1,
+    `design.md` "Contrato de `GET /api/v1/yo`"): usuario, organización y rol
+    (id y nombre), y la lista de permisos vigentes en orden alfabético
+    ascendente. Nunca `usuario.usuario` (nombre de login), email, estado,
+    secretos ni tope de descuento -- son campos que esta clase simplemente
+    no declara, no campos excluidos al serializar (mismo criterio que
+    `UsuarioResponse` más arriba)."""
+
+    usuario: UsuarioYoResponse
+    organizacion: OrganizacionYoResponse
+    rol: RolYoResponse
+    permisos: list[str]
+
+
+@router_yo.get("/yo", response_model=YoResponse)
+def obtener_yo(
+    contexto: Annotated[ContextoAutenticado, Depends(obtener_contexto_autenticado)],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> YoResponse:
+    """Datos de la propia sesión (D1, ADR-027). Delega enteramente en
+    `identidad_service.obtener_yo`: ninguna lógica de permisos o de sesión
+    habilitada se duplica acá. `AccessTokenInvalidoError` (usuario
+    inexistente, `INACTIVO`, o con rol inactivo -- ADR-028 D9) se propaga
+    tal cual; el manejador genérico de `DomainError` la traduce a 401
+    `IDENTIDAD_ACCESS_TOKEN_INVALIDO` (D1)."""
+    datos = identidad_service.obtener_yo(contexto.organizacion_id, contexto.usuario_id, sesion)
+    return YoResponse(
+        usuario=UsuarioYoResponse(id=datos.usuario.id, nombre=datos.usuario.nombre),
+        organizacion=OrganizacionYoResponse(
+            id=datos.organizacion.id, nombre=datos.organizacion.nombre
+        ),
+        rol=RolYoResponse(id=datos.rol.id, nombre=datos.rol.nombre),
+        permisos=datos.permisos,
+    )

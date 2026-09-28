@@ -736,3 +736,81 @@ class TestAislamientoEntreOrganizacionesHttp:
 
         assert respuesta.status_code == 403
         assert respuesta.json()["codigo"] == "COLA_AJENA"
+
+
+class TestUsuarioInactivoNoSeRechazaPorRuta:
+    """ADR-028 D9.3-B (grupo 2, `tasks.md` 2.7): a diferencia del resto de
+    las rutas de negocio (D9.1), `POST /sync/comandos` NO rechaza en bloque
+    por ruta a un usuario que pasó a `INACTIVO` -- preserva el canal
+    acotado para la cola offline (`design.md` D9, `identidad/api.py` sigue
+    usando `obtener_contexto_autenticado`, no `requiere_permiso`). El lote
+    se procesa por ítem igual que para un usuario activo: esto NO implica
+    todavía la rama `PERMISO_REVOCADO` del inactivo (deuda nominada, `02`
+    §6.3 paso 4, sin comandos offline reales hasta el change 15) -- solo
+    fija que el canal de la ruta sigue abierto."""
+
+    def test_lote_vacio_de_usuario_inactivo_responde_lista_vacia(
+        self, cliente: TestClient, sesion_http: Session
+    ) -> None:
+        from sqlalchemy import text
+
+        organizacion = _crear_organizacion(
+            sesion_http, slug=f"org-inactivo-lote-1-{uuid4().hex[:8]}"
+        )
+        usuario_id, dispositivo_id, nombre_usuario = _crear_usuario_y_dispositivo_http(
+            sesion_http, organizacion.id
+        )
+        sesion_http.commit()
+        access_token = _login(cliente, organizacion.slug, nombre_usuario, str(dispositivo_id))
+
+        sesion_http.execute(
+            text("UPDATE usuario SET estado = 'INACTIVO' WHERE id = :id"), {"id": str(usuario_id)}
+        )
+        sesion_http.commit()
+
+        respuesta = cliente.post(
+            "/api/v1/sync/comandos",
+            json={"items": []},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        assert respuesta.status_code == 200
+        assert respuesta.json()["resultados"] == []
+
+    def test_tipo_desconocido_de_usuario_inactivo_da_rechazado_por_item(
+        self, cliente: TestClient, sesion_http: Session
+    ) -> None:
+        """Triangulación: un lote no vacío tampoco se corta por ruta -- el
+        procesamiento por ítem sigue su curso normal (un tipo no declarado
+        en el catálogo da `RECHAZADO`, igual que para un usuario activo)."""
+        from sqlalchemy import text
+
+        organizacion = _crear_organizacion(
+            sesion_http, slug=f"org-inactivo-lote-2-{uuid4().hex[:8]}"
+        )
+        usuario_id, dispositivo_id, nombre_usuario = _crear_usuario_y_dispositivo_http(
+            sesion_http, organizacion.id
+        )
+        sesion_http.commit()
+        access_token = _login(cliente, organizacion.slug, nombre_usuario, str(dispositivo_id))
+
+        sesion_http.execute(
+            text("UPDATE usuario SET estado = 'INACTIVO' WHERE id = :id"), {"id": str(usuario_id)}
+        )
+        sesion_http.commit()
+
+        item_de_tipo_desconocido = _item_http(
+            usuario_id=str(usuario_id), dispositivo_id=str(dispositivo_id), secuencia=1
+        )
+        item_de_tipo_desconocido["tipo"] = "TIPO_QUE_NO_EXISTE"
+
+        respuesta = cliente.post(
+            "/api/v1/sync/comandos",
+            json={"items": [item_de_tipo_desconocido]},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        assert respuesta.status_code == 200
+        cuerpo = respuesta.json()
+        assert len(cuerpo["resultados"]) == 1
+        assert cuerpo["resultados"][0]["estado"] == "RECHAZADO"

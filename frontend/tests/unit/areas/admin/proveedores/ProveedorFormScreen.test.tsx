@@ -8,6 +8,7 @@ const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }))
 vi.mock('../../../../../src/lib/api/httpClient', () => ({ apiFetch: apiFetchMock }))
 
 import { ProveedorFormScreen } from '../../../../../src/areas/admin/proveedores/ProveedorFormScreen'
+import { queryClientConYo } from '../../../utils/permisosDePrueba'
 
 function respuesta(status: number, cuerpo: unknown) {
   return { ok: status >= 200 && status < 300, status, json: async () => cuerpo }
@@ -25,8 +26,13 @@ const PROVEEDOR = {
   actualizado_en: '2026-01-01T00:00:00Z',
 }
 
-function renderAlta() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+const SIN_PERMISO_DE_PROVEEDORES = 'No tenés permiso para gestionar proveedores.'
+
+/** Monta con `['yo']` ya sembrado (auxiliar compartido de la tarea 6.7): el
+ * permiso de la pantalla (`GESTIONAR_PROVEEDORES`) y el del enlace "Cargar
+ * costos" (`EDITAR_COSTOS`) salen de la consulta de sesión. El default es el
+ * rol Administración de `01-dominio.md` §19, que tiene ambos. */
+function renderAlta(queryClient: QueryClient = queryClientConYo('GES')) {
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={['/admin/proveedores/nuevo']}>
@@ -39,8 +45,7 @@ function renderAlta() {
   )
 }
 
-function renderEdicion(proveedorId: string) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+function renderEdicion(proveedorId: string, queryClient: QueryClient = queryClientConYo('GES')) {
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[`/admin/proveedores/${proveedorId}`]}>
@@ -147,5 +152,42 @@ describe('ProveedorFormScreen: ficha de edición (tarea 11.3, D5)', () => {
     await usuarioEvento.click(botonDesactivar)
 
     expect(await screen.findByRole('button', { name: /reactivar/i })).toBeInTheDocument()
+  })
+
+  /**
+   * Tarea 8.4 del change 06b, escenario "Enlace 'Cargar costos' desde la
+   * ficha del proveedor según el permiso" de la spec
+   * `administracion-de-proveedores`: el enlace se decide con `EDITAR_COSTOS`
+   * de la consulta de sesión `['yo']` (ADR-027), no preguntando al servidor.
+   * Un usuario con `GESTIONAR_PROVEEDORES` pero sin `EDITAR_COSTOS` no lo ve.
+   *
+   * Línea base de la suite: 4 casos, todos verdes antes de la tarea 8.4.
+   */
+  it('con GESTIONAR_PROVEEDORES y EDITAR_COSTOS muestra el enlace "Cargar costos" con el href correcto', async () => {
+    apiFetchMock.mockResolvedValue(respuesta(200, PROVEEDOR))
+
+    renderEdicion(PROVEEDOR.id)
+
+    const enlace = await screen.findByRole('link', { name: /cargar costos/i })
+    expect(enlace).toHaveAttribute('href', `/admin/proveedores/${PROVEEDOR.id}/costos`)
+  })
+
+  it('con GESTIONAR_PROVEEDORES pero sin EDITAR_COSTOS no muestra el enlace "Cargar costos"', async () => {
+    apiFetchMock.mockResolvedValue(respuesta(200, PROVEEDOR))
+    const queryClient = queryClientConYo('GES', { permisos: ['GESTIONAR_PROVEEDORES'] })
+
+    renderEdicion(PROVEEDOR.id, queryClient)
+
+    // La ficha se abre igual (el permiso de la pantalla sí está): lo que
+    // falta es solo el del enlace.
+    await screen.findByRole('button', { name: /desactivar/i })
+    expect(screen.queryByRole('link', { name: /cargar costos/i })).not.toBeInTheDocument()
+  })
+
+  it('sin GESTIONAR_PROVEEDORES no pide la ficha del proveedor y muestra que falta el permiso (B2)', async () => {
+    renderEdicion(PROVEEDOR.id, queryClientConYo('VEN'))
+
+    expect(await screen.findByText(SIN_PERMISO_DE_PROVEEDORES)).toBeInTheDocument()
+    expect(apiFetchMock).not.toHaveBeenCalled()
   })
 })

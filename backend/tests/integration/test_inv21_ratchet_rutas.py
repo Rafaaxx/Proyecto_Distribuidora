@@ -139,6 +139,20 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("post", "/api/v1/costos"),
         ("get", "/api/v1/costos/productos/{producto_id}/vigente"),
         ("get", "/api/v1/costos/productos/{producto_id}/historial"),
+        # Change 06b, grupo 9, tarea 9.1 (`identidad/api.py::router_yo`,
+        # ADR-027), con la prueba real en
+        # `test_inv21_aislamiento_endpoints_identidad.py::TestAislamientoDeLaSesion`.
+        # La 4.6 dejó esta ruta sin cobertura A PROPÓSITO (mismo precedente
+        # que la 12.1 del change 02): el ratchet quedó en rojo nombrando
+        # `[('get', '/api/v1/yo')]` desde que la ruta se registró hasta que
+        # sus dos pruebas de aislamiento existen. Como `/yo` no recibe ningún
+        # identificador (todo sale del token, D1-A), su aislamiento no sigue
+        # el patrón "recurso de otra organización -> 404" de las rutas de
+        # arriba, sino el inverso: dos organizaciones con login real, y el
+        # usuario de B obtiene solo su usuario, su organización y su rol
+        # (ningún id, nombre ni permiso de A), tanto si informa los
+        # identificadores de A en la consulta y en encabezados como si no.
+        ("get", "/api/v1/yo"),
     }
 )
 

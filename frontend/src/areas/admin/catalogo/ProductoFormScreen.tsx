@@ -31,7 +31,8 @@ import {
   useModificarProducto,
 } from '../../../features/catalogo/useMutacionesCatalogo'
 import { useAlicuotas } from '../../../features/configuracion/useAlicuotas'
-import { useCostoVigente, useOpcionesDeProveedores } from '../../../features/proveedores/useListados'
+import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
+import { useOpcionesDeProveedores } from '../../../features/proveedores/useListados'
 
 /**
  * Detalle + alta/edición de producto y presentaciones (tarea 10.5).
@@ -382,19 +383,6 @@ function ProductoBaseForm({
   const marcas = useMarcas()
   const alicuotas = useAlicuotas()
   const modificar = useModificarProducto()
-  // Bug 13.5 (14.3): la pantalla de historial de costos
-  // (`CostosHistorialScreen`) estaba huérfana -- ningún enlace llevaba a
-  // ella. No existe en el frontend un mecanismo propio de permisos (el
-  // access token no los lleva, ADR-017/`tokenStore.ts`): el único criterio
-  // establecido es el reactivo que ya usa `CostosHistorialScreen` y
-  // `ProveedoresListScreen` -- intentar la consulta real y distinguir
-  // `PermisoRequeridoProveedoresError` del resto. Se reutiliza acá esa
-  // misma consulta (`GET /costos/productos/{id}/vigente`, `VER_COSTOS`)
-  // solo para decidir si el enlace se muestra; mientras está pendiente o
-  // si falla por cualquier motivo, el enlace se oculta (no se asume
-  // permiso sin confirmación).
-  const costoVigente = useCostoVigente(detalle.id)
-  const tieneVerCostos = costoVigente.isSuccess
 
   const {
     register,
@@ -462,14 +450,20 @@ function ProductoBaseForm({
     <form onSubmit={alEnviar} noValidate className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-lg font-semibold text-primary">{detalle.codigo} — {detalle.nombre}</h1>
-        {tieneVerCostos && (
+        {/* Bug 13.5 (14.3), retirado en la tarea 8.3 del change 06b: el
+            enlace lo decide `VER_COSTOS` de la consulta de sesión `['yo']`
+            con el mecanismo compartido, y no una consulta al costo vigente
+            que solo servía para averiguar si el enlace se podía mostrar
+            (ADR-027 "Retiro del patrón reactivo"). El enlace solo existe en
+            la edición: en el alta no hay historial todavía. */}
+        <SiTienePermiso permiso="VER_COSTOS">
           <Link
             to={`/admin/proveedores/productos/${detalle.id}/historial`}
             className="text-sm text-primary/70 hover:text-primary hover:underline"
           >
             Ver historial de costos
           </Link>
-        )}
+        </SiTienePermiso>
       </div>
       <Campo id="codigo" etiqueta="Código" error={errors.codigo?.message}>
         <input id="codigo" className="rounded-md border border-border px-2 py-1 text-sm" {...register('codigo')} />

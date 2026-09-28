@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -682,3 +682,220 @@ def test_ninguna_organizacion_informada_en_la_peticion_se_usa(
     )
 
     assert respuesta.status_code == 200
+
+
+class TestLoginConRolInactivo:
+    """ADR-028 D9.1 último punto (grupo 2, `tasks.md` 2.6): un usuario
+    `ACTIVO` con rol `activo = false` recibe el mismo rechazo genérico que un
+    usuario inactivo, sin revelar la causa (SEG-01)."""
+
+    def test_login_con_rol_inactivo_da_el_mismo_rechazo_generico(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        organizacion = _crear_organizacion(sesion, "org-login-rol-inactivo-1")
+        usuario = _crear_usuario(
+            sesion, organizacion.id, permisos=frozenset(), nombre_usuario="vendedor-rol-1"
+        )
+        sesion.execute(
+            text("UPDATE rol SET activo = false WHERE id = :id"), {"id": str(usuario.rol_id)}
+        )
+        sesion.commit()
+
+        respuesta = cliente.post(
+            "/api/v1/auth/login",
+            json={
+                "organizacion_slug": "org-login-rol-inactivo-1",
+                "usuario": "vendedor-rol-1",
+                "contrasena": PASSWORD,
+                "dispositivo_id": str(uuid4()),
+                "nombre_dispositivo": "Tablet",
+            },
+        )
+
+        assert respuesta.status_code == 401
+        assert respuesta.json()["codigo"] == "IDENTIDAD_CREDENCIALES_INVALIDAS"
+
+        auditoria = (
+            sesion.execute(
+                select(Auditoria).where(
+                    Auditoria.organizacion_id == organizacion.id,
+                    Auditoria.accion == "INICIO_SESION_FALLIDO",
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(auditoria) == 1
+        assert auditoria[0].usuario_id == usuario.id
+
+    def test_login_con_rol_inactivo_y_contrasena_incorrecta_da_el_mismo_mensaje(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """Triangulación: el mismo código y mensaje, sea cual sea la otra
+        condición que también hubiera fallado -- nunca se distingue la
+        causa (SEG-01).
+
+        Nota de la sesión de verificación del grupo 10 (tarea 10.1): esta
+        prueba afirma el código y el mensaje, pero no el motivo concreto
+        (`ROL_INACTIVO`); el motivo vive en `sesion_refresh.motivo_revocacion`
+        y lo cubre `TestRenovacionDeUnUsuarioORolInactivo` de
+        `test_identidad_refresh_service.py`. Es lo que la spec pide: el mismo
+        rechazo genérico, sin revelar la causa."""
+        organizacion = _crear_organizacion(sesion, "org-login-rol-inactivo-2")
+        usuario = _crear_usuario(
+            sesion, organizacion.id, permisos=frozenset(), nombre_usuario="vendedor-rol-2"
+        )
+        sesion.execute(
+            text("UPDATE rol SET activo = false WHERE id = :id"), {"id": str(usuario.rol_id)}
+        )
+        sesion.commit()
+
+        respuesta = cliente.post(
+            "/api/v1/auth/login",
+            json={
+                "organizacion_slug": "org-login-rol-inactivo-2",
+                "usuario": "vendedor-rol-2",
+                "contrasena": "una-incorrecta-cualquiera",
+                "dispositivo_id": str(uuid4()),
+                "nombre_dispositivo": "Tablet",
+            },
+        )
+
+        assert respuesta.status_code == 401
+        assert respuesta.json()["codigo"] == "IDENTIDAD_CREDENCIALES_INVALIDAS"
+
+
+class TestRenovacionConSesionDeshabilitada:
+    """Spec `identidad/autenticacion-y-sesion`, escenario "Un usuario dado de
+    baja no puede renovar su sesión" (ADR-028 D9.2-A / D9.4-A), y el requisito
+    "La revocación DEBE persistir aunque la respuesta sea un error".
+
+    Lo que faltaba y esta clase cierra (tarea 10.1 del grupo 10): hasta acá
+    el comportamiento estaba cubierto solo en la capa de servicio
+    (`test_identidad_refresh_service.py::TestRenovacionDeUsuarioORolInactivo`),
+    leyendo la revocación desde la *misma* sesión de la prueba -- lo que no
+    distingue "quedó confirmada" de "quedó en la transacción de la petición".
+    La cláusula "persiste aunque la respuesta sea un error" es justamente
+    sobre ese borde: `POST /auth/refresh` responde 401 y aun así la revocación
+    y la auditoría tienen que haber quedado confirmadas.
+
+    Por eso estas pruebas leen con `sesion.expire_all()`: la fixture `sesion`
+    abre su propio `Engine` contra `database_url`, distinto del que la app
+    usa para atender la petición, así que lo que se lee después de expirar es
+    lo confirmado, no el estado sucio de la petición que acaba de fallar. Es
+    el mismo truco que usa `test_refresh_reuso_persiste_la_revocacion_de_la_familia`
+    (más arriba en este archivo), y por eso el `commit` de `auth.py` en el
+    `except DomainError` es observable y no accidental.
+    """
+
+    def _login(
+        self, cliente: TestClient, slug: str, nombre_usuario: str, dispositivo_id: str
+    ) -> str:
+        login = cliente.post(
+            "/api/v1/auth/login",
+            json={
+                "organizacion_slug": slug,
+                "usuario": nombre_usuario,
+                "contrasena": PASSWORD,
+                "dispositivo_id": dispositivo_id,
+                "nombre_dispositivo": "Tablet",
+            },
+        )
+        assert login.status_code == 200
+        return str(login.cookies["refresh_token"])
+
+    def test_el_401_persiste_la_revocacion_de_todas_las_familias_del_usuario(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        organizacion = _crear_organizacion(sesion, "org-refresh-inactivo-1")
+        usuario = _crear_usuario(
+            sesion, organizacion.id, permisos=frozenset(), nombre_usuario="vendedor-baja-1"
+        )
+        sesion.commit()
+
+        # Dos dispositivos: la revocación es de TODAS las familias del
+        # usuario, no solo de la que emite este token.
+        dispositivo_1 = str(uuid4())
+        dispositivo_2 = str(uuid4())
+        token_1 = self._login(cliente, "org-refresh-inactivo-1", "vendedor-baja-1", dispositivo_1)
+        token_2 = self._login(cliente, "org-refresh-inactivo-1", "vendedor-baja-1", dispositivo_2)
+
+        sesion.execute(
+            text("UPDATE usuario SET estado = 'INACTIVO' WHERE id = :id"), {"id": str(usuario.id)}
+        )
+        sesion.commit()
+
+        respuesta = cliente.post(
+            "/api/v1/auth/refresh",
+            json={"dispositivo_id": dispositivo_1},
+            cookies={"refresh_token": token_1},
+        )
+
+        assert respuesta.status_code == 401
+        assert respuesta.json()["codigo"] == "IDENTIDAD_REFRESH_TOKEN_INVALIDO"
+
+        # Sesión nueva: lo que se lee acá está confirmado, no en vuelo.
+        sesion.expire_all()
+        motivos = sesion.execute(
+            select(SesionRefresh.motivo_revocacion, SesionRefresh.revocado_en).where(
+                SesionRefresh.organizacion_id == organizacion.id,
+            )
+        ).all()
+        assert motivos, "el login tiene que haber dejado al menos un refresh"
+        assert all(motivo == "USUARIO_INACTIVO" for motivo, _ in motivos), motivos
+        assert all(revocado is not None for _, revocado in motivos), motivos
+
+        # Y el token del otro dispositivo tampoco sirve más: la baja se
+        # propaga a todas las familias, no solo a la que se presentó.
+        segundo_intento = cliente.post(
+            "/api/v1/auth/refresh",
+            json={"dispositivo_id": dispositivo_2},
+            cookies={"refresh_token": token_2},
+        )
+        assert segundo_intento.status_code == 401
+
+    def test_el_401_deja_una_auditoria_con_usuario_dispositivo_y_motivo(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        organizacion = _crear_organizacion(sesion, "org-refresh-rol-inactivo-1")
+        usuario = _crear_usuario(
+            sesion, organizacion.id, permisos=frozenset(), nombre_usuario="vendedor-baja-2"
+        )
+        sesion.commit()
+
+        # El login tiene que funcionar con el rol activo (ADR-028 D9.1 solo
+        # rechaza el *login* con rol inactivo); la baja del rol ocurre
+        # después, sobre una sesión ya emitida.
+        dispositivo_id = str(uuid4())
+        token = self._login(
+            cliente, "org-refresh-rol-inactivo-1", "vendedor-baja-2", dispositivo_id
+        )
+
+        sesion.execute(
+            text("UPDATE rol SET activo = false WHERE id = :id"), {"id": str(usuario.rol_id)}
+        )
+        sesion.commit()
+
+        respuesta = cliente.post(
+            "/api/v1/auth/refresh",
+            json={"dispositivo_id": dispositivo_id},
+            cookies={"refresh_token": token},
+        )
+        assert respuesta.status_code == 401
+
+        sesion.expire_all()
+        filas = (
+            sesion.execute(
+                select(Auditoria).where(
+                    Auditoria.organizacion_id == organizacion.id,
+                    Auditoria.accion == "REVOCAR_SESIONES_REFRESH_USUARIO",
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(filas) == 1
+        assert filas[0].usuario_id == usuario.id
+        assert filas[0].dispositivo_id == UUID(dispositivo_id)
+        assert filas[0].observacion is not None
+        assert "ROL_INACTIVO" in filas[0].observacion

@@ -484,6 +484,7 @@ Agrupación de endpoints de la etapa 1:
 - Reutilizar un refresh token ya rotado revoca toda la familia de tokens de ese dispositivo.
 - **DEBE:** los permisos no viajan en el token. Se cargan por petición (con caché breve en memoria del proceso), para que una revocación tenga efecto inmediato con conexión.
 - **Permisos para la interfaz (ADR-027):** `/admin` los obtiene de `GET /api/v1/yo`, que se vuelve a consultar en cada renovación del access token; `/ruta` usa los del bootstrap (SYN-10, SYN-11). Ocultar una acción nunca reemplaza la validación del servidor (SEG-06).
+- **Sesión habilitada (ADR-028):** toda petición autenticada que no sea el lote de sincronización se rechaza si el usuario está `INACTIVO` o su rol tiene `activo = false`, en la petición siguiente y sin esperar al vencimiento del access token. `GET /api/v1/yo` rechaza en vez de devolver una lista vacía. La renovación (`refresh`) revoca las familias de refresh del usuario y deja auditoría antes de rechazar, para que la sesión revocada no pueda revivir con una reactivación.
 
 ### 12.2 Dispositivos
 

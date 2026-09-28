@@ -88,30 +88,43 @@ export function parsearImporteDesdeApi(valorApi: string): Importe {
 }
 
 /**
- * Formatea un importe ya redondeado para mostrarlo en pantalla, con dos
- * decimales fijos. Es el único punto donde el valor se convierte a texto
- * para el usuario; nunca se usa el resultado para volver a calcular.
+ * Formatea un `Importe` con miles agrupados con `.` y `,` como separador
+ * decimal (es-AR), a la cantidad fija de `decimales` pedida. Manipulación
+ * de cadenas sobre `toFixed(decimales)` -- nunca pasa por `number`
+ * (INV-03). Helper privado compartido por `formatearImporte` y
+ * `formatearCosto`; ninguna de las dos duplica la lógica de agrupación.
+ */
+function formatearConMilesEsAr(importe: Importe, decimales: number): string {
+  const partes = importe.toFixed(decimales).split('.')
+  const entero = partes[0] ?? '0'
+  const parteDecimal = partes[1] ?? '0'.repeat(decimales)
+  const negativo = entero.startsWith('-')
+  const digitos = negativo ? entero.slice(1) : entero
+  const enteroAgrupado = digitos.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return `${negativo ? '-' : ''}${enteroAgrupado},${parteDecimal}`
+}
+
+/**
+ * Formatea un importe ya redondeado para mostrarlo en pantalla: dos
+ * decimales fijos, miles agrupados con `.` y `,` como separador decimal
+ * (es-AR), igual criterio que `formatearCosto` -- "31250" -> "31.250,00".
+ * Es el único punto donde el valor se convierte a texto para el usuario;
+ * nunca se usa el resultado para volver a calcular ni para serializar a
+ * la API (esa serialización usa siempre la cadena sin formatear, `02` §10.3).
  */
 export function formatearImporte(importe: Importe): string {
-  return importe.toFixed(2)
+  return formatearConMilesEsAr(importe, 2)
 }
 
 /**
  * Formatea un costo ya redondeado para mostrarlo en pantalla (tarea 11.4,
  * `CostosCargaScreen.tsx` y `CostosHistorialScreen.tsx`): seis decimales
  * fijos, miles agrupados con `.` y `,` como separador decimal (es-AR;
- * spec `administracion-de-proveedores`, "1.239,669421"). Manipulación de
- * cadenas sobre `toFixed(6)` -- nunca pasa por `number` (INV-03), igual
- * criterio que `formatearImporte`.
+ * spec `administracion-de-proveedores`, "1.239,669421"). Nunca pasa por
+ * `number` (INV-03), igual criterio que `formatearImporte`.
  */
 export function formatearCosto(importe: Importe): string {
-  const partes = importe.toFixed(6).split('.')
-  const entero = partes[0] ?? '0'
-  const decimales = partes[1] ?? '000000'
-  const negativo = entero.startsWith('-')
-  const digitos = negativo ? entero.slice(1) : entero
-  const enteroAgrupado = digitos.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
-  return `${negativo ? '-' : ''}${enteroAgrupado},${decimales}`
+  return formatearConMilesEsAr(importe, 6)
 }
 
 /**

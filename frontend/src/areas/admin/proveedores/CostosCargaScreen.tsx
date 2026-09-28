@@ -18,7 +18,8 @@ import {
 import { calcularCostoBase } from '../../../domain/proveedores/costoBase'
 import { formatearCosto, parsearImporteDesdeApi } from '../../../lib/money'
 import type { CostoDelLote } from '../../../features/proveedores/api'
-import { ErrorDeProveedores } from '../../../features/proveedores/errores'
+import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
+import { ErrorDeProveedores, PermisoRequeridoProveedoresError } from '../../../features/proveedores/errores'
 import { campoDeCostoParaCodigo } from '../../../features/proveedores/mapaErrorACampo'
 import { useProveedor } from '../../../features/proveedores/useListados'
 import { useInformarCostos } from '../../../features/proveedores/useMutaciones'
@@ -28,7 +29,30 @@ import { useInformarCostos } from '../../../features/proveedores/useMutaciones'
  * previa del costo base calculada en el cliente (tarea 11.4, CST-02, spec
  * `administracion-de-proveedores`). Un único envío (`COSTO_INFORMAR`)
  * para todas las filas (CST-05, INV-01: todo o nada).
+ *
+ * Qué se muestra lo decide **solo** la consulta de sesión `['yo']`, con el
+ * mecanismo compartido `<SiTienePermiso>` (tarea 8.5 del change 06b,
+ * `design.md` D4-A / **B2**): sin `EDITAR_COSTOS` los hijos no se montan, así
+ * que la pantalla no pide el proveedor ni los productos para averiguar si el
+ * usuario puede cargar costos. El 403 del servidor se trata **como red de
+ * seguridad** -- esta pantalla no lo tenía (caía en el mensaje genérico
+ * "No se pudo obtener el proveedor") y solo ocurre si el permiso se quitó
+ * del rol entre dos renovaciones del access token (SEG-06).
  */
+
+const SIN_PERMISO_DE_COSTOS = 'No tenés permiso para cargar costos.'
+
+/** Estado sin permiso (y red de seguridad del 403): mismo texto en los dos
+ * casos, para que el mensaje no revele por qué el usuario no ve la
+ * pantalla. */
+function CostosSinPermiso() {
+  return (
+    <main className="flex flex-col gap-4">
+      <h1 className="text-lg font-semibold text-primary">Cargar costos</h1>
+      <p className="text-sm text-primary/70">{SIN_PERMISO_DE_COSTOS}</p>
+    </main>
+  )
+}
 
 function fechaDeHoy(): string {
   const ahora = new Date()
@@ -39,6 +63,16 @@ function fechaDeHoy(): string {
 }
 
 export function CostosCargaScreen() {
+  return (
+    <SiTienePermiso permiso="EDITAR_COSTOS" fallback={<CostosSinPermiso />}>
+      <CargaDeCostosDeProveedor />
+    </SiTienePermiso>
+  )
+}
+
+/** Componente interno: es el único que consulta. Sin `EDITAR_COSTOS` no se
+ * monta, así que no dispara ninguna petición (**B2**). */
+function CargaDeCostosDeProveedor() {
   const { proveedorId } = useParams<{ proveedorId: string }>()
   const proveedor = useProveedor(proveedorId)
 
@@ -51,6 +85,9 @@ export function CostosCargaScreen() {
   }
 
   if (proveedor.isError || !proveedorId) {
+    if (proveedor.error instanceof PermisoRequeridoProveedoresError) {
+      return <CostosSinPermiso />
+    }
     return (
       <main>
         <p role="alert">No se pudo obtener el proveedor.</p>

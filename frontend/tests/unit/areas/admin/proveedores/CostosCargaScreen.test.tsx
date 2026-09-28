@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -8,6 +8,7 @@ const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }))
 vi.mock('../../../../../src/lib/api/httpClient', () => ({ apiFetch: apiFetchMock }))
 
 import { CostosCargaScreen } from '../../../../../src/areas/admin/proveedores/CostosCargaScreen'
+import { queryClientConYo } from '../../../utils/permisosDePrueba'
 
 function respuesta(status: number, cuerpo: unknown) {
   return { ok: status >= 200 && status < 300, status, json: async () => cuerpo }
@@ -143,8 +144,12 @@ function mockApiBase() {
   })
 }
 
-function renderPantalla() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+const SIN_PERMISO_DE_COSTOS = 'No tenés permiso para cargar costos.'
+
+/** Monta con `['yo']` ya sembrado (auxiliar compartido de la tarea 6.7): el
+ * permiso de la pantalla es `EDITAR_COSTOS` (`01` §19), y el default es el
+ * rol Administración, que lo tiene. */
+function renderPantalla(queryClient = queryClientConYo('GES')) {
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[`/admin/proveedores/${PROVEEDOR_ID}/costos`]}>
@@ -307,7 +312,7 @@ describe('CostosCargaScreen (tarea 11.4)', () => {
     expect((screen.getAllByLabelText(/^valor$/i)[1] as HTMLInputElement).value).toBe('1000')
   })
 
-  it('error del servidor sin fila (permiso u otro error general) se muestra como mensaje general', async () => {
+  it('error del servidor sin fila y que no es de permiso (p. ej. PROVEEDOR_INACTIVO) se muestra como mensaje general', async () => {
     apiFetchMock.mockImplementation((ruta: string, init?: RequestInit) => {
       if (ruta === `/proveedores/${PROVEEDOR_ID}`) return Promise.resolve(respuesta(200, PROVEEDOR))
       if (ruta.startsWith('/catalogo/productos/') && !ruta.includes('?')) {
@@ -340,5 +345,40 @@ describe('CostosCargaScreen (tarea 11.4)', () => {
     await usuarioEvento.click(screen.getByRole('button', { name: /cargar costos/i }))
 
     expect(await screen.findByText(/proveedor está inactivo/i)).toBeInTheDocument()
+  })
+
+  /**
+   * Tarea 8.5 del change 06b, escenario "Usuario sin permiso" de la spec
+   * `administracion-de-proveedores`: entrar por URL a la carga de costos sin
+   * `EDITAR_COSTOS` muestra la falta de permiso y no pide nada
+   * (**B2**, `design.md` D4-A). Antes esta pantalla no tenía ninguna
+   * Red de seguridad del 403: un 403 caía en el mensaje genérico "No se
+   * pudo obtener el proveedor".
+   *
+   * Línea base de la suite: 7 casos, todos verdes antes de la tarea 8.5.
+   */
+  it('sin EDITAR_COSTOS en la consulta de sesión no pide el proveedor ni los productos y muestra que falta el permiso (B2)', async () => {
+    renderPantalla(queryClientConYo('VEN'))
+
+    expect(await screen.findByText(SIN_PERMISO_DE_COSTOS)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /cargar costos/i })).not.toBeInTheDocument()
+    expect(apiFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('si el servidor rechaza aunque la interfaz creía tener el permiso, muestra la falta de permiso y no el mensaje genérico (red de seguridad, SEG-06)', async () => {
+    apiFetchMock.mockImplementation((ruta: string) => {
+      if (ruta === `/proveedores/${PROVEEDOR_ID}`) {
+        return Promise.resolve(
+          respuesta(403, { title: 'Falta el permiso requerido.', codigo: 'PERMISO_REQUERIDO' }),
+        )
+      }
+      return Promise.resolve(respuesta(200, { items: [], cursor_siguiente: null }))
+    })
+
+    renderPantalla()
+
+    expect(await screen.findByText(SIN_PERMISO_DE_COSTOS)).toBeInTheDocument()
+    expect(screen.queryByText(/no se pudo obtener el proveedor/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /cargar costos/i })).not.toBeInTheDocument()
   })
 })

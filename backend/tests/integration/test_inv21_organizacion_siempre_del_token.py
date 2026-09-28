@@ -38,6 +38,16 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("put", "/api/v1/identidad/roles/{rol_id}/permisos"),
         ("post", "/api/v1/identidad/usuarios/{usuario_id}/pin"),
         ("post", "/api/v1/identidad/usuarios/{usuario_id}/desbloqueo"),
+        # Change 06b, grupo 9, tarea 9.2 (`identidad/api.py::router_yo`,
+        # ADR-027, D1-A): la consulta de la propia sesión no declara NINGÚN
+        # parámetro -- ni `organizacion_id` ni `usuario_id`, que salen del
+        # token. Es la ruta donde el criterio de esta prueba se cumple de la
+        # forma más fuerte: no hay forma de informar la organización, porque
+        # la operación no tiene dónde declararla. Su comportamiento real
+        # (informar identificadores ajenos no cambia la respuesta) lo
+        # comprueba `test_inv21_aislamiento_endpoints_identidad.py::
+        # TestAislamientoDeLaSesion`.
+        ("get", "/api/v1/yo"),
     }
 )
 RUTAS_DE_AUTENTICACION = frozenset(
@@ -98,6 +108,52 @@ def test_ninguna_ruta_de_negocio_declara_organizacion_id_como_parametro_o_campo(
     assert infractoras == [], (
         f"Rutas que declaran '{_NOMBRE_PROHIBIDO}' en vez de tomarlo del token: {infractoras}."
     )
+
+
+def test_la_recorrida_de_aislamiento_alcanza_la_consulta_de_la_sesion(
+    database_url: str,
+) -> None:
+    """Tarea 9.2: esta verificación RECORRE la ruta nueva, no la omite.
+
+    `test_ninguna_ruta_de_negocio_declara_organizacion_id_como_parametro_o_campo`
+    itera `COBERTURA_DE_AISLAMIENTO` e indexa el esquema real, así que si
+    `("get", "/api/v1/yo")` no estuviera en esa lista, su inclusión sería
+    silenciosa: la prueba seguiría en verde sin haber mirado la ruta nueva.
+    Por eso se afirma acá, contra el esquema REAL, que la operación existe y
+    que además no declara `organizacion_id` (ni como parámetro ni en el
+    cuerpo) -- de modo que una tupla agregada a una ruta que no exista, o a
+    una que sí la declare, falle en vez de pasar por vacuidad.
+
+    Regla: `02` §8, INV-21, SEG-07, ADR-027."""
+    os.environ.setdefault("DATABASE_URL", database_url)
+    esquema = _esquema_real()
+    rutas = esquema["paths"]  # type: ignore[index]
+    componentes = esquema.get("components", {})  # type: ignore[assignment]
+
+    ruta = ("get", "/api/v1/yo")
+    assert ruta in COBERTURA_DE_AISLAMIENTO, (
+        "La consulta de la sesión tiene que estar en COBERTURA_DE_AISLAMIENTO "
+        "para que esta verificación la recorra (tarea 9.2)."
+    )
+    metodo, path = ruta
+    assert path in rutas and metodo in rutas[path], (  # type: ignore[operator]
+        f"La ruta {ruta} está declarada como cubierta pero no está registrada "
+        "en el esquema OpenAPI."
+    )
+
+    operacion = rutas[path][metodo]  # type: ignore[index]
+    parametros = _nombres_de_parametros(operacion)
+    assert _NOMBRE_PROHIBIDO not in parametros
+    assert _NOMBRE_PROHIBIDO not in _propiedades_del_cuerpo(operacion, componentes)
+    # `/yo` no declara ningún parámetro propio (D1-A, "Parámetros: Ninguno"):
+    # lo único que OpenAPI muestra es el esquema de seguridad
+    # `HTTPBearer`, que FastAPI agrega a toda operación autenticada. Ni
+    # `organizacion_id` ni `usuario_id` -- si alguna vez aparecieran, esta
+    # aserción los delata en el mismo lugar.
+    assert parametros == {"authorization"}
+    assert "usuario_id" not in parametros
+    # Y tampoco declara cuerpo: no hay nada que informar.
+    assert _propiedades_del_cuerpo(operacion, componentes) == set()
 
 
 def test_las_rutas_de_autenticacion_tampoco_declaran_organizacion_id(

@@ -1,4 +1,4 @@
-import { fijarAccessToken, limpiarAccessToken, obtenerAccessToken } from '../auth/tokenStore'
+import { fijarAccessToken, limpiarAccessToken, obtenerAccessToken, sesionTerminada } from '../auth/tokenStore'
 import { obtenerOGenerarDispositivoId } from '../dispositivo/dispositivoId'
 import { generarOperationId } from './operationId'
 
@@ -16,6 +16,14 @@ import { generarOperationId } from './operationId'
  * la misma renovación en vuelo (`renovacionEnCurso`): la segunda y
  * siguientes esperan la misma promesa en vez de disparar su propio
  * `/auth/refresh`.
+ *
+ * Una renovación rechazada es un corte, no un fallo transitorio (tarea
+ * 11.2, **B1**): desde ese momento el backend ya dijo que la sesión no
+ * existe, así que los 401 siguientes se devuelven tal cual sin volver a
+ * negociar. Sin este corte, cada 401 de cada consulta --y cada reintento
+ * de cada consulta-- abriría su propio `POST /auth/refresh` con el mismo
+ * resultado, y `/admin` quedaría golpeando el servidor sin fin en lugar de
+ * ofrecer "Iniciar sesión".
  *
  * Toda escritura (cualquier método distinto de `GET`/`HEAD`) recibe un
  * encabezado `Operation-Id` (UUIDv7) generado una sola vez por petición y
@@ -55,6 +63,13 @@ function conOperationIdFijo(init: RequestInit): RequestInit {
 let renovacionEnCurso: Promise<string | null> | null = null
 
 async function renovarAccessToken(): Promise<string | null> {
+  // La sesión ya terminó (el backend rechazó una renovación anterior):
+  // negociar otra vez solo produce otro rechazo. Se devuelve `null` para
+  // que `apiFetch` devuelva el 401 que ya tiene y deje de tocar la red.
+  if (sesionTerminada()) {
+    return null
+  }
+
   if (renovacionEnCurso) {
     return renovacionEnCurso
   }

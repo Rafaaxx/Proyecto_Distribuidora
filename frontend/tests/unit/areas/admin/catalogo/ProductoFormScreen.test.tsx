@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -9,6 +9,7 @@ vi.mock('../../../../../src/lib/api/httpClient', () => ({ apiFetch: apiFetchMock
 
 import type { components } from '../../../../../src/api/schema.gen'
 import { ProductoFormScreen } from '../../../../../src/areas/admin/catalogo/ProductoFormScreen'
+import { queryClientConYo } from '../../../utils/permisosDePrueba'
 
 function respuesta(status: number, cuerpo: unknown) {
   return { ok: status >= 200 && status < 300, status, json: async () => cuerpo }
@@ -44,8 +45,7 @@ const PAGINA_PROVEEDOR_OPCIONES = {
  * del árbol y esta prueba puede afirmar que la pantalla de detalle
  * efectivamente aparece.
  */
-function renderAlta() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+function renderAlta(queryClient = queryClientConYo('GES')) {
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={['/admin/catalogo/productos/nuevo']}>
@@ -104,8 +104,7 @@ const PRODUCTO_DETALLE = {
   ],
 } satisfies components['schemas']['ProductoDetalleResponse']
 
-function renderEdicion(productoId = PRODUCTO_DETALLE.id) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+function renderEdicion(productoId = PRODUCTO_DETALLE.id, queryClient = queryClientConYo('GES')) {
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[`/admin/catalogo/productos/${productoId}`]}>
@@ -550,53 +549,41 @@ describe('ProductoFormScreen — edición (tarea 10.5)', () => {
   })
 
   /**
-   * Bug 13.5 (14.3): `CostosHistorialScreen` (`/admin/proveedores/productos/:productoId/historial`)
-   * estaba huérfana -- ningún enlace llevaba a ella. La spec
-   * `administracion-de-proveedores` exige que el historial se muestre
-   * solo con `VER_COSTOS`; no existe en el frontend un mecanismo propio
-   * de permisos (el access token no los lleva), así que se reutiliza el
-   * mismo criterio reactivo que ya usa `CostosHistorialScreen`: intentar
-   * la consulta real de costo vigente (`GET
-   * /costos/productos/{id}/vigente`) y mostrar el enlace solo si esa
-   * consulta tiene éxito.
+   * Bug 13.5 (14.3) y tarea 8.3 del change 06b: el enlace a
+   * `CostosHistorialScreen` (`/admin/proveedores/productos/:productoId/historial`)
+   * se decide **solo** con `VER_COSTOS` de la consulta de sesión `['yo']`
+   * (ADR-027, `design.md` D4-A / **B2**). Antes se decidía con el patrón
+   * reactivo: la pantalla pedía `GET /costos/productos/{id}/vigente` en cada
+   * apertura de un producto solo para averiguar si podía mostrar el enlace
+   * (patrón retirado, ADR-027 "Retiro del patrón reactivo"). Ninguna de las
+   * tres pruebas de este bloque acepta ya una petición a `/costos/...`.
+   *
+   * Línea base de la suite: 17 casos, todos verdes antes de la tarea 8.3.
    */
-  it('con VER_COSTOS, muestra el enlace "Ver historial de costos" con el href correcto', async () => {
-    apiFetchMock.mockImplementation((ruta: string) => {
-      if (ruta.startsWith('/proveedores/opciones')) return Promise.resolve(respuesta(200, PAGINA_PROVEEDOR_OPCIONES))
-      if (ruta.startsWith('/catalogo/categorias')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
-      if (ruta.startsWith('/catalogo/marcas')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
-      if (ruta.startsWith('/configuracion/alicuotas')) return Promise.resolve(respuesta(200, PAGINA_ALICUOTAS))
-      if (ruta.startsWith(`/costos/productos/${PRODUCTO_DETALLE.id}/vigente`)) {
-        return Promise.resolve(respuesta(200, { costo: null, fecha: '2026-09-25' }))
-      }
-      return Promise.resolve(respuesta(200, PRODUCTO_DETALLE))
-    })
+  it('con VER_COSTOS en la consulta de sesión, muestra el enlace "Ver historial de costos" con el href correcto y no pide el costo vigente', async () => {
+    mockearDetalle()
 
     renderEdicion()
 
     const enlace = await screen.findByRole('link', { name: /ver historial de costos/i })
     expect(enlace).toHaveAttribute('href', `/admin/proveedores/productos/${PRODUCTO_DETALLE.id}/historial`)
+    expect(apiFetchMock.mock.calls.some(([ruta]) => String(ruta).includes('/costos/productos/'))).toBe(false)
   })
 
-  it('sin VER_COSTOS (403 del servidor), no muestra el enlace "Ver historial de costos"', async () => {
-    apiFetchMock.mockImplementation((ruta: string) => {
-      if (ruta.startsWith('/proveedores/opciones')) return Promise.resolve(respuesta(200, PAGINA_PROVEEDOR_OPCIONES))
-      if (ruta.startsWith('/catalogo/categorias')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
-      if (ruta.startsWith('/catalogo/marcas')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
-      if (ruta.startsWith('/configuracion/alicuotas')) return Promise.resolve(respuesta(200, PAGINA_ALICUOTAS))
-      if (ruta.startsWith(`/costos/productos/${PRODUCTO_DETALLE.id}/vigente`)) {
-        return Promise.resolve(respuesta(403, { title: 'No tenés permiso.', codigo: 'PERMISO_REQUERIDO' }))
-      }
-      return Promise.resolve(respuesta(200, PRODUCTO_DETALLE))
-    })
+  it('sin VER_COSTOS en la consulta de sesión, no muestra el enlace ni pide el costo vigente para averiguarlo (B2)', async () => {
+    mockearDetalle()
+    // Mismo rol de Administración, pero sin `VER_COSTOS`: es el permiso del
+    // enlace lo que se aísla, no el de toda la pantalla.
+    const queryClient = queryClientConYo('GES', { permisos: ['GESTIONAR_CATALOGO'] })
 
-    renderEdicion()
+    renderEdicion(PRODUCTO_DETALLE.id, queryClient)
 
     await screen.findByText('Pack x24')
     expect(screen.queryByRole('link', { name: /ver historial de costos/i })).not.toBeInTheDocument()
+    expect(apiFetchMock.mock.calls.some(([ruta]) => String(ruta).includes('/costos/productos/'))).toBe(false)
   })
 
-  it('en modo alta (sin producto existente), no muestra el enlace "Ver historial de costos"', async () => {
+  it('en modo alta (sin producto existente), no muestra el enlace "Ver historial de costos" ni pide el costo vigente', async () => {
     apiFetchMock.mockImplementation((ruta: string) => {
       if (ruta.startsWith('/proveedores/opciones')) return Promise.resolve(respuesta(200, PAGINA_PROVEEDOR_OPCIONES))
       if (ruta.startsWith('/catalogo/categorias')) return Promise.resolve(respuesta(200, PAGINA_CATEGORIAS))
@@ -609,6 +596,7 @@ describe('ProductoFormScreen — edición (tarea 10.5)', () => {
 
     await screen.findByRole('option', { name: 'Bebidas' })
     expect(screen.queryByRole('link', { name: /ver historial de costos/i })).not.toBeInTheDocument()
+    expect(apiFetchMock.mock.calls.some(([ruta]) => String(ruta).includes('/costos/'))).toBe(false)
   })
 
   it('si falla el guardado de cambios (código duplicado), no navega y muestra el error', async () => {

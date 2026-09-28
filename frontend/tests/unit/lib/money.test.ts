@@ -60,8 +60,28 @@ describe('parsearImporteDesdeApi', () => {
 })
 
 describe('formatearImporte', () => {
-  it('formatea un importe para mostrar con dos decimales', () => {
-    expect(formatearImporte(redondearImporte('31250'))).toBe('31250.00')
+  it('agrupa miles con "." y usa "," como separador decimal', () => {
+    expect(formatearImporte(redondearImporte('31250'))).toBe('31.250,00')
+  })
+
+  it('cero se muestra con dos decimales', () => {
+    expect(formatearImporte(redondearImporte('0'))).toBe('0,00')
+  })
+
+  it('un negativo conserva el signo delante del entero', () => {
+    expect(formatearImporte(redondearImporte('-1234.5'))).toBe('-1.234,50')
+  })
+
+  it('formatea sin separador de miles cuando la parte entera tiene menos de 4 dígitos', () => {
+    expect(formatearImporte(redondearImporte('833'))).toBe('833,00')
+  })
+
+  it('agrupa miles en un importe de cinco dígitos', () => {
+    expect(formatearImporte(redondearImporte('18000'))).toBe('18.000,00')
+  })
+
+  it('agrupa miles en valores de millones', () => {
+    expect(formatearImporte(redondearImporte('1234567.89'))).toBe('1.234.567,89')
   })
 })
 

@@ -77,7 +77,7 @@ describe('LoginScreen (tarea 13.4)', () => {
     expect(apiFetchMock).not.toHaveBeenCalled()
   })
 
-  it('envía organización, usuario, contraseña y el dispositivo, y navega al listado tras iniciar sesión', async () => {
+  it('envía organización, usuario, contraseña y el dispositivo, y navega al inicio de /admin tras iniciar sesión (tarea 7.6, B3)', async () => {
     apiFetchMock.mockResolvedValueOnce(respuesta(200, { access_token: 'token-emitido', token_type: 'bearer' }))
     const usuarioEvento = userEvent.setup()
     renderPantalla()
@@ -87,7 +87,10 @@ describe('LoginScreen (tarea 13.4)', () => {
     await usuarioEvento.type(screen.getByLabelText(/contraseña/i), 'correcta123')
     await usuarioEvento.click(screen.getByRole('button', { name: /iniciar sesión/i }))
 
-    await waitFor(() => expect(navegarMock).toHaveBeenCalledWith('/admin/dispositivos'))
+    // `design.md` D5-A (B3): el login ya no manda a `/admin/dispositivos`,
+    // que solo Administración y Supervisor pueden usar (`01` §19), sino a la
+    // ruta índice, que lleva a la primera sección permitida del usuario.
+    await waitFor(() => expect(navegarMock).toHaveBeenCalledWith('/admin/inicio'))
 
     expect(apiFetchMock).toHaveBeenCalledTimes(1)
     const [ruta, opciones] = apiFetchMock.mock.calls[0] as [string, RequestInit]

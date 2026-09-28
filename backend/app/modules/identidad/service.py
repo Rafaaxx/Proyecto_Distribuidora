@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.core.clock import Clock
 from app.core.ids import nuevo_id
 from app.core.seguridad import (
+    AccessTokenInvalidoError,
     derivar_hash_refresh_token,
     derivar_pin_autorizacion,
     emitir_access_token,
@@ -942,9 +943,21 @@ def iniciar_sesion(
         _registrar_intento_fallido(sesion, usuario_id=None, ip=ip, momento=momento)
         raise CredencialesInvalidasError("Usuario o contraseña incorrectos.")
 
+    rol_del_usuario = (
+        repository.obtener_rol_por_id(organizacion.id, usuario.rol_id, sesion)
+        if usuario is not None
+        else None
+    )
     credenciales_validas = (
         usuario is not None
         and usuario.estado == "ACTIVO"
+        # ADR-028 D9.1 último punto: un rol con `activo = false` se suma al
+        # mismo rechazo genérico que un usuario inactivo (mismo criterio de
+        # `01` §19: "los roles son plantillas" de la organización, nunca
+        # `None` para un usuario ya creado -- pero se verifica `is not None`
+        # de todos modos, defensa en profundidad en vez de asumir la FK).
+        and rol_del_usuario is not None
+        and rol_del_usuario.activo
         and verificar_password(password, usuario.password_hash)
     )
     if not credenciales_validas:
@@ -1117,6 +1130,47 @@ def renovar_sesion(
     if fila.expira_en <= momento:
         raise RefreshTokenInvalidoError("El refresh token venció.")
 
+    # ADR-028 D9.3-B (grupo 2 del change 06b): sin jornadas todavía (change
+    # 15), la excepción de D9.3-B no puede cumplirse -- se comporta igual
+    # que un corte total (D9.3-A). Verificación DESPUÉS de validar el token
+    # (reuso, revocación, vencimiento ya quedaron descartados arriba): si el
+    # usuario o su rol dejaron de estar activos, se revocan TODAS las
+    # familias de refresh del usuario (no solo la de este dispositivo,
+    # simétrico a `revocar_dispositivo`) y se audita antes de rechazar.
+    usuario_con_rol = repository.obtener_usuario_con_rol(
+        fila.organizacion_id, fila.usuario_id, sesion
+    )
+    motivo_sesion_deshabilitada = (
+        "USUARIO_INACTIVO"
+        if usuario_con_rol is None
+        else _motivo_sesion_deshabilitada(*usuario_con_rol)
+    )
+    if motivo_sesion_deshabilitada is not None:
+        repository.revocar_sesiones_refresh_de_usuario(
+            fila.organizacion_id,
+            sesion,
+            usuario_id=fila.usuario_id,
+            momento=momento,
+            motivo=motivo_sesion_deshabilitada,
+        )
+        registrar_auditoria(
+            fila.organizacion_id,
+            sesion,
+            reloj,
+            accion="REVOCAR_SESIONES_REFRESH_USUARIO",
+            entidad="usuario",
+            entidad_id=fila.usuario_id,
+            ocurrido_en=momento,
+            usuario_id=fila.usuario_id,
+            dispositivo_id=fila.dispositivo_id,
+            observacion=(
+                f"Sesión deshabilitada ({motivo_sesion_deshabilitada}): "
+                "se revocan sus familias de refresh (ADR-028)."
+            ),
+            origen="SISTEMA",
+        )
+        raise RefreshTokenInvalidoError("El refresh token no es válido.")
+
     fila.usado_en = momento
     sesion.flush()
 
@@ -1165,6 +1219,42 @@ def cerrar_sesion(sesion: Session, reloj: Clock, *, refresh_token_claro: str | N
     sesion.flush()
 
 
+# --- Sesión con usuario y rol activos (grupo 2, D9, ADR-028) ---------------
+
+
+def _motivo_sesion_deshabilitada(usuario: Usuario, rol: Rol) -> str | None:
+    """ADR-028 D9.1/D9.4-A: motivo por el que la sesión de `usuario` (con su
+    `rol`) no está habilitada, o `None` si ambos están activos. Un usuario
+    `INACTIVO` se distingue de un rol con `activo = false` solo para el
+    `motivo_revocacion` que audita `renovar_sesion` (texto libre, sin
+    catálogo) -- el código de error que ve el cliente es siempre el mismo
+    (D9.2-A, SEG-06: nunca revela la causa)."""
+    if usuario.estado != "ACTIVO":
+        return "USUARIO_INACTIVO"
+    if not rol.activo:
+        return "ROL_INACTIVO"
+    return None
+
+
+def exigir_sesion_habilitada(organizacion_id: UUID, usuario_id: UUID, sesion: Session) -> None:
+    """ADR-028 D9.1 ("Punto técnico de implementación" de `design.md` D9):
+    rechaza con `AccessTokenInvalidoError` (401 `IDENTIDAD_ACCESS_TOKEN_
+    INVALIDO`, D9.2-A) si `usuario_id` no existe en `organizacion_id`, está
+    `INACTIVO`, o su rol tiene `activo = false` (D9.4-A). Falla cerrada:
+    nunca distingue el motivo en la excepción (SEG-06). La usan
+    `requiere_permiso` (`core/autenticacion.py`, antes de leer los
+    permisos) y `obtener_yo` (grupo 3); `renovar_sesion` (más abajo) no la
+    llama directo porque necesita el motivo para auditar la revocación de
+    las familias de refresh, y su propio 401 es `RefreshTokenInvalidoError`
+    (D9.2-A), no este."""
+    usuario_con_rol = repository.obtener_usuario_con_rol(organizacion_id, usuario_id, sesion)
+    if usuario_con_rol is None:
+        raise AccessTokenInvalidoError("El usuario del token no existe.")
+    usuario, rol = usuario_con_rol
+    if _motivo_sesion_deshabilitada(usuario, rol) is not None:
+        raise AccessTokenInvalidoError("La sesión no está habilitada.")
+
+
 def listar_permisos_del_usuario(
     organizacion_id: UUID, usuario_id: UUID, sesion: Session
 ) -> frozenset[str]:
@@ -1173,11 +1263,86 @@ def listar_permisos_del_usuario(
     dependencia de permisos de `core/autenticacion.py` llama acá, nunca al
     repositorio directamente (`CLAUDE.md` §4: un módulo se usa solo a
     través de su `service.py`). Devuelve conjunto vacío si el usuario no
-    existe en esa organización (INV-21): nunca lanza."""
-    usuario = repository.obtener_usuario_por_id(organizacion_id, usuario_id, sesion)
-    if usuario is None:
+    existe en esa organización (INV-21), está `INACTIVO`, o su rol tiene
+    `activo = false` (ADR-028 D9.1: falla cerrada, defensa en profundidad
+    para cualquier consumidor futuro que no llame a
+    `exigir_sesion_habilitada`): nunca lanza."""
+    usuario_con_rol = repository.obtener_usuario_con_rol(organizacion_id, usuario_id, sesion)
+    if usuario_con_rol is None:
+        return frozenset()
+    usuario, rol = usuario_con_rol
+    if _motivo_sesion_deshabilitada(usuario, rol) is not None:
         return frozenset()
     return frozenset(repository.listar_permisos_de_rol(organizacion_id, usuario.rol_id, sesion))
+
+
+# --- `GET /api/v1/yo` (grupo 3, D1) ----------------------------------------
+
+
+@dataclass(frozen=True)
+class UsuarioYo:
+    id: UUID
+    nombre: str
+
+
+@dataclass(frozen=True)
+class OrganizacionYo:
+    id: UUID
+    nombre: str
+
+
+@dataclass(frozen=True)
+class RolYo:
+    id: UUID
+    nombre: str
+
+
+@dataclass(frozen=True)
+class DatosYo:
+    """Forma exacta del contrato de `GET /api/v1/yo` (`design.md`, "Contrato
+    de `GET /api/v1/yo`"): usuario, organización y rol (id y nombre), más
+    los permisos vigentes en orden alfabético ascendente."""
+
+    usuario: UsuarioYo
+    organizacion: OrganizacionYo
+    rol: RolYo
+    permisos: list[str]
+
+
+def obtener_yo(organizacion_id: UUID, usuario_id: UUID, sesion: Session) -> DatosYo:
+    """Datos de la propia sesión para `GET /api/v1/yo` (D1, ADR-027).
+
+    Exige la sesión habilitada (`exigir_sesion_habilitada`, ADR-028 D9)
+    antes de leer nada: un usuario `INACTIVO`, un rol inactivo, o un
+    usuario inexistente en `organizacion_id`, rechazan con
+    `AccessTokenInvalidoError` (401 `IDENTIDAD_ACCESS_TOKEN_INVALIDO`) y
+    nunca llegan a devolver datos parciales.
+
+    Los permisos salen **solo** de `listar_permisos_del_usuario` (nunca del
+    repositorio directo), para que lo que informa esta función coincida,
+    por construcción, con lo que autoriza el servidor (ADR-027)."""
+    exigir_sesion_habilitada(organizacion_id, usuario_id, sesion)
+
+    usuario = repository.obtener_usuario_por_id(organizacion_id, usuario_id, sesion)
+    if usuario is None:
+        raise AccessTokenInvalidoError("El usuario del token no existe.")
+
+    organizacion = repository.obtener_organizacion_por_id(organizacion_id, sesion)
+    if organizacion is None:
+        raise AccessTokenInvalidoError("La organización del token no existe.")
+
+    rol = repository.obtener_rol_por_id(organizacion_id, usuario.rol_id, sesion)
+    if rol is None:
+        raise AccessTokenInvalidoError("El rol del usuario del token no existe.")
+
+    permisos = sorted(listar_permisos_del_usuario(organizacion_id, usuario_id, sesion))
+
+    return DatosYo(
+        usuario=UsuarioYo(id=usuario.id, nombre=usuario.nombre),
+        organizacion=OrganizacionYo(id=organizacion.id, nombre=organizacion.nombre),
+        rol=RolYo(id=rol.id, nombre=rol.nombre),
+        permisos=permisos,
+    )
 
 
 def obtener_nombres_de_usuarios(

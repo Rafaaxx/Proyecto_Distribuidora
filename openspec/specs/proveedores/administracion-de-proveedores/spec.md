@@ -7,25 +7,43 @@ Define las pantallas de `/admin` para gestionar proveedores y cargar costos info
 ## Requirements
 
 ### Requirement: Las pantallas de proveedores y costos respetan los permisos
-La pantalla de proveedores DEBE mostrarse solo a usuarios con `GESTIONAR_PROVEEDORES`; la carga de costos solo con `EDITAR_COSTOS`; el historial y el costo vigente solo con `VER_COSTOS`. Sin el permiso, la pantalla DEBE mostrar que falta el permiso y NO DEBE mostrar datos. La restricción de la pantalla no reemplaza la del servidor.
+La pantalla de proveedores y su entrada en el menú DEBEN mostrarse solo a usuarios con `GESTIONAR_PROVEEDORES`. La carga de costos y el enlace "Cargar costos" de la ficha del proveedor, solo con `EDITAR_COSTOS`. El historial y el costo vigente, junto con el enlace "Ver historial de costos" de la ficha del producto, solo con `VER_COSTOS`. Cada pantalla, entrada y enlace DEBE decidir su visibilidad solo con los permisos efectivos de la consulta de sesión (ADR-027). NO DEBE pedir un dato al servidor solo para averiguar si tiene el permiso. Sin el permiso, la pantalla DEBE mostrar que falta y NO DEBE mostrar datos ni pedirlos al servidor **(B2)**. Si el servidor igual responde `PERMISO_REQUERIDO` (por ejemplo, porque el permiso se quitó entre dos renovaciones del token), la pantalla DEBE mostrar que falta el permiso, sin datos. La restricción de la pantalla no reemplaza la del servidor (SEG-06).
+
+> **(B2)** refleja la opción A de D4 de `design.md`, aprobada por el usuario el 2026-09-25.
 
 #### Scenario: Usuario con permisos
-- **GIVEN** un usuario con rol Administración (`GESTIONAR_PROVEEDORES`, `EDITAR_COSTOS`, `VER_COSTOS`)
+- **GIVEN** un usuario con rol Administración (`GESTIONAR_PROVEEDORES`, `EDITAR_COSTOS`, `VER_COSTOS` en su consulta de sesión)
 - **WHEN** entra a `/admin/proveedores`
-- **THEN** ve el listado de proveedores y puede abrir la ficha, cargar costos y ver el historial
-- **Regla:** `01` §19
+- **THEN** ve la entrada Proveedores en el menú y el listado de proveedores, y puede abrir la ficha, cargar costos y ver el historial
+- **Regla:** `01` §19; ADR-027
 
 #### Scenario: Usuario sin permiso
-- **GIVEN** un usuario con rol Vendedor
-- **WHEN** entra a `/admin/proveedores` o al historial de costos
-- **THEN** ve el mensaje de falta de permiso y ningún proveedor ni costo
-- **Regla:** `01` §19 (el vendedor no ve costos); TR-10
+- **GIVEN** un usuario con rol Vendedor/Repartidor
+- **WHEN** entra a `/admin/proveedores`, a la carga de costos de un proveedor o al historial de costos de un producto escribiendo la dirección
+- **THEN** el menú no muestra Proveedores y la pantalla muestra el mensaje de falta de permiso, sin ningún proveedor ni costo
+- **AND** no se hace ninguna petición de proveedores ni de costos al servidor **(B2)**
+- **Regla:** `01` §19 (el vendedor no ve costos); TR-10; ADR-027
 
 #### Scenario: Enlace al historial de costos desde la ficha del producto según el permiso
-- **GIVEN** la ficha de un producto existente, sin un mecanismo propio de permisos en el cliente (el token de acceso no los lleva): la verificación es reactiva, intentando la consulta real de costo vigente y distinguiendo el error de falta de permiso del resto
-- **WHEN** un usuario con `VER_COSTOS` la abre
-- **THEN** ve el enlace "Ver historial de costos" hacia el historial de ese producto; un usuario sin `VER_COSTOS` (403 del servidor), o la ficha en modo alta (sin producto todavía creado), no lo ve
-- **Regla:** `01` §19 (`VER_COSTOS`); el mecanismo reactivo es provisorio y ADR-027 lo reemplazará por permisos efectivos resueltos en la interfaz (change 06b)
+- **GIVEN** la ficha de un producto existente
+- **WHEN** la abre un usuario cuya consulta de sesión incluye `VER_COSTOS`
+- **THEN** ve el enlace "Ver historial de costos" hacia el historial de ese producto
+- **AND** un usuario sin `VER_COSTOS`, o la ficha en modo alta (sin producto creado todavía), no lo ve
+- **AND** en ningún caso se consulta el costo vigente para decidir si el enlace se muestra
+- **Regla:** `01` §19 (`VER_COSTOS`); ADR-027 (reemplaza el mecanismo reactivo provisorio del change 06)
+
+#### Scenario: Enlace "Cargar costos" desde la ficha del proveedor según el permiso
+- **GIVEN** la ficha de un proveedor activo
+- **WHEN** la abre un usuario con `GESTIONAR_PROVEEDORES` cuya consulta de sesión incluye `EDITAR_COSTOS`
+- **THEN** ve el enlace "Cargar costos"
+- **AND** un usuario con `GESTIONAR_PROVEEDORES` pero sin `EDITAR_COSTOS` no lo ve
+- **Regla:** `01` §19 (`EDITAR_COSTOS`); ADR-027
+
+#### Scenario: El servidor rechaza aunque la interfaz creía tener el permiso
+- **GIVEN** un usuario cuya consulta de sesión todavía incluye `VER_COSTOS`, al que se le quitó ese permiso del rol antes de la próxima renovación del token
+- **WHEN** abre el historial de costos de un producto y el servidor responde `PERMISO_REQUERIDO`
+- **THEN** la pantalla muestra que no tiene permiso para ver costos, sin ningún costo y sin un error genérico
+- **Regla:** SEG-06; ADR-017
 
 ### Requirement: Alta y edición de proveedores desde la pantalla
 El listado DEBE permitir buscar por nombre o CUIT, filtrar por actividad y paginar. La ficha DEBE permitir alta, modificación, desactivación y reactivación. Cada envío DEBE llevar un `Operation-Id` UUIDv7 nuevo que se conserva si el usuario reintenta tras un error de red. Los errores de dominio del servidor DEBEN mostrarse junto al campo que corresponde, conservando lo cargado.

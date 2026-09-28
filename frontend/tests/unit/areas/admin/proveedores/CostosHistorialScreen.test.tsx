@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -7,6 +7,7 @@ const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }))
 vi.mock('../../../../../src/lib/api/httpClient', () => ({ apiFetch: apiFetchMock }))
 
 import { CostosHistorialScreen } from '../../../../../src/areas/admin/proveedores/CostosHistorialScreen'
+import { queryClientConYo } from '../../../utils/permisosDePrueba'
 
 function respuesta(status: number, cuerpo: unknown) {
   return { ok: status >= 200 && status < 300, status, json: async () => cuerpo }
@@ -90,8 +91,12 @@ async function filasDeHistorial(): Promise<HTMLElement[]> {
   return (await within(seccion).findAllByRole('row')).slice(1)
 }
 
-function renderPantalla() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+const SIN_PERMISO_DE_COSTOS = 'No tenés permiso para ver costos.'
+
+/** Monta con `['yo']` ya sembrado (auxiliar compartido de la tarea 6.7): el
+ * permiso de la pantalla es `VER_COSTOS` (`01` §19), y el default es el rol
+ * Administración, que lo tiene. */
+function renderPantalla(queryClient = queryClientConYo('GES')) {
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[`/admin/proveedores/productos/${PRODUCTO_ID}/historial`]}>
@@ -177,9 +182,9 @@ describe('CostosHistorialScreen (tareas 11.5 y 14.5)', () => {
     const filaVigente = within(filas[1] as HTMLElement)
 
     // COSTO_VIGENTE: valor "18000.00", incluye_iva=false, bonificación 0.
-    // `formatearImporte` (`lib/money.ts`) es de dos decimales fijos, sin
-    // agrupar miles -- distinto de `formatearCosto`.
-    expect(filaVigente.getByText('18000.00')).toBeInTheDocument()
+    // `formatearImporte` (`lib/money.ts`) agrupa miles con "." y usa "," como
+    // separador decimal (es-AR), igual criterio que `formatearCosto`.
+    expect(filaVigente.getByText('18.000,00')).toBeInTheDocument()
     expect(filaVigente.getByText(/sin IVA/i)).toBeInTheDocument()
     expect(filaVigente.getByText('0 %')).toBeInTheDocument()
 
@@ -225,7 +230,7 @@ describe('CostosHistorialScreen (tareas 11.5 y 14.5)', () => {
     expect(dentro.getByText('Caja x12')).toBeInTheDocument()
     expect(dentro.getByText('Cervecería Central')).toBeInTheDocument()
     expect(dentro.getByText('2026-09-01')).toBeInTheDocument()
-    expect(dentro.getByText('18000.00')).toBeInTheDocument()
+    expect(dentro.getByText('18.000,00')).toBeInTheDocument()
     expect(dentro.getByText(/sin IVA/i)).toBeInTheDocument()
   })
 
@@ -252,7 +257,7 @@ describe('CostosHistorialScreen (tareas 11.5 y 14.5)', () => {
     )
     expect(filaBotella.getByText('Cervecería Central')).toBeInTheDocument()
     expect(filaBotella.getByText('2026-08-01')).toBeInTheDocument()
-    expect(filaBotella.getByText('1000.00')).toBeInTheDocument()
+    expect(filaBotella.getByText('1.000,00')).toBeInTheDocument()
     expect(filaBotella.getByText('1.000,000000')).toBeInTheDocument()
     expect(filaBotella.queryByText('Vigente')).not.toBeInTheDocument()
 
@@ -285,5 +290,35 @@ describe('CostosHistorialScreen (tareas 11.5 y 14.5)', () => {
 
     await screen.findByText('Costo vigente')
     expect(screen.queryByText('Último costo informado por presentación')).not.toBeInTheDocument()
+  })
+
+  /**
+   * Tarea 8.5 del change 06b, escenarios "Usuario sin permiso" y "El
+   * servidor rechaza aunque la interfaz creía tener el permiso" de la spec
+   * `administracion-de-proveedores`: el permiso de la pantalla es
+   * `VER_COSTOS` de la consulta de sesión `['yo']` (ADR-027, `design.md`
+   * D4-A / **B2**), y el 403 del servidor queda como red de seguridad.
+   *
+   * Línea base de la suite: 9 casos, todos verdes antes de la tarea 8.5.
+   */
+  it('sin VER_COSTOS en la consulta de sesión no pide el costo vigente ni el historial y muestra que falta el permiso (B2)', async () => {
+    renderPantalla(queryClientConYo('VEN'))
+
+    expect(await screen.findByText(SIN_PERMISO_DE_COSTOS)).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(apiFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('si el servidor rechaza aunque la interfaz creía tener el permiso, muestra la falta de permiso sin costos y sin error genérico (red de seguridad, SEG-06)', async () => {
+    apiFetchMock.mockResolvedValue(
+      respuesta(403, { title: 'Falta el permiso requerido.', codigo: 'PERMISO_REQUERIDO' }),
+    )
+
+    renderPantalla()
+
+    expect(await screen.findByText(SIN_PERMISO_DE_COSTOS)).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.queryByText(/no se pudo obtener el costo vigente/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/no se pudo obtener el historial de costos/i)).not.toBeInTheDocument()
   })
 })

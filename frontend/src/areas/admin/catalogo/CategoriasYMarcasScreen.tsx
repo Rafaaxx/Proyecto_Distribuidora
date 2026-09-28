@@ -14,6 +14,7 @@ import {
 } from '../../../domain/catalogo/categoriaMarcaSchema'
 import type { Categoria, Marca } from '../../../features/catalogo/api'
 import { ErrorDeCatalogo, PermisoRequeridoCatalogoError } from '../../../features/catalogo/errores'
+import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { useCategorias, useMarcas } from '../../../features/catalogo/useListados'
 import {
   useCrearCategoria,
@@ -22,20 +23,45 @@ import {
   useModificarMarca,
 } from '../../../features/catalogo/useMutacionesCatalogo'
 
+const SIN_PERMISO_DE_CATALOGO = 'No tenés permiso para gestionar el catálogo.'
+
+/** Estado sin permiso (y red de seguridad del 403): mismo texto en los dos
+ * casos, para que el mensaje no revele por qué el usuario no ve la
+ * pantalla. */
+function CatalogoSinPermiso() {
+  return (
+    <main className="flex flex-col gap-8">
+      <PageHeader titulo="Categorías y marcas" />
+      <p className="text-sm text-primary/70">{SIN_PERMISO_DE_CATALOGO}</p>
+    </main>
+  )
+}
+
 /**
  * Gestión de categorías y marcas de `/admin/catalogo` (tarea 10.6):
  * listar, crear, renombrar y desactivar/reactivar. `ProductoFormScreen`
  * (tarea 10.5) filtra estos mismos listados a solo `activo` para sus
  * selectores (CAT-05: "los inactivos no se ofrecen en nuevas
  * operaciones").
+ *
+ * Qué se muestra lo decide **solo** la consulta de sesión `['yo']`, con el
+ * mecanismo compartido `<SiTienePermiso>` (tarea 8.2 del change 06b,
+ * `design.md` D4-A / **B2**): sin `GESTIONAR_CATALOGO` las secciones no se
+ * montan, así que la pantalla no pide categorías ni marcas para averiguar si
+ * el usuario puede verlas. El 403 del servidor
+ * (`PermisoRequeridoCatalogoError`) se sigue tratando en cada sección, pero
+ * **solo como red de seguridad** -- ocurre si el permiso se quitó del rol
+ * entre dos renovaciones del access token (SEG-06).
  */
 export function CategoriasYMarcasScreen() {
   return (
-    <main className="flex flex-col gap-8">
-      <PageHeader titulo="Categorías y marcas" />
-      <SeccionCategorias />
-      <SeccionMarcas />
-    </main>
+    <SiTienePermiso permiso="GESTIONAR_CATALOGO" fallback={<CatalogoSinPermiso />}>
+      <main className="flex flex-col gap-8">
+        <PageHeader titulo="Categorías y marcas" />
+        <SeccionCategorias />
+        <SeccionMarcas />
+      </main>
+    </SiTienePermiso>
   )
 }
 
@@ -97,7 +123,7 @@ function SeccionCategorias() {
     return (
       <p role="alert">
         {categorias.error instanceof PermisoRequeridoCatalogoError
-          ? 'No tenés permiso para gestionar el catálogo.'
+          ? SIN_PERMISO_DE_CATALOGO
           : 'No se pudieron obtener las categorías.'}
       </p>
     )
@@ -197,7 +223,7 @@ function SeccionMarcas() {
     return (
       <p role="alert">
         {marcas.error instanceof PermisoRequeridoCatalogoError
-          ? 'No tenés permiso para gestionar el catálogo.'
+          ? SIN_PERMISO_DE_CATALOGO
           : 'No se pudieron obtener las marcas.'}
       </p>
     )

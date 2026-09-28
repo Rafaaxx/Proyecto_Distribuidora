@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "preview": "vite preview",
-    "generate:api-types": "cd ../backend && python -m scripts.export_openapi && cd ../frontend && openapi-typescript ../backend/openapi.json -o src/api/schema.gen.ts",
+    "generate:api-types": "node scripts/generar-tipos-api.mjs",
     "check:api-types": "npm run generate:api-types && git diff --exit-code -- src/api/schema.gen.ts ../backend/openapi.json"
   },
   "dependencies": {

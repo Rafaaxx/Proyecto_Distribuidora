@@ -676,6 +676,56 @@
         }
       }
     },
+    "/api/v1/yo": {
+      "get": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Obtener Yo",
+        "description": "Datos de la propia sesión (D1, ADR-027). Delega enteramente en\n`identidad_service.obtener_yo`: ninguna lógica de permisos o de sesión\nhabilitada se duplica acá. `AccessTokenInvalidoError` (usuario\ninexistente, `INACTIVO`, o con rol inactivo -- ADR-028 D9) se propaga\ntal cual; el manejador genérico de `DomainError` la traduce a 401\n`IDENTIDAD_ACCESS_TOKEN_INVALIDO` (D1).",
+        "operationId": "obtener_yo_api_v1_yo_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YoResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/catalogo/categorias": {
       "post": {
         "tags": [
@@ -3228,6 +3278,25 @@
         ],
         "title": "MarcaResponse"
       },
+      "OrganizacionYoResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre"
+        ],
+        "title": "OrganizacionYoResponse"
+      },
       "PaginaAlicuotas": {
         "properties": {
           "items": {
@@ -4192,6 +4261,25 @@
         ],
         "title": "RolResponse"
       },
+      "RolYoResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre"
+        ],
+        "title": "RolYoResponse"
+      },
       "RotarPinRequest": {
         "properties": {
           "pin": {
@@ -4289,6 +4377,25 @@
         "title": "UsuarioResponse",
         "description": "Tarea 10.8: sin `password_hash` ni las tres columnas del PIN de\nautorización -- Pydantic solo serializa los campos declarados acá, así\nque omitirlos de este modelo es la garantía, no un filtro posterior."
       },
+      "UsuarioYoResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre"
+        ],
+        "title": "UsuarioYoResponse"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -4352,6 +4459,35 @@
           "version"
         ],
         "title": "VersionRespuesta"
+      },
+      "YoResponse": {
+        "properties": {
+          "usuario": {
+            "$ref": "#/components/schemas/UsuarioYoResponse"
+          },
+          "organizacion": {
+            "$ref": "#/components/schemas/OrganizacionYoResponse"
+          },
+          "rol": {
+            "$ref": "#/components/schemas/RolYoResponse"
+          },
+          "permisos": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Permisos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "usuario",
+          "organizacion",
+          "rol",
+          "permisos"
+        ],
+        "title": "YoResponse",
+        "description": "Forma exacta del contrato aprobado el 2026-09-25 (tarea 4.1,\n`design.md` \"Contrato de `GET /api/v1/yo`\"): usuario, organización y rol\n(id y nombre), y la lista de permisos vigentes en orden alfabético\nascendente. Nunca `usuario.usuario` (nombre de login), email, estado,\nsecretos ni tope de descuento -- son campos que esta clase simplemente\nno declara, no campos excluidos al serializar (mismo criterio que\n`UsuarioResponse` más arriba)."
       }
     }
   }

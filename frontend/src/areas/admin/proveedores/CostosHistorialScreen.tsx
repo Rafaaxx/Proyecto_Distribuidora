@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { Badge } from '../../../components/ui/Badge'
 import { Card } from '../../../components/ui/Card'
 import { PageHeader } from '../../../components/ui/PageHeader'
+import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import type { CostoInformado } from '../../../features/proveedores/api'
 import { PermisoRequeridoProveedoresError } from '../../../features/proveedores/errores'
 import { useCostoVigente, useHistorialDeCostos } from '../../../features/proveedores/useListados'
@@ -16,13 +17,44 @@ import {
   redondearImporte,
 } from '../../../lib/money'
 
+const SIN_PERMISO_DE_COSTOS = 'No tenés permiso para ver costos.'
+
+/** Estado sin permiso (y red de seguridad del 403): mismo texto en los dos
+ * casos, para que el mensaje no revele por qué el usuario no ve la
+ * pantalla. */
+function CostosSinPermiso() {
+  return (
+    <main className="flex flex-col gap-4">
+      <PageHeader titulo="Historial de costos" />
+      <p className="text-sm text-primary/70">{SIN_PERMISO_DE_COSTOS}</p>
+    </main>
+  )
+}
+
 /**
  * Costo vigente a hoy e historial de costos informados de un producto,
  * de la vigencia más reciente a la más antigua; la vigencia futura se
  * marca como programada (tarea 11.5, spec `administracion-de-proveedores`,
  * escenario "Historial con vigente resaltado", CST-03, TR-04).
+ *
+ * Qué se muestra lo decide **solo** la consulta de sesión `['yo']`, con el
+ * mecanismo compartido `<SiTienePermiso>` (tarea 8.5 del change 06b,
+ * `design.md` D4-A / **B2**): sin `VER_COSTOS` los hijos no se montan, así
+ * que la pantalla no pide el costo vigente ni el historial para averiguar si
+ * el usuario puede verlos. El 403 del servidor se sigue tratando, pero
+ * **solo como red de seguridad** (SEG-06).
  */
 export function CostosHistorialScreen() {
+  return (
+    <SiTienePermiso permiso="VER_COSTOS" fallback={<CostosSinPermiso />}>
+      <HistorialDeCostos />
+    </SiTienePermiso>
+  )
+}
+
+/** Componente interno: es el único que consulta. Sin `VER_COSTOS` no se
+ * monta, así que no dispara ninguna petición (**B2**). */
+function HistorialDeCostos() {
   const { productoId } = useParams<{ productoId: string }>()
   const vigente = useCostoVigente(productoId)
   const historial = useHistorialDeCostos(productoId)
@@ -31,88 +63,86 @@ export function CostosHistorialScreen() {
     (vigente.isError && vigente.error instanceof PermisoRequeridoProveedoresError) ||
     (historial.isError && historial.error instanceof PermisoRequeridoProveedoresError)
 
+  if (esErrorDePermiso) {
+    return <CostosSinPermiso />
+  }
+
   return (
     <main className="flex flex-col gap-4">
       <PageHeader titulo="Historial de costos" />
 
-      {esErrorDePermiso && <p className="text-sm text-primary/70">No tenés permiso para ver costos.</p>}
-
-      {!esErrorDePermiso && (
-        <>
-          <section className="flex flex-col gap-2">
-            <h2 className="text-base font-semibold text-primary">Costo vigente</h2>
-            {vigente.isPending && <p className="text-sm text-primary/70">Cargando…</p>}
-            {vigente.isError && <p role="alert">No se pudo obtener el costo vigente.</p>}
-            {vigente.isSuccess && (
-              <>
-                {vigente.data.costo ? (
-                  <div className="flex flex-col gap-1 text-sm text-primary">
-                    <p className="text-lg font-semibold">
-                      {formatearCosto(parsearImporteDesdeApi(vigente.data.costo.costo_base))}
-                    </p>
-                    <p>
-                      <span>{vigente.data.costo.presentacion_nombre}</span> de{' '}
-                      <span>{vigente.data.costo.proveedor_nombre}</span>, vigente desde{' '}
-                      <span>{vigente.data.costo.vigencia_desde}</span>
-                    </p>
-                    <p>
-                      Informado: <span>{formatearImporte(redondearImporte(vigente.data.costo.valor))}</span>{' '}
-                      <span>{vigente.data.costo.incluye_iva ? '(con IVA)' : '(sin IVA)'}</span>
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-sm text-primary">Sin costo vigente</p>
-                )}
-              </>
+      <section className="flex flex-col gap-2">
+        <h2 className="text-base font-semibold text-primary">Costo vigente</h2>
+        {vigente.isPending && <p className="text-sm text-primary/70">Cargando…</p>}
+        {vigente.isError && <p role="alert">No se pudo obtener el costo vigente.</p>}
+        {vigente.isSuccess && (
+          <>
+            {vigente.data.costo ? (
+              <div className="flex flex-col gap-1 text-sm text-primary">
+                <p className="text-lg font-semibold">
+                  {formatearCosto(parsearImporteDesdeApi(vigente.data.costo.costo_base))}
+                </p>
+                <p>
+                  <span>{vigente.data.costo.presentacion_nombre}</span> de{' '}
+                  <span>{vigente.data.costo.proveedor_nombre}</span>, vigente desde{' '}
+                  <span>{vigente.data.costo.vigencia_desde}</span>
+                </p>
+                <p>
+                  Informado: <span>{formatearImporte(redondearImporte(vigente.data.costo.valor))}</span>{' '}
+                  <span>{vigente.data.costo.incluye_iva ? '(con IVA)' : '(sin IVA)'}</span>
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-primary">Sin costo vigente</p>
             )}
-          </section>
+          </>
+        )}
+      </section>
 
-          {vigente.isSuccess && vigente.data.por_presentacion.length > 0 && (
-            <SeccionUltimoCostoPorPresentacion
-              costos={vigente.data.por_presentacion}
-              idCostoVigente={vigente.data.costo?.id}
-            />
-          )}
-
-          <section className="flex flex-col gap-2">
-            <h2 className="text-base font-semibold text-primary">Historial</h2>
-            {historial.isPending && <p className="text-sm text-primary/70">Cargando…</p>}
-            {historial.isError && <p role="alert">No se pudo obtener el historial de costos.</p>}
-            {historial.isSuccess && (
-              <Card className="overflow-x-auto p-0">
-                <table className="w-full border-collapse text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="px-3 py-2 font-medium text-primary">Vigencia desde</th>
-                      <th className="px-3 py-2 font-medium text-primary">Proveedor</th>
-                      <th className="px-3 py-2 font-medium text-primary">Presentación</th>
-                      <th className="px-3 py-2 font-medium text-primary">Informado</th>
-                      <th className="px-3 py-2 font-medium text-primary">Bonificación</th>
-                      <th className="px-3 py-2 font-medium text-primary">Costo base</th>
-                      <th className="px-3 py-2 font-medium text-primary">Alícuota aplicada</th>
-                      <th className="px-3 py-2 font-medium text-primary">Registrado por</th>
-                      <th className="px-3 py-2 font-medium text-primary">Registrado el</th>
-                      <th className="px-3 py-2"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {historial.data.pages
-                      .flatMap((pagina) => pagina.items)
-                      .map((costo: CostoInformado) => (
-                        <FilaHistorial
-                          key={costo.id}
-                          costo={costo}
-                          hoy={vigente.data?.fecha ?? fechaDeHoy()}
-                          esVigente={costo.id === vigente.data?.costo?.id}
-                        />
-                      ))}
-                  </tbody>
-                </table>
-              </Card>
-            )}
-          </section>
-        </>
+      {vigente.isSuccess && vigente.data.por_presentacion.length > 0 && (
+        <SeccionUltimoCostoPorPresentacion
+          costos={vigente.data.por_presentacion}
+          idCostoVigente={vigente.data.costo?.id}
+        />
       )}
+
+      <section className="flex flex-col gap-2">
+        <h2 className="text-base font-semibold text-primary">Historial</h2>
+        {historial.isPending && <p className="text-sm text-primary/70">Cargando…</p>}
+        {historial.isError && <p role="alert">No se pudo obtener el historial de costos.</p>}
+        {historial.isSuccess && (
+          <Card className="overflow-x-auto p-0">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="px-3 py-2 font-medium text-primary">Vigencia desde</th>
+                  <th className="px-3 py-2 font-medium text-primary">Proveedor</th>
+                  <th className="px-3 py-2 font-medium text-primary">Presentación</th>
+                  <th className="px-3 py-2 font-medium text-primary">Informado</th>
+                  <th className="px-3 py-2 font-medium text-primary">Bonificación</th>
+                  <th className="px-3 py-2 font-medium text-primary">Costo base</th>
+                  <th className="px-3 py-2 font-medium text-primary">Alícuota aplicada</th>
+                  <th className="px-3 py-2 font-medium text-primary">Registrado por</th>
+                  <th className="px-3 py-2 font-medium text-primary">Registrado el</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {historial.data.pages
+                  .flatMap((pagina) => pagina.items)
+                  .map((costo: CostoInformado) => (
+                    <FilaHistorial
+                      key={costo.id}
+                      costo={costo}
+                      hoy={vigente.data?.fecha ?? fechaDeHoy()}
+                      esVigente={costo.id === vigente.data?.costo?.id}
+                    />
+                  ))}
+              </tbody>
+            </table>
+          </Card>
+        )}
+      </section>
     </main>
   )
 }

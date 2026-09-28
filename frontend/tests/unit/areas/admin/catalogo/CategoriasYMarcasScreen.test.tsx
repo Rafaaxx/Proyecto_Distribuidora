@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -7,6 +7,8 @@ const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }))
 vi.mock('../../../../../src/lib/api/httpClient', () => ({ apiFetch: apiFetchMock }))
 
 import { CategoriasYMarcasScreen } from '../../../../../src/areas/admin/catalogo/CategoriasYMarcasScreen'
+import type { RolDePrueba } from '../../../utils/permisosDePrueba'
+import { queryClientConYo } from '../../../utils/permisosDePrueba'
 
 function respuesta(status: number, cuerpo: unknown) {
   return { ok: status >= 200 && status < 300, status, json: async () => cuerpo }
@@ -28,16 +30,28 @@ const MARCA_ACTIVA = {
   actualizado_en: '2026-01-01T00:00:00Z',
 }
 
-function renderPantalla() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+const SIN_PERMISO_DE_CATALOGO = 'No tenés permiso para gestionar el catálogo.'
+
+/** Monta la pantalla con `['yo']` ya sembrado (auxiliar compartido de la
+ * tarea 6.7): el permiso sale de la consulta de sesión, no de un `apiFetch`
+ * interceptado. Roles de `01-dominio.md` §19 (GES tiene
+ * `GESTIONAR_CATALOGO`, SUP no). */
+function renderPantalla(rol: RolDePrueba = 'GES') {
   return render(
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={queryClientConYo(rol)}>
       <CategoriasYMarcasScreen />
     </QueryClientProvider>,
   )
 }
 
-describe('CategoriasYMarcasScreen (tarea 10.6)', () => {
+/** Tarea 10.6: listar, crear, renombrar y desactivar/reactivar. Tarea 8.2
+ * del change 06b: la visibilidad sale de `['yo']` y el 403 del servidor
+ * queda como red de seguridad (escenarios "Usuario sin permiso" y "El
+ * servidor rechaza aunque la interfaz creía tener el permiso" de la spec
+ * `catalogo/administracion-de-catalogo`).
+ *
+ * Línea base de la suite: 5 casos, todos verdes antes de la tarea 8.2. */
+describe('CategoriasYMarcasScreen (tareas 10.6 y 8.2, B2)', () => {
   beforeEach(() => {
     apiFetchMock.mockReset()
   })
@@ -173,5 +187,37 @@ describe('CategoriasYMarcasScreen (tarea 10.6)', () => {
     await usuarioEvento.click(within(fila).getByRole('button', { name: /desactivar/i }))
 
     expect(await screen.findByText('No se puede desactivar: tiene productos activos.')).toBeInTheDocument()
+  })
+
+  it('sin el permiso en la consulta de sesión no pide datos de catálogo y no muestra acciones de escritura (B2, escenario "Usuario sin permiso")', async () => {
+    renderPantalla('SUP')
+
+    expect(await screen.findByText(SIN_PERMISO_DE_CATALOGO)).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /nueva categoría/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /nueva marca/i })).not.toBeInTheDocument()
+    expect(apiFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('si el servidor rechaza aunque la interfaz creía tener el permiso, muestra la falta de permiso sin tablas ni error genérico (red de seguridad, SEG-06)', async () => {
+    apiFetchMock.mockImplementation((ruta: string) => {
+      if (ruta.startsWith('/catalogo/')) {
+        return Promise.resolve(
+          respuesta(403, { title: 'Falta el permiso requerido.', codigo: 'PERMISO_REQUERIDO' }),
+        )
+      }
+      throw new Error(`ruta inesperada: ${ruta}`)
+    })
+
+    renderPantalla('GES')
+
+    // Las dos secciones consultan por separado y las dos reciben el 403, así
+    // que la falta de permiso se informa una vez por listado rechazado.
+    const aviso = await screen.findByText(SIN_PERMISO_DE_CATALOGO)
+    expect(aviso).toHaveAttribute('role', 'alert')
+    await waitFor(() => expect(screen.getAllByText(SIN_PERMISO_DE_CATALOGO)).toHaveLength(2))
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.queryByText(/no se pudieron obtener las categorías/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/no se pudieron obtener las marcas/i)).not.toBeInTheDocument()
   })
 })

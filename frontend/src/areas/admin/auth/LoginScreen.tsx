@@ -24,7 +24,12 @@ export function LoginScreen() {
 
   const alEnviar = handleSubmit((datos) => {
     login.mutate(datos, {
-      onSuccess: () => navigate('/admin/dispositivos'),
+      // `design.md` D5-A (B3), tarea 7.6: a la ruta índice del layout, que
+      // lleva al usuario a la primera sección que su rol le permite. Antes
+      // iba a `/admin/dispositivos`, que solo Administración y Supervisor
+      // pueden usar (`01` §19), así que los demás veían "No tenés permiso"
+      // apenas entraban.
+      onSuccess: () => navigate('/admin/inicio'),
     })
   })
 

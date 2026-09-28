@@ -104,6 +104,13 @@ def requiere_permiso(codigo_permiso: str) -> Callable[..., ContextoAutenticado]:
         contexto: Annotated[ContextoAutenticado, Depends(obtener_contexto_autenticado)],
         sesion: Annotated[Session, Depends(get_session)],
     ) -> ContextoAutenticado:
+        # ADR-028 D9.1 (grupo 2 del change 06b): un usuario `INACTIVO` o con
+        # rol `activo = false` se rechaza ANTES de mirar el permiso, con el
+        # mismo 401 genérico que un access token inválido (D9.2-A) -- nunca
+        # revela la causa (SEG-06).
+        identidad_service.exigir_sesion_habilitada(
+            contexto.organizacion_id, contexto.usuario_id, sesion
+        )
         permisos_del_usuario = identidad_service.listar_permisos_del_usuario(
             contexto.organizacion_id, contexto.usuario_id, sesion
         )

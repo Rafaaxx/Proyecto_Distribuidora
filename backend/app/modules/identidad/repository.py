@@ -316,6 +316,33 @@ def obtener_usuario_por_id(
     return fila
 
 
+def obtener_usuario_con_rol(
+    organizacion_id: UUID, usuario_id: UUID, sesion: Session
+) -> tuple[Usuario, Rol] | None:
+    """Trae `usuario` y su `rol` en una sola consulta (ADR-028, D9,
+    `identidad/service.py::exigir_sesion_habilitada`): evita el viaje extra
+    a la base que costaría pedir cada uno por separado (`design.md` D9,
+    Consequences: "no suma un viaje extra"). Devuelve `None` si el usuario
+    no existe en `organizacion_id` (INV-21). Filtra también `Rol.
+    organizacion_id` como defensa en profundidad, aunque `usuario.rol_id`
+    ya es una FK compuesta que garantiza que el rol es de la misma
+    organización (`03` §4)."""
+    consulta = (
+        select(Usuario, Rol)
+        .join(Rol, Rol.id == Usuario.rol_id)
+        .where(
+            Usuario.organizacion_id == organizacion_id,
+            Usuario.id == usuario_id,
+            Rol.organizacion_id == organizacion_id,
+        )
+    )
+    fila = sesion.execute(consulta).one_or_none()
+    if fila is None:
+        return None
+    usuario, rol = fila
+    return usuario, rol
+
+
 def listar_usuarios_por_ids(
     organizacion_id: UUID, usuario_ids: frozenset[UUID], sesion: Session
 ) -> list[Usuario]:
@@ -484,6 +511,33 @@ def revocar_familia_refresh(
         .where(
             SesionRefresh.organizacion_id == organizacion_id,
             SesionRefresh.familia_id == familia_id,
+            SesionRefresh.revocado_en.is_(None),
+        )
+        .values(revocado_en=momento, motivo_revocacion=motivo)
+    )
+    resultado = sesion.execute(consulta)
+    sesion.flush()
+    return int(resultado.rowcount or 0)  # type: ignore[attr-defined]
+
+
+def revocar_sesiones_refresh_de_usuario(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    usuario_id: UUID,
+    momento: datetime,
+    motivo: str,
+) -> int:
+    """Marca como revocadas todas las sesiones de refresh no revocadas de
+    `usuario_id`, en TODOS sus dispositivos (ADR-028, D9.3-B: `renovar_sesion`
+    la llama cuando el usuario o su rol dejaron de estar activos -- simétrica
+    a `revocar_sesiones_refresh_de_dispositivo`, tarea 8.10, pero por
+    usuario en vez de por dispositivo). Devuelve cuántas filas tocó."""
+    consulta = (
+        update(SesionRefresh)
+        .where(
+            SesionRefresh.organizacion_id == organizacion_id,
+            SesionRefresh.usuario_id == usuario_id,
             SesionRefresh.revocado_en.is_(None),
         )
         .values(revocado_en=momento, motivo_revocacion=motivo)

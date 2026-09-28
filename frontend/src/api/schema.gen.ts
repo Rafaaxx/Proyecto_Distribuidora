@@ -255,6 +255,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/yo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Yo
+         * @description Datos de la propia sesión (D1, ADR-027). Delega enteramente en
+         *     `identidad_service.obtener_yo`: ninguna lógica de permisos o de sesión
+         *     habilitada se duplica acá. `AccessTokenInvalidoError` (usuario
+         *     inexistente, `INACTIVO`, o con rol inactivo -- ADR-028 D9) se propaga
+         *     tal cual; el manejador genérico de `DomainError` la traduce a 401
+         *     `IDENTIDAD_ACCESS_TOKEN_INVALIDO` (D1).
+         */
+        get: operations["obtener_yo_api_v1_yo_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/catalogo/categorias": {
         parameters: {
             query?: never;
@@ -938,6 +963,16 @@ export interface components {
              */
             actualizado_en: string;
         };
+        /** OrganizacionYoResponse */
+        OrganizacionYoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+        };
         /** PaginaAlicuotas */
         PaginaAlicuotas: {
             /** Items */
@@ -1343,6 +1378,16 @@ export interface components {
             /** Permisos */
             permisos: string[];
         };
+        /** RolYoResponse */
+        RolYoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+        };
         /** RotarPinRequest */
         RotarPinRequest: {
             /** Pin */
@@ -1393,6 +1438,16 @@ export interface components {
             /** Estado */
             estado: string;
         };
+        /** UsuarioYoResponse */
+        UsuarioYoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1412,6 +1467,23 @@ export interface components {
             version: string;
             /** App Version Minima */
             app_version_minima?: string | null;
+        };
+        /**
+         * YoResponse
+         * @description Forma exacta del contrato aprobado el 2026-09-25 (tarea 4.1,
+         *     `design.md` "Contrato de `GET /api/v1/yo`"): usuario, organización y rol
+         *     (id y nombre), y la lista de permisos vigentes en orden alfabético
+         *     ascendente. Nunca `usuario.usuario` (nombre de login), email, estado,
+         *     secretos ni tope de descuento -- son campos que esta clase simplemente
+         *     no declara, no campos excluidos al serializar (mismo criterio que
+         *     `UsuarioResponse` más arriba).
+         */
+        YoResponse: {
+            usuario: components["schemas"]["UsuarioYoResponse"];
+            organizacion: components["schemas"]["OrganizacionYoResponse"];
+            rol: components["schemas"]["RolYoResponse"];
+            /** Permisos */
+            permisos: string[];
         };
     };
     responses: never;
@@ -1783,6 +1855,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_yo_api_v1_yo_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["YoResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

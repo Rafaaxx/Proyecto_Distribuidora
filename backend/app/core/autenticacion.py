@@ -21,9 +21,15 @@ from sqlalchemy.orm import Session
 
 from app.api_v1.dependencias import _get_settings, get_session
 from app.core.config import Settings
-from app.core.errors import DomainError
+from app.core.errors import DomainError, PermisoRequeridoError
 from app.core.seguridad import verificar_access_token
 from app.modules.identidad import service as identidad_service
+
+# `PermisoRequeridoError` se importa de `core/errors.py` y no se define acá, pero
+# sigue siendo parte de la superficie de este módulo: los handlers del bus de
+# comandos y cualquier consumidor que no pase por una ruta lo toman de
+# `core.errors` directamente, que es donde puede importarse sin arrastrar
+# FastAPI.
 
 
 class AccessTokenAusenteError(DomainError):
@@ -31,14 +37,6 @@ class AccessTokenAusenteError(DomainError):
 
     codigo = "IDENTIDAD_ACCESS_TOKEN_AUSENTE"
     status_http = 401
-
-
-class PermisoRequeridoError(DomainError):
-    """Tarea 10.2 (`docs/02-arquitectura.md` §11): código estable listado
-    explícitamente en la documentación de la API."""
-
-    codigo = "PERMISO_REQUERIDO"
-    status_http = 403
 
 
 class OperationIdAusenteError(DomainError):

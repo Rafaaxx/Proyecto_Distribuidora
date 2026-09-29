@@ -153,6 +153,25 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         # (ningún id, nombre ni permiso de A), tanto si informa los
         # identificadores de A en la consulta y en encabezados como si no.
         ("get", "/api/v1/yo"),
+        # Change 07, grupo 4 (`clientes/api.py`, tareas 4.2 y 4.3/4.4,
+        # `design.md` D9 enmienda 2026-09-29): las tres rutas de lectura y
+        # las cuatro rutas de escritura DEDICADAS (una por comando `ONLINE`,
+        # mismo patrón que `proveedores/api.py`, en vez del despacho
+        # genérico de `POST /sync/comandos`, ya cubierta arriba) -- con su
+        # prueba real de aislamiento en
+        # `test_inv21_aislamiento_endpoints_clientes.py::
+        # TestAislamientoDeLasRutasDeClientes` (login real de dos
+        # organizaciones, recurso ajeno -> 404, la referencia ajena EN EL
+        # CONTENIDO de `CLIENTE_CREDITO_MODIFICAR`, y el caso propio de
+        # `/consumidor-final`: el identificador ajeno sale de la
+        # configuración de la otra organización, nunca de la petición).
+        ("get", "/api/v1/clientes"),
+        ("post", "/api/v1/clientes"),
+        ("get", "/api/v1/clientes/consumidor-final"),
+        ("post", "/api/v1/clientes/consumidor-final"),
+        ("get", "/api/v1/clientes/{cliente_id}"),
+        ("put", "/api/v1/clientes/{cliente_id}"),
+        ("put", "/api/v1/clientes/{cliente_id}/credito"),
     }
 )
 

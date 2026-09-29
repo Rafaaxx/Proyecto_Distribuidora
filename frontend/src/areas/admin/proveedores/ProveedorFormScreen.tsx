@@ -78,8 +78,11 @@ function ProveedorAlta() {
 
   const alEnviar = handleSubmit(async (datos) => {
     try {
-      const proveedor = await crear.mutateAsync(datos)
-      navigate(`/admin/proveedores/${proveedor.id}`)
+      // Grupo 8, tarea 8.2 (decisión del usuario 2026-09-29): vuelve al
+      // listado, mismo criterio que clientes -- el listado ya muestra el
+      // proveedor nuevo (la mutación invalida el listado).
+      await crear.mutateAsync(datos)
+      navigate('/admin/proveedores')
     } catch (error) {
       const { campo, mensaje } = mensajeDeError(error)
       setError(campo ?? 'root', { message: mensaje })
@@ -190,9 +193,14 @@ function ProveedorEdicionFormulario({
     },
   })
 
+  const navigate = useNavigate()
+
   const alEnviar = handleSubmit(async (datos) => {
     try {
       await modificar.mutateAsync({ proveedorId, ...datos })
+      // Grupo 8, tarea 8.2 (decisión del usuario 2026-09-29): vuelve al
+      // listado tras guardar la edición, mismo criterio que clientes.
+      navigate('/admin/proveedores')
     } catch (error) {
       const { campo, mensaje } = mensajeDeError(error)
       setError(campo ?? 'root', { message: mensaje })

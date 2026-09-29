@@ -15,6 +15,19 @@ from app.core.errors import DomainError
 from app.core.logging import configurar_logging
 from app.core.request_id_middleware import RequestIdMiddleware
 
+# Registro de comandos. Desde la enmienda de D9 (2026-09-29) `clientes/api.py`
+# también importa `clientes.commands` (mismo criterio que `catalogo`/
+# `proveedores`, cada una con su ruta de escritura dedicada); este import
+# queda igual de explícito para que `Base.metadata`/el registro de tipos no
+# dependan de que exista un `api.py` (mismo criterio que las líneas de abajo).
+from app.modules.clientes import commands as clientes_commands  # noqa: F401
+
+# Registro de modelos. Lo importa `clientes/api.py` al armar el router de
+# `app.api_v1`, pero se deja explícito para que `Base.metadata` conozca la
+# tabla sin depender de que exista un `api.py` (mismo criterio que
+# `catalogo/api.py` y `proveedores/api.py` con los suyos).
+from app.modules.clientes import models as clientes_models  # noqa: F401
+
 
 def _domain_error_a_problem_details(request: Request, exc: Exception) -> JSONResponse:
     """Traduce cualquier `DomainError` a Problem Details (RFC 9457, `02`

@@ -441,6 +441,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/clientes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Clientes
+         * @description Listado paginado por cursor con filtro por texto y por estado (spec
+         *     `administracion-de-clientes`, escenarios "Buscar un cliente por texto" y
+         *     "Filtrar por estado suspendido"). El `estado` se valida contra el
+         *     catálogo cerrado en `domain/estado.py` y lo repite el `CHECK` de la base.
+         */
+        get: operations["listar_clientes_api_v1_clientes_get"];
+        put?: never;
+        /** Crear Cliente */
+        post: operations["crear_cliente_api_v1_clientes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/clientes/{cliente_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Cliente
+         * @description La ficha de un cliente, con sus tres campos de crédito en solo lectura
+         *     para quien no tiene `GESTIONAR_CREDITO` (D3).
+         *
+         *     404 para un cliente de otra organización (INV-21, SEG-07): la respuesta
+         *     no distingue "ajeno" de "no existe", para que el 404 no confirme la
+         *     existencia del recurso de otra organización.
+         */
+        get: operations["obtener_cliente_api_v1_clientes__cliente_id__get"];
+        /** Modificar Cliente */
+        put: operations["modificar_cliente_api_v1_clientes__cliente_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/clientes/{cliente_id}/credito": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Modificar Credito Cliente */
+        put: operations["modificar_credito_cliente_api_v1_clientes__cliente_id__credito_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/clientes/consumidor-final": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Consumidor Final
+         * @description El consumidor final de la organización que consulta (spec
+         *     `consumidor-final`).
+         *
+         *     200 con `habilitado: false` cuando la organización no lo habilitó, y
+         *     200 con el cliente cuando sí: la ausencia del consumidor final es un
+         *     estado normal de la organización, no un recurso inexistente, así que no
+         *     es 404.
+         *
+         *     El aislamiento (INV-21) es por construcción: se resuelve por
+         *     `clientes_consumidor_final_id` de la configuración de A, que es de A, y
+         *     el cliente sale del mismo filtro por `organizacion_id`. El de B no se
+         *     puede pedir por esta ruta, porque el identificador sale de la
+         *     configuración de A, no de un parámetro de la petición.
+         */
+        get: operations["obtener_consumidor_final_api_v1_clientes_consumidor_final_get"];
+        put?: never;
+        /** Configurar Consumidor Final */
+        post: operations["configurar_consumidor_final_api_v1_clientes_consumidor_final_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/configuracion/alicuotas": {
         parameters: {
             query?: never;
@@ -653,10 +753,187 @@ export interface components {
              */
             actualizado_en: string;
         };
+        /**
+         * ClienteCrearRequest
+         * @description Cuerpo de `POST /clientes` (D9). Sin `estado` (nace `ACTIVO`, D7) y sin
+         *     `es_consumidor_final` (solo lo pone `CLIENTE_CONSUMIDOR_FINAL_CONFIGURAR`,
+         *     CLI-03) ni `lista_precio_id` (D2: sin FK hasta el change 13).
+         */
+        ClienteCrearRequest: {
+            /** Nombre */
+            nombre: string;
+            /** Direccion */
+            direccion: string;
+            /** Contacto */
+            contacto: string;
+            /** Razon Social */
+            razon_social?: string | null;
+            /** Documento Tipo */
+            documento_tipo?: string | null;
+            /** Documento Numero */
+            documento_numero?: string | null;
+            /** Telefono */
+            telefono?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Codigo */
+            codigo?: string | null;
+            /** Estado Facturacion Default */
+            estado_facturacion_default?: string | null;
+        };
+        /**
+         * ClienteCreditoModificarRequest
+         * @description Cuerpo de `PUT /clientes/{cliente_id}/credito` (D3, D9). Los tres
+         *     campos son opcionales porque `None` significa HEREDAR de la organización
+         *     (CRE-03, CRE-06, D8), no "dejar como está" -- misma semántica que
+         *     `ClienteCreditoModificarContenidoV1` en `commands.py`. Los importes viajan
+         *     como **string** estricto (mismo patrón que `CostoDelLoteRequest` en
+         *     `proveedores/schemas.py`): la huella canónica del comando (`commands/
+         *     huella.py`) no admite `Decimal`, así que el tipo se convierte recién en
+         *     `ClienteCreditoModificarContenidoV1` al validar el contenido, nunca acá
+         *     (`CLAUDE.md` §4, INV-03).
+         */
+        ClienteCreditoModificarRequest: {
+            /** Limite Credito */
+            limite_credito?: string | null;
+            /** Politica Credito */
+            politica_credito?: string | null;
+            /** Tolerancia Offline Tipo */
+            tolerancia_offline_tipo?: string | null;
+            /** Tolerancia Offline Valor */
+            tolerancia_offline_valor?: string | null;
+        };
+        /**
+         * ClienteModificarRequest
+         * @description Cuerpo de `PUT /clientes/{cliente_id}` (D9). `PUT` reemplaza el estado
+         *     completo de la ficha, igual que `ProveedorModificarRequest`: un opcional
+         *     ausente o `null` se guarda como `null`. `estado` es obligatorio porque
+         *     modificar la ficha y cambiar el estado son la misma escritura (D7). Sin
+         *     campos de crédito (D3) ni de consumidor final (CLI-03).
+         */
+        ClienteModificarRequest: {
+            /** Nombre */
+            nombre: string;
+            /** Direccion */
+            direccion: string;
+            /** Contacto */
+            contacto: string;
+            /** Estado */
+            estado: string;
+            /** Razon Social */
+            razon_social?: string | null;
+            /** Documento Tipo */
+            documento_tipo?: string | null;
+            /** Documento Numero */
+            documento_numero?: string | null;
+            /** Telefono */
+            telefono?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Codigo */
+            codigo?: string | null;
+            /** Estado Facturacion Default */
+            estado_facturacion_default?: string | null;
+        };
+        /**
+         * ClienteResponse
+         * @description La fila de `cliente` tal como la expone la API.
+         *
+         *     No expone `disponible`, `exceso` ni `política aplicada`: los calcula el
+         *     módulo que confirma la venta resolviendo la herencia de la organización
+         *     en el momento de evaluar (CRE-03, CRE-06, D8). Este change guarda el
+         *     crédito como datos y no como resultado.
+         *
+         *     Tampoco expone `actualizado_por_id`: no hay ninguna pantalla que lo
+         *     consulte hoy, y agregarlo "porque el modelo lo tiene" sería superficie
+         *     sin consumidor (D9, mismo criterio que `ProveedorResponse`).
+         */
+        ClienteResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Codigo */
+            codigo: string | null;
+            /** Nombre */
+            nombre: string;
+            /** Razon Social */
+            razon_social: string | null;
+            /** Documento Tipo */
+            documento_tipo: string | null;
+            /** Documento Numero */
+            documento_numero: string | null;
+            /** Direccion */
+            direccion: string;
+            /** Contacto */
+            contacto: string;
+            /** Telefono */
+            telefono: string | null;
+            /** Email */
+            email: string | null;
+            /** Lista Precio Id */
+            lista_precio_id: string | null;
+            /** Limite Credito */
+            limite_credito: string | null;
+            /** Politica Credito */
+            politica_credito: string | null;
+            /** Tolerancia Offline Tipo */
+            tolerancia_offline_tipo: string | null;
+            /** Tolerancia Offline Valor */
+            tolerancia_offline_valor: string | null;
+            /** Estado Facturacion Default */
+            estado_facturacion_default: string | null;
+            /** Es Consumidor Final */
+            es_consumidor_final: boolean;
+            /** Estado */
+            estado: string;
+            /**
+             * Creado En
+             * Format: date-time
+             */
+            creado_en: string;
+            /**
+             * Actualizado En
+             * Format: date-time
+             */
+            actualizado_en: string;
+        };
         /** ComposicionRolRequest */
         ComposicionRolRequest: {
             /** Permisos */
             permisos: string[];
+        };
+        /**
+         * ConsumidorFinalConfigurarRequest
+         * @description Cuerpo de `POST /clientes/consumidor-final` (D4, ADR-029). Solo el
+         *     nombre: la dirección y el contacto son genéricos y el cliente lo crea
+         *     este mismo comando (nunca un `cliente_id` existente, CLI-03).
+         */
+        ConsumidorFinalConfigurarRequest: {
+            /**
+             * Nombre
+             * @default Consumidor final
+             */
+            nombre: string;
+        };
+        /**
+         * ConsumidorFinalResponse
+         * @description `GET /clientes/consumidor-final` (spec `consumidor-final`,
+         *     escenarios "Organización sin consumidor final" y "Organización con
+         *     consumidor final").
+         *
+         *     **No es 404 cuando la organización no lo habilitó**: 200 con
+         *     `habilitado: false` y `cliente: null`. El 404 queda para el cliente de
+         *     otra organización o inexistente por id en `GET /clientes/{cliente_id}`
+         *     (INV-21), no para un estado legítimo de esta organización. Por eso este
+         *     esquema NO declara `from_attributes`: se arma explícito en `api.py` y no
+         *     sale de `model_validate` de una fila.
+         */
+        ConsumidorFinalResponse: {
+            /** Habilitado */
+            habilitado: boolean;
+            cliente: components["schemas"]["ClienteResponse"] | null;
         };
         /**
          * CostoDelLoteRequest
@@ -984,6 +1261,18 @@ export interface components {
         PaginaCategorias: {
             /** Items */
             items: components["schemas"]["CategoriaResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
+        /**
+         * PaginaClientes
+         * @description Paginada por cursor: el listado pagina por `(nombre, id)` y devuelve
+         *     el cursor de la próxima página, no un offset (`02` §11; el listado no
+         *     puede traer filas a Python para(sumarlas, `CLAUDE.md` §4).
+         */
+        PaginaClientes: {
+            /** Items */
+            items: components["schemas"]["ClienteResponse"][];
             /** Cursor Siguiente */
             cursor_siguiente: string | null;
         };
@@ -2362,6 +2651,254 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PresentacionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_clientes_api_v1_clientes_get: {
+        parameters: {
+            query?: {
+                limite?: number;
+                cursor?: string | null;
+                texto?: string | null;
+                estado?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaClientes"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_cliente_api_v1_clientes_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClienteCrearRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClienteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_cliente_api_v1_clientes__cliente_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                cliente_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClienteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    modificar_cliente_api_v1_clientes__cliente_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                cliente_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClienteModificarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClienteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    modificar_credito_cliente_api_v1_clientes__cliente_id__credito_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                cliente_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClienteCreditoModificarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClienteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_consumidor_final_api_v1_clientes_consumidor_final_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsumidorFinalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    configurar_consumidor_final_api_v1_clientes_consumidor_final_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsumidorFinalConfigurarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClienteResponse"];
                 };
             };
             /** @description Validation Error */

@@ -264,8 +264,10 @@ Ejemplos de PRC-22 (caja x6):
 | --- | --- | --- |
 | CLI-01 | Un cliente tiene nombre, razón social y CUIT/DNI opcionales, dirección, contacto, lista asignada opcional, límite y política de crédito opcionales, tolerancia offline opcional, estado de facturación inicial opcional y estado. | 1 |
 | CLI-02 | Estados: ACTIVO, SUSPENDIDO, INACTIVO. Vender a un cliente suspendido requiere `VENDER_CLIENTE_SUSPENDIDO`. A un cliente inactivo no se le vende. | 1 |
-| CLI-03 | Si la organización lo habilita, existe un cliente genérico "consumidor final" con límite de crédito cero. | 1 |
+| CLI-03 | Si la organización lo habilita, existe un cliente genérico "consumidor final" con límite de crédito cero. El consumidor final solo puede estar `ACTIVO` o `SUSPENDIDO`: no se inactiva (ADR-029). | 1 |
 | CLI-04 | Los clientes con operaciones no se eliminan: se inactivan. | 1 |
+| CLI-05 | El documento de un cliente se valida por tipo: los valores válidos son CUIT y DNI; el CUIT tiene 11 dígitos y el DNI entre 7 y 8, siempre solo numéricos. El número se normaliza a dígitos antes de comparar y de guardar. | 1 |
+| CLI-06 | Un cliente `INACTIVO` puede volver a `ACTIVO` solo si no tiene operaciones; con operaciones, `INACTIVO` es terminal (ADR-030). | 1 |
 
 ### 9.2 Crédito (ADR-003)
 
@@ -450,11 +452,13 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 | Versión de lista | Derivada | PROGRAMADA / VIGENTE / HISTÓRICA | 1 |
 | Regla de descuento | Almacenada | BORRADOR → ACTIVA ↔ PAUSADA | 1 |
 | Regla de descuento | Derivada | VENCIDA | 1 |
-| Cliente | Almacenada | ACTIVO ↔ SUSPENDIDO; ACTIVO/SUSPENDIDO ↔ INACTIVO | 1 |
+| Cliente | Almacenada | ACTIVO ↔ SUSPENDIDO; ACTIVO/SUSPENDIDO → INACTIVO; INACTIVO → ACTIVO solo sin operaciones | 1 |
 | Jornada | Almacenada | ABIERTA → EN_RENDICION → CERRADA; ABIERTA/EN_RENDICION → LIBERADA | 1 |
 | Dispositivo | Almacenada | ACTIVO → REVOCADO | 1 |
 | Observación | Almacenada | PENDIENTE → RESUELTA | 1 |
 | Factura | Almacenada | EMITIDA → ANULADA | Facturación |
+
+**Cliente.** Un cliente nace `ACTIVO` (change 07, D7). `INACTIVO` admite una sola salida —volver a `ACTIVO`— y solo si el cliente no tiene operaciones (CLI-06, ADR-030); cuando existan ventas, cobranzas o compras, la transición queda fuera de la máquina. El cliente consumidor final nunca pasa a `INACTIVO` (CLI-03, ADR-029).
 
 ## 19. Permisos y roles
 

@@ -1824,6 +1824,538 @@
         }
       }
     },
+    "/api/v1/clientes": {
+      "post": {
+        "tags": [
+          "clientes"
+        ],
+        "summary": "Crear Cliente",
+        "operationId": "crear_cliente_api_v1_clientes_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClienteCrearRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "clientes"
+        ],
+        "summary": "Listar Clientes",
+        "description": "Listado paginado por cursor con filtro por texto y por estado (spec\n`administracion-de-clientes`, escenarios \"Buscar un cliente por texto\" y\n\"Filtrar por estado suspendido\"). El `estado` se valida contra el\ncatálogo cerrado en `domain/estado.py` y lo repite el `CHECK` de la base.",
+        "operationId": "listar_clientes_api_v1_clientes_get",
+        "parameters": [
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "texto",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Texto"
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Estado"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaClientes"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/clientes/{cliente_id}": {
+      "put": {
+        "tags": [
+          "clientes"
+        ],
+        "summary": "Modificar Cliente",
+        "operationId": "modificar_cliente_api_v1_clientes__cliente_id__put",
+        "parameters": [
+          {
+            "name": "cliente_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Cliente Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClienteModificarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "clientes"
+        ],
+        "summary": "Obtener Cliente",
+        "description": "La ficha de un cliente, con sus tres campos de crédito en solo lectura\npara quien no tiene `GESTIONAR_CREDITO` (D3).\n\n404 para un cliente de otra organización (INV-21, SEG-07): la respuesta\nno distingue \"ajeno\" de \"no existe\", para que el 404 no confirme la\nexistencia del recurso de otra organización.",
+        "operationId": "obtener_cliente_api_v1_clientes__cliente_id__get",
+        "parameters": [
+          {
+            "name": "cliente_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Cliente Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/clientes/{cliente_id}/credito": {
+      "put": {
+        "tags": [
+          "clientes"
+        ],
+        "summary": "Modificar Credito Cliente",
+        "operationId": "modificar_credito_cliente_api_v1_clientes__cliente_id__credito_put",
+        "parameters": [
+          {
+            "name": "cliente_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Cliente Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClienteCreditoModificarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/clientes/consumidor-final": {
+      "post": {
+        "tags": [
+          "clientes"
+        ],
+        "summary": "Configurar Consumidor Final",
+        "operationId": "configurar_consumidor_final_api_v1_clientes_consumidor_final_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsumidorFinalConfigurarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "clientes"
+        ],
+        "summary": "Obtener Consumidor Final",
+        "description": "El consumidor final de la organización que consulta (spec\n`consumidor-final`).\n\n200 con `habilitado: false` cuando la organización no lo habilitó, y\n200 con el cliente cuando sí: la ausencia del consumidor final es un\nestado normal de la organización, no un recurso inexistente, así que no\nes 404.\n\nEl aislamiento (INV-21) es por construcción: se resuelve por\n`clientes_consumidor_final_id` de la configuración de A, que es de A, y\nel cliente sale del mismo filtro por `organizacion_id`. El de B no se\npuede pedir por esta ruta, porque el identificador sale de la\nconfiguración de A, no de un parámetro de la petición.",
+        "operationId": "obtener_consumidor_final_api_v1_clientes_consumidor_final_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsumidorFinalResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/configuracion/alicuotas": {
       "get": {
         "tags": [
@@ -2692,6 +3224,463 @@
         ],
         "title": "CategoriaResponse"
       },
+      "ClienteCrearRequest": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "direccion": {
+            "type": "string",
+            "title": "Direccion"
+          },
+          "contacto": {
+            "type": "string",
+            "title": "Contacto"
+          },
+          "razon_social": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Razon Social"
+          },
+          "documento_tipo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documento Tipo"
+          },
+          "documento_numero": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documento Numero"
+          },
+          "telefono": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telefono"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "codigo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Codigo"
+          },
+          "estado_facturacion_default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estado Facturacion Default"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "direccion",
+          "contacto"
+        ],
+        "title": "ClienteCrearRequest",
+        "description": "Cuerpo de `POST /clientes` (D9). Sin `estado` (nace `ACTIVO`, D7) y sin\n`es_consumidor_final` (solo lo pone `CLIENTE_CONSUMIDOR_FINAL_CONFIGURAR`,\nCLI-03) ni `lista_precio_id` (D2: sin FK hasta el change 13)."
+      },
+      "ClienteCreditoModificarRequest": {
+        "properties": {
+          "limite_credito": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?\\d+(\\.\\d+)?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limite Credito"
+          },
+          "politica_credito": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Politica Credito"
+          },
+          "tolerancia_offline_tipo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tolerancia Offline Tipo"
+          },
+          "tolerancia_offline_valor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?\\d+(\\.\\d+)?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tolerancia Offline Valor"
+          }
+        },
+        "type": "object",
+        "title": "ClienteCreditoModificarRequest",
+        "description": "Cuerpo de `PUT /clientes/{cliente_id}/credito` (D3, D9). Los tres\ncampos son opcionales porque `None` significa HEREDAR de la organización\n(CRE-03, CRE-06, D8), no \"dejar como está\" -- misma semántica que\n`ClienteCreditoModificarContenidoV1` en `commands.py`. Los importes viajan\ncomo **string** estricto (mismo patrón que `CostoDelLoteRequest` en\n`proveedores/schemas.py`): la huella canónica del comando (`commands/\nhuella.py`) no admite `Decimal`, así que el tipo se convierte recién en\n`ClienteCreditoModificarContenidoV1` al validar el contenido, nunca acá\n(`CLAUDE.md` §4, INV-03)."
+      },
+      "ClienteModificarRequest": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "direccion": {
+            "type": "string",
+            "title": "Direccion"
+          },
+          "contacto": {
+            "type": "string",
+            "title": "Contacto"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "razon_social": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Razon Social"
+          },
+          "documento_tipo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documento Tipo"
+          },
+          "documento_numero": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documento Numero"
+          },
+          "telefono": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telefono"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "codigo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Codigo"
+          },
+          "estado_facturacion_default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estado Facturacion Default"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "direccion",
+          "contacto",
+          "estado"
+        ],
+        "title": "ClienteModificarRequest",
+        "description": "Cuerpo de `PUT /clientes/{cliente_id}` (D9). `PUT` reemplaza el estado\ncompleto de la ficha, igual que `ProveedorModificarRequest`: un opcional\nausente o `null` se guarda como `null`. `estado` es obligatorio porque\nmodificar la ficha y cambiar el estado son la misma escritura (D7). Sin\ncampos de crédito (D3) ni de consumidor final (CLI-03)."
+      },
+      "ClienteResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "codigo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Codigo"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "razon_social": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Razon Social"
+          },
+          "documento_tipo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documento Tipo"
+          },
+          "documento_numero": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documento Numero"
+          },
+          "direccion": {
+            "type": "string",
+            "title": "Direccion"
+          },
+          "contacto": {
+            "type": "string",
+            "title": "Contacto"
+          },
+          "telefono": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telefono"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "lista_precio_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lista Precio Id"
+          },
+          "limite_credito": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limite Credito"
+          },
+          "politica_credito": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Politica Credito"
+          },
+          "tolerancia_offline_tipo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tolerancia Offline Tipo"
+          },
+          "tolerancia_offline_valor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tolerancia Offline Valor"
+          },
+          "estado_facturacion_default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estado Facturacion Default"
+          },
+          "es_consumidor_final": {
+            "type": "boolean",
+            "title": "Es Consumidor Final"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "creado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Creado En"
+          },
+          "actualizado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Actualizado En"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "codigo",
+          "nombre",
+          "razon_social",
+          "documento_tipo",
+          "documento_numero",
+          "direccion",
+          "contacto",
+          "telefono",
+          "email",
+          "lista_precio_id",
+          "limite_credito",
+          "politica_credito",
+          "tolerancia_offline_tipo",
+          "tolerancia_offline_valor",
+          "estado_facturacion_default",
+          "es_consumidor_final",
+          "estado",
+          "creado_en",
+          "actualizado_en"
+        ],
+        "title": "ClienteResponse",
+        "description": "La fila de `cliente` tal como la expone la API.\n\nNo expone `disponible`, `exceso` ni `política aplicada`: los calcula el\nmódulo que confirma la venta resolviendo la herencia de la organización\nen el momento de evaluar (CRE-03, CRE-06, D8). Este change guarda el\ncrédito como datos y no como resultado.\n\nTampoco expone `actualizado_por_id`: no hay ninguna pantalla que lo\nconsulte hoy, y agregarlo \"porque el modelo lo tiene\" sería superficie\nsin consumidor (D9, mismo criterio que `ProveedorResponse`)."
+      },
       "ComposicionRolRequest": {
         "properties": {
           "permisos": {
@@ -2707,6 +3696,43 @@
           "permisos"
         ],
         "title": "ComposicionRolRequest"
+      },
+      "ConsumidorFinalConfigurarRequest": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre",
+            "default": "Consumidor final"
+          }
+        },
+        "type": "object",
+        "title": "ConsumidorFinalConfigurarRequest",
+        "description": "Cuerpo de `POST /clientes/consumidor-final` (D4, ADR-029). Solo el\nnombre: la dirección y el contacto son genéricos y el cliente lo crea\neste mismo comando (nunca un `cliente_id` existente, CLI-03)."
+      },
+      "ConsumidorFinalResponse": {
+        "properties": {
+          "habilitado": {
+            "type": "boolean",
+            "title": "Habilitado"
+          },
+          "cliente": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClienteResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "habilitado",
+          "cliente"
+        ],
+        "title": "ConsumidorFinalResponse",
+        "description": "`GET /clientes/consumidor-final` (spec `consumidor-final`,\nescenarios \"Organización sin consumidor final\" y \"Organización con\nconsumidor final\").\n\n**No es 404 cuando la organización no lo habilitó**: 200 con\n`habilitado: false` y `cliente: null`. El 404 queda para el cliente de\notra organización o inexistente por id en `GET /clientes/{cliente_id}`\n(INV-21), no para un estado legítimo de esta organización. Por eso este\nesquema NO declara `from_attributes`: se arma explícito en `api.py` y no\nsale de `model_validate` de una fila."
       },
       "CostoDelLoteRequest": {
         "properties": {
@@ -3352,6 +4378,35 @@
           "cursor_siguiente"
         ],
         "title": "PaginaCategorias"
+      },
+      "PaginaClientes": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ClienteResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "cursor_siguiente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Siguiente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "cursor_siguiente"
+        ],
+        "title": "PaginaClientes",
+        "description": "Paginada por cursor: el listado pagina por `(nombre, id)` y devuelve\nel cursor de la próxima página, no un offset (`02` §11; el listado no\npuede traer filas a Python para(sumarlas, `CLAUDE.md` §4)."
       },
       "PaginaCostosInformados": {
         "properties": {

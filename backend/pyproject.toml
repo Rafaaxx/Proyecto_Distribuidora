@@ -85,6 +85,21 @@ ignore_imports = [
     "app.modules.proveedores.api -> sqlalchemy",
     "app.modules.proveedores.api -> app.api_v1.dependencias",
     "app.modules.proveedores.api -> app.core.autenticacion",
+    # Change 07 (`design.md` D4 y el precedente de `proveedores`/`configuracion`
+    # que ya esta declarado mas arriba): `clientes` es el tercer maestro sobre
+    # el bus. El grupo 2 (tarea 2.1) agrega `repository.py` y `service.py`, asi
+    # que sus dos entradas van junto con las de `proveedores`; el grupo 4
+    # (tarea 4.1) agrega `api.py` y las suyas. `import-linter` rechaza una
+    # excepcion que no corresponde a ningun import real ("No matches for ignored
+    # import"), asi que cada linea de esta lista tiene un import que existe.
+    "app.modules.clientes.models -> app.core.db",
+    "app.modules.clientes.models -> sqlalchemy",
+    "app.modules.clientes.repository -> sqlalchemy",
+    "app.modules.clientes.service -> sqlalchemy",
+    "app.modules.clientes.api -> fastapi",
+    "app.modules.clientes.api -> sqlalchemy",
+    "app.modules.clientes.api -> app.api_v1.dependencias",
+    "app.modules.clientes.api -> app.core.autenticacion",
 ]
 
 # `allow_indirect_imports`: descubrimiento de la tarea 9.6 (change 05, D12).
@@ -140,6 +155,7 @@ source_modules = [
     "app.modules.configuracion.domain",
     "app.modules.catalogo.domain",
     "app.modules.proveedores.domain",
+    "app.modules.clientes.domain",
 ]
 forbidden_modules = ["app.commands"]
 
@@ -273,5 +289,35 @@ forbidden_modules = [
 # service-ajeno`, ver ese contrato mas arriba).
 ignore_imports = [
     "app.modules.proveedores.api -> app.modules.sync.service",
+]
+allow_indirect_imports = "true"
+
+# Change 07 (`design.md` D4, `02` SS5.3): `clientes` es el tercer maestro de
+# negocio sobre el bus. Su `domain/` es puro (ni infraestructura ni el bus)
+# -- mismo criterio que `proveedores-domain-no-infraestructura`.
+[[tool.importlinter.contracts]]
+id = "clientes-domain-no-infraestructura"
+name = "clientes domain no importa infraestructura ni el bus de comandos"
+type = "forbidden"
+source_modules = ["app.modules.clientes.domain"]
+forbidden_modules = ["fastapi", "sqlalchemy", "app.commands"]
+
+# `clientes` alcanza a `identidad` UNICAMENTE por su `service.py`, porque es
+# el unico modulo al que le necesita algo: el setter que fija
+# `permite_consumidor_final` y `cliente_consumidor_final_id` de la
+# organizacion (`design.md` D4, tarea 2.3). Nunca por sus modelos, su
+# repositorio, su dominio o su api -- mismo criterio que
+# `configuracion no importa modelos ni repositorio de identidad`, que es el
+# contrato que ya separa a `configuracion` de `identidad`.
+[[tool.importlinter.contracts]]
+id = "clientes-solo-por-service-ajeno"
+name = "clientes solo alcanza a otros modulos de negocio por su service.py"
+type = "forbidden"
+source_modules = ["app.modules.clientes"]
+forbidden_modules = [
+    "app.modules.identidad.models",
+    "app.modules.identidad.repository",
+    "app.modules.identidad.api",
+    "app.modules.identidad.domain",
 ]
 allow_indirect_imports = "true"

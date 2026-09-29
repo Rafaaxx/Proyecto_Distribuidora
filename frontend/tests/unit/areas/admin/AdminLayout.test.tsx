@@ -33,6 +33,7 @@ function montarLayout(queryClient: QueryClient, rutaInicial = '/admin/catalogo')
             <Route path="inicio" element={<AdminInicio />} />
             <Route path="catalogo" element={<p>Pantalla de catálogo</p>} />
             <Route path="proveedores" element={<p>Pantalla de proveedores</p>} />
+            <Route path="clientes" element={<p>Pantalla de clientes</p>} />
             <Route path="dispositivos" element={<p>Pantalla de dispositivos</p>} />
           </Route>
         </Routes>
@@ -84,9 +85,12 @@ describe('AdminLayout: el menú muestra solo las secciones permitidas (tareas 7.
     expect(screen.queryByRole('link', { name: 'Dispositivos' })).not.toBeInTheDocument()
   })
 
-  it('Supervisor comercial ve solo Dispositivos', async () => {
+  it('Supervisor comercial ve Clientes y Dispositivos, y no Catálogo ni Proveedores', async () => {
+    // Change 07, grupo 5 (tarea 5.5): `GESTIONAR_CLIENTES` habilita la
+    // sección de Clientes también para el Supervisor comercial (`01` §19).
     await montarRol('SUP')
 
+    expect(screen.getByRole('link', { name: 'Clientes' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Dispositivos' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Catálogo' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Proveedores' })).not.toBeInTheDocument()
@@ -244,10 +248,13 @@ describe('AdminLayout: la ruta índice /admin/inicio (tarea 7.6, B3)', () => {
     expect(await screen.findByText('Pantalla de catálogo')).toBeInTheDocument()
   })
 
-  it('Supervisor comercial aterriza en Dispositivos, su única sección', async () => {
+  it('Supervisor comercial aterriza en Clientes, la primera sección permitida (change 07, tarea 5.5)', async () => {
+    // `Clientes` precede a `Dispositivos` en `SECCIONES`, y el Supervisor
+    // comercial tiene `GESTIONAR_CLIENTES` (`01` §19): el aterrizaje sigue
+    // el orden del menú (B3), no un orden fijo por rol.
     montarLayout(queryClientConYo('SUP'), '/admin/inicio')
 
-    expect(await screen.findByText('Pantalla de dispositivos')).toBeInTheDocument()
+    expect(await screen.findByText('Pantalla de clientes')).toBeInTheDocument()
   })
 
   it('Vendedor/Repartidor ve que no tiene secciones de administración disponibles', async () => {

@@ -165,6 +165,42 @@ def obtener_configuracion(
     return repository.obtener_configuracion(organizacion_id, sesion)
 
 
+def configurar_consumidor_final(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    cliente_consumidor_final_id: UUID,
+    actor_id: UUID | None = None,
+) -> ConfiguracionOrganizacion | None:
+    """Setter de `permite_consumidor_final` y `cliente_consumidor_final_id`
+    (change 07, tarea 2.3, `design.md` D4, ADR-029).
+
+    Existe como setter acá y no en `clientes/service.py` porque la fila es de
+    este módulo: `clientes` alcanza a `identidad` solo por su `service.py`
+    (contrato de import-linter, el mismo que ya existe para `configuracion`).
+
+    Los dos campos se escriben juntos porque `03` §4 los declara como un par:
+    `permite_consumidor_final` en `true` sin `cliente_consumidor_final_id`
+    apuntaría a nada, y un identificador sin el permiso en `true` no
+    significaría nada para el bootstrap del change 21 (SYN-11).
+
+    Devuelve `None` sin tocar nada si la organización no tiene fila de
+    configuración: es el mismo criterio que `obtener_configuracion` y que
+    `repository.actualizar_configuracion`, que nunca buscan la fila de otra
+    organización. Sin `commit`: la transacción la gestiona quien llama -- el bus
+    de comandos, que comparte la transacción con la creación del cliente
+    (`design.md` D4: no existe estado intermedio)."""
+    return repository.actualizar_configuracion(
+        organizacion_id,
+        sesion,
+        momento=reloj.now(),
+        actualizado_por_id=actor_id,
+        permite_consumidor_final=True,
+        cliente_consumidor_final_id=cliente_consumidor_final_id,
+    )
+
+
 def fecha_de_negocio(organizacion_id: UUID, sesion: Session, reloj: Clock) -> date | None:
     """Deriva la fecha de negocio a partir del momento actual del reloj
     inyectable y la zona horaria de la organización (TR-04). Devuelve `None`

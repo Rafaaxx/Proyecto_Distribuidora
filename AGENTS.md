@@ -69,7 +69,7 @@ python -m pytest tests/properties     # Hypothesis
 python -m ruff check .       # lint
 python -m ruff format .      # formato
 python -m mypy app           # tipos
-python -m import_linter      # límites entre módulos
+lint-imports                 # límites entre módulos (import-linter)
 ```
 
 ### Frontend

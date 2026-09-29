@@ -403,19 +403,20 @@ Las diferencias generan movimientos `DIFERENCIA_RENDICION` con origen en la rend
 | Columna | Tipo | Notas |
 | --- | --- | --- |
 | `id`, `organizacion_id` | `uuid` | |
-| `codigo` | `text` | `UNIQUE (organizacion_id, codigo)` |
-| `nombre`, `razon_social` | `text` | |
-| `documento_tipo`, `documento_numero` | `text` | CUIT o DNI |
-| `condicion_iva` | `text` | Para facturación |
-| `direccion`, `telefono`, `email` | `text` | |
-| `lista_precio_id` | `uuid` | Opcional (PRC-20) |
+| `codigo` | `text` | Opcional. Único por organización con índice parcial `WHERE codigo IS NOT NULL` (`ux_cliente__codigo`, `design.md` D1 del change 07, ADR-031) |
+| `nombre`, `razon_social` | `text` | `nombre` NO es único: el mismo nombre puede repetirse en la organización (D1) |
+| `documento_tipo`, `documento_numero` | `text` | CUIT o DNI; opcionales como pareja (si se informa uno, el otro es obligatorio). `documento_numero` se normaliza a solo dígitos. Único por organización como pareja, con índice parcial `WHERE documento_numero IS NOT NULL` (`ux_cliente__documento`, D1). Longitud validada por tipo: CUIT 11 dígitos, DNI 7 u 8 (CLI-05) |
+| `direccion`, `telefono`, `email` | `text` | `direccion` obligatoria |
+| `lista_precio_id` | `uuid` | Columna sin FK hasta que el change 13 cree `lista_precio` y agregue la FK compuesta `(organizacion_id, lista_precio_id)` (D2 del change 07; mismo precedente que `producto.proveedor_id`, ADR-025). No se ofrece en ningún formulario hasta entonces |
 | `limite_credito` | `numeric(14,2)` | Nulo = sin control (CRE-01) |
-| `politica_credito` | `text` | Nulo = la de la organización |
-| `tolerancia_offline_tipo`, `tolerancia_offline_valor` | | Nulos = los de la organización |
+| `politica_credito` | `text` | Nulo = la de la organización (CRE-03) |
+| `tolerancia_offline_tipo`, `tolerancia_offline_valor` | `text`, `numeric(14,2)` | Nulos = los de la organización (CRE-06). Misma escala que `configuracion_organizacion.tolerancia_offline_valor` (ADR-032 del change 07) |
 | `estado_facturacion_default` | `text` | Nulo = el de la organización (VTA-08) |
-| `es_consumidor_final` | `boolean` | CLI-03 |
-| `estado` | `text` | `ACTIVO`, `SUSPENDIDO`, `INACTIVO` |
-| `actualizado_en` | `timestamptz` | |
+| `es_consumidor_final` | `boolean` | CLI-03; solo lo asigna `CLIENTE_CONSUMIDOR_FINAL_CONFIGURAR` (ADR-029) |
+| `estado` | `text` | `ACTIVO`, `SUSPENDIDO`, `INACTIVO`. Nace `ACTIVO`; `INACTIVO` se revierte solo sin operaciones (CLI-06, ADR-030) |
+| `creado_en`, `actualizado_en` | `timestamptz` | |
+
+**Deuda consciente (change 07):** `condicion_iva`, que este párrafo listaba, no se crea todavía — `01` §16 y FAC-04 no definen su dominio y el change de facturación la agrega junto con su catálogo (`design.md` D5 del change 07). El modelo en código no tiene esa columna hasta entonces.
 
 ## 11. Descuentos
 

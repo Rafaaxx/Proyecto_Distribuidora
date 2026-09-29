@@ -30,3 +30,24 @@ class DomainError(Exception):
         super().__init__(mensaje)
         self.mensaje = mensaje
         self.extension = extension
+
+
+class PermisoRequeridoError(DomainError):
+    """Falta el permiso que la operación exige: 403.
+
+    Vive acá y no en `core/autenticacion.py` aunque lo inventara el change 05
+    (tarea 10.2), porque no es un error de la capa HTTP: es un `DomainError`
+    como cualquier otro y lo lanza cualquier consumidor que deba comprobar un
+    permiso, no sólo una ruta. En particular lo necesitan los handlers del bus
+    de comandos (`clientes/commands.py`, `docs/02-arquitectura.md` §6.3 paso 4:
+    el permiso se valida por comando, y un lote de sincronización trae tipos
+    distintos, así que no hay un permiso único que declarar en la ruta), y esos
+    handlers no pueden importar `core/autenticacion.py` porque ese módulo
+    depende de `api_v1.dependencias` y el ciclo de imports lo rompe.
+
+    El código `PERMISO_REQUERIDO` y el 403 son los mismos de siempre: esta clase
+    se mudó de módulo, no se redefinió.
+    """
+
+    codigo = "PERMISO_REQUERIDO"
+    status_http = 403

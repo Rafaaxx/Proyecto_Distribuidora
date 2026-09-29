@@ -37,6 +37,7 @@ function renderAlta(queryClient: QueryClient = queryClientConYo('GES')) {
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={['/admin/proveedores/nuevo']}>
         <Routes>
+          <Route path="/admin/proveedores" element={<p>Listado de proveedores</p>} />
           <Route path="/admin/proveedores/nuevo" element={<ProveedorFormScreen />} />
           <Route path="/admin/proveedores/:proveedorId" element={<ProveedorFormScreen />} />
         </Routes>
@@ -50,6 +51,7 @@ function renderEdicion(proveedorId: string, queryClient: QueryClient = queryClie
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[`/admin/proveedores/${proveedorId}`]}>
         <Routes>
+          <Route path="/admin/proveedores" element={<p>Listado de proveedores</p>} />
           <Route path="/admin/proveedores/:proveedorId" element={<ProveedorFormScreen />} />
         </Routes>
       </MemoryRouter>
@@ -99,6 +101,21 @@ describe('ProveedorFormScreen: alta (tarea 11.3)', () => {
 
     expect(await screen.findByText('El nombre ya está en uso.')).toBeInTheDocument()
     expect(screen.getByLabelText(/^nombre$/i)).toHaveValue('Bodega Andina')
+  })
+
+  /** Grupo 8, tarea 8.2 (decisión del usuario 2026-09-29): tras el alta
+   * vuelve al listado de proveedores, no a la ficha del proveedor recién
+   * creado -- mismo criterio que clientes. */
+  it('después de crear el proveedor vuelve al listado de proveedores', async () => {
+    apiFetchMock.mockResolvedValueOnce(respuesta(201, PROVEEDOR))
+
+    const usuarioEvento = userEvent.setup()
+    renderAlta()
+
+    await usuarioEvento.type(screen.getByLabelText(/^nombre$/i), 'Bodega Andina')
+    await usuarioEvento.click(screen.getByRole('button', { name: /crear proveedor/i }))
+
+    expect(await screen.findByText('Listado de proveedores')).toBeInTheDocument()
   })
 })
 
@@ -189,5 +206,27 @@ describe('ProveedorFormScreen: ficha de edición (tarea 11.3, D5)', () => {
 
     expect(await screen.findByText(SIN_PERMISO_DE_PROVEEDORES)).toBeInTheDocument()
     expect(apiFetchMock).not.toHaveBeenCalled()
+  })
+
+  /** Grupo 8, tarea 8.2 (decisión del usuario 2026-09-29): guardar la
+   * edición de la ficha del proveedor vuelve al listado, mismo criterio que
+   * clientes. */
+  it('después de guardar la edición vuelve al listado de proveedores', async () => {
+    apiFetchMock.mockImplementation((_ruta: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        return Promise.resolve(respuesta(200, { ...PROVEEDOR, nombre: 'Bodega Andina S.A.' }))
+      }
+      return Promise.resolve(respuesta(200, PROVEEDOR))
+    })
+
+    const usuarioEvento = userEvent.setup()
+    renderEdicion(PROVEEDOR.id)
+
+    const campoNombre = await screen.findByLabelText(/^nombre$/i)
+    await usuarioEvento.clear(campoNombre)
+    await usuarioEvento.type(campoNombre, 'Bodega Andina S.A.')
+    await usuarioEvento.click(screen.getByRole('button', { name: /guardar cambios/i }))
+
+    expect(await screen.findByText('Listado de proveedores')).toBeInTheDocument()
   })
 })

@@ -14,9 +14,18 @@ export interface TablaProps<T> {
   filas: T[]
   columnas: ColumnaTabla<T>[]
   obtenerClave: (fila: T) => string
+  /** Grupo 8, tarea 8.3 (decisión del usuario 2026-09-29): cuando se pasa,
+   * toda la fila navega al hacer clic, salvo que el clic haya empezado en
+   * un elemento interactivo propio (link, botón, input, select) -- así el
+   * nombre sigue siendo un `<Link>` real para el teclado y los lectores de
+   * pantalla, y la fila no se convierte en un botón falso. Opcional: las
+   * tablas que no lo pasan (por ejemplo `ProductosListScreen`) no cambian. */
+  onFilaClick?: (fila: T) => void
 }
 
-export function Tabla<T>({ filas, columnas, obtenerClave }: TablaProps<T>) {
+const SELECTOR_ELEMENTOS_INTERACTIVOS = 'a, button, input, select, textarea'
+
+export function Tabla<T>({ filas, columnas, obtenerClave, onFilaClick }: TablaProps<T>) {
   return (
     <table className="w-full border-collapse text-left text-sm">
       <thead>
@@ -30,7 +39,23 @@ export function Tabla<T>({ filas, columnas, obtenerClave }: TablaProps<T>) {
       </thead>
       <tbody>
         {filas.map((fila) => (
-          <tr key={obtenerClave(fila)} className="border-b border-border last:border-0">
+          <tr
+            key={obtenerClave(fila)}
+            className={
+              onFilaClick
+                ? 'cursor-pointer border-b border-border last:border-0 hover:bg-surface-muted'
+                : 'border-b border-border last:border-0'
+            }
+            onClick={
+              onFilaClick
+                ? (evento) => {
+                    const objetivo = evento.target as HTMLElement
+                    if (objetivo.closest(SELECTOR_ELEMENTOS_INTERACTIVOS)) return
+                    onFilaClick(fila)
+                  }
+                : undefined
+            }
+          >
             {columnas.map((columna) => (
               <td key={columna.clave} className="px-3 py-2">
                 {columna.render(fila)}

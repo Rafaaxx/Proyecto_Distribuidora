@@ -8,6 +8,7 @@ from fastapi import APIRouter
 
 from app.api_v1 import auth, sistema
 from app.modules.catalogo import api as catalogo_api
+from app.modules.clientes import api as clientes_api
 from app.modules.configuracion import api as configuracion_api
 from app.modules.identidad import api as identidad_api
 from app.modules.proveedores import api as proveedores_api
@@ -19,6 +20,7 @@ router.include_router(auth.router)
 router.include_router(identidad_api.router)
 router.include_router(identidad_api.router_yo)
 router.include_router(catalogo_api.router)
+router.include_router(clientes_api.router)
 router.include_router(configuracion_api.router)
 router.include_router(proveedores_api.router)
 router.include_router(sync_api.router)

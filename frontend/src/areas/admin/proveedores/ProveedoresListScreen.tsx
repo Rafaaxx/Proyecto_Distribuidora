@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 import { Badge } from '../../../components/ui/Badge'
 import { Card } from '../../../components/ui/Card'
@@ -50,6 +50,7 @@ export function ProveedoresListScreen() {
 /** Componente interno: es el único que consulta y filtra. Sin permiso no se
  * monta, así que no dispara ninguna petición (**B2**). */
 function ProveedoresListado() {
+  const navigate = useNavigate()
   const [texto, setTexto] = useState('')
   const [soloActivos, setSoloActivos] = useState(true)
 
@@ -121,6 +122,7 @@ function ProveedoresListado() {
           <Tabla<Proveedor>
             filas={filas}
             obtenerClave={(proveedor) => proveedor.id}
+            onFilaClick={(proveedor) => navigate(`/admin/proveedores/${proveedor.id}`)}
             columnas={[
               {
                 clave: 'nombre',

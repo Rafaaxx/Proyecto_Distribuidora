@@ -1,6 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }))
@@ -36,6 +37,21 @@ function renderPantalla(rol: RolDePrueba = 'GES') {
     <QueryClientProvider client={queryClientConYo(rol)}>
       <MemoryRouter initialEntries={['/admin/proveedores']}>
         <ProveedoresListScreen />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
+/** Grupo 8, tarea 8.3: hace falta una ruta destino real para comprobar la
+ * navegación de la fila. */
+function renderPantallaConRutas(rol: RolDePrueba = 'GES') {
+  return render(
+    <QueryClientProvider client={queryClientConYo(rol)}>
+      <MemoryRouter initialEntries={['/admin/proveedores']}>
+        <Routes>
+          <Route path="/admin/proveedores" element={<ProveedoresListScreen />} />
+          <Route path="/admin/proveedores/:proveedorId" element={<p>Ficha de proveedor</p>} />
+        </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -84,5 +100,41 @@ describe('ProveedoresListScreen (tareas 11.3 y 8.4, B2)', () => {
     expect(await screen.findByText(SIN_PERMISO_DE_PROVEEDORES)).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     expect(screen.queryByText(/no se pudieron obtener los proveedores/i)).not.toBeInTheDocument()
+  })
+})
+
+/** Grupo 8, tarea 8.3 (decisión del usuario 2026-09-29): toda la fila abre
+ * la ficha del proveedor, conservando el nombre como `<Link>` real. */
+describe('ProveedoresListScreen: fila clicable (grupo 8, tarea 8.3)', () => {
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('hacer clic en la celda de CUIT abre la ficha del proveedor', async () => {
+    apiFetchMock.mockResolvedValue(respuesta(200, { items: [PROVEEDOR_1], cursor_siguiente: null }))
+    const usuarioEvento = userEvent.setup()
+
+    renderPantallaConRutas('GES')
+
+    const celdaCuit = await screen.findByText('30-71234567-1')
+    await usuarioEvento.click(celdaCuit)
+
+    expect(await screen.findByText('Ficha de proveedor')).toBeInTheDocument()
+  })
+
+  it('hacer clic en la insignia de estado abre la ficha del proveedor', async () => {
+    apiFetchMock.mockResolvedValue(respuesta(200, { items: [PROVEEDOR_1], cursor_siguiente: null }))
+    const usuarioEvento = userEvent.setup()
+
+    renderPantallaConRutas('GES')
+
+    const insigniaEstado = await screen.findByText('Activo')
+    await usuarioEvento.click(insigniaEstado)
+
+    expect(await screen.findByText('Ficha de proveedor')).toBeInTheDocument()
   })
 })

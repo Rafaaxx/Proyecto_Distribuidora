@@ -172,6 +172,22 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("get", "/api/v1/clientes/{cliente_id}"),
         ("put", "/api/v1/clientes/{cliente_id}"),
         ("put", "/api/v1/clientes/{cliente_id}/credito"),
+        # Change 08, grupo 6 (`cuentas_corrientes/api.py`, `clientes/api.py`,
+        # `proveedores/api.py`, tareas 6.1 y 6.2): la ruta de escritura dedicada de
+        # `SALDO_INICIAL_REGISTRAR` y las dos lecturas del estado de cuenta, cada
+        # una con su prueba real de aislamiento (login real de dos organizaciones,
+        # entidad ajena o inexistente -> 404 sin revelar saldo ni movimientos) en
+        # `test_cuentas_corrientes_api.py::TestSaldoInicialRegistrar::
+        # test_una_entidad_de_otra_organizacion_o_inexistente_responde_404`,
+        # `TestEstadoDeCuentaDeUnCliente::
+        # test_un_cliente_de_otra_organizacion_o_inexistente_responde_404_sin_datos`
+        # y `TestEstadoDeCuentaDeUnProveedor::
+        # test_un_proveedor_de_otra_organizacion_responde_404`. La tarea 8.4
+        # agrega el archivo dedicado `test_inv21_aislamiento_endpoints_cuentas_
+        # corrientes.py` con los mismos casos por ruta.
+        ("post", "/api/v1/cuentas-corrientes/saldos-iniciales"),
+        ("get", "/api/v1/clientes/{cliente_id}/cuenta-corriente"),
+        ("get", "/api/v1/proveedores/{proveedor_id}/cuenta-corriente"),
     }
 )
 

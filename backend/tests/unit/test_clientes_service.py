@@ -1101,3 +1101,78 @@ def test_sin_fila_de_configuracion_no_se_confirma_un_cliente_consumidor_final(
     # Se llegó a crear el cliente, y la excepción es lo que impide que la
     # transacción del bus lo confirme.
     assert len(creados) == 1
+
+
+# --- CLI-06 activo desde el change 08: la consulta llega como callable -------
+
+
+def _modificar_con_verificador(
+    sesion: object, estado_actual: str, estado_nuevo: str, verificador: object
+) -> tuple[list[str], dict[str, object]]:
+    """Corre `modificar_cliente` con el bloqueo y la escritura sustituidos y
+    devuelve el orden de las llamadas y lo escrito."""
+    cliente = _cliente(estado=estado_actual)
+    orden: list[str] = []
+    enviados: dict[str, object] = {}
+
+    def _bloquear(*args: object, **kwargs: object) -> object:
+        orden.append("bloqueo")
+        return cliente
+
+    def _escribir(*args: object, **kwargs: object) -> object:
+        orden.append("escritura")
+        enviados.update(kwargs)
+        cliente.estado = str(kwargs["estado"])
+        return cliente
+
+    def _verificar() -> bool:
+        orden.append("consulta")
+        return bool(verificador)
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(clientes_repository, "obtener_cliente_por_id_para_actualizar", _bloquear)
+    monkeypatch.setattr(clientes_repository, "actualizar_cliente", _escribir)
+    try:
+        clientes_service.modificar_cliente(
+            cliente.organizacion_id,
+            sesion,  # type: ignore[arg-type]
+            _reloj(),
+            cliente_id=cliente.id,
+            **_ficha(),
+            estado=estado_nuevo,
+            actor_id=None,
+            verificar_operaciones=_verificar,
+        )
+    finally:
+        monkeypatch.undo()
+    return orden, enviados
+
+
+def test_la_consulta_de_operaciones_ocurre_despues_del_bloqueo_del_cliente(sesion: object) -> None:
+    """D8 del change 08: se pregunta con la fila del cliente ya tomada."""
+    orden, enviados = _modificar_con_verificador(sesion, "INACTIVO", "ACTIVO", False)
+
+    assert orden == ["bloqueo", "consulta", "escritura"]
+    assert enviados["estado"] == "ACTIVO"
+
+
+def test_un_cliente_inactivo_con_movimientos_no_se_reactiva_y_no_se_escribe(
+    sesion: object,
+) -> None:
+    orden: list[str] = []
+    with pytest.raises(ClienteConOperacionesError):
+        orden, _ = _modificar_con_verificador(sesion, "INACTIVO", "ACTIVO", True)
+    assert orden == []
+
+
+@pytest.mark.parametrize(
+    ("actual", "nuevo"),
+    [("ACTIVO", "SUSPENDIDO"), ("SUSPENDIDO", "ACTIVO"), ("ACTIVO", "INACTIVO")],
+)
+def test_la_consulta_no_se_hace_si_el_cliente_no_esta_inactivo(
+    sesion: object, actual: str, nuevo: str
+) -> None:
+    """CLI-06 solo gobierna la salida de `INACTIVO`."""
+    orden, _ = _modificar_con_verificador(sesion, actual, nuevo, True)
+
+    assert "consulta" not in orden

@@ -22,6 +22,7 @@ propagar son los de `domain/errores.py`.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from decimal import Decimal
 from uuid import UUID
 
@@ -166,6 +167,7 @@ def modificar_cliente(
     estado: str,
     actor_id: UUID | None,
     tiene_operaciones: bool = False,
+    verificar_operaciones: Callable[[], bool] | None = None,
 ) -> Cliente:
     """`CLIENTE_MODIFICAR`.
 
@@ -176,11 +178,14 @@ def modificar_cliente(
     inexistente en esta organización, y también puede ser un cliente de otra
     (INV-21): se responde igual.
 
-    `tiene_operaciones` es un DATO, no una consulta (CLI-06, ADR-030): este
-    change no tiene forma de averiguarlo porque ningún módulo registra
-    operaciones todavía (changes 08, 10, 17 y 18a). Sale por parámetro con
-    `False` para que el change que registre la primera operación lo pase desde
-    su verificador sin tocar esta máquina de estados.
+    CLI-06 (ADR-030) se decide con dos entradas. `tiene_operaciones` es un dato
+    que ya sabe quien llama. `verificar_operaciones` es una consulta que este
+    servicio hace DESPUÉS de bloquear la fila del cliente y SOLO si el cliente
+    está `INACTIVO` (es la única salida que CLI-06 gobierna): desde el change 08
+    el handler pasa `cuentas_corrientes_service.cuenta_tiene_movimientos`, así una
+    reactivación concurrente con un saldo inicial se serializa (`design.md` D6 y
+    D8 del change 08). Es un callable y no un dato porque la fila tiene que estar
+    tomada cuando se pregunta, y el bloqueo ocurre acá adentro.
 
     La escritura no incluye los tres campos de crédito (D3): la ficha y el
     crédito son dos comandos con dos permisos distintos.
@@ -190,10 +195,15 @@ def modificar_cliente(
         raise RecursoNoEncontradoError(f"El cliente {cliente_id} no existe en esta organización.")
 
     documento = normalizar_documento(documento_tipo, documento_numero)
+    operaciones = tiene_operaciones or (
+        cliente.estado == "INACTIVO"
+        and verificar_operaciones is not None
+        and verificar_operaciones()
+    )
     estado_validado = validar_transicion(
         cliente.estado,
         estado,
-        tiene_operaciones=tiene_operaciones,
+        tiene_operaciones=operaciones,
         es_consumidor_final=cliente.es_consumidor_final,
     )
 

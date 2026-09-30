@@ -35,7 +35,7 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api_v1.dependencias import get_session
@@ -50,6 +50,8 @@ from app.core.autenticacion import (
 )
 from app.core.clock import SystemClock
 from app.modules.catalogo import service as catalogo_service
+from app.modules.cuentas_corrientes import service as cuentas_corrientes_service
+from app.modules.cuentas_corrientes.service import EstadoDeCuentaResponse, estado_de_cuenta_response
 from app.modules.identidad import service as identidad_service
 from app.modules.proveedores import commands as proveedores_commands  # noqa: F401
 from app.modules.proveedores import repository as proveedores_repository
@@ -248,6 +250,43 @@ def obtener_proveedor(
             f"El proveedor {proveedor_id} no existe en esta organización."
         )
     return ProveedorResponse.model_validate(proveedor)
+
+
+@router_proveedores.get("/{proveedor_id}/cuenta-corriente", response_model=EstadoDeCuentaResponse)
+def obtener_cuenta_corriente_de_proveedor(
+    proveedor_id: UUID,
+    contexto: Annotated[
+        ContextoAutenticado, Depends(requiere_permiso(PERMISO_GESTIONAR_PROVEEDORES))
+    ],
+    sesion: Annotated[Session, Depends(get_session)],
+    desde: date | None = None,
+    hasta: date | None = None,
+    cursor: str | None = None,
+    limite: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> EstadoDeCuentaResponse:
+    """Estado de cuenta del proveedor (change 08, tarea 6.2; CC-07, `design.md`
+    D2 y D9). Permiso `GESTIONAR_PROVEEDORES`, el de la ficha. Mismas reglas que
+    `clientes/api.py`: fechas de negocio en la zona de la organización, `limite`
+    mayor que 200 es 422 y un proveedor ajeno o inexistente responde 404 antes de
+    leer el libro (INV-21, SEG-07)."""
+    proveedor = proveedores_service.obtener_proveedor(
+        contexto.organizacion_id, proveedor_id, sesion
+    )
+    if proveedor is None:
+        raise RecursoNoEncontradoError(
+            f"El proveedor {proveedor_id} no existe en esta organización."
+        )
+    estado = cuentas_corrientes_service.estado_de_cuenta(
+        contexto.organizacion_id,
+        sesion,
+        cuenta_tipo="PROVEEDOR",
+        entidad_id=proveedor_id,
+        desde=desde,
+        hasta=hasta,
+        cursor=cursor,
+        limite=limite,
+    )
+    return estado_de_cuenta_response(estado)
 
 
 # --- costos informados (D3, D4, D12, D14) ------------------------------------

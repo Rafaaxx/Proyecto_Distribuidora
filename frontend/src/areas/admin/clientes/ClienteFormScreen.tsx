@@ -24,6 +24,7 @@ import { useCliente } from '../../../features/clientes/useListados'
 import { esErrorDeRed, useCrearCliente, useModificarCliente } from '../../../features/clientes/useMutaciones'
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { formatearImporte, parsearImporteDesdeApi } from '../../../lib/money'
+import { SaldoDeCuenta } from '../cuentas-corrientes/SaldoDeCuenta'
 
 const SIN_PERMISO_DE_CLIENTES = 'No tenés permiso para gestionar clientes.'
 const AVISO_SIN_CONEXION = 'Se necesita conexión para completar esta operación. Probá de nuevo cuando tengas conexión.'
@@ -350,6 +351,8 @@ function ClienteEdicionFormulario({
         </dl>
       </Card>
 
+      <SaldoDeCuenta cuentaTipo="CLIENTE" entidadId={clienteId} />
+
       <Card>
         <form onSubmit={alEnviar} noValidate className="flex flex-col gap-4">
           <Campo id="nombre" etiqueta="Nombre" error={errors.nombre?.message}>
@@ -421,7 +424,7 @@ function ClienteEdicionFormulario({
             />
           </Campo>
 
-          <Campo id="estado" etiqueta="Estado">
+          <Campo id="estado" etiqueta="Estado" error={errors.estado?.message}>
             <select id="estado" className="rounded-md border border-border px-2 py-1 text-sm" {...register('estado')}>
               {ESTADOS_CLIENTE.map((estado) => (
                 <option key={estado} value={estado}>

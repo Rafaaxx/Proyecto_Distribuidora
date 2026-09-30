@@ -15,6 +15,7 @@ import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { campoDeProveedorParaCodigo, type CampoProveedor } from '../../../features/proveedores/mapaErrorACampo'
 import { useProveedor } from '../../../features/proveedores/useListados'
 import { useCrearProveedor, useModificarProveedor } from '../../../features/proveedores/useMutaciones'
+import { SaldoDeCuenta } from '../cuentas-corrientes/SaldoDeCuenta'
 
 const SIN_PERMISO_DE_PROVEEDORES = 'No tenés permiso para gestionar proveedores.'
 
@@ -222,6 +223,7 @@ function ProveedorEdicionFormulario({
   return (
     <main className="flex flex-col gap-4">
       <h1 className="text-lg font-semibold text-primary">{detalle.nombre}</h1>
+      <SaldoDeCuenta cuentaTipo="PROVEEDOR" entidadId={proveedorId} />
       <form onSubmit={alEnviar} noValidate className="flex flex-col gap-4">
         <Campo id="nombre" etiqueta="Nombre" error={errors.nombre?.message}>
           <input id="nombre" className="rounded-md border border-border px-2 py-1 text-sm" {...register('nombre')} />

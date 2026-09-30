@@ -100,6 +100,18 @@ ignore_imports = [
     "app.modules.clientes.api -> sqlalchemy",
     "app.modules.clientes.api -> app.api_v1.dependencias",
     "app.modules.clientes.api -> app.core.autenticacion",
+    # Change 08 (`design.md` D7, `02` §5.3): `cuentas_corrientes` es el cuarto
+    # modulo sobre el bus. Cada grupo agrega las entradas de los archivos que
+    # crea (`models.py` en el grupo 2; `repository.py` y `service.py` en el 4;
+    # `api.py` en el 6): `import-linter` rechaza una excepcion sin import real.
+    "app.modules.cuentas_corrientes.models -> app.core.db",
+    "app.modules.cuentas_corrientes.models -> sqlalchemy",
+    "app.modules.cuentas_corrientes.repository -> sqlalchemy",
+    "app.modules.cuentas_corrientes.service -> sqlalchemy",
+    "app.modules.cuentas_corrientes.api -> fastapi",
+    "app.modules.cuentas_corrientes.api -> sqlalchemy",
+    "app.modules.cuentas_corrientes.api -> app.api_v1.dependencias",
+    "app.modules.cuentas_corrientes.api -> app.core.autenticacion",
 ]
 
 # `allow_indirect_imports`: descubrimiento de la tarea 9.6 (change 05, D12).
@@ -156,6 +168,7 @@ source_modules = [
     "app.modules.catalogo.domain",
     "app.modules.proveedores.domain",
     "app.modules.clientes.domain",
+    "app.modules.cuentas_corrientes.domain",
 ]
 forbidden_modules = ["app.commands"]
 
@@ -283,6 +296,14 @@ forbidden_modules = [
     "app.modules.catalogo.api",
     "app.modules.catalogo.domain",
     "app.modules.sync",
+    # Change 08 (`02` §5.3: `proveedores -> cuentas_corrientes`): solo por su
+    # `service.py`, nunca por su libro, su repositorio, su api, su dominio ni
+    # sus comandos.
+    "app.modules.cuentas_corrientes.models",
+    "app.modules.cuentas_corrientes.repository",
+    "app.modules.cuentas_corrientes.api",
+    "app.modules.cuentas_corrientes.domain",
+    "app.modules.cuentas_corrientes.commands",
 ]
 # Grupo 10 (tarea 10.2): `proveedores/api.py` ya existe y llama a
 # `sync_service.procesar_comando` (mismo patron que `catalogo-solo-por-
@@ -319,5 +340,55 @@ forbidden_modules = [
     "app.modules.identidad.repository",
     "app.modules.identidad.api",
     "app.modules.identidad.domain",
+    # Change 08 (`02` §5.3: `clientes -> cuentas_corrientes`): solo por su
+    # `service.py` (`cuenta_tiene_movimientos`, CLI-06, `design.md` D8), nunca
+    # por su libro, su repositorio, su api, su dominio ni sus comandos.
+    "app.modules.cuentas_corrientes.models",
+    "app.modules.cuentas_corrientes.repository",
+    "app.modules.cuentas_corrientes.api",
+    "app.modules.cuentas_corrientes.domain",
+    "app.modules.cuentas_corrientes.commands",
+]
+allow_indirect_imports = "true"
+
+# Change 08 (`design.md` D7, `02` SS5.3): `cuentas_corrientes` es un modulo sin
+# dependencias de negocio (`cuentas_corrientes, costeo, catalogo -> (sin
+# dependencias de negocio)`). Su `domain/` es puro (ni infraestructura ni el
+# bus) -- mismo criterio que `clientes-domain-no-infraestructura`.
+[[tool.importlinter.contracts]]
+id = "cuentas-corrientes-domain-no-infraestructura"
+name = "cuentas_corrientes domain no importa infraestructura ni el bus de comandos"
+type = "forbidden"
+source_modules = ["app.modules.cuentas_corrientes.domain"]
+forbidden_modules = ["fastapi", "sqlalchemy", "app.commands"]
+
+# `cuentas_corrientes` no importa ningun otro modulo de negocio: ni `clientes`,
+# ni `proveedores`, ni `catalogo`, ni `configuracion`. La existencia de la
+# entidad la garantiza la FK compuesta de D6 (traducida a 404 por el
+# repositorio) y el consumidor final se reconoce con la configuracion de la
+# organizacion. De `identidad` solo alcanza su `service.py` (permisos,
+# configuracion de la organizacion, auditoria). La unica excepcion es
+# `cuentas_corrientes.api -> sync.service` (`procesar_comando`, grupo 6), igual
+# que `proveedores.api -> sync.service`.
+[[tool.importlinter.contracts]]
+id = "cuentas-corrientes-solo-por-service-ajeno"
+name = "cuentas_corrientes solo alcanza a identidad por su service.py y a ningun otro modulo"
+type = "forbidden"
+source_modules = ["app.modules.cuentas_corrientes"]
+forbidden_modules = [
+    "app.modules.identidad.models",
+    "app.modules.identidad.repository",
+    "app.modules.identidad.api",
+    "app.modules.identidad.domain",
+    "app.modules.configuracion",
+    "app.modules.catalogo",
+    "app.modules.proveedores",
+    "app.modules.clientes",
+    "app.modules.sync",
+]
+# `cuentas_corrientes/api.py` llama a `sync_service.procesar_comando` (grupo 6,
+# tarea 6.1), igual que `proveedores.api` y `clientes.api`.
+ignore_imports = [
+    "app.modules.cuentas_corrientes.api -> app.modules.sync.service",
 ]
 allow_indirect_imports = "true"

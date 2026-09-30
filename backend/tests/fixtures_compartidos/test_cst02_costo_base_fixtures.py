@@ -13,8 +13,9 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
-from app.modules.proveedores.domain.costo_base import calcular_costo_base
 from cargador import descubrir_casos
+
+from app.modules.proveedores.domain.costo_base import calcular_costo_base
 
 _CASOS_CST02 = [caso for caso in descubrir_casos() if caso.entrada.get("motor") == "cst02"]
 

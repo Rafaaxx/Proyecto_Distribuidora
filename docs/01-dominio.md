@@ -352,6 +352,7 @@ Ejemplo de DSC-03 con regla "cajas equivalentes ≥ 20 → 5%": 19 cajas + 5 uni
 | CC-05 | Una venta registra un débito por su total aunque se cobre en el momento; la cobranza registra su propio crédito. Lo mismo para compras de contado y sus pagos. | 1 |
 | CC-06 | Los movimientos no se editan ni se borran. | 1 |
 | CC-07 | El estado de cuenta muestra los movimientos en orden de `occurred_at` con saldo acumulado calculado al consultar. | 1 (PDF: 2) |
+| CC-08 | Una cuenta admite varios movimientos `SALDO_INICIAL`, cada uno con su sentido; un error de carga se corrige con otro `SALDO_INICIAL` en sentido contrario por la diferencia. Se admiten solo mientras la cuenta no tenga movimientos de otro tipo (`CUENTA_CON_OPERACIONES`). No se carga saldo inicial al consumidor final (`CONSUMIDOR_FINAL_SIN_CUENTA`); cualquier otro estado de cliente o de proveedor lo admite. | 1 |
 
 ### 12.2 Cobranzas
 
@@ -467,11 +468,11 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 | ADMIN_USUARIOS | Usuarios, roles y permisos | ✓ | | | | |
 | ADMIN_CONFIGURACION | Configuración de la organización | ✓ | | | | |
 | GESTIONAR_DISPOSITIVOS | Ver y revocar dispositivos | ✓ | | ✓ | | |
-| IMPORTAR_DATOS | Importaciones y puesta en marcha | ✓ | | | | |
+| IMPORTAR_DATOS | Importaciones y puesta en marcha (incluye registrar saldos iniciales, CC-08) | ✓ | | | | |
 | GESTIONAR_CATALOGO | Productos, presentaciones, categorías | ✓ | ✓ | | | |
-| GESTIONAR_CLIENTES | Alta y edición de clientes | ✓ | ✓ | ✓ | | |
+| GESTIONAR_CLIENTES | Alta y edición de clientes; ver su cuenta corriente | ✓ | ✓ | ✓ | | |
 | GESTIONAR_CREDITO | Límite, política y tolerancia de clientes | ✓ | ✓ | | | |
-| GESTIONAR_PROVEEDORES | Alta y edición de proveedores | ✓ | ✓ | | | |
+| GESTIONAR_PROVEEDORES | Alta y edición de proveedores; ver su cuenta corriente | ✓ | ✓ | | | |
 | VER_COSTOS | Ver costos | ✓ | ✓ | | | |
 | EDITAR_COSTOS | Registrar costos informados | ✓ | ✓ | | | |
 | VER_UTILIDAD | Ver utilidad | ✓ | ✓ | | | ✓ |

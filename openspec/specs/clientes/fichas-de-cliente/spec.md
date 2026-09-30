@@ -114,7 +114,7 @@ El `codigo` es opcional y, cuando existe, DEBE ser único entre los clientes de 
 
 ### Requirement: El estado del cliente sigue la máquina de estados de `01` §18
 
-El sistema DEBE validar cada cambio de estado contra la máquina de `01` §18: `ACTIVO ↔ SUSPENDIDO`, `ACTIVO → INACTIVO` y `SUSPENDIDO → INACTIVO` y, desde `INACTIVO`, la única salida es `INACTIVO → ACTIVO` y solo si el cliente no tiene operaciones (CLI-06, ADR-030); con operaciones es terminal. Un cliente NO DEBE borrarse en ningún caso (CLI-04, INV-05). En este change ningún cliente tiene operaciones porque ventas, cobranzas y compras todavía no existen (changes 08, 10, 17 y 18a), así que tanto la inactivación como la reactivación quedan disponibles y la restricción se activa cuando exista la primera operación.
+El sistema DEBE validar cada cambio de estado contra la máquina de `01` §18: `ACTIVO ↔ SUSPENDIDO`, `ACTIVO → INACTIVO` y `SUSPENDIDO → INACTIVO` y, desde `INACTIVO`, la única salida es `INACTIVO → ACTIVO` y solo si el cliente no tiene operaciones (CLI-06, ADR-030); con operaciones es terminal. Un cliente NO DEBE borrarse en ningún caso (CLI-04, INV-05). A partir del change 08, un cliente tiene operaciones si su cuenta corriente tiene al menos un movimiento de cualquier tipo, incluido `SALDO_INICIAL` (`design.md` D8 del change 08, aprobada 2026-09-29); `clientes` lo consulta a `cuentas_corrientes/service.py` dentro de la misma transacción, después de bloquear la fila del cliente, y la reactivación de un cliente con movimientos se rechaza con `CLIENTE_CON_OPERACIONES`. Ventas y cobranzas (changes 17 y 18a) quedan cubiertas por la misma consulta porque también escriben en el libro.
 
 #### Scenario: Suspender y reactivar
 
@@ -132,12 +132,24 @@ El sistema DEBE validar cada cambio de estado contra la máquina de `01` §18: `
 
 #### Scenario: Reactivar un cliente sin operaciones
 
-- **GIVEN** el cliente `Kiosco La Esquina` `INACTIVO` en A, sin operaciones (ningún módulo registra operaciones en este change)
+- **GIVEN** el cliente `Kiosco La Esquina` `INACTIVO` en A, sin movimientos en su cuenta corriente
 - **WHEN** se envía `CLIENTE_MODIFICAR` con `estado = ACTIVO`
 - **THEN** el cliente vuelve a `ACTIVO` y sigue existiendo
-- **Regla:** CLI-06; `01` §18; `design.md` D7; ADR-030
+- **Regla:** CLI-06; `01` §18; ADR-030
 
-Cuando existan operaciones (changes 08/10/17/18a), esta transición se rechaza con `CLIENTE_CON_OPERACIONES` y se prueba en el change que registra la primera.
+#### Scenario: Reactivar un cliente con movimientos se rechaza
+
+- **GIVEN** el cliente `Kiosco La Esquina` `INACTIVO` en A, con un saldo inicial de `"150000.00"` en su cuenta corriente
+- **WHEN** se envía `CLIENTE_MODIFICAR` con `estado = ACTIVO`
+- **THEN** se rechaza con `CLIENTE_CON_OPERACIONES` y el cliente sigue `INACTIVO`
+- **Regla:** CLI-06; ADR-030; `design.md` D8 del change 08
+
+#### Scenario: Reactivación y saldo inicial concurrentes
+
+- **GIVEN** el cliente `Kiosco La Esquina` `INACTIVO` sin movimientos, y dos transacciones que confirman sus commits: una reactivación y un saldo inicial
+- **WHEN** se ejecutan a la vez
+- **THEN** nunca termina el cliente `ACTIVO` con un movimiento que la reactivación no vio: o se aplica la reactivación antes del saldo inicial, o la reactivación se rechaza con `CLIENTE_CON_OPERACIONES`
+- **Regla:** CLI-06; ADR-030; `design.md` D6 y D8 del change 08
 
 #### Scenario: Estado fuera del catálogo
 

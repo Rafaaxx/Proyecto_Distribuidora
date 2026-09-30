@@ -53,6 +53,7 @@ from app.commands.sobre import SobreComando
 from app.core.clock import Clock
 from app.core.errors import PermisoRequeridoError
 from app.modules.clientes import service as clientes_service
+from app.modules.cuentas_corrientes import service as cuentas_corrientes_service
 from app.modules.identidad import service as identidad_service
 
 ResultadoHandler = tuple[str, dict[str, object] | None, str | None]
@@ -188,6 +189,15 @@ def manejar_cliente_modificar(
         codigo=contenido.codigo,
         estado_facturacion_default=contenido.estado_facturacion_default,
         actor_id=sobre.usuario_id,
+        # CLI-06 activo (change 08, D8): un cliente tiene operaciones si su
+        # cuenta corriente tiene algun movimiento. Se consulta dentro del
+        # servicio, con la fila del cliente ya bloqueada.
+        verificar_operaciones=lambda: cuentas_corrientes_service.cuenta_tiene_movimientos(
+            sobre.organizacion_id,
+            sesion,  # type: ignore[arg-type]
+            cuenta_tipo="CLIENTE",
+            entidad_id=contenido.cliente_id,
+        ),
     )
     return "ACEPTADO", {"cliente_id": str(cliente.id)}, None
 

@@ -51,6 +51,8 @@ Toda tabla de negocio tiene:
 | `organizacion_id` | `uuid` | Obligatoria (INV-02) |
 | `creado_en` | `timestamptz` | `default now()` |
 
+Excepción: una tabla de saldo cuya clave natural es compuesta y que ninguna otra tabla referencia no lleva `id`; su clave primaria empieza por `organizacion_id` (INV-02). Hoy es el caso de `saldo_cuenta` (ADR-035).
+
 Las tablas de datos maestros agregan `actualizado_en` (obligatoria: la usa el bootstrap incremental, `02` §13.4) y `actualizado_por_id`.
 
 Las tablas de operaciones agregan:
@@ -503,14 +505,19 @@ Libro único para clientes y proveedores, de solo inserción (CC-01).
 
 | Columna | Tipo | Notas |
 | --- | --- | --- |
-| `id`, `organizacion_id` | `uuid` | |
+| `id`, `organizacion_id` | `uuid` | `UNIQUE (organizacion_id, id)` |
 | `cuenta_tipo` | `text` | `CLIENTE`, `PROVEEDOR` |
 | `entidad_id` | `uuid` | Cliente o proveedor |
-| `tipo` | `text` | CC-02, CC-03 |
+| `cliente_id` | `uuid` | **Generada** por la base: `entidad_id` si `cuenta_tipo = CLIENTE`, si no nulo. FK compuesta `(organizacion_id, cliente_id) → cliente` |
+| `proveedor_id` | `uuid` | **Generada** por la base: `entidad_id` si `cuenta_tipo = PROVEEDOR`, si no nulo. FK compuesta `(organizacion_id, proveedor_id) → proveedor` |
+| `tipo` | `text` | CC-02, CC-03. `CHECK` de catálogo y de coherencia con `cuenta_tipo` (sin los tipos de IVA, que agrega el módulo de facturación) |
 | `sentido` | `text` | `AUMENTA`, `REDUCE` |
 | `importe` | `numeric(14,2)` | `CHECK (importe > 0)` |
 | `origen_tipo`, `origen_id` | `text`, `uuid` | |
-| `occurred_at`, `registered_at`, `usuario_id`, `operation_id` | | |
+| `occurred_at`, `registered_at`, `usuario_id`, `operation_id` | | `usuario_id` con FK compuesta a `usuario` |
+| `dispositivo_id` | `uuid` | `NOT NULL`. FK compuesta `(organizacion_id, dispositivo_id) → dispositivo` (§2.3) |
+
+`cliente_id` y `proveedor_id` no las escribe nadie: las calcula PostgreSQL, y existen para que la referencia a `cliente` o a `proveedor` sea una clave foránea compuesta (§2.4) aunque `entidad_id` apunte a dos tablas según `cuenta_tipo`. El emparejamiento entre `tipo` y `sentido` (por ejemplo, `VENTA` siempre `AUMENTA`) no tiene `CHECK` en la base: lo verifica el dominio (ADR-034).
 
 **No tiene columna de saldo acumulado.** El saldo se calcula (CC-04) y se materializa en `saldo_cuenta`.
 
@@ -518,7 +525,7 @@ Libro único para clientes y proveedores, de solo inserción (CC-01).
 
 ### `saldo_cuenta`
 
-`organizacion_id`, `cuenta_tipo`, `entidad_id` (PK compuesta), `saldo` `numeric(14,2)`, `actualizado_en`. Es la fila que se bloquea al evaluar crédito y al registrar movimientos (`02` §7.3).
+`organizacion_id`, `cuenta_tipo`, `entidad_id` (PK compuesta, sin `id`: ninguna tabla referencia una fila de saldo), `cliente_id` y `proveedor_id` (generadas, con las mismas FK compuestas que `cuenta_movimiento`), `saldo` `numeric(14,2) NOT NULL DEFAULT 0`, `actualizado_en`. Es la fila que se bloquea al evaluar crédito y al registrar movimientos (`02` §7.3). La fila nace de forma perezosa con el primer movimiento de la cuenta (`INSERT ... ON CONFLICT DO NOTHING` y `SELECT ... FOR UPDATE`).
 
 ## 13. Sincronización, auditoría, importación y facturación
 

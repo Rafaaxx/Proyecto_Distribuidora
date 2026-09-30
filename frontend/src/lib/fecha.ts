@@ -25,3 +25,23 @@ export function formatearFechaHora(momentoIso: string): string {
   const minutos = conDosDigitos(momento.getMinutes())
   return `${dia}/${mes}/${anio} ${horas}:${minutos}`
 }
+
+/**
+ * Igual que `formatearFechaHora` pero en la zona horaria pasada (IANA, por
+ * ejemplo `America/Argentina/Mendoza`) en vez de la del navegador: las fechas
+ * del estado de cuenta se muestran en la zona de la organización (change 08,
+ * TR-04). Formato `dd/mm/aaaa hh:mm`, hora de 24 h.
+ */
+export function formatearFechaHoraEnZona(momentoIso: string, zonaHoraria: string): string {
+  const partes = new Intl.DateTimeFormat('en-GB', {
+    timeZone: zonaHoraria,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(momentoIso))
+  const valor = (tipo: Intl.DateTimeFormatPartTypes): string => partes.find((parte) => parte.type === tipo)?.value ?? ''
+  return `${valor('day')}/${valor('month')}/${valor('year')} ${valor('hour')}:${valor('minute')}`
+}

@@ -359,3 +359,123 @@ describe('ClienteFormScreen: ficha de edición (tarea 5.3, D3, D7)', () => {
     expect(JSON.parse(String(opciones.body))).toMatchObject({ estado: 'INACTIVO' })
   })
 })
+
+/** Change 08, tarea 7.2 (spec `administracion-de-cuentas-corrientes`, "La
+ * ficha muestra el saldo y lleva a la cuenta corriente"): saldo actual con su
+ * rótulo según el signo y enlace "Cuenta corriente". */
+describe('ClienteFormScreen: saldo y cuenta corriente en la ficha (change 08, tarea 7.2)', () => {
+  function estadoDeCuenta(saldoActual: string) {
+    return {
+      saldo_anterior: '0.00',
+      saldo_actual: saldoActual,
+      zona_horaria: 'America/Argentina/Mendoza',
+      items: [],
+      cursor_siguiente: null,
+    }
+  }
+
+  function responderConSaldo(saldoActual: string) {
+    apiFetchMock.mockImplementation((ruta: string) =>
+      Promise.resolve(
+        String(ruta).includes('/cuenta-corriente')
+          ? respuesta(200, estadoDeCuenta(saldoActual))
+          : respuesta(200, CLIENTE),
+      ),
+    )
+  }
+
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('un cliente con deuda ve "Nos debe" con el importe y el enlace a su cuenta corriente', async () => {
+    responderConSaldo('150000.00')
+
+    renderEdicion(CLIENTE.id)
+
+    expect(await screen.findByText('Nos debe $ 150.000,00')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Cuenta corriente' })).toHaveAttribute(
+      'href',
+      `/admin/clientes/${CLIENTE.id}/cuenta-corriente`,
+    )
+    expect(apiFetchMock).toHaveBeenCalledWith(expect.stringContaining(`/clientes/${CLIENTE.id}/cuenta-corriente`))
+  })
+
+  it('un cliente con saldo a favor lo rotula "Saldo a favor" sin signo', async () => {
+    responderConSaldo('-2500.50')
+
+    renderEdicion(CLIENTE.id)
+
+    expect(await screen.findByText('Saldo a favor $ 2.500,50')).toBeInTheDocument()
+  })
+
+  it('un cliente sin movimientos ve saldo cero', async () => {
+    responderConSaldo('0.00')
+
+    renderEdicion(CLIENTE.id)
+
+    expect(await screen.findByText('Saldo $ 0,00')).toBeInTheDocument()
+  })
+
+  it('si el saldo no se puede leer avisa, y el enlace sigue disponible', async () => {
+    apiFetchMock.mockImplementation((ruta: string) =>
+      Promise.resolve(
+        String(ruta).includes('/cuenta-corriente')
+          ? respuesta(500, { title: 'Error interno.', codigo: 'ERROR_INTERNO' })
+          : respuesta(200, CLIENTE),
+      ),
+    )
+
+    renderEdicion(CLIENTE.id)
+
+    expect(await screen.findByText('No se pudo obtener el saldo.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Cuenta corriente' })).toBeInTheDocument()
+  })
+
+  it('el alta de un cliente no muestra saldo ni enlace', async () => {
+    renderAlta()
+
+    expect(await screen.findByRole('button', { name: /crear cliente/i })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Cuenta corriente' })).not.toBeInTheDocument()
+    expect(apiFetchMock).not.toHaveBeenCalled()
+  })
+})
+
+/** Change 08, verificación 9.3 paso 14: el rechazo del servidor al reactivar
+ * un cliente inactivo se mapea al campo `estado`, que no mostraba el error. */
+describe('ClienteFormScreen: rechazo de cambio de estado se muestra junto al campo (change 08, 9.3)', () => {
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it.each([
+    [409, 'CLIENTE_CON_OPERACIONES', 'El cliente tiene operaciones y no puede reactivarse.'],
+    [409, 'TRANSICION_ESTADO_INVALIDA', 'La transición de estado no es válida.'],
+  ])('%s %s: muestra el mensaje, no navega y el cliente sigue INACTIVO', async (status, codigo, mensaje) => {
+    apiFetchMock.mockImplementation((_ruta: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        return Promise.resolve(respuesta(status, { title: mensaje, codigo }))
+      }
+      return Promise.resolve(respuesta(200, { ...CLIENTE, estado: 'INACTIVO' }))
+    })
+
+    const usuarioEvento = userEvent.setup()
+    renderEdicion(CLIENTE.id)
+
+    const selectEstado = await screen.findByLabelText(/^estado$/i)
+    await usuarioEvento.selectOptions(selectEstado, 'ACTIVO')
+    await usuarioEvento.click(screen.getByRole('button', { name: /guardar cambios/i }))
+
+    expect(await screen.findByText(mensaje)).toBeInTheDocument()
+    expect(screen.queryByText('Listado de clientes')).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/^nombre$/i)).toBeInTheDocument()
+  })
+})

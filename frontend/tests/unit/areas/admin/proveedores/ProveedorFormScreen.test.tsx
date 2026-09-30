@@ -230,3 +230,71 @@ describe('ProveedorFormScreen: ficha de edición (tarea 11.3, D5)', () => {
     expect(await screen.findByText('Listado de proveedores')).toBeInTheDocument()
   })
 })
+
+/** Change 08, tarea 7.2 (spec `administracion-de-cuentas-corrientes`): saldo
+ * actual del proveedor con su rótulo según el signo y enlace "Cuenta
+ * corriente". */
+describe('ProveedorFormScreen: saldo y cuenta corriente en la ficha (change 08, tarea 7.2)', () => {
+  function responderConSaldo(saldoActual: string) {
+    apiFetchMock.mockImplementation((ruta: string) =>
+      Promise.resolve(
+        String(ruta).includes('/cuenta-corriente')
+          ? respuesta(200, {
+              saldo_anterior: '0.00',
+              saldo_actual: saldoActual,
+              zona_horaria: 'America/Argentina/Mendoza',
+              items: [],
+              cursor_siguiente: null,
+            })
+          : respuesta(200, PROVEEDOR),
+      ),
+    )
+  }
+
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('un proveedor sin movimientos ve saldo cero y el enlace a su cuenta corriente', async () => {
+    responderConSaldo('0.00')
+
+    renderEdicion(PROVEEDOR.id)
+
+    expect(await screen.findByText('Saldo $ 0,00')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Cuenta corriente' })).toHaveAttribute(
+      'href',
+      `/admin/proveedores/${PROVEEDOR.id}/cuenta-corriente`,
+    )
+    expect(apiFetchMock).toHaveBeenCalledWith(expect.stringContaining(`/proveedores/${PROVEEDOR.id}/cuenta-corriente`))
+  })
+
+  it('con saldo positivo dice "Le debemos" y con saldo negativo "Saldo a nuestro favor"', async () => {
+    responderConSaldo('9000.00')
+    const primero = renderEdicion(PROVEEDOR.id)
+    expect(await screen.findByText('Le debemos $ 9.000,00')).toBeInTheDocument()
+    primero.unmount()
+
+    responderConSaldo('-3000.00')
+    renderEdicion(PROVEEDOR.id)
+    expect(await screen.findByText('Saldo a nuestro favor $ 3.000,00')).toBeInTheDocument()
+  })
+
+  it('si el saldo no se puede leer avisa, y el enlace sigue disponible', async () => {
+    apiFetchMock.mockImplementation((ruta: string) =>
+      Promise.resolve(
+        String(ruta).includes('/cuenta-corriente')
+          ? respuesta(500, { title: 'Error interno.', codigo: 'ERROR_INTERNO' })
+          : respuesta(200, PROVEEDOR),
+      ),
+    )
+
+    renderEdicion(PROVEEDOR.id)
+
+    expect(await screen.findByText('No se pudo obtener el saldo.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Cuenta corriente' })).toBeInTheDocument()
+  })
+})

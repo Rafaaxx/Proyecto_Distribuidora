@@ -42,6 +42,7 @@ from app.core.ids import nuevo_id
 from app.modules.clientes import commands as clientes_commands
 from app.modules.clientes import repository as clientes_repository
 from app.modules.clientes.domain.errores import (
+    ClienteConOperacionesError,
     CodigoDuplicadoError,
     ConfiguracionDeOrganizacionAusenteError,
     ConsumidorFinalNoInactivableError,
@@ -51,8 +52,12 @@ from app.modules.clientes.domain.errores import (
     TransicionEstadoInvalidaError,
 )
 from app.modules.clientes.models import Cliente
+from app.modules.cuentas_corrientes import service as cuentas_corrientes_service
 from app.modules.identidad import repository as identidad_repository
 from app.modules.identidad.models import Auditoria, ConfiguracionOrganizacion, Organizacion
+from app.modules.proveedores import (
+    models as _proveedores_models,  # noqa: F401 (FK de cuentas_corrientes)
+)
 from app.modules.sync import service as sync_service
 from app.modules.sync.models import Comando
 
@@ -508,11 +513,9 @@ class TestClienteModificarContraElBus:
         """D7, opción C aprobada (CLI-06, ADR-030): `INACTIVO -> ACTIVO` está
         permitido mientras el cliente no tenga operaciones.
 
-        Hoy el permiso es siempre concesión: ningún change anterior al 07
-        registra operaciones sobre un cliente, así que la comprobación
-        `tiene_operaciones` no puede dar `true` todavía. La prueba documenta el
-        sentido de la regla, que es el que va a quedar cuando existan (changes
-        08/10/17/18a)."""
+        Sin movimientos en su cuenta corriente (change 08, D8) el cliente no
+        tiene operaciones. El caso con movimientos es
+        `TestReactivacionConMovimientos`."""
         organizacion = _crear_organizacion(db_session)
         usuario_id, dispositivo_id = _crear_usuario_y_dispositivo(db_session, organizacion.id)
         db_session.commit()
@@ -1080,3 +1083,122 @@ class TestListadoContraElBus:
             org_b.id, db_session, texto="30-111 222"
         )
         assert encontrados == []
+
+
+# --- CLI-06 activo desde el change 08 (D8) -----------------------------------
+
+
+class TestReactivacionConMovimientos:
+    """`CLIENTE_MODIFICAR` consulta a `cuentas_corrientes` si el cliente tiene
+    movimientos (CLI-06, ADR-030, `design.md` D8 del change 08)."""
+
+    def _cliente_con_estado(
+        self, sesion: Session, *, estado: str, con_saldo_inicial: bool
+    ) -> tuple[Any, UUID, UUID, UUID]:
+        organizacion = _crear_organizacion(sesion)
+        usuario_id, dispositivo_id = _crear_usuario_y_dispositivo(sesion, organizacion.id)
+        sesion.commit()
+        creado = _crear(
+            sesion,
+            organizacion_id=organizacion.id,
+            usuario_id=usuario_id,
+            dispositivo_id=dispositivo_id,
+        )
+        cliente_id = UUID(creado.resultado["cliente_id"])  # type: ignore[index]
+        if con_saldo_inicial:
+            cuentas_corrientes_service.registrar_saldo_inicial(
+                organizacion.id,
+                sesion,
+                RELOJ,
+                cuenta_tipo="CLIENTE",
+                entidad_id=cliente_id,
+                importe="150000.00",
+                sentido="AUMENTA",
+                occurred_at=MOMENTO,
+                usuario_id=usuario_id,
+                dispositivo_id=dispositivo_id,
+                operation_id=uuid4(),
+            )
+        for siguiente in ("INACTIVO",) if estado == "INACTIVO" else ():
+            self._modificar(
+                sesion, organizacion.id, usuario_id, dispositivo_id, cliente_id, siguiente
+            )
+        sesion.commit()
+        return organizacion, usuario_id, dispositivo_id, cliente_id
+
+    def _modificar(
+        self,
+        sesion: Session,
+        organizacion_id: UUID,
+        usuario_id: UUID,
+        dispositivo_id: UUID,
+        cliente_id: UUID,
+        estado: str,
+    ) -> Comando:
+        return _procesar(
+            sesion,
+            _sobre(
+                tipo="CLIENTE_MODIFICAR",
+                organizacion_id=organizacion_id,
+                usuario_id=usuario_id,
+                dispositivo_id=dispositivo_id,
+                contenido=_ficha(cliente_id, estado=estado),
+            ),
+            handler=clientes_commands.manejar_cliente_modificar,
+            contenido_cls=clientes_commands.ClienteModificarContenidoV1,
+        )
+
+    def test_reactivar_un_cliente_con_movimientos_se_rechaza(self, db_session: Session) -> None:
+        organizacion, usuario_id, dispositivo_id, cliente_id = self._cliente_con_estado(
+            db_session, estado="INACTIVO", con_saldo_inicial=True
+        )
+
+        with pytest.raises(ClienteConOperacionesError) as error:
+            self._modificar(
+                db_session, organizacion.id, usuario_id, dispositivo_id, cliente_id, "ACTIVO"
+            )
+
+        assert error.value.codigo == "CLIENTE_CON_OPERACIONES"
+        assert _clientes_de(db_session, organizacion.id)[0].estado == "INACTIVO"
+
+    def test_reactivar_un_cliente_inactivo_sin_movimientos_sigue_permitido(
+        self, db_session: Session
+    ) -> None:
+        organizacion, usuario_id, dispositivo_id, cliente_id = self._cliente_con_estado(
+            db_session, estado="INACTIVO", con_saldo_inicial=False
+        )
+
+        self._modificar(
+            db_session, organizacion.id, usuario_id, dispositivo_id, cliente_id, "ACTIVO"
+        )
+
+        assert _clientes_de(db_session, organizacion.id)[0].estado == "ACTIVO"
+
+    def test_un_cliente_con_movimientos_se_suspende_y_se_reactiva_si_nunca_estuvo_inactivo(
+        self, db_session: Session
+    ) -> None:
+        """La consulta solo aplica a la salida de `INACTIVO` (CLI-06): con
+        movimientos, `ACTIVO <-> SUSPENDIDO` sigue igual."""
+        organizacion, usuario_id, dispositivo_id, cliente_id = self._cliente_con_estado(
+            db_session, estado="ACTIVO", con_saldo_inicial=True
+        )
+
+        for estado in ("SUSPENDIDO", "ACTIVO", "INACTIVO"):
+            self._modificar(
+                db_session, organizacion.id, usuario_id, dispositivo_id, cliente_id, estado
+            )
+
+        assert _clientes_de(db_session, organizacion.id)[0].estado == "INACTIVO"
+
+    def test_un_cliente_inactivo_con_movimientos_puede_seguir_inactivo_al_corregir_la_ficha(
+        self, db_session: Session
+    ) -> None:
+        organizacion, usuario_id, dispositivo_id, cliente_id = self._cliente_con_estado(
+            db_session, estado="INACTIVO", con_saldo_inicial=True
+        )
+
+        self._modificar(
+            db_session, organizacion.id, usuario_id, dispositivo_id, cliente_id, "INACTIVO"
+        )
+
+        assert _clientes_de(db_session, organizacion.id)[0].estado == "INACTIVO"

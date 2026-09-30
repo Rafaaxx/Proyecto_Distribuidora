@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 | --- | --- |
-| Estado | Vigente |
+| Estado | Vigente (punto 3 enmendado por ADR-034, 2026-09-30) |
 | Fecha | 2026-09-28 |
 | Referenciado en | `openspec/changes/07-clientes/design.md` D7 y `specs/clientes/fichas-de-cliente`; `01-dominio.md` CLI-06 y §18; ADR-023 (verificadores de uso) |
 

@@ -41,10 +41,11 @@ organización, así que un id ajeno es indistinguible de uno inexistente."""
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api_v1.dependencias import get_session
@@ -72,6 +73,8 @@ from app.modules.clientes.schemas import (
     ConsumidorFinalResponse,
     PaginaClientes,
 )
+from app.modules.cuentas_corrientes import service as cuentas_corrientes_service
+from app.modules.cuentas_corrientes.service import EstadoDeCuentaResponse, estado_de_cuenta_response
 from app.modules.sync import service as sync_service
 
 PERMISO = "GESTIONAR_CLIENTES"
@@ -361,3 +364,38 @@ def obtener_cliente(
     if cliente is None:
         raise RecursoNoEncontradoError(f"El cliente {cliente_id} no existe en esta organización.")
     return ClienteResponse.model_validate(cliente)
+
+
+@router.get("/{cliente_id}/cuenta-corriente", response_model=EstadoDeCuentaResponse)
+def obtener_cuenta_corriente_de_cliente(
+    cliente_id: UUID,
+    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso(PERMISO))],
+    sesion: Annotated[Session, Depends(get_session)],
+    desde: date | None = None,
+    hasta: date | None = None,
+    cursor: str | None = None,
+    limite: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> EstadoDeCuentaResponse:
+    """Estado de cuenta del cliente (change 08, tarea 6.2; CC-07, `design.md`
+    D2 y D9). Permiso `GESTIONAR_CLIENTES`, el mismo de la ficha: quien puede ver
+    al cliente puede ver su cuenta. `desde`/`hasta` son fechas de negocio en la
+    zona de la organización; un `limite` mayor que 200 es un error de validación
+    (422), no un recorte silencioso.
+
+    404 para un cliente de otra organización o inexistente (INV-21, SEG-07): se
+    comprueba ANTES de leer el libro, así que la respuesta no revela saldo ni
+    movimientos ajenos."""
+    cliente = clientes_service.obtener_cliente_por_id(contexto.organizacion_id, cliente_id, sesion)
+    if cliente is None:
+        raise RecursoNoEncontradoError(f"El cliente {cliente_id} no existe en esta organización.")
+    estado = cuentas_corrientes_service.estado_de_cuenta(
+        contexto.organizacion_id,
+        sesion,
+        cuenta_tipo="CLIENTE",
+        entidad_id=cliente_id,
+        desde=desde,
+        hasta=hasta,
+        cursor=cursor,
+        limite=limite,
+    )
+    return estado_de_cuenta_response(estado)

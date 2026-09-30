@@ -165,8 +165,15 @@ def _tabla_declara_organizacion_id_obligatoria(engine: Engine, tabla: str) -> st
     pk = _columnas_pk(engine, tabla)
     if "organizacion_id" in pk:
         # PK = organizacion_id (caso configuracion_organizacion) o PK
-        # compuesta que incluye organizacion_id (caso rol_permiso, tarea
-        # 3.3): en ambos casos la base no permite una fila sin organización.
+        # compuesta que EMPIEZA por organizacion_id (casos rol_permiso, tarea
+        # 3.3, y saldo_cuenta, change 08 D11): en ambos casos la base no
+        # permite una fila sin organización y el índice de la clave sirve a las
+        # consultas por organización.
+        if pk[0] != "organizacion_id":
+            return (
+                f"'{tabla}' tiene una PK compuesta que no empieza por "
+                f"organizacion_id: {pk} (docs/03 §2.4)."
+            )
         return None
 
     unique_ok = any(
@@ -325,3 +332,52 @@ def test_rol_permiso_si_se_verifica_como_tabla_de_negocio(database_url: str) -> 
     assert "rol_permiso" in tablas
     assert _tabla_declara_organizacion_id_obligatoria(engine, "rol_permiso") is None
     assert _fk_simple_entre_negocio(engine, "rol_permiso") == []
+
+
+# --- Clave primaria compuesta (change 08, D11) -------------------------------
+
+
+def test_saldo_cuenta_cumple_inv02_con_su_pk_compuesta_que_empieza_por_organizacion(
+    database_url: str,
+) -> None:
+    """Change 08, D11: `saldo_cuenta` no tiene `id`; su PK es
+    `(organizacion_id, cuenta_tipo, entidad_id)` y cumple INV-02 sin `UNIQUE
+    (organizacion_id, id)`."""
+    aplicar_migraciones(database_url)
+    engine = crear_engine(database_url)
+
+    assert _columnas_pk(engine, "saldo_cuenta")[0] == "organizacion_id"
+    assert _tabla_declara_organizacion_id_obligatoria(engine, "saldo_cuenta") is None
+
+
+@pytest.fixture
+def _tabla_temporal_con_pk_que_no_empieza_por_organizacion(database_url: str) -> Iterator[Engine]:
+    aplicar_migraciones(database_url)
+    engine = crear_engine(database_url)
+    with engine.connect() as conexion:
+        conexion.execute(
+            text(
+                "CREATE TABLE inv02_negativo_pk_desordenada ("
+                "organizacion_id uuid NOT NULL REFERENCES organizacion (id), "
+                "clave uuid NOT NULL, "
+                "PRIMARY KEY (clave, organizacion_id))"
+            )
+        )
+        conexion.commit()
+    try:
+        yield engine
+    finally:
+        with engine.connect() as conexion:
+            conexion.execute(text("DROP TABLE IF EXISTS inv02_negativo_pk_desordenada"))
+            conexion.commit()
+
+
+def test_inv02_detecta_una_pk_compuesta_que_no_empieza_por_organizacion_id(
+    _tabla_temporal_con_pk_que_no_empieza_por_organizacion: Engine,
+) -> None:
+    mensaje = _tabla_declara_organizacion_id_obligatoria(
+        _tabla_temporal_con_pk_que_no_empieza_por_organizacion, "inv02_negativo_pk_desordenada"
+    )
+    assert mensaje is not None
+    assert "inv02_negativo_pk_desordenada" in mensaje
+    assert "no empieza por organizacion_id" in mensaje

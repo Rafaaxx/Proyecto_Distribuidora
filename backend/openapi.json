@@ -2356,6 +2356,128 @@
         }
       }
     },
+    "/api/v1/clientes/{cliente_id}/cuenta-corriente": {
+      "get": {
+        "tags": [
+          "clientes"
+        ],
+        "summary": "Obtener Cuenta Corriente De Cliente",
+        "description": "Estado de cuenta del cliente (change 08, tarea 6.2; CC-07, `design.md`\nD2 y D9). Permiso `GESTIONAR_CLIENTES`, el mismo de la ficha: quien puede ver\nal cliente puede ver su cuenta. `desde`/`hasta` son fechas de negocio en la\nzona de la organización; un `limite` mayor que 200 es un error de validación\n(422), no un recorte silencioso.\n\n404 para un cliente de otra organización o inexistente (INV-21, SEG-07): se\ncomprueba ANTES de leer el libro, así que la respuesta no revela saldo ni\nmovimientos ajenos.",
+        "operationId": "obtener_cuenta_corriente_de_cliente_api_v1_clientes__cliente_id__cuenta_corriente_get",
+        "parameters": [
+          {
+            "name": "cliente_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Cliente Id"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Desde"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hasta"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstadoDeCuentaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/configuracion/alicuotas": {
       "get": {
         "tags": [
@@ -2414,6 +2536,81 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PaginaAlicuotas"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cuentas-corrientes/saldos-iniciales": {
+      "post": {
+        "tags": [
+          "cuentas-corrientes"
+        ],
+        "summary": "Registrar Saldo Inicial",
+        "operationId": "registrar_saldo_inicial_api_v1_cuentas_corrientes_saldos_iniciales_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaldoInicialRegistrarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaldoInicialResponse"
                 }
               }
             }
@@ -2811,6 +3008,128 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PaginaProveedorOpciones"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/proveedores/{proveedor_id}/cuenta-corriente": {
+      "get": {
+        "tags": [
+          "proveedores"
+        ],
+        "summary": "Obtener Cuenta Corriente De Proveedor",
+        "description": "Estado de cuenta del proveedor (change 08, tarea 6.2; CC-07, `design.md`\nD2 y D9). Permiso `GESTIONAR_PROVEEDORES`, el de la ficha. Mismas reglas que\n`clientes/api.py`: fechas de negocio en la zona de la organización, `limite`\nmayor que 200 es 422 y un proveedor ajeno o inexistente responde 404 antes de\nleer el libro (INV-21, SEG-07).",
+        "operationId": "obtener_cuenta_corriente_de_proveedor_api_v1_proveedores__proveedor_id__cuenta_corriente_get",
+        "parameters": [
+          {
+            "name": "proveedor_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Proveedor Id"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Desde"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hasta"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstadoDeCuentaResponse"
                 }
               }
             }
@@ -4080,6 +4399,49 @@
         ],
         "title": "DispositivoResponse"
       },
+      "EstadoDeCuentaResponse": {
+        "properties": {
+          "saldo_anterior": {
+            "type": "string",
+            "title": "Saldo Anterior"
+          },
+          "saldo_actual": {
+            "type": "string",
+            "title": "Saldo Actual"
+          },
+          "zona_horaria": {
+            "type": "string",
+            "title": "Zona Horaria"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MovimientoEstadoDeCuentaResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "cursor_siguiente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Siguiente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "saldo_anterior",
+          "saldo_actual",
+          "zona_horaria",
+          "items",
+          "cursor_siguiente"
+        ],
+        "title": "EstadoDeCuentaResponse"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -4303,6 +4665,76 @@
           "actualizado_en"
         ],
         "title": "MarcaResponse"
+      },
+      "MovimientoEstadoDeCuentaResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "sentido": {
+            "type": "string",
+            "title": "Sentido"
+          },
+          "importe": {
+            "type": "string",
+            "title": "Importe"
+          },
+          "origen_tipo": {
+            "type": "string",
+            "title": "Origen Tipo"
+          },
+          "origen_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Origen Id"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Registered At"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "operation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Operation Id"
+          },
+          "saldo_acumulado": {
+            "type": "string",
+            "title": "Saldo Acumulado"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tipo",
+          "sentido",
+          "importe",
+          "origen_tipo",
+          "origen_id",
+          "occurred_at",
+          "registered_at",
+          "usuario_id",
+          "operation_id",
+          "saldo_acumulado"
+        ],
+        "title": "MovimientoEstadoDeCuentaResponse",
+        "description": "Un movimiento del estado de cuenta con su saldo acumulado real (CC-07)."
       },
       "OrganizacionYoResponse": {
         "properties": {
@@ -5347,6 +5779,74 @@
           "pin"
         ],
         "title": "RotarPinRequest"
+      },
+      "SaldoInicialRegistrarRequest": {
+        "properties": {
+          "cuenta_tipo": {
+            "type": "string",
+            "enum": [
+              "CLIENTE",
+              "PROVEEDOR"
+            ],
+            "title": "Cuenta Tipo"
+          },
+          "entidad_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Entidad Id"
+          },
+          "importe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Importe"
+          },
+          "sentido": {
+            "type": "string",
+            "enum": [
+              "AUMENTA",
+              "REDUCE"
+            ],
+            "title": "Sentido"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cuenta_tipo",
+          "entidad_id",
+          "importe",
+          "sentido"
+        ],
+        "title": "SaldoInicialRegistrarRequest"
+      },
+      "SaldoInicialResponse": {
+        "properties": {
+          "movimiento_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Movimiento Id"
+          },
+          "saldo": {
+            "type": "string",
+            "title": "Saldo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "movimiento_id",
+          "saldo"
+        ],
+        "title": "SaldoInicialResponse",
+        "description": "Sale de `comando.resultado`, no de una relectura: un reenvío idempotente\ndel mismo `Operation-Id` devuelve exactamente lo mismo (INV-06)."
       },
       "SaludRespuesta": {
         "properties": {

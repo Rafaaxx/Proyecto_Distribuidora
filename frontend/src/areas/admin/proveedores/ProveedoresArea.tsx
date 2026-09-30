@@ -1,5 +1,7 @@
 import { Route, Routes } from 'react-router-dom'
 
+import { CuentaCorrienteScreen } from '../cuentas-corrientes/CuentaCorrienteScreen'
+import { SaldoInicialScreen } from '../cuentas-corrientes/SaldoInicialScreen'
 import { CostosCargaScreen } from './CostosCargaScreen'
 import { CostosHistorialScreen } from './CostosHistorialScreen'
 import { ProveedorFormScreen } from './ProveedorFormScreen'
@@ -18,6 +20,10 @@ export function ProveedoresArea() {
       <Route path="nuevo" element={<ProveedorFormScreen />} />
       <Route path=":proveedorId" element={<ProveedorFormScreen />} />
       <Route path=":proveedorId/costos" element={<CostosCargaScreen />} />
+      {/* Change 08 (D13): la cuenta corriente cuelga de la ficha, sin sección
+          nueva en el menú. */}
+      <Route path=":entidadId/cuenta-corriente" element={<CuentaCorrienteScreen cuentaTipo="PROVEEDOR" />} />
+      <Route path=":entidadId/cuenta-corriente/saldo-inicial" element={<SaldoInicialScreen cuentaTipo="PROVEEDOR" />} />
       <Route path="productos/:productoId/historial" element={<CostosHistorialScreen />} />
     </Routes>
   )

@@ -541,6 +541,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/clientes/{cliente_id}/cuenta-corriente": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Cuenta Corriente De Cliente
+         * @description Estado de cuenta del cliente (change 08, tarea 6.2; CC-07, `design.md`
+         *     D2 y D9). Permiso `GESTIONAR_CLIENTES`, el mismo de la ficha: quien puede ver
+         *     al cliente puede ver su cuenta. `desde`/`hasta` son fechas de negocio en la
+         *     zona de la organización; un `limite` mayor que 200 es un error de validación
+         *     (422), no un recorte silencioso.
+         *
+         *     404 para un cliente de otra organización o inexistente (INV-21, SEG-07): se
+         *     comprueba ANTES de leer el libro, así que la respuesta no revela saldo ni
+         *     movimientos ajenos.
+         */
+        get: operations["obtener_cuenta_corriente_de_cliente_api_v1_clientes__cliente_id__cuenta_corriente_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/configuracion/alicuotas": {
         parameters: {
             query?: never;
@@ -552,6 +580,23 @@ export interface paths {
         get: operations["listar_alicuotas_api_v1_configuracion_alicuotas_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cuentas-corrientes/saldos-iniciales": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Registrar Saldo Inicial */
+        post: operations["registrar_saldo_inicial_api_v1_cuentas_corrientes_saldos_iniciales_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -603,6 +648,30 @@ export interface paths {
         };
         /** Listar Opciones De Proveedores */
         get: operations["listar_opciones_de_proveedores_api_v1_proveedores_opciones_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/proveedores/{proveedor_id}/cuenta-corriente": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Cuenta Corriente De Proveedor
+         * @description Estado de cuenta del proveedor (change 08, tarea 6.2; CC-07, `design.md`
+         *     D2 y D9). Permiso `GESTIONAR_PROVEEDORES`, el de la ficha. Mismas reglas que
+         *     `clientes/api.py`: fechas de negocio en la zona de la organización, `limite`
+         *     mayor que 200 es 422 y un proveedor ajeno o inexistente responde 404 antes de
+         *     leer el libro (INV-21, SEG-07).
+         */
+        get: operations["obtener_cuenta_corriente_de_proveedor_api_v1_proveedores__proveedor_id__cuenta_corriente_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1119,6 +1188,19 @@ export interface components {
             /** Revocado En */
             revocado_en: string | null;
         };
+        /** EstadoDeCuentaResponse */
+        EstadoDeCuentaResponse: {
+            /** Saldo Anterior */
+            saldo_anterior: string;
+            /** Saldo Actual */
+            saldo_actual: string;
+            /** Zona Horaria */
+            zona_horaria: string;
+            /** Items */
+            items: components["schemas"]["MovimientoEstadoDeCuentaResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1239,6 +1321,52 @@ export interface components {
              * Format: date-time
              */
             actualizado_en: string;
+        };
+        /**
+         * MovimientoEstadoDeCuentaResponse
+         * @description Un movimiento del estado de cuenta con su saldo acumulado real (CC-07).
+         */
+        MovimientoEstadoDeCuentaResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Tipo */
+            tipo: string;
+            /** Sentido */
+            sentido: string;
+            /** Importe */
+            importe: string;
+            /** Origen Tipo */
+            origen_tipo: string;
+            /**
+             * Origen Id
+             * Format: uuid
+             */
+            origen_id: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * Registered At
+             * Format: date-time
+             */
+            registered_at: string;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /** Saldo Acumulado */
+            saldo_acumulado: string;
         };
         /** OrganizacionYoResponse */
         OrganizacionYoResponse: {
@@ -1681,6 +1809,40 @@ export interface components {
         RotarPinRequest: {
             /** Pin */
             pin: string;
+        };
+        /** SaldoInicialRegistrarRequest */
+        SaldoInicialRegistrarRequest: {
+            /**
+             * Cuenta Tipo
+             * @enum {string}
+             */
+            cuenta_tipo: "CLIENTE" | "PROVEEDOR";
+            /**
+             * Entidad Id
+             * Format: uuid
+             */
+            entidad_id: string;
+            /** Importe */
+            importe: string | number;
+            /**
+             * Sentido
+             * @enum {string}
+             */
+            sentido: "AUMENTA" | "REDUCE";
+        };
+        /**
+         * SaldoInicialResponse
+         * @description Sale de `comando.resultado`, no de una relectura: un reenvío idempotente
+         *     del mismo `Operation-Id` devuelve exactamente lo mismo (INV-06).
+         */
+        SaldoInicialResponse: {
+            /**
+             * Movimiento Id
+             * Format: uuid
+             */
+            movimiento_id: string;
+            /** Saldo */
+            saldo: string;
         };
         /** SaludRespuesta */
         SaludRespuesta: {
@@ -2912,6 +3074,44 @@ export interface operations {
             };
         };
     };
+    obtener_cuenta_corriente_de_cliente_api_v1_clientes__cliente_id__cuenta_corriente_get: {
+        parameters: {
+            query?: {
+                desde?: string | null;
+                hasta?: string | null;
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                cliente_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstadoDeCuentaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     listar_alicuotas_api_v1_configuracion_alicuotas_get: {
         parameters: {
             query?: {
@@ -2933,6 +3133,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaginaAlicuotas"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registrar_saldo_inicial_api_v1_cuentas_corrientes_saldos_iniciales_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaldoInicialRegistrarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaldoInicialResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3110,6 +3346,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaginaProveedorOpciones"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_cuenta_corriente_de_proveedor_api_v1_proveedores__proveedor_id__cuenta_corriente_get: {
+        parameters: {
+            query?: {
+                desde?: string | null;
+                hasta?: string | null;
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                proveedor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstadoDeCuentaResponse"];
                 };
             };
             /** @description Validation Error */

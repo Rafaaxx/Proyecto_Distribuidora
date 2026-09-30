@@ -18,6 +18,7 @@ import pytest
 from app.modules.catalogo import repository as catalogo_repository
 from app.modules.clientes import repository as clientes_repository
 from app.modules.configuracion import repository as configuracion_repository
+from app.modules.cuentas_corrientes import repository as cuentas_corrientes_repository
 from app.modules.identidad import repository as identidad_repository
 from app.modules.proveedores import repository as proveedores_repository
 
@@ -122,6 +123,22 @@ def test_clientes_repository_exige_organizacion_id_primero_en_todo_metodo() -> N
 
 def test_clientes_no_declara_ninguna_exencion_de_organizacion_id() -> None:
     exentas = clientes_repository.FUNCIONES_SIN_ORGANIZACION_ID
+    assert isinstance(exentas, frozenset)
+    assert not exentas
+
+
+def test_cuentas_corrientes_repository_exige_organizacion_id_primero_en_todo_metodo() -> None:
+    """Change 08, tarea 4.1: `cuentas_corrientes` tampoco declara excepciones
+    (`FUNCIONES_SIN_ORGANIZACION_ID` vacio) -- todo dato del libro y del saldo
+    es de una organizacion, y ninguna consulta se hace sin filtrarla."""
+    _verificar_organizacion_id_primer_parametro(
+        cuentas_corrientes_repository,
+        exentas=cuentas_corrientes_repository.FUNCIONES_SIN_ORGANIZACION_ID,
+    )
+
+
+def test_cuentas_corrientes_no_declara_ninguna_exencion_de_organizacion_id() -> None:
+    exentas = cuentas_corrientes_repository.FUNCIONES_SIN_ORGANIZACION_ID
     assert isinstance(exentas, frozenset)
     assert not exentas
 

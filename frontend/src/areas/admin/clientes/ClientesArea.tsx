@@ -1,5 +1,7 @@
 import { Route, Routes } from 'react-router-dom'
 
+import { CuentaCorrienteScreen } from '../cuentas-corrientes/CuentaCorrienteScreen'
+import { SaldoInicialScreen } from '../cuentas-corrientes/SaldoInicialScreen'
 import { ClienteCreditoScreen } from './ClienteCreditoScreen'
 import { ClienteFormScreen } from './ClienteFormScreen'
 import { ClientesListScreen } from './ClientesListScreen'
@@ -29,6 +31,10 @@ export function ClientesArea() {
       <Route path="/consumidor-final" element={<ConsumidorFinalScreen />} />
       <Route path="/:clienteId" element={<ClienteFormScreen />} />
       <Route path="/:clienteId/credito" element={<ClienteCreditoScreen />} />
+      {/* Change 08 (D13): la cuenta corriente cuelga de la ficha, sin sección
+          nueva en el menú. */}
+      <Route path="/:entidadId/cuenta-corriente" element={<CuentaCorrienteScreen cuentaTipo="CLIENTE" />} />
+      <Route path="/:entidadId/cuenta-corriente/saldo-inicial" element={<SaldoInicialScreen cuentaTipo="CLIENTE" />} />
     </Routes>
   )
 }

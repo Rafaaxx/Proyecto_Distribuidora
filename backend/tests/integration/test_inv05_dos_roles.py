@@ -17,10 +17,10 @@ from sqlalchemy.exc import ProgrammingError
 
 # Lista explícita y enumerable (mismo criterio que el ratchet de rutas del
 # change 02 y la exención de catálogo global de la tarea 3.1): las tablas de
-# libro declaradas hasta este change. `cuenta_movimiento`, `stock_movimiento`
-# y `costo_producto_mov` llegan con changes posteriores y se agregan acá
-# cuando existan.
-TABLAS_DE_LIBRO_DECLARADAS = frozenset({"auditoria", "intento_login"})
+# libro declaradas hasta este change. `stock_movimiento` y
+# `costo_producto_mov` llegan con changes posteriores y se agregan acá cuando
+# existan. `cuenta_movimiento` se agregó en el change 08.
+TABLAS_DE_LIBRO_DECLARADAS = frozenset({"auditoria", "intento_login", "cuenta_movimiento"})
 
 # Tablas de sistema que Alembic administra y que no son de negocio: no
 # reciben grants de `app_runtime` (no las consulta la aplicación).
@@ -218,3 +218,37 @@ def test_inv05_detecta_una_tabla_de_libro_mal_otorgada(
         if privilegios.get(tabla, set()) & {"UPDATE", "DELETE"}
     ]
     assert "inv05_negativo_mal_otorgada" in errores
+
+
+def test_inv05_el_libro_de_cuenta_corriente_esta_declarado_y_admite_solo_select_e_insert(
+    database_url: str, _engine_de_sesion: Engine
+) -> None:
+    """INV-05, CC-06: `cuenta_movimiento` es tabla de libro (solo `SELECT` e
+    `INSERT`); `saldo_cuenta` no lo es: es la materialización verificable del
+    saldo y sí admite `UPDATE` (nunca `DELETE`)."""
+    aplicar_migraciones(database_url)
+    privilegios = _privilegios_de_app_runtime(_engine_de_sesion)
+
+    assert "cuenta_movimiento" in TABLAS_DE_LIBRO_DECLARADAS
+    assert privilegios["cuenta_movimiento"] == {"SELECT", "INSERT"}
+    assert "saldo_cuenta" not in TABLAS_DE_LIBRO_DECLARADAS
+    assert privilegios["saldo_cuenta"] == {"SELECT", "INSERT", "UPDATE"}
+
+
+def test_inv05_app_runtime_no_puede_actualizar_ni_borrar_movimientos_de_cuenta(
+    database_url: str, app_runtime_engine: Engine
+) -> None:
+    """INV-05, CC-06: la base rechaza `UPDATE` y `DELETE` sobre el libro de
+    cuenta corriente (escenario "El usuario de aplicación no puede modificar
+    ni borrar movimientos")."""
+    aplicar_migraciones(database_url)
+
+    for sentencia in (
+        "UPDATE cuenta_movimiento SET importe = 1 WHERE false",
+        "DELETE FROM cuenta_movimiento WHERE false",
+    ):
+        with (
+            app_runtime_engine.connect() as conexion,
+            pytest.raises(ProgrammingError, match="(?i)permission denied"),
+        ):
+            conexion.execute(text(sentencia))

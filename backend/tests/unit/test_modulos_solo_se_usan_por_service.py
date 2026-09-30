@@ -67,3 +67,39 @@ def test_service_py_puede_importar_el_otro_modulo_sin_ser_marcado_infractor() ->
         assert infractores, "El import de prueba no se agregó correctamente."
     finally:
         service_identidad.write_text(contenido_original, encoding="utf-8")
+
+
+# --- Change 08: cuentas_corrientes (tarea 4.2, `02` §5.3) -------------------
+
+
+def test_cuentas_corrientes_no_importa_ningun_otro_modulo_de_negocio() -> None:
+    """`cuentas_corrientes` no depende de clientes, proveedores, catalogo ni
+    configuracion, y de identidad solo alcanza su `service.py`."""
+    prohibidos = ("clientes", "proveedores", "catalogo", "configuracion")
+    infractores = []
+    for archivo in _archivos_python_de("cuentas_corrientes"):
+        for nombre in _nombres_importados(archivo):
+            if any(
+                nombre == f"app.modules.{otro}" or nombre.startswith(f"app.modules.{otro}.")
+                for otro in prohibidos
+            ):
+                infractores.append(f"{archivo.relative_to(BACKEND_DIR)} importa {nombre!r}")
+            if nombre.startswith("app.modules.identidad.") and nombre != (
+                "app.modules.identidad.service"
+            ):
+                infractores.append(f"{archivo.relative_to(BACKEND_DIR)} importa {nombre!r}")
+
+    assert infractores == [], f"cuentas_corrientes depende de otro modulo: {infractores}"
+
+
+def test_clientes_y_proveedores_solo_importan_el_service_de_cuentas_corrientes() -> None:
+    infractores = []
+    for modulo in ("clientes", "proveedores"):
+        for archivo in _archivos_python_de(modulo):
+            for nombre in _nombres_importados(archivo):
+                if nombre.startswith("app.modules.cuentas_corrientes.") and nombre != (
+                    "app.modules.cuentas_corrientes.service"
+                ):
+                    infractores.append(f"{archivo.relative_to(BACKEND_DIR)} importa {nombre!r}")
+
+    assert infractores == [], f"Import de internos de cuentas_corrientes: {infractores}"

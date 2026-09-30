@@ -28,6 +28,12 @@ from app.modules.clientes import commands as clientes_commands  # noqa: F401
 # `catalogo/api.py` y `proveedores/api.py` con los suyos).
 from app.modules.clientes import models as clientes_models  # noqa: F401
 
+# Registro de comandos y de modelos de `cuentas_corrientes` (change 08): mismo
+# criterio que `clientes` arriba, explícito para no depender de que exista un
+# `api.py` (grupo 6).
+from app.modules.cuentas_corrientes import commands as cuentas_corrientes_commands  # noqa: F401
+from app.modules.cuentas_corrientes import models as cuentas_corrientes_models  # noqa: F401
+
 
 def _domain_error_a_problem_details(request: Request, exc: Exception) -> JSONResponse:
     """Traduce cualquier `DomainError` a Problem Details (RFC 9457, `02`

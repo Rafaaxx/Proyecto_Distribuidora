@@ -1569,6 +1569,66 @@
         }
       }
     },
+    "/api/v1/catalogo/productos/{producto_id}/costo": {
+      "get": {
+        "tags": [
+          "catalogo"
+        ],
+        "summary": "Obtener Costo Promedio",
+        "description": "Costo promedio vigente de un producto (change 09, enmienda a D3 del\n2026-09-30; misma idea que ADR-035 punto 5: las lecturas viven con su\nentidad). Permiso `VER_COSTOS`.\n\n`catalogo` resuelve PRIMERO el producto en la organización del token: 404 si\nno existe o es de otra organización (INV-21, SEG-07), sin revelar nada. Recién\nentonces consulta a `costeo/service.py` (dependencia permitida `catalogo ->\ncosteo`; `costeo` no importa `catalogo`). Un producto sin ingresos responde\n200 con `costo_promedio` nulo y `stock_total` 0 (D10).",
+        "operationId": "obtener_costo_promedio_api_v1_catalogo_productos__producto_id__costo_get",
+        "parameters": [
+          {
+            "name": "producto_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Producto Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CostoPromedioResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/catalogo/productos/{producto_id}/presentaciones": {
       "post": {
         "tags": [
@@ -3384,6 +3444,553 @@
         }
       }
     },
+    "/api/v1/stock/ubicaciones": {
+      "post": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Crear Ubicacion",
+        "operationId": "crear_ubicacion_api_v1_stock_ubicaciones_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UbicacionCrearRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UbicacionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Listar Ubicaciones",
+        "description": "Ubicaciones de la organización, con filtro opcional por estado, paginadas\npor cursor (spec `ubicaciones`, escenario \"Listar ubicaciones\").",
+        "operationId": "listar_ubicaciones_api_v1_stock_ubicaciones_get",
+        "parameters": [
+          {
+            "name": "activo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Activo"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaUbicaciones"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stock/ubicaciones/{ubicacion_id}": {
+      "put": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Modificar Ubicacion",
+        "operationId": "modificar_ubicacion_api_v1_stock_ubicaciones__ubicacion_id__put",
+        "parameters": [
+          {
+            "name": "ubicacion_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Ubicacion Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UbicacionModificarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UbicacionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stock/iniciales": {
+      "post": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Registrar Stock Inicial",
+        "operationId": "registrar_stock_inicial_api_v1_stock_iniciales_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StockInicialRegistrarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockInicialResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stock/ubicaciones/{ubicacion_id}/saldos": {
+      "get": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Obtener Saldos De Ubicacion",
+        "description": "Stock de una ubicación por producto en unidad base (STK-01), con las\nunidades de la presentación de referencia para mostrarlo en cajas + unidades\n(CAT-08). El promedio solo viaja con `VER_COSTOS` (D3-A). 404 si la ubicación\nes ajena o inexistente.",
+        "operationId": "obtener_saldos_de_ubicacion_api_v1_stock_ubicaciones__ubicacion_id__saldos_get",
+        "parameters": [
+          {
+            "name": "ubicacion_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Ubicacion Id"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockDeUbicacionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stock/kardex": {
+      "get": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Obtener Kardex",
+        "description": "Kardex de un producto en una ubicación (STK-04, D11): `desde` y `hasta`\nson fechas de negocio en la zona de la organización; el acumulado es el de la\nhistoria completa. El costo de cada movimiento solo viaja con `VER_COSTOS`\n(D3-A). 404 si el producto o la ubicación son ajenos o inexistentes.",
+        "operationId": "obtener_kardex_api_v1_stock_kardex_get",
+        "parameters": [
+          {
+            "name": "producto_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Producto Id"
+            }
+          },
+          {
+            "name": "ubicacion_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Ubicacion Id"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Desde"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hasta"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KardexResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sync/comandos": {
       "post": {
         "tags": [
@@ -4277,6 +4884,38 @@
         ],
         "title": "CostoInformarResponse"
       },
+      "CostoPromedioResponse": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "costo_promedio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Costo Promedio"
+          },
+          "stock_total": {
+            "type": "integer",
+            "title": "Stock Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto_id",
+          "costo_promedio",
+          "stock_total"
+        ],
+        "title": "CostoPromedioResponse",
+        "description": "Costo promedio vigente de un producto (CST-10) y su stock total. El\npromedio es `None` mientras el producto no tuvo ningún ingreso con costo (D10:\n\"sin costo\", no cero); viaja como string (`\"1050.000000\"`)."
+      },
       "CostoVigenteResponse": {
         "properties": {
           "fecha": {
@@ -4533,6 +5172,265 @@
         ],
         "title": "ItemLoteComandoRequest",
         "description": "Un comando de la cola local (`02` §13.2 `cola`), tal como el\ndispositivo lo generó. `usuario_id`/`dispositivo_id` son los que\ndeclaró al generarlo -- el servidor los compara contra la sesión que\nsincroniza (`ColaAjenaError`, tarea 8.5), nunca los usa tal cual para\nconstruir el sobre sin esa verificación."
+      },
+      "KardexResponse": {
+        "properties": {
+          "saldo_anterior": {
+            "type": "integer",
+            "title": "Saldo Anterior"
+          },
+          "saldo_actual": {
+            "type": "integer",
+            "title": "Saldo Actual"
+          },
+          "zona_horaria": {
+            "type": "string",
+            "title": "Zona Horaria"
+          },
+          "producto_codigo": {
+            "type": "string",
+            "title": "Producto Codigo"
+          },
+          "producto_nombre": {
+            "type": "string",
+            "title": "Producto Nombre"
+          },
+          "unidades_referencia": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unidades Referencia"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LineaDeKardexResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "cursor_siguiente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Siguiente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "saldo_anterior",
+          "saldo_actual",
+          "zona_horaria",
+          "producto_codigo",
+          "producto_nombre",
+          "unidades_referencia",
+          "items",
+          "cursor_siguiente"
+        ],
+        "title": "KardexResponse"
+      },
+      "LineaDeKardexResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "cantidad_base": {
+            "type": "integer",
+            "title": "Cantidad Base"
+          },
+          "origen_tipo": {
+            "type": "string",
+            "title": "Origen Tipo"
+          },
+          "origen_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Origen Id"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Registered At"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "operation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Operation Id"
+          },
+          "saldo_acumulado": {
+            "type": "integer",
+            "title": "Saldo Acumulado"
+          },
+          "costo_unitario": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Costo Unitario"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tipo",
+          "cantidad_base",
+          "origen_tipo",
+          "origen_id",
+          "occurred_at",
+          "registered_at",
+          "usuario_id",
+          "operation_id",
+          "saldo_acumulado"
+        ],
+        "title": "LineaDeKardexResponse"
+      },
+      "LineaDeStockResponse": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "producto_codigo": {
+            "type": "string",
+            "title": "Producto Codigo"
+          },
+          "producto_nombre": {
+            "type": "string",
+            "title": "Producto Nombre"
+          },
+          "cantidad_base": {
+            "type": "integer",
+            "title": "Cantidad Base"
+          },
+          "unidades_referencia": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unidades Referencia"
+          },
+          "costo_promedio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Costo Promedio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto_id",
+          "producto_codigo",
+          "producto_nombre",
+          "cantidad_base",
+          "unidades_referencia"
+        ],
+        "title": "LineaDeStockResponse"
+      },
+      "LineaStockInicialRequest": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "cantidad_base": {
+            "type": "integer",
+            "title": "Cantidad Base"
+          },
+          "costo_unitario": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Costo Unitario"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "producto_id",
+          "cantidad_base"
+        ],
+        "title": "LineaStockInicialRequest"
+      },
+      "LineaStockInicialResponse": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "movimiento_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Movimiento Id"
+          },
+          "cantidad_base": {
+            "type": "integer",
+            "title": "Cantidad Base"
+          },
+          "saldo": {
+            "type": "integer",
+            "title": "Saldo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto_id",
+          "movimiento_id",
+          "cantidad_base",
+          "saldo"
+        ],
+        "title": "LineaStockInicialResponse"
       },
       "LoginRequest": {
         "properties": {
@@ -4980,6 +5878,34 @@
           "cursor_siguiente"
         ],
         "title": "PaginaProveedores"
+      },
+      "PaginaUbicaciones": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UbicacionResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "cursor_siguiente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Siguiente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "cursor_siguiente"
+        ],
+        "title": "PaginaUbicaciones"
       },
       "PresentacionAgregarRequest": {
         "properties": {
@@ -5865,6 +6791,81 @@
         ],
         "title": "SaludRespuesta"
       },
+      "StockDeUbicacionResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LineaDeStockResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "cursor_siguiente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Siguiente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "cursor_siguiente"
+        ],
+        "title": "StockDeUbicacionResponse"
+      },
+      "StockInicialRegistrarRequest": {
+        "properties": {
+          "ubicacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Id"
+          },
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/LineaStockInicialRequest"
+            },
+            "type": "array",
+            "title": "Lineas"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ubicacion_id",
+          "lineas"
+        ],
+        "title": "StockInicialRegistrarRequest",
+        "description": "`lineas` sin cota en el esquema: el dominio la valida (1 a 200,\n`LINEAS_INVALIDAS`, D5)."
+      },
+      "StockInicialResponse": {
+        "properties": {
+          "ubicacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Id"
+          },
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/LineaStockInicialResponse"
+            },
+            "type": "array",
+            "title": "Lineas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ubicacion_id",
+          "lineas"
+        ],
+        "title": "StockInicialResponse",
+        "description": "Sale de `comando.resultado`, no de una relectura: un reenvío idempotente del\nmismo `Operation-Id` devuelve exactamente lo mismo (INV-06). No lleva costos."
+      },
       "TokenResponse": {
         "properties": {
           "access_token": {
@@ -5883,6 +6884,110 @@
           "access_token"
         ],
         "title": "TokenResponse"
+      },
+      "UbicacionCrearRequest": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "DEPOSITO",
+              "VEHICULO",
+              "OTRO"
+            ],
+            "title": "Tipo"
+          },
+          "requiere_toma": {
+            "type": "boolean",
+            "title": "Requiere Toma",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "nombre",
+          "tipo"
+        ],
+        "title": "UbicacionCrearRequest"
+      },
+      "UbicacionModificarRequest": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "DEPOSITO",
+              "VEHICULO",
+              "OTRO"
+            ],
+            "title": "Tipo"
+          },
+          "requiere_toma": {
+            "type": "boolean",
+            "title": "Requiere Toma"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "nombre",
+          "tipo",
+          "requiere_toma",
+          "activo"
+        ],
+        "title": "UbicacionModificarRequest",
+        "description": "Reemplazo completo de los campos editables (D7, D8), igual que los `PUT`\nde los demás maestros."
+      },
+      "UbicacionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "requiere_toma": {
+            "type": "boolean",
+            "title": "Requiere Toma"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          },
+          "actualizado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Actualizado En"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "tipo",
+          "requiere_toma",
+          "activo",
+          "actualizado_en"
+        ],
+        "title": "UbicacionResponse"
       },
       "UsuarioResponse": {
         "properties": {

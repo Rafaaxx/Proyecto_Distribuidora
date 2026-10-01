@@ -28,11 +28,18 @@ from app.modules.clientes import commands as clientes_commands  # noqa: F401
 # `catalogo/api.py` y `proveedores/api.py` con los suyos).
 from app.modules.clientes import models as clientes_models  # noqa: F401
 
+# Registro de modelos de `costeo` y `stock` (change 09): explícito para que
+# `Base.metadata` conozca las tablas sin depender de que existan sus `api.py`
+# (grupo 7) ni sus comandos (grupo 6).
+from app.modules.costeo import models as costeo_models  # noqa: F401
+
 # Registro de comandos y de modelos de `cuentas_corrientes` (change 08): mismo
 # criterio que `clientes` arriba, explícito para no depender de que exista un
 # `api.py` (grupo 6).
 from app.modules.cuentas_corrientes import commands as cuentas_corrientes_commands  # noqa: F401
 from app.modules.cuentas_corrientes import models as cuentas_corrientes_models  # noqa: F401
+from app.modules.stock import commands as stock_commands  # noqa: F401
+from app.modules.stock import models as stock_models  # noqa: F401
 
 
 def _domain_error_a_problem_details(request: Request, exc: Exception) -> JSONResponse:

@@ -49,6 +49,7 @@ from app.modules.catalogo.schemas import (
     CategoriaCrearRequest,
     CategoriaModificarRequest,
     CategoriaResponse,
+    CostoPromedioResponse,
     MarcaCrearRequest,
     MarcaModificarRequest,
     MarcaResponse,
@@ -64,11 +65,13 @@ from app.modules.catalogo.schemas import (
     ProductoModificarRequest,
     ProductoResponse,
 )
+from app.modules.costeo import service as costeo_service
 from app.modules.sync import service as sync_service
 
 router = APIRouter(prefix="/catalogo", tags=["catalogo"])
 
 PERMISO = "GESTIONAR_CATALOGO"
+PERMISO_VER_COSTOS = "VER_COSTOS"
 
 
 def _resultado_de(comando: sync_service.Comando) -> dict[str, object]:
@@ -469,6 +472,34 @@ def obtener_producto(
         **ProductoResponse.model_validate(producto).model_dump(),
         presentaciones=[PresentacionResponse.model_validate(p) for p in presentaciones],
         proveedor_nombre=proveedor_nombre,
+    )
+
+
+@router.get("/productos/{producto_id}/costo", response_model=CostoPromedioResponse)
+def obtener_costo_promedio(
+    producto_id: UUID,
+    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso(PERMISO_VER_COSTOS))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> CostoPromedioResponse:
+    """Costo promedio vigente de un producto (change 09, enmienda a D3 del
+    2026-09-30; misma idea que ADR-035 punto 5: las lecturas viven con su
+    entidad). Permiso `VER_COSTOS`.
+
+    `catalogo` resuelve PRIMERO el producto en la organización del token: 404 si
+    no existe o es de otra organización (INV-21, SEG-07), sin revelar nada. Recién
+    entonces consulta a `costeo/service.py` (dependencia permitida `catalogo ->
+    costeo`; `costeo` no importa `catalogo`). Un producto sin ingresos responde
+    200 con `costo_promedio` nulo y `stock_total` 0 (D10)."""
+    producto = catalogo_repository.obtener_producto_por_id(
+        contexto.organizacion_id, producto_id, sesion
+    )
+    if producto is None:
+        raise RecursoNoEncontradoError(f"El producto {producto_id} no existe en esta organización.")
+    costo = costeo_service.obtener_costo(contexto.organizacion_id, sesion, producto_id)
+    return CostoPromedioResponse(
+        producto_id=producto_id,
+        costo_promedio=None if costo is None else costo.costo_promedio,
+        stock_total=0 if costo is None else costo.stock_total,
     )
 
 

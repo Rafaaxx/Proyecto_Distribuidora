@@ -96,8 +96,14 @@ describe('AdminLayout: el menú muestra solo las secciones permitidas (tareas 7.
     expect(screen.queryByRole('link', { name: 'Proveedores' })).not.toBeInTheDocument()
   })
 
-  it('Vendedor/Repartidor no ve ninguna sección', async () => {
+  it('Vendedor/Repartidor ve solo Stock (TRANSFERIR_STOCK, change 09 D3)', async () => {
     await montarRol('VEN')
+
+    expect(screen.getAllByRole('link').map((enlace) => enlace.textContent)).toEqual(['Stock'])
+  })
+
+  it('Consulta/Dirección no ve ninguna sección', async () => {
+    await montarRol('CON')
 
     expect(screen.queryAllByRole('link')).toHaveLength(0)
   })
@@ -257,8 +263,8 @@ describe('AdminLayout: la ruta índice /admin/inicio (tarea 7.6, B3)', () => {
     expect(await screen.findByText('Pantalla de clientes')).toBeInTheDocument()
   })
 
-  it('Vendedor/Repartidor ve que no tiene secciones de administración disponibles', async () => {
-    montarLayout(queryClientConYo('VEN'), '/admin/inicio')
+  it('Consulta/Dirección ve que no tiene secciones de administración disponibles', async () => {
+    montarLayout(queryClientConYo('CON'), '/admin/inicio')
 
     expect(
       await screen.findByText('Tu usuario no tiene secciones de administración disponibles'),

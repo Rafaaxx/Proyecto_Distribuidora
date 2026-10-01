@@ -32,6 +32,7 @@ export const SECCIONES: readonly SeccionAdmin[] = [
   { ruta: '/admin/catalogo', etiqueta: 'Catálogo', permiso: 'GESTIONAR_CATALOGO' },
   { ruta: '/admin/proveedores', etiqueta: 'Proveedores', permiso: 'GESTIONAR_PROVEEDORES' },
   { ruta: '/admin/clientes', etiqueta: 'Clientes', permiso: 'GESTIONAR_CLIENTES' },
+  { ruta: '/admin/stock', etiqueta: 'Stock', permiso: 'TRANSFERIR_STOCK' },
   { ruta: '/admin/dispositivos', etiqueta: 'Dispositivos', permiso: 'GESTIONAR_DISPOSITIVOS' },
 ]
 

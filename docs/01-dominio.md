@@ -139,7 +139,7 @@ Ejemplos de CST-02:
 | --- | --- | --- |
 | CST-10 | Cada producto tiene un costo promedio por organización, único para todas las ubicaciones. | 1 |
 | CST-11 | Un ingreso con costo (compra, stock inicial, anulación de venta) recalcula el promedio: si el stock total previo es mayor que cero, `(stock × promedio + cantidad × costo) / (stock + cantidad)`; si es cero o negativo, el promedio pasa a ser el costo del ingreso. | 1 |
-| CST-12 | Las transferencias, los ajustes y las rendiciones no modifican el promedio. Los egresos por ajuste se valorizan al promedio vigente. | 1 |
+| CST-12 | Las transferencias, los ajustes y las rendiciones no modifican el promedio. Los egresos por ajuste, y los de corrección de un stock inicial (STK-10), se valorizan al promedio vigente. | 1 |
 | CST-13 | Cada cambio del promedio se registra con valor anterior, valor nuevo, operación origen y momento, de forma que el promedio en cualquier momento pueda reconstruirse. | 1 |
 | CST-14 | El cálculo del costo de venta está encapsulado en un único servicio de costeo. Ninguna otra parte del sistema calcula costos de venta. | 1 |
 | CST-15 | La estrategia FIFO podrá habilitarse desde una fecha de corte sin modificar costos congelados anteriores. | 4 |
@@ -240,6 +240,7 @@ Ejemplos de PRC-22 (caja x6):
 | STK-07 | Una transferencia genera, en la misma transacción, una salida en origen y una entrada en destino por la misma cantidad. No modifica costos. | 1 |
 | STK-08 | Un ajuste requiere `AJUSTAR_STOCK` y un motivo del catálogo de la organización. | 1 |
 | STK-09 | Mientras una ubicación está tomada, solo la jornada que la tomó puede generar movimientos sobre ella, salvo la rendición y usuarios con `LIBERAR_UBICACION`, con auditoría. | 1 |
+| STK-10 | Un producto admite varios `STOCK_INICIAL`, cada uno con su cantidad con signo distinta de cero. Uno positivo es un ingreso con costo (CST-11); uno negativo es una corrección: egresa al promedio vigente sin recalcularlo y no puede dejar negativo el saldo de la ubicación (`STOCK_INSUFICIENTE`, sin excepción por `PERMITIR_STOCK_NEGATIVO`). Se admiten solo mientras el producto no tenga en la organización movimientos de otro tipo (`PRODUCTO_CON_OPERACIONES`). Un costo mal cargado se corrige llevando el stock total a cero y recargando. | 1 |
 
 ### 8.2 Jornada y rendición
 
@@ -466,14 +467,14 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 | Permiso | Alcance | ADM | GES | SUP | VEN | CON |
 | --- | --- | :-: | :-: | :-: | :-: | :-: |
 | ADMIN_USUARIOS | Usuarios, roles y permisos | ✓ | | | | |
-| ADMIN_CONFIGURACION | Configuración de la organización | ✓ | | | | |
+| ADMIN_CONFIGURACION | Configuración de la organización (incluye crear, modificar y desactivar ubicaciones, STK-02) | ✓ | | | | |
 | GESTIONAR_DISPOSITIVOS | Ver y revocar dispositivos | ✓ | | ✓ | | |
-| IMPORTAR_DATOS | Importaciones y puesta en marcha (incluye registrar saldos iniciales, CC-08) | ✓ | | | | |
+| IMPORTAR_DATOS | Importaciones y puesta en marcha (incluye registrar saldos iniciales, CC-08, y stock inicial, STK-10) | ✓ | | | | |
 | GESTIONAR_CATALOGO | Productos, presentaciones, categorías | ✓ | ✓ | | | |
 | GESTIONAR_CLIENTES | Alta y edición de clientes; ver su cuenta corriente | ✓ | ✓ | ✓ | | |
 | GESTIONAR_CREDITO | Límite, política y tolerancia de clientes | ✓ | ✓ | | | |
 | GESTIONAR_PROVEEDORES | Alta y edición de proveedores; ver su cuenta corriente | ✓ | ✓ | | | |
-| VER_COSTOS | Ver costos | ✓ | ✓ | | | |
+| VER_COSTOS | Ver costos (incluye el costo promedio de un producto y los costos del kardex y del stock) | ✓ | ✓ | | | |
 | EDITAR_COSTOS | Registrar costos informados | ✓ | ✓ | | | |
 | VER_UTILIDAD | Ver utilidad | ✓ | ✓ | | | ✓ |
 | GESTIONAR_LISTAS | Reglas de margen, redondeo y borradores | ✓ | ✓ | | | |
@@ -484,7 +485,7 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 | ANULAR_COMPRA | Anular compras | ✓ | ✓ | | | |
 | REGISTRAR_PAGO_PROVEEDOR | Registrar pagos | ✓ | ✓ | | | |
 | ANULAR_PAGO_PROVEEDOR | Anular pagos | ✓ | ✓ | | | |
-| TRANSFERIR_STOCK | Transferencias | ✓ | ✓ | ✓ | ✓ | |
+| TRANSFERIR_STOCK | Transferencias; ver ubicaciones, stock por ubicación y kardex (sin costos) | ✓ | ✓ | ✓ | ✓ | |
 | AJUSTAR_STOCK | Ajustes | ✓ | ✓ | | | |
 | PERMITIR_STOCK_NEGATIVO | Operar con stock negativo online | ✓ | | | | |
 | ABRIR_JORNADA | Abrir jornada y tomar ubicación | ✓ | | ✓ | ✓ | |
@@ -539,7 +540,7 @@ Deben cumplirse siempre y estar cubiertos por pruebas automatizadas.
 
 | Evento | Stock | Costo promedio | Cta. cliente | Cta. proveedor | Utilidad | Auditoría |
 | --- | --- | --- | --- | --- | --- | --- |
-| Stock inicial | + | Recalcula | — | — | — | Sí |
+| Stock inicial | + / − (corrección, STK-10) | Recalcula (+); no cambia (−) | — | — | — | Sí |
 | Saldo inicial | — | — | + / − | + / − | — | Sí |
 | Costo informado | — | — | — | — | — | Sí |
 | Versión publicada | — | — | — | — | — | Sí |

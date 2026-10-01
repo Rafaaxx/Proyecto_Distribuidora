@@ -15,15 +15,18 @@ HTTP a los nombres internos del comando).
 `organizacion_id` nunca aparece en ningún esquema de entrada (`CLAUDE.md`
 §4: sale siempre del token). Los importes no existen en este módulo (no
 hay precios ni costos en `catalogo`), así que ninguna regla de dinero
-aplica acá.
+aplica acá; la única excepción es `CostoPromedioResponse` (change 09,
+enmienda a D3 del 2026-09-30), que solo REEXPONE el promedio que calcula
+`costeo`, como string (`CLAUDE.md` §4).
 """
 
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 
 # --- categoria ---------------------------------------------------------
 
@@ -189,3 +192,20 @@ class PaginaMarcas(BaseModel):
 class PaginaProductos(BaseModel):
     items: list[ProductoResponse]
     cursor_siguiente: str | None
+
+
+# --- costo promedio (change 09, enmienda a D3) ---------------------------
+
+
+class CostoPromedioResponse(BaseModel):
+    """Costo promedio vigente de un producto (CST-10) y su stock total. El
+    promedio es `None` mientras el producto no tuvo ningún ingreso con costo (D10:
+    "sin costo", no cero); viaja como string (`"1050.000000"`)."""
+
+    producto_id: UUID
+    costo_promedio: Decimal | None
+    stock_total: int
+
+    @field_serializer("costo_promedio")
+    def _serializar_costo(self, valor: Decimal | None) -> str | None:
+        return None if valor is None else str(valor)

@@ -1,0 +1,245 @@
+[
+  {
+    "id": "CST11-ejemplo-01-primer-ingreso-sin-promedio",
+    "reglas": ["CST-10", "CST-11"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "ingreso",
+      "stock_previo": 0,
+      "promedio_previo": null,
+      "cantidad": 60,
+      "costo_ingreso": "1000.000000"
+    },
+    "salida_esperada": { "promedio_nuevo": "1000.000000", "stock_nuevo": 60 }
+  },
+  {
+    "id": "CST11-ejemplo-02-segundo-ingreso-promedia",
+    "reglas": ["CST-11"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "ingreso",
+      "stock_previo": 60,
+      "promedio_previo": "1000.000000",
+      "cantidad": 60,
+      "costo_ingreso": "1100.000000"
+    },
+    "salida_esperada": { "promedio_nuevo": "1050.000000", "stock_nuevo": 120 }
+  },
+  {
+    "id": "CST11-ejemplo-03-egreso-no-recalcula",
+    "reglas": ["CST-12"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "egreso",
+      "stock_previo": 120,
+      "promedio_previo": "1050.000000",
+      "cantidad": 72
+    },
+    "salida_esperada": {
+      "promedio_nuevo": "1050.000000",
+      "stock_nuevo": 48,
+      "costo_valorizacion": "1050.000000"
+    }
+  },
+  {
+    "id": "CST11-ejemplo-04-ingreso-tras-egreso-1133",
+    "reglas": ["CST-11", "TR-02", "TR-03"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "ingreso",
+      "stock_previo": 48,
+      "promedio_previo": "1050.000000",
+      "cantidad": 60,
+      "costo_ingreso": "1200.000000"
+    },
+    "salida_esperada": { "promedio_nuevo": "1133.333333", "stock_nuevo": 108 }
+  },
+  {
+    "id": "CST11-stock-previo-cero-toma-el-costo-del-ingreso",
+    "reglas": ["CST-11"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "ingreso",
+      "stock_previo": 0,
+      "promedio_previo": "1050.000000",
+      "cantidad": 60,
+      "costo_ingreso": "1200.000000"
+    },
+    "salida_esperada": { "promedio_nuevo": "1200.000000", "stock_nuevo": 60 }
+  },
+  {
+    "id": "CST11-stock-previo-negativo-toma-el-costo-del-ingreso",
+    "reglas": ["CST-11"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "ingreso",
+      "stock_previo": -5,
+      "promedio_previo": "1050.000000",
+      "cantidad": 60,
+      "costo_ingreso": "1200.000000"
+    },
+    "salida_esperada": { "promedio_nuevo": "1200.000000", "stock_nuevo": 55 }
+  },
+  {
+    "id": "CST11-stock-previo-negativo-sin-promedio",
+    "reglas": ["CST-11", "CST-10"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "ingreso",
+      "stock_previo": -3,
+      "promedio_previo": null,
+      "cantidad": 10,
+      "costo_ingreso": "250.500000"
+    },
+    "salida_esperada": { "promedio_nuevo": "250.500000", "stock_nuevo": 7 }
+  },
+  {
+    "id": "CST11-redondeo-medio-hacia-arriba-septimo-decimal",
+    "reglas": ["CST-11", "TR-02", "TR-03"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "ingreso",
+      "stock_previo": 3,
+      "promedio_previo": "333.333333",
+      "cantidad": 3,
+      "costo_ingreso": "100.000000"
+    },
+    "salida_esperada": { "promedio_nuevo": "216.666667", "stock_nuevo": 6 }
+  },
+  {
+    "id": "CST11-redondeo-medio-hacia-arriba-no-al-par",
+    "reglas": ["CST-11", "TR-03", "INV-03"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "ingreso",
+      "stock_previo": 1,
+      "promedio_previo": "0.000002",
+      "cantidad": 1,
+      "costo_ingreso": "0.000003"
+    },
+    "salida_esperada": { "promedio_nuevo": "0.000003", "stock_nuevo": 2 }
+  },
+  {
+    "id": "CST11-sin-redondeo-intermedio-tres-unidades",
+    "reglas": ["CST-11", "TR-03"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "ingreso",
+      "stock_previo": 1,
+      "promedio_previo": "1000.000000",
+      "cantidad": 2,
+      "costo_ingreso": "1000.000001"
+    },
+    "salida_esperada": { "promedio_nuevo": "1000.000001", "stock_nuevo": 3 }
+  },
+  {
+    "id": "CST11-costo-con-seis-decimales-se-conserva",
+    "reglas": ["CST-11", "TR-02"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "ingreso",
+      "stock_previo": 0,
+      "promedio_previo": null,
+      "cantidad": 1,
+      "costo_ingreso": "0.833333"
+    },
+    "salida_esperada": { "promedio_nuevo": "0.833333", "stock_nuevo": 1 }
+  },
+  {
+    "id": "CST11-egreso-total-conserva-el-promedio",
+    "reglas": ["CST-12"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "egreso",
+      "stock_previo": 48,
+      "promedio_previo": "1050.000000",
+      "cantidad": 48
+    },
+    "salida_esperada": {
+      "promedio_nuevo": "1050.000000",
+      "stock_nuevo": 0,
+      "costo_valorizacion": "1050.000000"
+    }
+  },
+  {
+    "id": "CST11-egreso-sin-promedio-no-valoriza",
+    "reglas": ["CST-12", "CST-10"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "egreso",
+      "stock_previo": 10,
+      "promedio_previo": null,
+      "cantidad": 4
+    },
+    "salida_esperada": {
+      "promedio_nuevo": null,
+      "stock_nuevo": 6,
+      "costo_valorizacion": null
+    }
+  },
+  {
+    "id": "CST11-error-costo-cero",
+    "reglas": ["CST-11", "TR-01"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "ingreso",
+      "stock_previo": 0,
+      "promedio_previo": null,
+      "cantidad": 60,
+      "costo_ingreso": "0"
+    },
+    "salida_esperada": { "error": "COSTO_INVALIDO" }
+  },
+  {
+    "id": "CST11-error-costo-negativo",
+    "reglas": ["CST-11", "TR-01"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "ingreso",
+      "stock_previo": 10,
+      "promedio_previo": "1000.000000",
+      "cantidad": 5,
+      "costo_ingreso": "-1.000000"
+    },
+    "salida_esperada": { "error": "COSTO_INVALIDO" }
+  },
+  {
+    "id": "CST11-error-costo-con-mas-de-seis-decimales",
+    "reglas": ["CST-11", "TR-02", "TR-03"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "ingreso",
+      "stock_previo": 0,
+      "promedio_previo": null,
+      "cantidad": 60,
+      "costo_ingreso": "1000.0000001"
+    },
+    "salida_esperada": { "error": "COSTO_INVALIDO" }
+  },
+  {
+    "id": "CST11-error-costo-no-decimal",
+    "reglas": ["CST-11", "INV-03"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "ingreso",
+      "stock_previo": 0,
+      "promedio_previo": null,
+      "cantidad": 60,
+      "costo_ingreso": "1e3"
+    },
+    "salida_esperada": { "error": "COSTO_INVALIDO" }
+  },
+  {
+    "id": "CST11-error-costo-desborda-numeric-18-6",
+    "reglas": ["CST-11", "INV-03"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "ingreso",
+      "stock_previo": 0,
+      "promedio_previo": null,
+      "cantidad": 1,
+      "costo_ingreso": "1000000000000.000000"
+    },
+    "salida_esperada": { "error": "COSTO_INVALIDO" }
+  }
+]

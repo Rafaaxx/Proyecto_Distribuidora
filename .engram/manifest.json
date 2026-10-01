@@ -160,6 +160,14 @@
       "sessions": 0,
       "memories": 4,
       "prompts": 0
+    },
+    {
+      "id": "8c6ce48a",
+      "created_by": "rafan",
+      "created_at": "2026-10-01T00:11:15Z",
+      "sessions": 0,
+      "memories": 12,
+      "prompts": 0
     }
   ]
 }

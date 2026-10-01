@@ -230,10 +230,11 @@ cobranzas ──► cuentas_corrientes
 clientes ──► cuentas_corrientes
 precios ──► catalogo, proveedores (costos informados)
 stock ──► catalogo, costeo
+catalogo ──► costeo (solo lectura del costo promedio de un producto, ADR-036)
 facturacion ──► ventas (lectura), cuentas_corrientes, costeo
 sync ──► todos los módulos con comandos
 auditoria, configuracion, identidad ◄── todos
-cuentas_corrientes, costeo, catalogo ──► (sin dependencias de negocio)
+cuentas_corrientes, costeo ──► (sin dependencias de negocio)
 ```
 
 No se permiten ciclos. Si aparece la necesidad de uno, se resuelve moviendo la lógica al módulo que orquesta (normalmente `ventas`) o registrando un ADR.

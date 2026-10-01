@@ -51,7 +51,7 @@ Toda tabla de negocio tiene:
 | `organizacion_id` | `uuid` | Obligatoria (INV-02) |
 | `creado_en` | `timestamptz` | `default now()` |
 
-Excepción: una tabla de saldo cuya clave natural es compuesta y que ninguna otra tabla referencia no lleva `id`; su clave primaria empieza por `organizacion_id` (INV-02). Hoy es el caso de `saldo_cuenta` (ADR-035).
+Excepción: una tabla de saldo cuya clave natural es compuesta y que ninguna otra tabla referencia no lleva `id`; su clave primaria empieza por `organizacion_id` (INV-02). Hoy es el caso de `saldo_cuenta` (ADR-035), `stock_saldo` y `costo_producto` (ADR-039).
 
 Las tablas de datos maestros agregan `actualizado_en` (obligatoria: la usa el bootstrap incremental, `02` §13.4) y `actualizado_por_id`.
 
@@ -297,16 +297,18 @@ Fila de bloqueo del producto (`02` §7.2 y §7.3).
 
 | Columna | Tipo | Notas |
 | --- | --- | --- |
-| `organizacion_id`, `producto_id` | `uuid` | PK compuesta |
-| `costo_promedio` | `numeric(18,6)` | CST-10 |
-| `stock_total` | `integer` | Suma de `stock_saldo` del producto |
+| `organizacion_id`, `producto_id` | `uuid` | PK compuesta (sin `id`, §2.3). FK compuesta `(organizacion_id, producto_id) → producto` |
+| `costo_promedio` | `numeric(18,6)` | CST-10. **Nulo** hasta el primer ingreso con costo (ADR-039); `CHECK (costo_promedio IS NULL OR costo_promedio > 0)` |
+| `stock_total` | `integer` | `NOT NULL DEFAULT 0`. Suma de `stock_saldo` del producto; cambia con todo movimiento |
 | `actualizado_en` | `timestamptz` | |
+
+La fila nace de forma perezosa con el primer movimiento del producto (`INSERT ... ON CONFLICT DO NOTHING` y `SELECT ... FOR UPDATE`).
 
 ### `costo_producto_mov`
 
 Historia del promedio (CST-13), de solo inserción.
 
-`id`, `organizacion_id`, `producto_id`, `origen_tipo` (`COMPRA`, `ANULACION_COMPRA`, `STOCK_INICIAL`, `ANULACION_VENTA`), `origen_id`, `cantidad` `integer`, `costo_ingreso` `numeric(18,6)`, `stock_anterior`, `promedio_anterior`, `stock_nuevo`, `promedio_nuevo`, `recalculado` `boolean` (falso cuando se mantuvo el promedio, CMP-06), `operation_id`, `registered_at`.
+`id`, `organizacion_id` (`UNIQUE (organizacion_id, id)`), `producto_id` (FK compuesta a `producto`), `origen_tipo` (`COMPRA`, `ANULACION_COMPRA`, `STOCK_INICIAL`, `ANULACION_VENTA`; `CHECK` de catálogo), `origen_id`, `cantidad` `integer`, `costo_ingreso` `numeric(18,6)`, `stock_anterior` `integer`, `promedio_anterior` `numeric(18,6)` (nulo en el primer ingreso del producto), `stock_nuevo` `integer`, `promedio_nuevo` `numeric(18,6)`, `recalculado` `boolean` (falso cuando se mantuvo el promedio, CMP-06), `operation_id`, `registered_at`. El usuario de aplicación solo tiene `SELECT` e `INSERT` (INV-05).
 
 ## 8. Precios
 
@@ -335,15 +337,17 @@ CREATE UNIQUE INDEX ux_lista_version__numero
 
 ### `ubicacion`
 
-`id`, `organizacion_id`, `nombre`, `tipo` (`DEPOSITO`, `VEHICULO`, `OTRO`), `requiere_toma` `boolean`, `activo` (STK-02).
+`id`, `organizacion_id`, `nombre`, `tipo` (`DEPOSITO`, `VEHICULO`, `OTRO`; `CHECK` de catálogo), `requiere_toma` `boolean`, `activo`, `creado_en`, `actualizado_en`, `actualizado_por_id` (STK-02; dato maestro, §2.3). `UNIQUE (organizacion_id, id)`. Restricciones: `ux_ubicacion__nombre` único sobre `(organizacion_id, lower(nombre))`, activas o no, y `CHECK (tipo <> 'VEHICULO' OR requiere_toma)` (ADR-038). El usuario de aplicación tiene `SELECT`, `INSERT` y `UPDATE`.
 
 ### `stock_saldo`
 
 | Columna | Tipo | Notas |
 | --- | --- | --- |
-| `organizacion_id`, `producto_id`, `ubicacion_id` | `uuid` | PK compuesta |
-| `cantidad_base` | `integer` | Puede ser negativa (STK-05, STK-06) |
+| `organizacion_id`, `producto_id`, `ubicacion_id` | `uuid` | PK compuesta (sin `id`, §2.3). FK compuestas a `producto` y a `ubicacion` |
+| `cantidad_base` | `integer` | `NOT NULL DEFAULT 0`. Puede ser negativa (STK-05, STK-06); ningún camino del change 09 la deja negativa |
 | `actualizado_en` | `timestamptz` | |
+
+La fila nace de forma perezosa con el primer movimiento del par (`INSERT ... ON CONFLICT DO NOTHING` y `SELECT ... FOR UPDATE`). El usuario de aplicación tiene `SELECT`, `INSERT` y `UPDATE`.
 
 ### `stock_movimiento`
 
@@ -357,10 +361,12 @@ Libro de stock, de solo inserción (INV-12).
 | `tipo` | `text` | STK-03 |
 | `origen_tipo`, `origen_id` | `text`, `uuid` | Documento que lo generó |
 | `costo_unitario` | `numeric(18,6)` | Congelado en ventas y ajustes |
-| `jornada_id`, `motivo_id` | `uuid` | Opcionales |
-| Columnas de operación | | |
+| `jornada_id`, `motivo_id` | `uuid` | Opcionales. `motivo_id` con FK compuesta a `motivo`; **`jornada_id` sin FK** hasta que exista `jornada` (change 15, mismo trato que `comando.jornada_id`) |
+| `operation_id`, `usuario_id`, `dispositivo_id`, `occurred_at`, `registered_at` | | Columnas de operación (§2.3), todas `NOT NULL`; `dispositivo_id` con FK compuesta a `dispositivo` y `usuario_id` a `usuario` |
 
-Índices: `(organizacion_id, producto_id, ubicacion_id, occurred_at)` para kardex y verificación de consistencia; `(organizacion_id, origen_tipo, origen_id)` para reversiones.
+`UNIQUE (organizacion_id, id)`; FK compuestas a `producto` y `ubicacion`; `CHECK` de catálogo en `tipo` (los nueve tipos de la etapa 1 de STK-03). El usuario de aplicación solo tiene `SELECT` e `INSERT` (INV-05).
+
+Índices: `(organizacion_id, producto_id, ubicacion_id, occurred_at, id)` para kardex y verificación de consistencia; `(organizacion_id, origen_tipo, origen_id)` para reversiones.
 
 El origen es genérico (`origen_tipo` + `origen_id`) y no una clave foránea por tipo de documento. Se valida en el servicio y en pruebas.
 
@@ -624,7 +630,7 @@ El resto (INV-01, INV-07, INV-08, INV-10 a INV-15, INV-17, INV-19 a INV-21) se g
 | Saldo de un cliente | `saldo_cuenta` por PK |
 | Estado de cuenta | `cuenta_movimiento (organizacion_id, cuenta_tipo, entidad_id, occurred_at, id)` |
 | Stock de una ubicación | `stock_saldo` por PK; `ix_stock_saldo__ubicacion` |
-| Kardex de un producto | `stock_movimiento (organizacion_id, producto_id, ubicacion_id, occurred_at)` |
+| Kardex de un producto | `stock_movimiento (organizacion_id, producto_id, ubicacion_id, occurred_at, id)` |
 | Ventas de un período | `venta (organizacion_id, occurred_at)` |
 | Ventas de un vendedor o jornada | `venta (organizacion_id, usuario_id, occurred_at)`; `ix_venta__jornada` |
 | Ventas pendientes de facturar | Índice parcial por estado de facturación |

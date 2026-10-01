@@ -18,9 +18,11 @@ import pytest
 from app.modules.catalogo import repository as catalogo_repository
 from app.modules.clientes import repository as clientes_repository
 from app.modules.configuracion import repository as configuracion_repository
+from app.modules.costeo import repository as costeo_repository
 from app.modules.cuentas_corrientes import repository as cuentas_corrientes_repository
 from app.modules.identidad import repository as identidad_repository
 from app.modules.proveedores import repository as proveedores_repository
+from app.modules.stock import repository as stock_repository
 
 
 def _funciones_publicas_del_modulo(modulo: Any) -> list[tuple[str, Callable[..., Any]]]:
@@ -141,6 +143,18 @@ def test_cuentas_corrientes_no_declara_ninguna_exencion_de_organizacion_id() -> 
     exentas = cuentas_corrientes_repository.FUNCIONES_SIN_ORGANIZACION_ID
     assert isinstance(exentas, frozenset)
     assert not exentas
+
+
+def test_costeo_y_stock_repository_exigen_organizacion_id_primero_en_todo_metodo() -> None:
+    """Change 09, tareas 5.1 y 5.2: `costeo` y `stock` tampoco declaran excepciones
+    (`FUNCIONES_SIN_ORGANIZACION_ID` vacio) -- todo dato de stock y de costo es de
+    una organizacion, y ninguna consulta se hace sin filtrarla."""
+    for repositorio in (costeo_repository, stock_repository):
+        _verificar_organizacion_id_primer_parametro(
+            repositorio, exentas=repositorio.FUNCIONES_SIN_ORGANIZACION_ID
+        )
+        assert isinstance(repositorio.FUNCIONES_SIN_ORGANIZACION_ID, frozenset)
+        assert not repositorio.FUNCIONES_SIN_ORGANIZACION_ID
 
 
 def test_una_funcion_sin_organizacion_id_primero_es_detectada() -> None:

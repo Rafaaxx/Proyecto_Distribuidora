@@ -350,6 +350,28 @@ def test_saldo_cuenta_cumple_inv02_con_su_pk_compuesta_que_empieza_por_organizac
     assert _tabla_declara_organizacion_id_obligatoria(engine, "saldo_cuenta") is None
 
 
+@pytest.mark.parametrize(
+    ("tabla", "pk_esperada"),
+    [
+        ("stock_saldo", ["organizacion_id", "producto_id", "ubicacion_id"]),
+        ("costo_producto", ["organizacion_id", "producto_id"]),
+    ],
+)
+def test_los_saldos_de_stock_y_costo_cumplen_inv02_con_su_pk_compuesta(
+    database_url: str, tabla: str, pk_esperada: list[str]
+) -> None:
+    """Change 09, tarea 9.5 (ADR-035 punto 6, anticipado para estas dos tablas):
+    `stock_saldo` y `costo_producto` no tienen `id`; su PK empieza por
+    `organizacion_id` y cumple INV-02 sin `UNIQUE (organizacion_id, id)`. Además
+    ninguna de sus FK omite la organización."""
+    aplicar_migraciones(database_url)
+    engine = crear_engine(database_url)
+
+    assert _columnas_pk(engine, tabla) == pk_esperada
+    assert _tabla_declara_organizacion_id_obligatoria(engine, tabla) is None
+    assert _fk_simple_entre_negocio(engine, tabla) == []
+
+
 @pytest.fixture
 def _tabla_temporal_con_pk_que_no_empieza_por_organizacion(database_url: str) -> Iterator[Engine]:
     aplicar_migraciones(database_url)

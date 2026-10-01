@@ -17,10 +17,17 @@ from sqlalchemy.exc import ProgrammingError
 
 # Lista explícita y enumerable (mismo criterio que el ratchet de rutas del
 # change 02 y la exención de catálogo global de la tarea 3.1): las tablas de
-# libro declaradas hasta este change. `stock_movimiento` y
-# `costo_producto_mov` llegan con changes posteriores y se agregan acá cuando
-# existan. `cuenta_movimiento` se agregó en el change 08.
-TABLAS_DE_LIBRO_DECLARADAS = frozenset({"auditoria", "intento_login", "cuenta_movimiento"})
+# libro declaradas hasta este change. `cuenta_movimiento` se agregó en el
+# change 08; `stock_movimiento` y `costo_producto_mov`, en el 09.
+TABLAS_DE_LIBRO_DECLARADAS = frozenset(
+    {
+        "auditoria",
+        "intento_login",
+        "cuenta_movimiento",
+        "stock_movimiento",
+        "costo_producto_mov",
+    }
+)
 
 # Tablas de sistema que Alembic administra y que no son de negocio: no
 # reciben grants de `app_runtime` (no las consulta la aplicación).
@@ -252,3 +259,59 @@ def test_inv05_app_runtime_no_puede_actualizar_ni_borrar_movimientos_de_cuenta(
             pytest.raises(ProgrammingError, match="(?i)permission denied"),
         ):
             conexion.execute(text(sentencia))
+
+
+def test_inv05_los_libros_de_stock_y_costo_estan_declarados_y_admiten_solo_select_e_insert(
+    database_url: str, _engine_de_sesion: Engine
+) -> None:
+    """INV-05, TR-06 (change 09, tarea 9.4): `stock_movimiento` y
+    `costo_producto_mov` son tablas de libro (solo `SELECT` e `INSERT`).
+    `stock_saldo`, `costo_producto` y `ubicacion` no lo son: materializan o
+    administran datos que se actualizan (`UPDATE` sí, `DELETE` nunca)."""
+    aplicar_migraciones(database_url)
+    privilegios = _privilegios_de_app_runtime(_engine_de_sesion)
+
+    for libro in ("stock_movimiento", "costo_producto_mov"):
+        assert libro in TABLAS_DE_LIBRO_DECLARADAS
+        assert privilegios[libro] == {"SELECT", "INSERT"}
+    for actualizable in ("stock_saldo", "costo_producto", "ubicacion"):
+        assert actualizable not in TABLAS_DE_LIBRO_DECLARADAS
+        assert privilegios[actualizable] == {"SELECT", "INSERT", "UPDATE"}
+
+
+@pytest.mark.parametrize("tabla", ["stock_movimiento", "costo_producto_mov"])
+def test_inv05_app_runtime_no_puede_actualizar_ni_borrar_los_libros_de_stock_y_costo(
+    database_url: str, app_runtime_engine: Engine, tabla: str
+) -> None:
+    """INV-05, TR-06, escenario "El usuario de aplicación no puede modificar ni
+    borrar movimientos" de `specs/stock/libro-de-stock` y "La historia no se
+    edita" de `specs/costeo/costo-promedio`: la base rechaza `UPDATE` y
+    `DELETE`."""
+    aplicar_migraciones(database_url)
+
+    for sentencia in (
+        f"UPDATE {tabla} SET organizacion_id = organizacion_id WHERE false",
+        f"DELETE FROM {tabla} WHERE false",
+    ):
+        with (
+            app_runtime_engine.connect() as conexion,
+            pytest.raises(ProgrammingError, match="(?i)permission denied"),
+        ):
+            conexion.execute(text(sentencia))
+
+
+@pytest.mark.parametrize("tabla", ["stock_saldo", "costo_producto", "ubicacion"])
+def test_inv05_app_runtime_actualiza_los_saldos_y_las_ubicaciones_pero_no_las_borra(
+    database_url: str, app_runtime_engine: Engine, tabla: str
+) -> None:
+    """Contraparte de lo anterior: `UPDATE` sí (los saldos y el promedio se
+    materializan; la ubicación se modifica) y `DELETE` no."""
+    aplicar_migraciones(database_url)
+
+    with app_runtime_engine.connect() as conexion:
+        conexion.execute(text(f"UPDATE {tabla} SET organizacion_id = organizacion_id WHERE false"))
+    with (
+        app_runtime_engine.connect() as conexion,
+        pytest.raises(ProgrammingError, match="(?i)permission denied"),
+    ):
+        conexion.execute(text(f"DELETE FROM {tabla} WHERE false"))

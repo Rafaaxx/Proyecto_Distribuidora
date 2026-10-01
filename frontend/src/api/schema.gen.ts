@@ -390,6 +390,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/catalogo/productos/{producto_id}/costo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Costo Promedio
+         * @description Costo promedio vigente de un producto (change 09, enmienda a D3 del
+         *     2026-09-30; misma idea que ADR-035 punto 5: las lecturas viven con su
+         *     entidad). Permiso `VER_COSTOS`.
+         *
+         *     `catalogo` resuelve PRIMERO el producto en la organización del token: 404 si
+         *     no existe o es de otra organización (INV-21, SEG-07), sin revelar nada. Recién
+         *     entonces consulta a `costeo/service.py` (dependencia permitida `catalogo ->
+         *     costeo`; `costeo` no importa `catalogo`). Un producto sin ingresos responde
+         *     200 con `costo_promedio` nulo y `stock_total` 0 (D10).
+         */
+        get: operations["obtener_costo_promedio_api_v1_catalogo_productos__producto_id__costo_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/catalogo/productos/{producto_id}/presentaciones": {
         parameters: {
             query?: never;
@@ -737,6 +765,108 @@ export interface paths {
         };
         /** Listar Historial De Costos */
         get: operations["listar_historial_de_costos_api_v1_costos_productos__producto_id__historial_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock/ubicaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Ubicaciones
+         * @description Ubicaciones de la organización, con filtro opcional por estado, paginadas
+         *     por cursor (spec `ubicaciones`, escenario "Listar ubicaciones").
+         */
+        get: operations["listar_ubicaciones_api_v1_stock_ubicaciones_get"];
+        put?: never;
+        /** Crear Ubicacion */
+        post: operations["crear_ubicacion_api_v1_stock_ubicaciones_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock/ubicaciones/{ubicacion_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Modificar Ubicacion */
+        put: operations["modificar_ubicacion_api_v1_stock_ubicaciones__ubicacion_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock/iniciales": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Registrar Stock Inicial */
+        post: operations["registrar_stock_inicial_api_v1_stock_iniciales_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock/ubicaciones/{ubicacion_id}/saldos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Saldos De Ubicacion
+         * @description Stock de una ubicación por producto en unidad base (STK-01), con las
+         *     unidades de la presentación de referencia para mostrarlo en cajas + unidades
+         *     (CAT-08). El promedio solo viaja con `VER_COSTOS` (D3-A). 404 si la ubicación
+         *     es ajena o inexistente.
+         */
+        get: operations["obtener_saldos_de_ubicacion_api_v1_stock_ubicaciones__ubicacion_id__saldos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock/kardex": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Kardex
+         * @description Kardex de un producto en una ubicación (STK-04, D11): `desde` y `hasta`
+         *     son fechas de negocio en la zona de la organización; el acumulado es el de la
+         *     historia completa. El costo de cada movimiento solo viaja con `VER_COSTOS`
+         *     (D3-A). 404 si el producto o la ubicación son ajenos o inexistentes.
+         */
+        get: operations["obtener_kardex_api_v1_stock_kardex_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1138,6 +1268,23 @@ export interface components {
             costos: components["schemas"]["CostoDelResultadoResponse"][];
         };
         /**
+         * CostoPromedioResponse
+         * @description Costo promedio vigente de un producto (CST-10) y su stock total. El
+         *     promedio es `None` mientras el producto no tuvo ningún ingreso con costo (D10:
+         *     "sin costo", no cero); viaja como string (`"1050.000000"`).
+         */
+        CostoPromedioResponse: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Costo Promedio */
+            costo_promedio: string | null;
+            /** Stock Total */
+            stock_total: number;
+        };
+        /**
          * CostoVigenteResponse
          * @description `GET .../vigente` (P7, aprobado 2026-09-24): 200 siempre que el
          *     producto exista en la organización, con `costo: null` cuando no hay
@@ -1254,6 +1401,115 @@ export interface components {
             };
             /** Jornada Id */
             jornada_id?: string | null;
+        };
+        /** KardexResponse */
+        KardexResponse: {
+            /** Saldo Anterior */
+            saldo_anterior: number;
+            /** Saldo Actual */
+            saldo_actual: number;
+            /** Zona Horaria */
+            zona_horaria: string;
+            /** Producto Codigo */
+            producto_codigo: string;
+            /** Producto Nombre */
+            producto_nombre: string;
+            /** Unidades Referencia */
+            unidades_referencia: number | null;
+            /** Items */
+            items: components["schemas"]["LineaDeKardexResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
+        /** LineaDeKardexResponse */
+        LineaDeKardexResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Tipo */
+            tipo: string;
+            /** Cantidad Base */
+            cantidad_base: number;
+            /** Origen Tipo */
+            origen_tipo: string;
+            /**
+             * Origen Id
+             * Format: uuid
+             */
+            origen_id: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * Registered At
+             * Format: date-time
+             */
+            registered_at: string;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /** Saldo Acumulado */
+            saldo_acumulado: number;
+            /** Costo Unitario */
+            costo_unitario?: string | null;
+        };
+        /** LineaDeStockResponse */
+        LineaDeStockResponse: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Producto Codigo */
+            producto_codigo: string;
+            /** Producto Nombre */
+            producto_nombre: string;
+            /** Cantidad Base */
+            cantidad_base: number;
+            /** Unidades Referencia */
+            unidades_referencia: number | null;
+            /** Costo Promedio */
+            costo_promedio?: string | null;
+        };
+        /** LineaStockInicialRequest */
+        LineaStockInicialRequest: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Cantidad Base */
+            cantidad_base: number;
+            /** Costo Unitario */
+            costo_unitario?: string | number | null;
+        };
+        /** LineaStockInicialResponse */
+        LineaStockInicialResponse: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /**
+             * Movimiento Id
+             * Format: uuid
+             */
+            movimiento_id: string;
+            /** Cantidad Base */
+            cantidad_base: number;
+            /** Saldo */
+            saldo: number;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -1439,6 +1695,13 @@ export interface components {
         PaginaProveedores: {
             /** Items */
             items: components["schemas"]["ProveedorResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
+        /** PaginaUbicaciones */
+        PaginaUbicaciones: {
+            /** Items */
+            items: components["schemas"]["UbicacionResponse"][];
             /** Cursor Siguiente */
             cursor_siguiente: string | null;
         };
@@ -1852,6 +2115,41 @@ export interface components {
              */
             estado: "ok" | "error";
         };
+        /** StockDeUbicacionResponse */
+        StockDeUbicacionResponse: {
+            /** Items */
+            items: components["schemas"]["LineaDeStockResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
+        /**
+         * StockInicialRegistrarRequest
+         * @description `lineas` sin cota en el esquema: el dominio la valida (1 a 200,
+         *     `LINEAS_INVALIDAS`, D5).
+         */
+        StockInicialRegistrarRequest: {
+            /**
+             * Ubicacion Id
+             * Format: uuid
+             */
+            ubicacion_id: string;
+            /** Lineas */
+            lineas: components["schemas"]["LineaStockInicialRequest"][];
+        };
+        /**
+         * StockInicialResponse
+         * @description Sale de `comando.resultado`, no de una relectura: un reenvío idempotente del
+         *     mismo `Operation-Id` devuelve exactamente lo mismo (INV-06). No lleva costos.
+         */
+        StockInicialResponse: {
+            /**
+             * Ubicacion Id
+             * Format: uuid
+             */
+            ubicacion_id: string;
+            /** Lineas */
+            lineas: components["schemas"]["LineaStockInicialResponse"][];
+        };
         /** TokenResponse */
         TokenResponse: {
             /** Access Token */
@@ -1862,6 +2160,60 @@ export interface components {
              * @constant
              */
             token_type: "bearer";
+        };
+        /** UbicacionCrearRequest */
+        UbicacionCrearRequest: {
+            /** Nombre */
+            nombre: string;
+            /**
+             * Tipo
+             * @enum {string}
+             */
+            tipo: "DEPOSITO" | "VEHICULO" | "OTRO";
+            /**
+             * Requiere Toma
+             * @default false
+             */
+            requiere_toma: boolean;
+        };
+        /**
+         * UbicacionModificarRequest
+         * @description Reemplazo completo de los campos editables (D7, D8), igual que los `PUT`
+         *     de los demás maestros.
+         */
+        UbicacionModificarRequest: {
+            /** Nombre */
+            nombre: string;
+            /**
+             * Tipo
+             * @enum {string}
+             */
+            tipo: "DEPOSITO" | "VEHICULO" | "OTRO";
+            /** Requiere Toma */
+            requiere_toma: boolean;
+            /** Activo */
+            activo: boolean;
+        };
+        /** UbicacionResponse */
+        UbicacionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Tipo */
+            tipo: string;
+            /** Requiere Toma */
+            requiere_toma: boolean;
+            /** Activo */
+            activo: boolean;
+            /**
+             * Actualizado En
+             * Format: date-time
+             */
+            actualizado_en: string;
         };
         /**
          * UsuarioResponse
@@ -2712,6 +3064,39 @@ export interface operations {
             };
         };
     };
+    obtener_costo_promedio_api_v1_catalogo_productos__producto_id__costo_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                producto_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CostoPromedioResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     agregar_presentacion_api_v1_catalogo_productos__producto_id__presentaciones_post: {
         parameters: {
             query?: never;
@@ -3491,6 +3876,225 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaginaCostosInformados"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_ubicaciones_api_v1_stock_ubicaciones_get: {
+        parameters: {
+            query?: {
+                activo?: boolean | null;
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaUbicaciones"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_ubicacion_api_v1_stock_ubicaciones_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UbicacionCrearRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UbicacionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    modificar_ubicacion_api_v1_stock_ubicaciones__ubicacion_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                ubicacion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UbicacionModificarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UbicacionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registrar_stock_inicial_api_v1_stock_iniciales_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StockInicialRegistrarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockInicialResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_saldos_de_ubicacion_api_v1_stock_ubicaciones__ubicacion_id__saldos_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                ubicacion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockDeUbicacionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_kardex_api_v1_stock_kardex_get: {
+        parameters: {
+            query: {
+                producto_id: string;
+                ubicacion_id: string;
+                desde?: string | null;
+                hasta?: string | null;
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KardexResponse"];
                 };
             };
             /** @description Validation Error */

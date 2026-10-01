@@ -15,6 +15,7 @@ import { DispositivosScreen } from './dispositivos/DispositivosScreen'
 const CatalogoArea = lazy(() => import('./catalogo/CatalogoArea'))
 const ProveedoresArea = lazy(() => import('./proveedores/ProveedoresArea'))
 const ClientesArea = lazy(() => import('./clientes/ClientesArea'))
+const StockArea = lazy(() => import('./stock/StockArea'))
 
 /**
  * `docs/02-arquitectura.md` §13.1: `/admin` usa TanStack Query contra la
@@ -106,6 +107,14 @@ export function AdminScreen() {
             element={
               <Suspense fallback={null}>
                 <ClientesArea />
+              </Suspense>
+            }
+          />
+          <Route
+            path="stock/*"
+            element={
+              <Suspense fallback={null}>
+                <StockArea />
               </Suspense>
             }
           />

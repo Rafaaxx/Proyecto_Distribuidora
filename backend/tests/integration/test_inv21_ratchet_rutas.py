@@ -188,6 +188,21 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("post", "/api/v1/cuentas-corrientes/saldos-iniciales"),
         ("get", "/api/v1/clientes/{cliente_id}/cuenta-corriente"),
         ("get", "/api/v1/proveedores/{proveedor_id}/cuenta-corriente"),
+        # Change 09, grupo 7 (`stock/api.py`, `catalogo/api.py`, tareas 7.1 a 7.3):
+        # las tres escrituras dedicadas y las cuatro lecturas (ubicaciones, saldos,
+        # kardex y costo promedio), cada una con su prueba real de aislamiento (login
+        # real de dos organizaciones, recurso ajeno o inexistente -> 404 sin datos) en
+        # `test_stock_api.py` (clases TestUbicacionModificar, TestStockInicialRegistrar,
+        # TestSaldosDeUbicacion, TestKardex y TestCostoPromedioDeProducto; el alta y el
+        # listado de ubicaciones solo filtran por la organizacion del token). La tarea
+        # 9.5 agrega el archivo dedicado `test_inv21_aislamiento_endpoints_stock.py`.
+        ("post", "/api/v1/stock/ubicaciones"),
+        ("get", "/api/v1/stock/ubicaciones"),
+        ("put", "/api/v1/stock/ubicaciones/{ubicacion_id}"),
+        ("get", "/api/v1/stock/ubicaciones/{ubicacion_id}/saldos"),
+        ("post", "/api/v1/stock/iniciales"),
+        ("get", "/api/v1/stock/kardex"),
+        ("get", "/api/v1/catalogo/productos/{producto_id}/costo"),
     }
 )
 

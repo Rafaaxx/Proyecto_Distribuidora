@@ -112,6 +112,22 @@ ignore_imports = [
     "app.modules.cuentas_corrientes.api -> sqlalchemy",
     "app.modules.cuentas_corrientes.api -> app.api_v1.dependencias",
     "app.modules.cuentas_corrientes.api -> app.core.autenticacion",
+    # Change 09 (`design.md` D9, `02` §5.3): `costeo` y `stock` son el quinto y el
+    # sexto modulo de negocio. Cada grupo agrega las entradas de los archivos que
+    # crea (`models.py` en el grupo 2; `repository.py` y `service.py` en el 5;
+    # `api.py` en el 7): `import-linter` rechaza una excepcion sin import real.
+    "app.modules.costeo.models -> app.core.db",
+    "app.modules.costeo.models -> sqlalchemy",
+    "app.modules.costeo.repository -> sqlalchemy",
+    "app.modules.costeo.service -> sqlalchemy",
+    "app.modules.stock.models -> app.core.db",
+    "app.modules.stock.models -> sqlalchemy",
+    "app.modules.stock.repository -> sqlalchemy",
+    "app.modules.stock.service -> sqlalchemy",
+    "app.modules.stock.api -> fastapi",
+    "app.modules.stock.api -> sqlalchemy",
+    "app.modules.stock.api -> app.api_v1.dependencias",
+    "app.modules.stock.api -> app.core.autenticacion",
 ]
 
 # `allow_indirect_imports`: descubrimiento de la tarea 9.6 (change 05, D12).
@@ -169,6 +185,8 @@ source_modules = [
     "app.modules.proveedores.domain",
     "app.modules.clientes.domain",
     "app.modules.cuentas_corrientes.domain",
+    "app.modules.costeo.domain",
+    "app.modules.stock.domain",
 ]
 forbidden_modules = ["app.commands"]
 
@@ -254,6 +272,11 @@ forbidden_modules = [
     # `catalogo/service.py` (`registrar_consulta_proveedor`), nunca
     # importando `app.modules.proveedores`.
     "app.modules.proveedores",
+    # Change 09 (enmienda a D3, 2026-09-30): `catalogo -> costeo.service` esta
+    # permitido (la ruta del costo promedio vive con su entidad, ADR-035 punto 5),
+    # pero `catalogo` no importa `stock`: `stock -> catalogo` ya existe y un ciclo
+    # seria un error.
+    "app.modules.stock",
 ]
 ignore_imports = [
     "app.modules.catalogo.api -> app.modules.sync.service",
@@ -390,5 +413,115 @@ forbidden_modules = [
 # tarea 6.1), igual que `proveedores.api` y `clientes.api`.
 ignore_imports = [
     "app.modules.cuentas_corrientes.api -> app.modules.sync.service",
+]
+allow_indirect_imports = "true"
+
+# Change 09 (`design.md` D9, `02` SS5.3): `costeo` es un modulo sin dependencias de
+# negocio (CST-14: es el unico lugar que calcula costos) y `stock` alcanza a
+# `catalogo` y `costeo` solo por su `service.py`. Sus `domain/` son puros (ni
+# infraestructura ni el bus) -- mismo criterio que
+# `cuentas-corrientes-domain-no-infraestructura`.
+[[tool.importlinter.contracts]]
+id = "costeo-domain-no-infraestructura"
+name = "costeo domain no importa infraestructura ni el bus de comandos"
+type = "forbidden"
+source_modules = ["app.modules.costeo.domain"]
+forbidden_modules = ["fastapi", "sqlalchemy", "app.commands"]
+
+[[tool.importlinter.contracts]]
+id = "stock-domain-no-infraestructura"
+name = "stock domain no importa infraestructura ni el bus de comandos"
+type = "forbidden"
+source_modules = ["app.modules.stock.domain"]
+forbidden_modules = ["fastapi", "sqlalchemy", "app.commands"]
+
+# `costeo` no importa ningun otro modulo de negocio: ni `stock`, ni `catalogo`, ni
+# `proveedores`, ni `clientes`, ni `cuentas_corrientes`, ni `configuracion`, ni
+# `sync`. Que el producto exista en la organizacion lo garantiza la FK compuesta
+# de `costo_producto` (traducida a 404 por el repositorio). De `identidad` solo
+# alcanza su `service.py` (permisos, auditoria). El grupo 7 agrega la excepcion de
+# `costeo.api -> sync.service` solo si esa ruta llega a escribir (la lectura del
+# promedio no pasa por el bus).
+[[tool.importlinter.contracts]]
+id = "costeo-solo-por-service-ajeno"
+name = "costeo solo alcanza a identidad por su service.py y a ningun otro modulo"
+type = "forbidden"
+source_modules = ["app.modules.costeo"]
+forbidden_modules = [
+    "app.modules.identidad.models",
+    "app.modules.identidad.repository",
+    "app.modules.identidad.api",
+    "app.modules.identidad.domain",
+    "app.modules.configuracion",
+    "app.modules.catalogo",
+    "app.modules.proveedores",
+    "app.modules.clientes",
+    "app.modules.cuentas_corrientes",
+    "app.modules.stock",
+    "app.modules.sync",
+]
+allow_indirect_imports = "true"
+
+# `stock -> catalogo, costeo` (`02` SS5.3): solo por su `service.py`, nunca por sus
+# modelos, repositorio ni dominio. Con `identidad` (permisos, auditoria) igual.
+# Ningun otro modulo de negocio. Los `api`/`commands` de `catalogo` y `costeo`
+# (y el `api -> sync.service` de `stock`) se agregan al crearse esos archivos.
+[[tool.importlinter.contracts]]
+id = "stock-solo-por-service-ajeno"
+name = "stock solo alcanza a catalogo, costeo e identidad por su service.py"
+type = "forbidden"
+source_modules = ["app.modules.stock"]
+forbidden_modules = [
+    "app.modules.identidad.models",
+    "app.modules.identidad.repository",
+    "app.modules.identidad.api",
+    "app.modules.identidad.domain",
+    "app.modules.configuracion",
+    "app.modules.proveedores",
+    "app.modules.clientes",
+    "app.modules.cuentas_corrientes",
+    "app.modules.sync",
+    "app.modules.catalogo.models",
+    "app.modules.catalogo.repository",
+    "app.modules.catalogo.api",
+    "app.modules.catalogo.domain",
+    "app.modules.catalogo.commands",
+    "app.modules.costeo.models",
+    "app.modules.costeo.repository",
+    "app.modules.costeo.domain",
+]
+# `stock/api.py` llama a `sync_service.procesar_comando` (grupo 7, tarea 7.1),
+# igual que `cuentas_corrientes.api`, `proveedores.api` y `clientes.api`.
+ignore_imports = [
+    "app.modules.stock.api -> app.modules.sync.service",
+]
+allow_indirect_imports = "true"
+
+# Los demas modulos de negocio alcanzan a `stock` y a `costeo` solo por su
+# `service.py` (`02` SS5.3: `proveedores -> catalogo, stock, costeo, ...`; los
+# changes 11, 14, 15, 18a, 19 y 24 los usaran igual). `api.py` y `commands.py` de
+# ambos se agregan a `forbidden_modules` al crearse.
+[[tool.importlinter.contracts]]
+id = "modulos-hacia-stock-y-costeo-solo-por-service"
+name = "los demas modulos alcanzan a stock y costeo solo por su service.py"
+type = "forbidden"
+source_modules = [
+    "app.modules.identidad",
+    "app.modules.configuracion",
+    "app.modules.catalogo",
+    "app.modules.proveedores",
+    "app.modules.clientes",
+    "app.modules.cuentas_corrientes",
+    "app.modules.sync",
+]
+forbidden_modules = [
+    "app.modules.stock.models",
+    "app.modules.stock.repository",
+    "app.modules.stock.domain",
+    "app.modules.stock.commands",
+    "app.modules.stock.api",
+    "app.modules.costeo.models",
+    "app.modules.costeo.repository",
+    "app.modules.costeo.domain",
 ]
 allow_indirect_imports = "true"

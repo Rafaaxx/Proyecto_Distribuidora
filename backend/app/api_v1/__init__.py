@@ -13,6 +13,7 @@ from app.modules.configuracion import api as configuracion_api
 from app.modules.cuentas_corrientes import api as cuentas_corrientes_api
 from app.modules.identidad import api as identidad_api
 from app.modules.proveedores import api as proveedores_api
+from app.modules.stock import api as stock_api
 from app.modules.sync import api as sync_api
 
 router = APIRouter()
@@ -25,4 +26,5 @@ router.include_router(clientes_api.router)
 router.include_router(configuracion_api.router)
 router.include_router(cuentas_corrientes_api.router)
 router.include_router(proveedores_api.router)
+router.include_router(stock_api.router)
 router.include_router(sync_api.router)

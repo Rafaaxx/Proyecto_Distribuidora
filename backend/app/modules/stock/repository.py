@@ -153,6 +153,25 @@ def listar_ubicaciones(
     return list(sesion.scalars(consulta.order_by(Ubicacion.id).limit(limite)).all())
 
 
+def buscar_ubicaciones_por_nombre(
+    organizacion_id: UUID, sesion: Session, *, nombre: str
+) -> list[Ubicacion]:
+    """Ubicaciones de la organización con ese nombre, sin distinguir mayúsculas ni
+    espacios al borde, activas o no (change 10, `design.md` D4)."""
+    clave = nombre.strip().lower()
+    if not clave:
+        return []
+    consulta = (
+        select(Ubicacion)
+        .where(
+            Ubicacion.organizacion_id == organizacion_id,
+            func.lower(func.btrim(Ubicacion.nombre)) == clave,
+        )
+        .order_by(Ubicacion.id)
+    )
+    return list(sesion.scalars(consulta).all())
+
+
 def bloquear_ubicaciones_compartidas(
     organizacion_id: UUID, sesion: Session, *, ubicaciones: Collection[UUID]
 ) -> dict[UUID, Ubicacion]:

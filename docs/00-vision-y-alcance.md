@@ -114,7 +114,7 @@ Etapa 1 — Ruta sin papel ─────────┬──> Etapa 2 — Cir
 | Catálogo | Productos, categorías, marcas, presentaciones con unidades por caja, presentaciones de compra y de venta, alícuota de IVA por producto, proveedor del producto | Códigos de barras, fotos, catálogo para clientes |
 | Clientes | Ficha, lista asignada, límite y política de crédito (ADR-003), estado | Segmentos para promociones, agenda de visitas |
 | Proveedores | Ficha, cuenta corriente, compras a crédito y pagos | Vencimientos, notas de crédito/débito de proveedor |
-| Importación inicial | Productos, clientes, proveedores y listas desde planillas (CSV/Excel) | Importadores genéricos para otras organizaciones |
+| Importación inicial | Productos, clientes, proveedores, costos, stock y saldos iniciales (change 10) desde planillas (CSV/Excel); las listas de precios se importan desde el change 13 | Importadores genéricos para otras organizaciones |
 | Puesta en marcha | Stock inicial valorizado por ubicación, saldos iniciales de clientes y proveedores | — |
 | Costos | Carga de costo del proveedor por caja o unidad con vigencia; conversión a unidad base; costo promedio ponderado actualizado por compras | FIFO, fletes capitalizables |
 | Compras | Registro de compra, ingreso de stock, actualización de costo promedio, deuda con proveedor, anulación por reversión | Órdenes de compra, recepción parcial |

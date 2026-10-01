@@ -32,6 +32,15 @@ class NombreInvalidoError(DomainError):
     status_http = 422
 
 
+class ValorObligatorioError(DomainError):
+    """Texto obligatorio vacío o solo espacios tras recortar, distinto de un nombre
+    (por ahora, la unidad base de un producto, CAT-01). Mismo código estable que el
+    de `importacion` (`VALOR_OBLIGATORIO`)."""
+
+    codigo = "VALOR_OBLIGATORIO"
+    status_http = 422
+
+
 class NombreDuplicadoError(DomainError):
     """Nombre de categoría/marca ya usado en la organización (CAT-01,
     `03` §5: `UNIQUE (organizacion_id, nombre)`)."""

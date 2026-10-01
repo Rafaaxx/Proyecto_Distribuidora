@@ -36,7 +36,10 @@ from app.modules.proveedores.domain.errores import (
     ProveedorNoCorrespondeError,
     RecursoNoEncontradoError,
 )
-from app.modules.proveedores.domain.lote import CostoDelLote, validar_lote_de_costos
+from app.modules.proveedores.domain.lote import (
+    CostoDelLote as CostoDelLote,  # re-exportado: lo usa `importacion` (change 10)
+)
+from app.modules.proveedores.domain.lote import validar_lote_de_costos
 from app.modules.proveedores.domain.normalizacion import normalizar_cuit, normalizar_nombre
 from app.modules.proveedores.models import CostoInformado, Proveedor
 
@@ -190,6 +193,16 @@ def listar_proveedores(
     return repository.listar_proveedores_paginado(
         organizacion_id, sesion, limite=limite, cursor=cursor, texto=texto, activo=activo
     )
+
+
+def buscar_proveedores_por_nombre(
+    organizacion_id: UUID, nombre: str, sesion: Session
+) -> list[Proveedor]:
+    """Lectura pública para la importación (change 10, `design.md` D4): proveedores de
+    la organización con ese nombre, sin distinguir mayúsculas ni espacios al borde,
+    activos o no (el alta de producto y de costo rechazan después uno inactivo con
+    `PROVEEDOR_INACTIVO`)."""
+    return repository.buscar_proveedores_por_nombre(organizacion_id, nombre, sesion)
 
 
 def listar_opciones_de_proveedores(

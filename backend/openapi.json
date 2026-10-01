@@ -726,6 +726,226 @@
         }
       }
     },
+    "/api/v1/importaciones/{tipo}": {
+      "post": {
+        "tags": [
+          "importacion"
+        ],
+        "summary": "Importar",
+        "description": "Importa una planilla. Todo o nada (D1): 201 con el resultado, o 422\n`IMPORTACION_CON_ERRORES` con todos los errores por fila y ningún efecto.",
+        "operationId": "importar_api_v1_importaciones__tipo__post",
+        "parameters": [
+          {
+            "name": "tipo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tipo"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_importar_api_v1_importaciones__tipo__post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportacionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/importaciones": {
+      "get": {
+        "tags": [
+          "importacion"
+        ],
+        "summary": "Listar Importaciones",
+        "description": "Historial de importaciones de la organización, la más reciente primero,\npaginado por cursor. Un `limite` fuera de 1 a 200 es un error de validación (422),\nno un recorte silencioso.",
+        "operationId": "listar_importaciones_api_v1_importaciones_get",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaImportaciones"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/importaciones/plantillas/{tipo}": {
+      "get": {
+        "tags": [
+          "importacion"
+        ],
+        "summary": "Descargar Plantilla",
+        "description": "Plantilla CSV del tipo: solo el encabezado exacto, en UTF-8 con BOM y `;` para\nque Excel en español la abra bien. La plantilla se puede importar sin errores de\ncolumnas.",
+        "operationId": "descargar_plantilla_api_v1_importaciones_plantillas__tipo__get",
+        "parameters": [
+          {
+            "name": "tipo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tipo"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/catalogo/categorias": {
       "post": {
         "tags": [
@@ -4083,6 +4303,20 @@
         ],
         "title": "AlicuotaResponse"
       },
+      "Body_importar_api_v1_importaciones__tipo__post": {
+        "properties": {
+          "archivo": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Archivo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "archivo"
+        ],
+        "title": "Body_importar_api_v1_importaciones__tipo__post"
+      },
       "CategoriaCrearRequest": {
         "properties": {
           "nombre": {
@@ -5094,6 +5328,100 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "ImportacionItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "archivo_nombre": {
+            "type": "string",
+            "title": "Archivo Nombre"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "filas_total": {
+            "type": "integer",
+            "title": "Filas Total"
+          },
+          "filas_ok": {
+            "type": "integer",
+            "title": "Filas Ok"
+          },
+          "filas_error": {
+            "type": "integer",
+            "title": "Filas Error"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "usuario_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usuario Nombre"
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Registered At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tipo",
+          "archivo_nombre",
+          "estado",
+          "filas_total",
+          "filas_ok",
+          "filas_error",
+          "usuario_id",
+          "usuario_nombre",
+          "registered_at"
+        ],
+        "title": "ImportacionItem",
+        "description": "Una fila del historial. El momento viaja en UTC con su desfase: la zona de\nla organización la aplica la pantalla (TR-04)."
+      },
+      "ImportacionResponse": {
+        "properties": {
+          "importacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Importacion Id"
+          },
+          "filas_total": {
+            "type": "integer",
+            "title": "Filas Total"
+          },
+          "filas_ok": {
+            "type": "integer",
+            "title": "Filas Ok"
+          }
+        },
+        "type": "object",
+        "required": [
+          "importacion_id",
+          "filas_total",
+          "filas_ok"
+        ],
+        "title": "ImportacionResponse",
+        "description": "Resultado de una importación aceptada. Con el modo todo o nada (D1),\n`filas_ok` es siempre `filas_total`."
+      },
       "ItemLoteComandoRequest": {
         "properties": {
           "operation_id": {
@@ -5765,6 +6093,40 @@
           "cursor_siguiente"
         ],
         "title": "PaginaCostosInformados"
+      },
+      "PaginaImportaciones": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ImportacionItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "cursor_siguiente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Siguiente"
+          },
+          "zona_horaria": {
+            "type": "string",
+            "title": "Zona Horaria"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "cursor_siguiente",
+          "zona_horaria"
+        ],
+        "title": "PaginaImportaciones",
+        "description": "`zona_horaria` (IANA) es la de la organización: la pantalla muestra\n`registered_at` en esa zona (TR-04)."
       },
       "PaginaMarcas": {
         "properties": {

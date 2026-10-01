@@ -21,6 +21,7 @@ from app.modules.configuracion import repository as configuracion_repository
 from app.modules.costeo import repository as costeo_repository
 from app.modules.cuentas_corrientes import repository as cuentas_corrientes_repository
 from app.modules.identidad import repository as identidad_repository
+from app.modules.importacion import repository as importacion_repository
 from app.modules.proveedores import repository as proveedores_repository
 from app.modules.stock import repository as stock_repository
 
@@ -155,6 +156,17 @@ def test_costeo_y_stock_repository_exigen_organizacion_id_primero_en_todo_metodo
         )
         assert isinstance(repositorio.FUNCIONES_SIN_ORGANIZACION_ID, frozenset)
         assert not repositorio.FUNCIONES_SIN_ORGANIZACION_ID
+
+
+def test_importacion_repository_exige_organizacion_id_primero_en_todo_metodo() -> None:
+    """Change 10, tarea 4.1: `importacion` tampoco declara excepciones
+    (`FUNCIONES_SIN_ORGANIZACION_ID` vacio) -- todo dato de importacion es de una
+    organizacion, y ninguna consulta se hace sin filtrarla."""
+    _verificar_organizacion_id_primer_parametro(
+        importacion_repository, exentas=importacion_repository.FUNCIONES_SIN_ORGANIZACION_ID
+    )
+    assert isinstance(importacion_repository.FUNCIONES_SIN_ORGANIZACION_ID, frozenset)
+    assert not importacion_repository.FUNCIONES_SIN_ORGANIZACION_ID
 
 
 def test_una_funcion_sin_organizacion_id_primero_es_detectada() -> None:

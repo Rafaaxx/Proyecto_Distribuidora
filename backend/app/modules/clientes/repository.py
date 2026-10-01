@@ -29,7 +29,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import or_, select, tuple_
+from sqlalchemy import func, or_, select, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -270,6 +270,41 @@ def _decodificar_cursor(cursor: str) -> tuple[str, UUID]:
 
 def _digitos(texto: str) -> str:
     return "".join(caracter for caracter in texto if caracter in _DIGITOS)
+
+
+def buscar_clientes_por_codigo(
+    organizacion_id: UUID, codigo: str, sesion: Session
+) -> list[Cliente]:
+    """Clientes de la organización con ese código, sin distinguir mayúsculas ni
+    espacios al borde, en cualquier estado (change 10, `design.md` D4)."""
+    clave = codigo.strip().lower()
+    if not clave:
+        return []
+    consulta = (
+        select(Cliente)
+        .where(
+            Cliente.organizacion_id == organizacion_id,
+            func.lower(func.btrim(Cliente.codigo)) == clave,
+        )
+        .order_by(Cliente.id)
+    )
+    return list(sesion.scalars(consulta).all())
+
+
+def buscar_clientes_por_documento(
+    organizacion_id: UUID, documento: str, sesion: Session
+) -> list[Cliente]:
+    """Clientes de la organización cuyo documento coincide con esos dígitos (el número
+    se guarda normalizado a dígitos, CLI-05), en cualquier estado (change 10, D4)."""
+    digitos = _digitos(documento)
+    if not digitos:
+        return []
+    consulta = (
+        select(Cliente)
+        .where(Cliente.organizacion_id == organizacion_id, Cliente.documento_numero == digitos)
+        .order_by(Cliente.id)
+    )
+    return list(sesion.scalars(consulta).all())
 
 
 def listar_clientes_paginado(

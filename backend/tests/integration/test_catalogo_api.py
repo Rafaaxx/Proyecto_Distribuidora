@@ -517,6 +517,80 @@ class TestProductosYPresentaciones:
         assert detalle.json()["proveedor_id"] is not None
         assert detalle.json()["proveedor_nombre"] == "Proveedor de prueba"
 
+    @pytest.mark.parametrize(
+        ("cambios", "codigo"),
+        [
+            ({"nombre": "   "}, "NOMBRE_INVALIDO"),
+            ({"unidad_base": " "}, "VALOR_OBLIGATORIO"),
+            ({"presentaciones.nombre": "  "}, "NOMBRE_INVALIDO"),
+        ],
+    )
+    def test_alta_con_textos_obligatorios_vacios_responde_422_con_codigo_estable(
+        self, cliente: TestClient, sesion: Session, cambios: dict[str, str], codigo: str
+    ) -> None:
+        """Change 10, tarea 12.1 (TR-10): la regla es del dominio de catálogo."""
+        from app.modules.configuracion.models import AlicuotaIva
+
+        organizacion = _crear_organizacion(sesion, "org-prod-vacios")
+        _con_gestionar_catalogo(sesion, organizacion.id, nombre_usuario="admin1")
+        categoria = catalogo_repository.crear_categoria(
+            organizacion.id,
+            sesion,
+            categoria_id=nuevo_id(),
+            nombre="Vinos",
+            activo=True,
+            momento=MOMENTO,
+        )
+        alicuota = AlicuotaIva(
+            id=nuevo_id(),
+            organizacion_id=organizacion.id,
+            nombre="21%",
+            valor="0.210000",
+            activo=True,
+            creado_en=MOMENTO,
+            actualizado_en=MOMENTO,
+        )
+        sesion.add(alicuota)
+        sesion.commit()
+        proveedor = self._crear_proveedor(sesion, organizacion.id)
+        access_token = _login(cliente, "org-prod-vacios", "admin1")
+        cuerpo: dict[str, object] = {
+            "codigo": "VA-001",
+            "nombre": "Vino A",
+            "categoria_id": str(categoria.id),
+            "marca_id": None,
+            "proveedor_id": str(proveedor.id),
+            "unidad_base": "botella",
+            "alicuota_id": str(alicuota.id),
+            "presentaciones": [
+                {
+                    "nombre": "Botella",
+                    "unidades_base": 1,
+                    "usar_en_venta": True,
+                    "usar_en_compra": True,
+                    "es_referencia": True,
+                }
+            ],
+        }
+        for campo, valor in cambios.items():
+            if campo == "presentaciones.nombre":
+                cuerpo["presentaciones"][0]["nombre"] = valor  # type: ignore[index]
+            else:
+                cuerpo[campo] = valor
+
+        respuesta = cliente.post(
+            "/api/v1/catalogo/productos",
+            json=cuerpo,
+            headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
+        )
+
+        assert respuesta.status_code == 422, respuesta.text
+        assert respuesta.json()["codigo"] == codigo
+        listado = cliente.get(
+            "/api/v1/catalogo/productos", headers={"Authorization": f"Bearer {access_token}"}
+        )
+        assert listado.json()["items"] == []
+
     def test_producto_de_otra_organizacion_responde_404(
         self, cliente: TestClient, sesion: Session
     ) -> None:

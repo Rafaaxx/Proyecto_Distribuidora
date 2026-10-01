@@ -631,3 +631,60 @@ FUNCIONES_SIN_ORGANIZACION_ID: frozenset[str] = frozenset()
 repository.FUNCIONES_SIN_ORGANIZACION_ID`, tarea 6.1): `catalogo` no tiene
 ningún catálogo global propio ni ningún lookup previo a la resolución de la
 organización -- toda función pública recibe `organizacion_id` primero."""
+
+
+# --- búsquedas por clave natural (change 10, `design.md` D4) -------------------
+
+
+def buscar_categorias_por_nombre(
+    organizacion_id: UUID, nombre: str, sesion: Session
+) -> list[Categoria]:
+    """Categorías de la organización cuyo nombre coincide con `nombre` sin distinguir
+    mayúsculas ni espacios al borde, activas o no. Texto vacío no coincide con nada."""
+    clave = nombre.strip().lower()
+    if not clave:
+        return []
+    consulta = (
+        select(Categoria)
+        .where(
+            Categoria.organizacion_id == organizacion_id,
+            func.lower(func.btrim(Categoria.nombre)) == clave,
+        )
+        .order_by(Categoria.nombre, Categoria.id)
+    )
+    return list(sesion.scalars(consulta).all())
+
+
+def buscar_marcas_por_nombre(organizacion_id: UUID, nombre: str, sesion: Session) -> list[Marca]:
+    """Igual que `buscar_categorias_por_nombre`, para marcas."""
+    clave = nombre.strip().lower()
+    if not clave:
+        return []
+    consulta = (
+        select(Marca)
+        .where(
+            Marca.organizacion_id == organizacion_id,
+            func.lower(func.btrim(Marca.nombre)) == clave,
+        )
+        .order_by(Marca.nombre, Marca.id)
+    )
+    return list(sesion.scalars(consulta).all())
+
+
+def buscar_productos_por_codigo(
+    organizacion_id: UUID, codigo: str, sesion: Session
+) -> list[Producto]:
+    """Productos de la organización cuyo código coincide con `codigo` sin distinguir
+    mayúsculas ni espacios al borde, activos o no."""
+    clave = codigo.strip().lower()
+    if not clave:
+        return []
+    consulta = (
+        select(Producto)
+        .where(
+            Producto.organizacion_id == organizacion_id,
+            func.lower(func.btrim(Producto.codigo)) == clave,
+        )
+        .order_by(Producto.codigo, Producto.id)
+    )
+    return list(sesion.scalars(consulta).all())

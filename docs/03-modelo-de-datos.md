@@ -570,7 +570,7 @@ El índice único es el mecanismo de idempotencia (`02` §6.3). El contenido com
 
 ### `importacion`
 
-`id`, `organizacion_id`, `tipo` (`PRODUCTOS`, `CLIENTES`, `PROVEEDORES`, `PRECIOS`, `STOCK_INICIAL`, `SALDOS_INICIALES`), `archivo_nombre`, `estado`, `filas_total`, `filas_ok`, `filas_error`, `errores` `jsonb`, columnas de operación.
+`id`, `organizacion_id`, `tipo` (`PRODUCTOS`, `CLIENTES`, `PROVEEDORES`, `PRECIOS`, `COSTOS`, `STOCK_INICIAL`, `SALDOS_INICIALES`), `archivo_nombre`, `estado` (`CONFIRMADA`), `filas_total`, `filas_ok`, `filas_error`, `errores` `jsonb`, y las columnas de operación (`operation_id`, `usuario_id`, `dispositivo_id`, `occurred_at`, `registered_at`, §2.3). `UNIQUE (organizacion_id, id)`; FK compuestas a `usuario` y `dispositivo`; `CHECK` de `tipo` y `estado` y de filas no negativas; índice `(organizacion_id, registered_at DESC, id)` para el historial. De solo inserción (`GRANT SELECT, INSERT`). Con el modo todo-o-nada solo se guardan importaciones confirmadas (`filas_error` = 0, `errores` = `[]`). `PRECIOS` está en el catálogo del `CHECK` pero no tiene importador hasta el change 13.
 
 ### Facturación (se crea al desarrollar el módulo)
 

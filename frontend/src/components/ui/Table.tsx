@@ -21,13 +21,15 @@ export interface TablaProps<T> {
    * pantalla, y la fila no se convierte en un botón falso. Opcional: las
    * tablas que no lo pasan (por ejemplo `ProductosListScreen`) no cambian. */
   onFilaClick?: (fila: T) => void
+  /** Nombre accesible de la tabla (`aria-label`), para las pantallas con más de una. */
+  etiqueta?: string
 }
 
 const SELECTOR_ELEMENTOS_INTERACTIVOS = 'a, button, input, select, textarea'
 
-export function Tabla<T>({ filas, columnas, obtenerClave, onFilaClick }: TablaProps<T>) {
+export function Tabla<T>({ filas, columnas, obtenerClave, onFilaClick, etiqueta }: TablaProps<T>) {
   return (
-    <table className="w-full border-collapse text-left text-sm">
+    <table aria-label={etiqueta} className="w-full border-collapse text-left text-sm">
       <thead>
         <tr className="border-b border-border">
           {columnas.map((columna) => (

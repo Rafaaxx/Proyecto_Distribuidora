@@ -96,8 +96,8 @@ La columna **Etapa** indica cuándo se implementa la regla. Las reglas marcadas 
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| CAT-01 | Todo producto tiene código único dentro de la organización, nombre, categoría, marca opcional, unidad base, alícuota de IVA y proveedor. | 1 |
-| CAT-02 | Un producto tiene una o más presentaciones. Cada presentación indica unidades base (entero ≥ 1), si se usa en venta y si se usa en compra. | 1 |
+| CAT-01 | Todo producto tiene código único dentro de la organización, nombre, categoría, marca opcional, unidad base, alícuota de IVA y proveedor. El nombre del producto no puede quedar vacío ni de solo espacios tras recortar (`NOMBRE_INVALIDO`, 422) y la unidad base tampoco (`VALOR_OBLIGATORIO`, 422). Los textos válidos se guardan recortados. | 1 |
+| CAT-02 | Un producto tiene una o más presentaciones. Cada presentación indica unidades base (entero ≥ 1), si se usa en venta y si se usa en compra. El nombre de cada presentación no puede quedar vacío ni de solo espacios tras recortar (`NOMBRE_INVALIDO`, 422); el texto válido se guarda recortado. | 1 |
 | CAT-03 | Cada producto tiene exactamente una presentación de referencia, que debe usarse en venta. | 1 |
 | CAT-04 | Las unidades de una presentación ya usada en alguna operación no pueden modificarse. Para cambiar el contenido se crea una presentación nueva y se desactiva la anterior. | 1 |
 | CAT-05 | Un producto o presentación usado en operaciones no se elimina: se desactiva. Los inactivos no se ofrecen en nuevas operaciones. | 1 |
@@ -122,7 +122,7 @@ La columna **Etapa** indica cuándo se implementa la regla. Las reglas marcadas 
 | CST-02 | El costo base derivado se calcula como `valor × (1 − bonificación) / (1 + alícuota si incluye IVA) / unidades de la presentación`, redondeado a 6 decimales solo al final. | 1 |
 | CST-03 | Los costos informados no se sobrescriben. El vigente para una fecha es el de mayor vigencia desde que no supere esa fecha. | 1 |
 | CST-04 | El costo informado se usa para calcular precios. No se usa para costear ventas. | 1 |
-| CST-05 | Puede cargarse un costo por producto o varios de un proveedor en una sola operación. | 1 (importación masiva: 2) |
+| CST-05 | Puede cargarse un costo por producto o varios de un proveedor en una sola operación. La importación **inicial** de costos desde una planilla es de la etapa 1 (change 10, por `informar_costos`); la importación masiva **recurrente** es de la etapa 2. | 1 (importación inicial; masiva recurrente: 2) |
 
 Ejemplos de CST-02:
 
@@ -263,7 +263,7 @@ Ejemplos de PRC-22 (caja x6):
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| CLI-01 | Un cliente tiene nombre, razón social y CUIT/DNI opcionales, dirección, contacto, lista asignada opcional, límite y política de crédito opcionales, tolerancia offline opcional, estado de facturación inicial opcional y estado. | 1 |
+| CLI-01 | Un cliente tiene nombre, razón social y CUIT/DNI opcionales, dirección, contacto, lista asignada opcional, límite y política de crédito opcionales, tolerancia offline opcional, estado de facturación inicial opcional y estado. El estado de facturación inicial del cliente es `NO_REQUIERE`, `PENDIENTE` o nulo (el de la organización); otro valor se rechaza con `ESTADO_FACTURACION_INVALIDO` (422). | 1 |
 | CLI-02 | Estados: ACTIVO, SUSPENDIDO, INACTIVO. Vender a un cliente suspendido requiere `VENDER_CLIENTE_SUSPENDIDO`. A un cliente inactivo no se le vende. | 1 |
 | CLI-03 | Si la organización lo habilita, existe un cliente genérico "consumidor final" con límite de crédito cero. El consumidor final solo puede estar `ACTIVO` o `SUSPENDIDO`: no se inactiva (ADR-029). | 1 |
 | CLI-04 | Los clientes con operaciones no se eliminan: se inactivan. | 1 |
@@ -381,6 +381,17 @@ Ejemplo de DSC-03 con regla "cajas equivalentes ≥ 20 → 5%": 19 cajas + 5 uni
 | SYN-09 | El dispositivo no elimina una operación local hasta recibir ACEPTADO o ACEPTADO_CON_OBSERVACIONES. Un RECHAZADO queda visible en el dispositivo. | 1 |
 | SYN-10 | Sin conexión, los permisos vigentes son los descargados al abrir la jornada. Si al sincronizar el usuario ya no tiene el permiso, la operación se acepta con PERMISO_REVOCADO. | 1 |
 | SYN-11 | El bootstrap incluye: productos y presentaciones activos, clientes con saldo y datos de crédito, versiones de lista vigentes y las anteriores permitidas, reglas de descuento activas, stock de la ubicación tomada, permisos y topes del usuario, credenciales de autorización de supervisores y configuración de la organización. No incluye costos ni utilidades salvo que el usuario tenga `VER_COSTOS`. | 1 |
+
+### 13.1 Importación inicial
+
+| ID | Regla | Etapa |
+| --- | --- | :-: |
+| IMP-01 | Una importación es una sola operación por archivo: o se escriben todas las filas o ninguna (INV-01). Un archivo con errores se rechaza con el informe completo de errores por fila y columna (`IMPORTACION_CON_ERRORES`). | 1 |
+| IMP-02 | Cada fila se valida y se escribe con las mismas reglas que el alta individual de su entidad y produce el mismo código de error ante el mismo dato inválido (TR-10). | 1 |
+| IMP-03 | Una importación de maestros solo crea registros; una clave natural que ya existe es un error de duplicado y ningún registro existente se modifica. | 1 |
+| IMP-04 | Las referencias entre entidades se escriben por clave natural (categoría y marca por nombre, alícuota por porcentaje, proveedor por nombre, producto por código, cliente por código o documento, ubicación por nombre); no se crean al vuelo. | 1 |
+| IMP-05 | Los números de una planilla se leen como decimales exactos: coma decimal y sin separador de miles; un punto se rechaza (INV-03). Las cantidades son enteros (INV-04). | 1 |
+| IMP-06 | El stock y los saldos iniciales importados se fechan con el momento de la importación (sin fecha de corte), como los cargados por pantalla (STK-10, CC-08). | 1 |
 
 ## 14. Seguridad y sesión (ADR-011)
 

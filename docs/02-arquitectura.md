@@ -68,6 +68,7 @@ Las versiones se fijan al iniciar el proyecto en `backend/requirements.txt`, `ba
 | Driver | psycopg 3 | |
 | Migraciones | Alembic | Única vía para cambiar el esquema |
 | Hash de contraseñas | Argon2id | |
+| Cuerpo `multipart/form-data` | python-multipart | Recepción de planillas en la importación (ADR-041) |
 | Gestión de dependencias | pip con `requirements.txt` y `requirements-dev.txt` | Configuración de herramientas (Ruff, mypy, pytest) en `pyproject.toml` |
 | Calidad | Ruff (lint y formato), mypy o pyright, import-linter | import-linter valida límites entre módulos |
 | Pruebas | pytest, Testcontainers, Hypothesis | Ver §15 |
@@ -198,6 +199,7 @@ Monorepo:
 | auditoria | Registro de auditoría | AUD |
 | reportes | Consultas de solo lectura | REP |
 | facturacion | Facturas y efecto fiscal | FAC |
+| importacion | Lectura de planillas (CSV y `.xlsx`), conversión exacta de valores, informe de errores por fila, comando `IMPORTACION_REGISTRAR`, historial de importaciones y un importador por tipo sobre los servicios de los demás módulos | IMP, TR-10 |
 
 ### 5.2 Capas dentro de cada módulo
 
@@ -233,6 +235,7 @@ stock ──► catalogo, costeo
 catalogo ──► costeo (solo lectura del costo promedio de un producto, ADR-036)
 facturacion ──► ventas (lectura), cuentas_corrientes, costeo
 sync ──► todos los módulos con comandos
+importacion ──► catalogo, proveedores, clientes, stock, cuentas_corrientes, configuracion, identidad (solo por service.py; nadie depende de importacion, ADR-042)
 auditoria, configuracion, identidad ◄── todos
 cuentas_corrientes, costeo ──► (sin dependencias de negocio)
 ```
@@ -310,9 +313,12 @@ Errores transitorios de PostgreSQL (serialización `40001`, deadlock `40P01`) se
 | `LISTA_GENERAR_BORRADOR`, `LISTA_PUBLICAR`, `LISTA_ANULAR_VERSION` | ✓ | |
 | `SALDO_INICIAL_REGISTRAR` | ✓ | |
 | `OBSERVACION_RESOLVER` | ✓ | |
+| `IMPORTACION_REGISTRAR` (permiso `IMPORTAR_DATOS`) | ✓ | |
 | Altas y modificaciones de maestros (productos, clientes, proveedores, reglas, configuración) | ✓ | |
 
 Las altas y modificaciones de maestros también llevan `operation_id` y pasan por el bus, aunque no generen movimientos.
+
+Una importación es un comando por archivo: todo o nada, con savepoints por fila dentro del handler (ADR-040).
 
 ### 6.6 Compatibilidad de versiones
 
@@ -471,7 +477,7 @@ Agrupación de endpoints de la etapa 1:
 | Cobranzas | registro, anulación, consulta |
 | Sync | `GET /sync/bootstrap`, `POST /sync/comandos` |
 | Observaciones | listado, resolución |
-| Importación | carga de planillas, puesta en marcha |
+| Importación | carga de planillas, puesta en marcha: `POST /api/v1/importaciones/{tipo}` (multipart, `Operation-Id` obligatorio), `GET /api/v1/importaciones` (historial paginado por cursor) y `GET /api/v1/importaciones/plantillas/{tipo}` (CSV con solo el encabezado), todas con `IMPORTAR_DATOS` |
 | Reportes | ventas por período, rendición, saldos |
 | Auditoría | consulta |
 | Sistema | `GET /salud`, `GET /version` |

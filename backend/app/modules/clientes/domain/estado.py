@@ -19,6 +19,7 @@ from __future__ import annotations
 from app.modules.clientes.domain.errores import (
     ClienteConOperacionesError,
     ConsumidorFinalNoInactivableError,
+    EstadoFacturacionInvalidoError,
     EstadoInvalidoError,
     TransicionEstadoInvalidaError,
 )
@@ -26,6 +27,10 @@ from app.modules.clientes.domain.errores import (
 # `03` §10, `01` §18. Catálogo cerrado: un estado fuera de acá no entra ni por un
 # camino que se salte el dominio (el `CHECK` de la base lo repite).
 ESTADOS = frozenset({"ACTIVO", "SUSPENDIDO", "INACTIVO"})
+
+# `03` §10: `NO_REQUIERE` o `PENDIENTE` (nulo = el de la organización, VTA-08). Los otros
+# estados de facturación (`PARCIAL`, `FACTURADA`) son de una venta, no del cliente.
+ESTADOS_DE_FACTURACION = frozenset({"NO_REQUIERE", "PENDIENTE"})
 
 _TRANSICIONES: dict[str, frozenset[str]] = {
     "ACTIVO": frozenset({"SUSPENDIDO", "INACTIVO"}),
@@ -49,6 +54,20 @@ def validar_estado(estado: str) -> str:
     if estado not in ESTADOS:
         raise EstadoInvalidoError(
             f"El estado {estado!r} no está en el catálogo ({', '.join(sorted(ESTADOS))})."
+        )
+    return estado
+
+
+def validar_estado_facturacion_default(estado: str | None) -> str | None:
+    """Verifica `estado_facturacion_default` contra el catálogo cerrado
+    (`ESTADO_FACTURACION_INVALIDO`, 422). `None` significa "el de la organización"
+    (VTA-08) y se conserva. No normaliza: es un valor de catálogo, no texto libre."""
+    if estado is None:
+        return None
+    if estado not in ESTADOS_DE_FACTURACION:
+        raise EstadoFacturacionInvalidoError(
+            f"El estado de facturación {estado!r} no está en el catálogo "
+            f"({', '.join(sorted(ESTADOS_DE_FACTURACION))}) (VTA-08)."
         )
     return estado
 

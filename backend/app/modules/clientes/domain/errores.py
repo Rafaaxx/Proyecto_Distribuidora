@@ -94,6 +94,15 @@ class EstadoInvalidoError(DomainError):
     status_http = 422
 
 
+class EstadoFacturacionInvalidoError(DomainError):
+    """`estado_facturacion_default` que no es `NO_REQUIERE` ni `PENDIENTE` (`03` §10,
+    VTA-08). Sin esta regla el valor llegaba a la base y su `CHECK` lo rechazaba con un
+    fallo interno (500)."""
+
+    codigo = "ESTADO_FACTURACION_INVALIDO"
+    status_http = 422
+
+
 class TransicionEstadoInvalidaError(DomainError):
     """Transición que la máquina de `01` §18 no permite (`design.md` D7)."""
 

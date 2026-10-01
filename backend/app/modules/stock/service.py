@@ -73,6 +73,7 @@ __all__ = [
     "PaginaDeUbicaciones",
     "ResultadoDeMovimiento",
     "StockDeUbicacion",
+    "buscar_ubicaciones_por_nombre",
     "crear_ubicacion",
     "kardex",
     "listar_ubicaciones",
@@ -190,6 +191,16 @@ def obtener_ubicacion(
     """Lectura pública: la ubicación de la organización, o `None` (que quien la
     expone responde como 404, INV-21)."""
     return repository.obtener_ubicacion(organizacion_id, sesion, ubicacion_id=ubicacion_id)
+
+
+def buscar_ubicaciones_por_nombre(
+    organizacion_id: UUID, nombre: str, sesion: Session
+) -> list[Ubicacion]:
+    """Lectura pública para la importación (change 10, `design.md` D4): ubicaciones de
+    la organización con ese nombre, sin distinguir mayúsculas ni espacios al borde,
+    activas o no (el stock inicial rechaza después una inactiva con
+    `UBICACION_INACTIVA`)."""
+    return repository.buscar_ubicaciones_por_nombre(organizacion_id, sesion, nombre=nombre)
 
 
 def modificar_ubicacion(

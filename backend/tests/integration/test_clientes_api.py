@@ -682,6 +682,32 @@ class TestCrearCliente:
         assert cuerpo["estado"] == "ACTIVO", "D7: el cliente nace ACTIVO."
         assert cuerpo["es_consumidor_final"] is False
 
+    @pytest.mark.parametrize("valor", ["FACTURADA", "PARCIAL", "pendiente", ""])
+    def test_estado_de_facturacion_fuera_del_catalogo_responde_422_y_no_500(
+        self, cliente: TestClient, sesion: Session, valor: str
+    ) -> None:
+        """Change 10, tarea 12.2 (VTA-08): antes el valor llegaba al `CHECK` de la base."""
+        organizacion, slug = _organizacion_con_permisos(
+            sesion, "org-crear-fact", permisos=frozenset({"GESTIONAR_CLIENTES"})
+        )
+        token = _login(cliente, slug, "admin")
+
+        respuesta = cliente.post(
+            "/api/v1/clientes",
+            json={
+                "nombre": "Kiosco La Esquina",
+                "direccion": "Av. San Martín 1420",
+                "contacto": "Rocío",
+                "estado_facturacion_default": valor,
+            },
+            headers={"Authorization": f"Bearer {token}", "Operation-Id": str(uuid4())},
+        )
+
+        assert respuesta.status_code == 422, respuesta.text
+        assert respuesta.json()["codigo"] == "ESTADO_FACTURACION_INVALIDO"
+        items, _ = clientes_repository.listar_clientes_paginado(organizacion.id, sesion, limite=10)
+        assert items == []
+
     def test_sin_operation_id_se_rechaza_con_400(
         self, cliente: TestClient, sesion: Session
     ) -> None:

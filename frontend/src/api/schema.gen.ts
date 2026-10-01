@@ -280,6 +280,71 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/importaciones/{tipo}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Importar
+         * @description Importa una planilla. Todo o nada (D1): 201 con el resultado, o 422
+         *     `IMPORTACION_CON_ERRORES` con todos los errores por fila y ningún efecto.
+         */
+        post: operations["importar_api_v1_importaciones__tipo__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/importaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Importaciones
+         * @description Historial de importaciones de la organización, la más reciente primero,
+         *     paginado por cursor. Un `limite` fuera de 1 a 200 es un error de validación (422),
+         *     no un recorte silencioso.
+         */
+        get: operations["listar_importaciones_api_v1_importaciones_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/importaciones/plantillas/{tipo}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Descargar Plantilla
+         * @description Plantilla CSV del tipo: solo el encabezado exacto, en UTF-8 con BOM y `;` para
+         *     que Excel en español la abra bien. La plantilla se puede importar sin errores de
+         *     columnas.
+         */
+        get: operations["descargar_plantilla_api_v1_importaciones_plantillas__tipo__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/catalogo/categorias": {
         parameters: {
             query?: never;
@@ -918,6 +983,11 @@ export interface components {
             /** Activo */
             activo: boolean;
         };
+        /** Body_importar_api_v1_importaciones__tipo__post */
+        Body_importar_api_v1_importaciones__tipo__post: {
+            /** Archivo */
+            archivo: string;
+        };
         /** CategoriaCrearRequest */
         CategoriaCrearRequest: {
             /** Nombre */
@@ -1354,6 +1424,58 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * ImportacionItem
+         * @description Una fila del historial. El momento viaja en UTC con su desfase: la zona de
+         *     la organización la aplica la pantalla (TR-04).
+         */
+        ImportacionItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Tipo */
+            tipo: string;
+            /** Archivo Nombre */
+            archivo_nombre: string;
+            /** Estado */
+            estado: string;
+            /** Filas Total */
+            filas_total: number;
+            /** Filas Ok */
+            filas_ok: number;
+            /** Filas Error */
+            filas_error: number;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /** Usuario Nombre */
+            usuario_nombre: string | null;
+            /**
+             * Registered At
+             * Format: date-time
+             */
+            registered_at: string;
+        };
+        /**
+         * ImportacionResponse
+         * @description Resultado de una importación aceptada. Con el modo todo o nada (D1),
+         *     `filas_ok` es siempre `filas_total`.
+         */
+        ImportacionResponse: {
+            /**
+             * Importacion Id
+             * Format: uuid
+             */
+            importacion_id: string;
+            /** Filas Total */
+            filas_total: number;
+            /** Filas Ok */
+            filas_ok: number;
+        };
+        /**
          * ItemLoteComandoRequest
          * @description Un comando de la cola local (`02` §13.2 `cola`), tal como el
          *     dispositivo lo generó. `usuario_id`/`dispositivo_id` son los que
@@ -1666,6 +1788,19 @@ export interface components {
             items: components["schemas"]["CostoInformadoResponse"][];
             /** Cursor Siguiente */
             cursor_siguiente: string | null;
+        };
+        /**
+         * PaginaImportaciones
+         * @description `zona_horaria` (IANA) es la de la organización: la pantalla muestra
+         *     `registered_at` en esa zona (TR-04).
+         */
+        PaginaImportaciones: {
+            /** Items */
+            items: components["schemas"]["ImportacionItem"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+            /** Zona Horaria */
+            zona_horaria: string;
         };
         /** PaginaMarcas */
         PaginaMarcas: {
@@ -2688,6 +2823,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["YoResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    importar_api_v1_importaciones__tipo__post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                tipo: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_importar_api_v1_importaciones__tipo__post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_importaciones_api_v1_importaciones_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaImportaciones"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    descargar_plantilla_api_v1_importaciones_plantillas__tipo__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                tipo: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

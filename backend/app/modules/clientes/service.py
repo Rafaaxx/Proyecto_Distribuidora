@@ -43,7 +43,11 @@ from app.modules.clientes.domain.errores import (
     ConsumidorFinalYaHabilitadoError,
     RecursoNoEncontradoError,
 )
-from app.modules.clientes.domain.estado import validar_estado, validar_transicion
+from app.modules.clientes.domain.estado import (
+    validar_estado,
+    validar_estado_facturacion_default,
+    validar_transicion,
+)
 from app.modules.clientes.domain.ficha import (
     normalizar_codigo,
     normalizar_contacto,
@@ -119,6 +123,7 @@ def crear_cliente(
     `configurar_consumidor_final` sea explícito al dejar la lista sin asignar.
     """
     documento = normalizar_documento(documento_tipo, documento_numero)
+    estado_facturacion = validar_estado_facturacion_default(estado_facturacion_default)
     return repository.crear_cliente(
         organizacion_id,
         sesion,
@@ -133,7 +138,7 @@ def crear_cliente(
         telefono=telefono,
         email=email,
         lista_precio_id=lista_precio_id,
-        estado_facturacion_default=estado_facturacion_default,
+        estado_facturacion_default=estado_facturacion,
         es_consumidor_final=False,
         limite_credito=None,
         politica_credito=None,
@@ -195,6 +200,7 @@ def modificar_cliente(
         raise RecursoNoEncontradoError(f"El cliente {cliente_id} no existe en esta organización.")
 
     documento = normalizar_documento(documento_tipo, documento_numero)
+    estado_facturacion = validar_estado_facturacion_default(estado_facturacion_default)
     operaciones = tiene_operaciones or (
         cliente.estado == "INACTIVO"
         and verificar_operaciones is not None
@@ -220,7 +226,7 @@ def modificar_cliente(
         contacto=normalizar_contacto(contacto),
         telefono=telefono,
         email=email,
-        estado_facturacion_default=estado_facturacion_default,
+        estado_facturacion_default=estado_facturacion,
         estado=estado_validado,
         momento=reloj.now(),
         actualizado_por_id=actor_id,
@@ -340,6 +346,24 @@ def obtener_cliente_por_id(
 
 def obtener_consumidor_final(organizacion_id: UUID, sesion: Session) -> Cliente | None:
     return repository.obtener_consumidor_final(organizacion_id, sesion)
+
+
+def buscar_clientes_por_codigo(
+    organizacion_id: UUID, codigo: str, sesion: Session
+) -> list[Cliente]:
+    """Lectura pública para la importación (change 10, `design.md` D4): clientes de la
+    organización con ese código, sin distinguir mayúsculas ni espacios al borde, en
+    cualquier estado."""
+    return repository.buscar_clientes_por_codigo(organizacion_id, codigo, sesion)
+
+
+def buscar_clientes_por_documento(
+    organizacion_id: UUID, documento: str, sesion: Session
+) -> list[Cliente]:
+    """Lectura pública para la importación (change 10, `design.md` D4): clientes de la
+    organización con ese documento (se compara en dígitos, CLI-05), en cualquier
+    estado."""
+    return repository.buscar_clientes_por_documento(organizacion_id, documento, sesion)
 
 
 def listar_clientes(

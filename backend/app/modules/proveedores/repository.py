@@ -447,3 +447,22 @@ FUNCIONES_SIN_ORGANIZACION_ID: frozenset[str] = frozenset()
 """Sin excepción (mismo criterio que `catalogo.repository.FUNCIONES_SIN_
 ORGANIZACION_ID`, tarea 7.1): `proveedores` no tiene ningún catálogo global
 propio -- toda función pública recibe `organizacion_id` primero."""
+
+
+def buscar_proveedores_por_nombre(
+    organizacion_id: UUID, nombre: str, sesion: Session
+) -> list[Proveedor]:
+    """Proveedores de la organización con ese nombre, sin distinguir mayúsculas ni
+    espacios al borde, activos o no (change 10, `design.md` D4)."""
+    clave = nombre.strip().lower()
+    if not clave:
+        return []
+    consulta = (
+        select(Proveedor)
+        .where(
+            Proveedor.organizacion_id == organizacion_id,
+            func.lower(func.btrim(Proveedor.nombre)) == clave,
+        )
+        .order_by(Proveedor.nombre, Proveedor.id)
+    )
+    return list(sesion.scalars(consulta).all())

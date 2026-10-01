@@ -102,6 +102,19 @@ def listar_alicuotas_paginado(
     return pagina, cursor_siguiente
 
 
+def buscar_alicuotas_por_valor(
+    organizacion_id: UUID, sesion: Session, valor: Decimal
+) -> list[AlicuotaIva]:
+    """Alícuotas de la organización con ese valor exacto (fracción: 21% es `0.21`),
+    activas o no (change 10, `design.md` D4)."""
+    consulta = (
+        select(AlicuotaIva)
+        .where(AlicuotaIva.organizacion_id == organizacion_id, AlicuotaIva.valor == valor)
+        .order_by(AlicuotaIva.nombre, AlicuotaIva.id)
+    )
+    return list(sesion.scalars(consulta).all())
+
+
 def desactivar_alicuota(
     organizacion_id: UUID,
     sesion: Session,

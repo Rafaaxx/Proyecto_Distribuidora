@@ -203,6 +203,17 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("post", "/api/v1/stock/iniciales"),
         ("get", "/api/v1/stock/kardex"),
         ("get", "/api/v1/catalogo/productos/{producto_id}/costo"),
+        # Change 10, grupo 4 (`importacion/api.py`, tarea 4.3): la escritura dedicada de
+        # `IMPORTACION_REGISTRAR` (multipart), el historial y la plantilla, cada una con
+        # su prueba real de aislamiento (login real de dos organizaciones; la
+        # organizacion sale solo del token, una columna `organizacion_id` en el archivo
+        # se rechaza, un nombre de otra organizacion no cuenta como duplicado y el
+        # historial no muestra nada ajeno) en
+        # `test_inv21_aislamiento_endpoints_importacion.py`. Ninguna toma un
+        # identificador de recurso en la ruta: el aislamiento es estructural.
+        ("post", "/api/v1/importaciones/{tipo}"),
+        ("get", "/api/v1/importaciones"),
+        ("get", "/api/v1/importaciones/plantillas/{tipo}"),
     }
 )
 

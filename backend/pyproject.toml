@@ -128,6 +128,18 @@ ignore_imports = [
     "app.modules.stock.api -> sqlalchemy",
     "app.modules.stock.api -> app.api_v1.dependencias",
     "app.modules.stock.api -> app.core.autenticacion",
+    # Change 10 (`design.md` D10, `02` §5.3): `importacion` es el septimo modulo de
+    # negocio. Cada grupo agrega las entradas de los archivos que crea (`models.py` en
+    # el grupo 2; `repository.py` y `queries.py` en el 4; `api.py` en el 4):
+    # `import-linter` rechaza una excepcion sin import real.
+    "app.modules.importacion.models -> app.core.db",
+    "app.modules.importacion.models -> sqlalchemy",
+    "app.modules.importacion.repository -> sqlalchemy",
+    "app.modules.importacion.queries -> sqlalchemy",
+    "app.modules.importacion.api -> fastapi",
+    "app.modules.importacion.api -> sqlalchemy",
+    "app.modules.importacion.api -> app.api_v1.dependencias",
+    "app.modules.importacion.api -> app.core.autenticacion",
 ]
 
 # `allow_indirect_imports`: descubrimiento de la tarea 9.6 (change 05, D12).
@@ -187,6 +199,7 @@ source_modules = [
     "app.modules.cuentas_corrientes.domain",
     "app.modules.costeo.domain",
     "app.modules.stock.domain",
+    "app.modules.importacion.domain",
 ]
 forbidden_modules = ["app.commands"]
 
@@ -525,3 +538,88 @@ forbidden_modules = [
     "app.modules.costeo.domain",
 ]
 allow_indirect_imports = "true"
+
+# Change 10 (`design.md` D10, `02` SS5.3): `importacion` orquesta la puesta en marcha
+# desde planillas y llama a los servicios de los demas modulos. Su `domain/` es puro
+# (ni infraestructura ni el bus) -- mismo criterio que
+# `stock-domain-no-infraestructura`.
+[[tool.importlinter.contracts]]
+id = "importacion-domain-no-infraestructura"
+name = "importacion domain no importa infraestructura ni el bus de comandos"
+type = "forbidden"
+source_modules = ["app.modules.importacion.domain"]
+forbidden_modules = ["fastapi", "sqlalchemy", "app.commands"]
+
+# `importacion -> catalogo, proveedores, clientes, stock, cuentas_corrientes,
+# configuracion, identidad` (`02` SS5.3, D10-A), solo por su `service.py`: nunca por
+# sus modelos, repositorio, dominio, api ni comandos. `costeo` no se alcanza (lo usa
+# `stock` por dentro) y `sync` solo lo toca la api por `procesar_comando` (la
+# excepcion `importacion.api -> sync.service` se declara al crearse `api.py`).
+[[tool.importlinter.contracts]]
+id = "importacion-solo-por-service-ajeno"
+name = "importacion solo alcanza a los demas modulos por su service.py"
+type = "forbidden"
+source_modules = ["app.modules.importacion"]
+forbidden_modules = [
+    "app.modules.catalogo.models",
+    "app.modules.catalogo.repository",
+    "app.modules.catalogo.domain",
+    "app.modules.catalogo.api",
+    "app.modules.catalogo.commands",
+    "app.modules.proveedores.models",
+    "app.modules.proveedores.repository",
+    "app.modules.proveedores.domain",
+    "app.modules.proveedores.api",
+    "app.modules.proveedores.commands",
+    "app.modules.clientes.models",
+    "app.modules.clientes.repository",
+    "app.modules.clientes.domain",
+    "app.modules.clientes.api",
+    "app.modules.clientes.commands",
+    "app.modules.stock.models",
+    "app.modules.stock.repository",
+    "app.modules.stock.domain",
+    "app.modules.stock.api",
+    "app.modules.stock.commands",
+    "app.modules.cuentas_corrientes.models",
+    "app.modules.cuentas_corrientes.repository",
+    "app.modules.cuentas_corrientes.domain",
+    "app.modules.cuentas_corrientes.api",
+    "app.modules.cuentas_corrientes.commands",
+    "app.modules.configuracion.models",
+    "app.modules.configuracion.repository",
+    "app.modules.configuracion.domain",
+    "app.modules.configuracion.api",
+    "app.modules.configuracion.commands",
+    "app.modules.identidad.models",
+    "app.modules.identidad.repository",
+    "app.modules.identidad.domain",
+    "app.modules.identidad.api",
+    "app.modules.identidad.commands",
+    "app.modules.costeo",
+    "app.modules.sync",
+]
+# `importacion/api.py` llama a `sync_service.procesar_comando` (grupo 4, tarea 4.3),
+# igual que `stock.api`, `cuentas_corrientes.api`, `proveedores.api` y `clientes.api`.
+ignore_imports = [
+    "app.modules.importacion.api -> app.modules.sync.service",
+]
+allow_indirect_imports = "true"
+
+# Nadie depende de `importacion` (`design.md` D10-A): orquesta, no es orquestado.
+[[tool.importlinter.contracts]]
+id = "nadie-importa-importacion"
+name = "ningun modulo de negocio importa importacion"
+type = "forbidden"
+source_modules = [
+    "app.modules.identidad",
+    "app.modules.configuracion",
+    "app.modules.catalogo",
+    "app.modules.proveedores",
+    "app.modules.clientes",
+    "app.modules.cuentas_corrientes",
+    "app.modules.costeo",
+    "app.modules.stock",
+    "app.modules.sync",
+]
+forbidden_modules = ["app.modules.importacion"]

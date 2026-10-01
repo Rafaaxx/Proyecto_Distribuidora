@@ -38,6 +38,11 @@ from app.modules.costeo import models as costeo_models  # noqa: F401
 # `api.py` (grupo 6).
 from app.modules.cuentas_corrientes import commands as cuentas_corrientes_commands  # noqa: F401
 from app.modules.cuentas_corrientes import models as cuentas_corrientes_models  # noqa: F401
+
+# Registro de comandos y de modelos de `importacion` (change 10): explícito para que
+# `Base.metadata` y el registro de tipos no dependan de que exista su `api.py`.
+from app.modules.importacion import commands as importacion_commands  # noqa: F401
+from app.modules.importacion import models as importacion_models  # noqa: F401
 from app.modules.stock import commands as stock_commands  # noqa: F401
 from app.modules.stock import models as stock_models  # noqa: F401
 

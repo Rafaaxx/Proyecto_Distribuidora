@@ -46,6 +46,16 @@ def obtener_alicuota_por_id(
     return repository.obtener_alicuota_por_id(organizacion_id, sesion, alicuota_id)
 
 
+def buscar_alicuotas_por_valor(
+    organizacion_id: UUID, valor: Decimal, sesion: Session
+) -> list[AlicuotaIva]:
+    """Lectura pública para la importación (change 10, `design.md` D4: alícuota por
+    porcentaje): las alícuotas de la organización con ese valor exacto (fracción, 21%
+    es `0.21`), activas o no; el alta de producto rechaza después una inactiva con
+    `ALICUOTA_INACTIVA`. Nunca devuelve las de otra organización."""
+    return repository.buscar_alicuotas_por_valor(organizacion_id, sesion, valor)
+
+
 def desactivar_alicuota(
     organizacion_id: UUID, sesion: Session, reloj: Clock, alicuota_id: UUID
 ) -> AlicuotaIva | None:

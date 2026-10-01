@@ -34,9 +34,16 @@ from app.modules.catalogo.domain.errores import (
     ProveedorInactivoError,
     RecursoNoEncontradoError,
 )
-from app.modules.catalogo.domain.nombres import normalizar_codigo, normalizar_nombre
+from app.modules.catalogo.domain.nombres import (
+    normalizar_codigo,
+    normalizar_nombre,
+    normalizar_nombres_de_presentaciones,
+    normalizar_unidad_base,
+)
 from app.modules.catalogo.domain.presentaciones import (
-    DatosPresentacion,
+    DatosPresentacion as DatosPresentacion,  # re-exportado: lo usa `importacion` (change 10)
+)
+from app.modules.catalogo.domain.presentaciones import (
     validar_alta_presentaciones,
     validar_modificacion_presentacion,
     validar_nueva_referencia,
@@ -231,6 +238,15 @@ def obtener_categoria(
     return repository.obtener_categoria_por_id(organizacion_id, categoria_id, sesion)
 
 
+def buscar_categorias_por_nombre(
+    organizacion_id: UUID, nombre: str, sesion: Session
+) -> list[Categoria]:
+    """Lectura pública para la importación (change 10, `design.md` D4): categorías de
+    la organización con ese nombre, sin distinguir mayúsculas ni espacios al borde,
+    activas o no (el alta rechaza después una inactiva con `CATEGORIA_INACTIVA`)."""
+    return repository.buscar_categorias_por_nombre(organizacion_id, nombre, sesion)
+
+
 # --- marca (CAT-01, CAT-05) -------------------------------------------------
 
 
@@ -283,6 +299,12 @@ def listar_marcas(
     organizacion_id: UUID, sesion: Session, *, solo_activas: bool = False
 ) -> list[Marca]:
     return repository.listar_marcas(organizacion_id, sesion, solo_activas=solo_activas)
+
+
+def buscar_marcas_por_nombre(organizacion_id: UUID, nombre: str, sesion: Session) -> list[Marca]:
+    """Lectura pública para la importación (change 10, `design.md` D4); mismos criterios
+    que `buscar_categorias_por_nombre`."""
+    return repository.buscar_marcas_por_nombre(organizacion_id, nombre, sesion)
 
 
 def obtener_marca(organizacion_id: UUID, marca_id: UUID, sesion: Session) -> Marca | None:
@@ -345,6 +367,9 @@ def crear_producto(
     función se revierte entero (INV-01), porque quien confirma la
     transacción es el bus, no esta función."""
     codigo_normalizado = normalizar_codigo(codigo)
+    nombre_normalizado = normalizar_nombre(nombre)
+    unidad_base_normalizada = normalizar_unidad_base(unidad_base)
+    presentaciones = normalizar_nombres_de_presentaciones(presentaciones)
     validar_alta_presentaciones(presentaciones)
 
     _resolver_categoria_activa(organizacion_id, categoria_id, sesion)
@@ -358,11 +383,11 @@ def crear_producto(
         sesion,
         producto_id=nuevo_id(),
         codigo=codigo_normalizado,
-        nombre=nombre,
+        nombre=nombre_normalizado,
         categoria_id=categoria_id,
         marca_id=marca_id,
         proveedor_id=proveedor_id,
-        unidad_base=unidad_base,
+        unidad_base=unidad_base_normalizada,
         alicuota_id=alicuota_id,
         activo=True,
         momento=momento,
@@ -415,6 +440,8 @@ def modificar_producto(
         raise RecursoNoEncontradoError(f"El producto {producto_id} no existe en esta organización.")
 
     codigo_normalizado = normalizar_codigo(codigo)
+    nombre_normalizado = normalizar_nombre(nombre)
+    unidad_base_normalizada = normalizar_unidad_base(unidad_base)
     _resolver_categoria_activa(organizacion_id, categoria_id, sesion)
     _resolver_marca_activa(organizacion_id, marca_id, sesion)
     _resolver_alicuota_activa(organizacion_id, alicuota_id, sesion)
@@ -427,11 +454,11 @@ def modificar_producto(
         sesion,
         producto_id=producto_id,
         codigo=codigo_normalizado,
-        nombre=nombre,
+        nombre=nombre_normalizado,
         categoria_id=categoria_id,
         marca_id=marca_id,
         proveedor_id=proveedor_id,
-        unidad_base=unidad_base,
+        unidad_base=unidad_base_normalizada,
         alicuota_id=alicuota_id,
         activo=activo,
         momento=reloj.now(),
@@ -464,6 +491,15 @@ def listar_productos_paginado(
     )
 
 
+def buscar_productos_por_codigo(
+    organizacion_id: UUID, codigo: str, sesion: Session
+) -> list[Producto]:
+    """Lectura pública para la importación (change 10, `design.md` D4): productos de la
+    organización con ese código, sin distinguir mayúsculas ni espacios al borde, activos
+    o no. Más de uno es una ambigüedad que decide quien llama."""
+    return repository.buscar_productos_por_codigo(organizacion_id, codigo, sesion)
+
+
 def obtener_producto(organizacion_id: UUID, producto_id: UUID, sesion: Session) -> Producto | None:
     """Lectura pública (tarea 7.7): otros módulos (06, 09, 11, 13, 18a)
     resuelven un producto por id sin importar `catalogo.models` ni
@@ -491,6 +527,7 @@ def agregar_presentacion(
     siempre en `False`. Bloquea la fila de `producto` (D5) antes de
     escribir, para serializar con cualquier otro cambio concurrente de
     presentaciones del mismo producto."""
+    nombre_normalizado = normalizar_nombre(nombre)
     validar_unidades_base(unidades_base)
     producto = repository.obtener_producto_por_id_para_actualizar(
         organizacion_id, producto_id, sesion
@@ -503,7 +540,7 @@ def agregar_presentacion(
         sesion,
         presentacion_id=nuevo_id(),
         producto_id=producto_id,
-        nombre=nombre,
+        nombre=nombre_normalizado,
         unidades_base=unidades_base,
         usar_en_venta=usar_en_venta,
         usar_en_compra=usar_en_compra,
@@ -531,6 +568,7 @@ def modificar_presentacion(
     del producto dueño (D5) antes de decidir, consulta los verificadores de
     uso (D2) y aplica `validar_modificacion_presentacion` (dominio puro,
     grupo 4)."""
+    nombre_normalizado = normalizar_nombre(nombre)
     presentacion = repository.obtener_presentacion_por_id(organizacion_id, presentacion_id, sesion)
     if presentacion is None:
         raise RecursoNoEncontradoError(
@@ -556,7 +594,7 @@ def modificar_presentacion(
         organizacion_id,
         sesion,
         presentacion_id=presentacion_id,
-        nombre=nombre,
+        nombre=nombre_normalizado,
         unidades_base=unidades_base,
         usar_en_venta=usar_en_venta,
         usar_en_compra=usar_en_compra,

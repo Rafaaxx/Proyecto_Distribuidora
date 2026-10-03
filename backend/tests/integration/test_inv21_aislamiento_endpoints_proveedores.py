@@ -25,6 +25,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
+from cuentas_corrientes_utiles import agregar_configuracion
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -95,6 +96,7 @@ def _crear_organizacion(sesion: Session, slug: str) -> Organizacion:
     )
     sesion.add(organizacion)
     sesion.flush()
+    agregar_configuracion(sesion, organizacion.id)
     return organizacion
 
 

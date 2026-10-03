@@ -121,6 +121,19 @@ const ALICUOTAS = {
   cursor_siguiente: null,
 }
 
+type CondicionFiscal = 'RESPONSABLE_INSCRIPTO' | 'MONOTRIBUTO'
+let condicionFiscal: CondicionFiscal = 'RESPONSABLE_INSCRIPTO'
+
+function configuracionFiscal() {
+  const computa = condicionFiscal === 'RESPONSABLE_INSCRIPTO'
+  return {
+    condicion_iva: condicionFiscal,
+    computa_credito_fiscal: computa,
+    modo_impositivo: computa ? 'B' : 'A',
+    modalidad_iva_default: computa ? 'CLIENTE' : null,
+  }
+}
+
 function mockApiBase() {
   apiFetchMock.mockImplementation((ruta: string, init?: RequestInit) => {
     if (ruta === `/proveedores/${PROVEEDOR_ID}`) return Promise.resolve(respuesta(200, PROVEEDOR))
@@ -132,6 +145,7 @@ function mockApiBase() {
     if (ruta.startsWith('/catalogo/productos')) {
       return Promise.resolve(respuesta(200, { items: [PRODUCTO_CERVEZA_B, PRODUCTO_VINO_A], cursor_siguiente: null }))
     }
+    if (ruta === '/configuracion/fiscal') return Promise.resolve(respuesta(200, configuracionFiscal()))
     if (ruta.startsWith('/configuracion/alicuotas')) {
       return Promise.resolve(respuesta(200, ALICUOTAS))
     }
@@ -171,6 +185,7 @@ function renderPantalla(queryClient = queryClientConYo('GES')) {
 describe('CostosCargaScreen (tarea 11.4)', () => {
   beforeEach(() => {
     apiFetchMock.mockReset()
+    condicionFiscal = 'RESPONSABLE_INSCRIPTO'
   })
 
   afterEach(() => {
@@ -272,6 +287,7 @@ describe('CostosCargaScreen (tarea 11.4)', () => {
       if (ruta.startsWith('/catalogo/productos')) {
         return Promise.resolve(respuesta(200, { items: [PRODUCTO_CERVEZA_B, PRODUCTO_VINO_A], cursor_siguiente: null }))
       }
+      if (ruta === '/configuracion/fiscal') return Promise.resolve(respuesta(200, configuracionFiscal()))
       if (ruta.startsWith('/configuracion/alicuotas')) return Promise.resolve(respuesta(200, ALICUOTAS))
       if (ruta === '/costos' && init?.method === 'POST') {
         return Promise.resolve(
@@ -323,6 +339,7 @@ describe('CostosCargaScreen (tarea 11.4)', () => {
       if (ruta.startsWith('/catalogo/productos')) {
         return Promise.resolve(respuesta(200, { items: [PRODUCTO_CERVEZA_B, PRODUCTO_VINO_A], cursor_siguiente: null }))
       }
+      if (ruta === '/configuracion/fiscal') return Promise.resolve(respuesta(200, configuracionFiscal()))
       if (ruta.startsWith('/configuracion/alicuotas')) return Promise.resolve(respuesta(200, ALICUOTAS))
       if (ruta === '/costos' && init?.method === 'POST') {
         // Sin `fila`: error no específico de una fila (p. ej. proveedor
@@ -402,6 +419,7 @@ describe('CostosCargaScreen pide los productos del proveedor al servidor (tarea 
           url.searchParams.get('proveedor_id') === PROVEEDOR_ID ? [PRODUCTO_CERVEZA_B] : [PRODUCTO_CERVEZA_B, PRODUCTO_AJENO]
         return Promise.resolve(respuesta(200, { items, cursor_siguiente: null }))
       }
+      if (ruta === '/configuracion/fiscal') return Promise.resolve(respuesta(200, configuracionFiscal()))
       if (ruta.startsWith('/configuracion/alicuotas')) return Promise.resolve(respuesta(200, ALICUOTAS))
       return Promise.resolve(respuesta(200, { items: [], cursor_siguiente: null }))
     })
@@ -432,5 +450,101 @@ describe('CostosCargaScreen pide los productos del proveedor al servidor (tarea 
     await screen.findByRole('option', { name: 'Cerveza B' })
     const opciones = within(screen.getByLabelText(/^producto$/i) as HTMLSelectElement).getAllByRole('option')
     expect(opciones.map((o) => o.textContent)).toEqual(['Elegí un producto', 'Cerveza B'])
+  })
+})
+
+/**
+ * Change 11b, tarea 7.3 (CST-06, `design.md` D4): sin crédito fiscal la fila no ofrece
+ * "Incluye IVA", rotula el valor como "Valor pagado" y envía `incluye_iva = false`.
+ */
+describe('CostosCargaScreen sin crédito fiscal (11b, tarea 7.3)', () => {
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+    condicionFiscal = 'MONOTRIBUTO'
+  })
+
+  afterEach(() => {
+    condicionFiscal = 'RESPONSABLE_INSCRIPTO'
+    vi.clearAllMocks()
+  })
+
+  async function elegirCajaX12(usuarioEvento: ReturnType<typeof userEvent.setup>) {
+    await screen.findByRole('option', { name: 'Cerveza B' })
+    await usuarioEvento.selectOptions(screen.getByLabelText(/^producto$/i), CERVEZA_B_ID)
+    await usuarioEvento.selectOptions(await screen.findByLabelText(/presentaci[oó]n/i), PRESENTACION_CAJA_X12_ID)
+  }
+
+  it('un monotributista no ve "Incluye IVA" y ve "Valor pagado"', async () => {
+    mockApiBase()
+    renderPantalla()
+
+    expect(await screen.findByLabelText(/^valor pagado$/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/incluye iva/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^valor$/i)).not.toBeInTheDocument()
+  })
+
+  it('21780 como valor pagado muestra costo base 1.815,000000 y envía incluye_iva = false', async () => {
+    mockApiBase()
+    const usuarioEvento = userEvent.setup()
+    renderPantalla()
+    await elegirCajaX12(usuarioEvento)
+
+    await usuarioEvento.type(await screen.findByLabelText(/^valor pagado$/i), '21780')
+
+    await waitFor(() => expect(screen.getByTestId('vista-previa-0')).toHaveTextContent('1.815,000000'))
+    await usuarioEvento.click(screen.getByRole('button', { name: /cargar costos/i }))
+    await waitFor(() => expect(apiFetchMock.mock.calls.some(([ruta]) => ruta === '/costos')).toBe(true))
+    const llamada = apiFetchMock.mock.calls.find(([ruta]) => ruta === '/costos') as [string, RequestInit]
+    const cuerpo = JSON.parse(String(llamada[1].body)) as { costos: { valor: string; incluye_iva: boolean }[] }
+    expect(cuerpo.costos).toHaveLength(1)
+    expect(cuerpo.costos[0]).toMatchObject({ valor: '21780', incluye_iva: false })
+  })
+
+  it('un inscripto sigue con "Valor" e "Incluye IVA" y 18000 con IVA da 1.239,669421 (TR-06)', async () => {
+    condicionFiscal = 'RESPONSABLE_INSCRIPTO'
+    mockApiBase()
+    const usuarioEvento = userEvent.setup()
+    renderPantalla()
+    await elegirCajaX12(usuarioEvento)
+
+    await usuarioEvento.type(await screen.findByLabelText(/^valor$/i), '18000')
+    await usuarioEvento.click(screen.getByLabelText(/incluye iva/i))
+
+    await waitFor(() => expect(screen.getByTestId('vista-previa-0')).toHaveTextContent('1.239,669421'))
+    expect(screen.queryByLabelText(/^valor pagado$/i)).not.toBeInTheDocument()
+  })
+
+  it('INCLUYE_IVA_NO_APLICA del servidor señala la fila y conserva lo cargado', async () => {
+    mockApiBase()
+    const base = apiFetchMock.getMockImplementation() as (ruta: string, init?: RequestInit) => Promise<unknown>
+    apiFetchMock.mockImplementation((ruta: string, init?: RequestInit) => {
+      if (ruta === '/costos' && init?.method === 'POST') {
+        return Promise.resolve(
+          respuesta(422, { title: 'Esta organización no computa crédito fiscal: no informe IVA incluido.', codigo: 'INCLUYE_IVA_NO_APLICA', fila: 0 }),
+        )
+      }
+      return base(ruta, init)
+    })
+    const usuarioEvento = userEvent.setup()
+    renderPantalla()
+    await elegirCajaX12(usuarioEvento)
+    await usuarioEvento.type(await screen.findByLabelText(/^valor pagado$/i), '21780')
+
+    await usuarioEvento.click(screen.getByRole('button', { name: /cargar costos/i }))
+
+    expect(await screen.findByText(/no computa crédito fiscal/i)).toBeInTheDocument()
+    expect((screen.getByLabelText(/^valor pagado$/i) as HTMLInputElement).value).toBe('21780')
+  })
+
+  it('mientras la condición no llega no se puede cargar y se avisa si falla la lectura', async () => {
+    mockApiBase()
+    const base = apiFetchMock.getMockImplementation() as (ruta: string, init?: RequestInit) => Promise<unknown>
+    apiFetchMock.mockImplementation((ruta: string, init?: RequestInit) =>
+      ruta === '/configuracion/fiscal' ? Promise.resolve(respuesta(500, { title: 'Falló' })) : base(ruta, init),
+    )
+    renderPantalla()
+
+    expect(await screen.findByText(/no se pudo leer la condici[oó]n frente al iva/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /cargar costos/i })).toBeDisabled()
   })
 })

@@ -85,6 +85,7 @@ from app.modules.proveedores.schemas import (
     ProveedorModificarRequest,
     ProveedorOpcionResponse,
     ProveedorResponse,
+    ResumenReglaIvaResponse,
 )
 from app.modules.sync import service as sync_service
 
@@ -335,6 +336,7 @@ def _costo_informado_response(
         presentacion_id=costo.presentacion_id,
         valor=costo.valor,
         incluye_iva=costo.incluye_iva,
+        computa_credito_fiscal=costo.computa_credito_fiscal,
         bonificacion=costo.bonificacion,
         alicuota_aplicada=costo.alicuota_aplicada,
         costo_base=costo.costo_base,
@@ -410,6 +412,35 @@ def informar_costos(
             CostoDelResultadoResponse(id=UUID(str(costo_id)), costo_base=str(costo_base))
             for costo_id, costo_base in zip(costo_ids, costos_base, strict=True)
         ]
+    )
+
+
+@router_costos.get("/resumen-regla-iva", response_model=ResumenReglaIvaResponse)
+def resumir_costos_por_regla_de_iva(
+    contexto: Annotated[
+        ContextoAutenticado,
+        Depends(requiere_algun_permiso("ADMIN_CONFIGURACION", PERMISO_EDITAR_COSTOS)),
+    ],
+    sesion: Annotated[Session, Depends(get_session)],
+    fecha: date | None = None,
+) -> ResumenReglaIvaResponse:
+    """11b, D10 (CST-03, CST-06): cuántos costos informados vigentes a `fecha` (por defecto,
+    la fecha de negocio de hoy) se registraron computando crédito fiscal y cuántos sin
+    computarlo. Lo usa la pantalla de cambio de condición para avisar cuántos costos conviene
+    volver a informar. La organización sale del token (INV-21)."""
+    fecha_efectiva = fecha
+    if fecha_efectiva is None:
+        fecha_efectiva = identidad_service.fecha_de_negocio(
+            contexto.organizacion_id, sesion, SystemClock()
+        )
+        assert fecha_efectiva is not None  # la organización del token siempre existe.
+    resumen = proveedores_queries.resumir_costos_vigentes_por_regla_de_iva(
+        contexto.organizacion_id, fecha_efectiva, sesion
+    )
+    return ResumenReglaIvaResponse(
+        fecha=resumen.fecha,
+        con_credito_fiscal=resumen.con_credito_fiscal,
+        sin_credito_fiscal=resumen.sin_credito_fiscal,
     )
 
 
@@ -724,6 +755,7 @@ def obtener_compra(
                 cantidad_base=linea.cantidad_base,
                 valor_presentacion=str(linea.valor_presentacion),
                 incluye_iva=linea.incluye_iva,
+                computa_credito_fiscal=linea.computa_credito_fiscal,
                 bonificacion=str(linea.bonificacion),
                 alicuota_aplicada=str(linea.alicuota_aplicada),
                 costo_base=str(linea.costo_base),

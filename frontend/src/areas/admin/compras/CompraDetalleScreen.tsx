@@ -9,6 +9,7 @@ import { Dialogo } from '../../../components/ui/Dialog'
 import { PageHeader } from '../../../components/ui/PageHeader'
 import { Tabla, type ColumnaTabla } from '../../../components/ui/Table'
 import { avisoDeObservacion } from '../../../domain/compras/observaciones'
+import { etiquetaIvaDescontado } from '../../../domain/proveedores/ivaDescontado'
 import { formatearCantidad, referenciaDeRespuesta } from '../../../domain/stock/cantidades'
 import type { CompraDetalle, CompraLinea } from '../../../features/compras/api'
 import { ErrorDeCompras, PermisoRequeridoComprasError } from '../../../features/compras/errores'
@@ -72,6 +73,8 @@ function DetalleDeCompra() {
     { clave: 'presentacion', encabezado: 'Presentación', render: (l) => l.presentacion_nombre ?? l.presentacion_id },
     { clave: 'cantidad', encabezado: 'Cantidad', render: (l) => formatearCantidad(l.cantidad_base, referenciaDeRespuesta(l.unidades_referencia, l.nombre_referencia)) },
     { clave: 'costo', encabezado: 'Costo base', render: (l) => formatearCosto(parsearImporteDesdeApi(l.costo_base)) },
+    // 11b (CST-06, TR-06): la regla congelada en la línea, no la condición actual.
+    { clave: 'iva', encabezado: 'IVA', render: (l) => etiquetaIvaDescontado(l) },
     { clave: 'neto', encabezado: 'Importe neto', render: (l) => formatearImporte(parsearImporteDesdeApi(l.importe_neto)) },
   ]
 

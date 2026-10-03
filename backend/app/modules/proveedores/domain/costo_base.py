@@ -7,8 +7,12 @@ comunes de `shared/fixtures/calculo/cst-02-costo-base.json`).
 
 Fórmula (TR-03: sin redondeos intermedios, un único redondeo al final):
 
-    costo_por_presentacion = valor * (1 - bonificacion) / (1 + alicuota si incluye_iva sino 1)
+    costo_por_presentacion = valor * (1 - bonificacion)
+                             / (1 + alicuota si incluye_iva y computa_credito_fiscal sino 1)
     costo_base = costo_por_presentacion / unidades
+
+Solo un responsable inscripto computa crédito fiscal (CST-06, 11b): para los demás el IVA
+pagado es costo y el valor informado (el valor pagado) no se divide por la alícuota.
 
 El cociente se calcula con `Decimal` de precisión ampliada (50 dígitos
 significativos, misma verificación que la tarea 2.1) para que la única
@@ -23,6 +27,7 @@ from decimal import Decimal, localcontext
 from app.core.money import redondear_costo
 from app.modules.proveedores.domain.errores import (
     BonificacionInvalidaError,
+    IncluyeIvaNoAplicaError,
     ValorInvalidoError,
 )
 
@@ -31,6 +36,7 @@ _PRECISION_INTERMEDIA = 50
 
 def calcular_costo_base(
     *,
+    computa_credito_fiscal: bool,
     valor: Decimal,
     incluye_iva: bool,
     alicuota: Decimal,
@@ -40,6 +46,9 @@ def calcular_costo_base(
     """Calcula el costo base por unidad base de una presentación informada
     (CST-02).
 
+    - `computa_credito_fiscal`: la regla de CST-06 de la organización. Si es falso, el
+      valor informado es el pagado y `incluye_iva = true` se rechaza con
+      `INCLUYE_IVA_NO_APLICA` (D4, TR-10): nunca se acepta y se ignora.
     - `valor`: lo pagado por la presentación completa, `> 0` (`VALOR_INVALIDO`
       si no; TR-01).
     - `incluye_iva`: si `valor` ya incluye el IVA de `alicuota`.
@@ -51,6 +60,11 @@ def calcular_costo_base(
       un invariante del llamador, no una entrada de usuario, así que se
       afirma con `ValueError` en vez de un `DomainError` con código propio).
     """
+    if incluye_iva and not computa_credito_fiscal:
+        raise IncluyeIvaNoAplicaError(
+            "La organización no computa crédito fiscal de IVA: el valor que se carga es el "
+            "pagado, sin la opción de IVA incluido."
+        )
     if valor <= 0:
         raise ValorInvalidoError("El valor informado debe ser mayor a cero.")
     if bonificacion < 0 or bonificacion >= 1:

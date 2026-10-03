@@ -197,6 +197,7 @@ def _dato_costo(
         presentacion_id=presentacion_id,
         valor=valor,
         incluye_iva=True,
+        computa_credito_fiscal=True,
         bonificacion=Decimal("0"),
         alicuota_aplicada=Decimal("0.210000"),
         costo_base=Decimal("1239.669421"),

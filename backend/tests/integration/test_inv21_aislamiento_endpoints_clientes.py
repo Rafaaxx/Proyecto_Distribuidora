@@ -132,6 +132,7 @@ def _crear_organizacion(sesion: Session, slug: str) -> Organizacion:
     sesion.add(
         ConfiguracionOrganizacion(
             organizacion_id=organizacion.id,
+            condicion_iva="RESPONSABLE_INSCRIPTO",
             modo_impositivo="B",
             lista_precio_default_id=None,
             politica_credito_default="ADVERTIR",

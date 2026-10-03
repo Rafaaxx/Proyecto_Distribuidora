@@ -5,6 +5,7 @@
     "entrada": {
       "motor": "cst02",
       "operacion": "calcular_costo_base",
+      "computa_credito_fiscal": true,
       "valor": "18000.00",
       "incluye_iva": false,
       "alicuota": "0",
@@ -19,6 +20,7 @@
     "entrada": {
       "motor": "cst02",
       "operacion": "calcular_costo_base",
+      "computa_credito_fiscal": true,
       "valor": "1000.00",
       "incluye_iva": false,
       "alicuota": "0",
@@ -33,6 +35,7 @@
     "entrada": {
       "motor": "cst02",
       "operacion": "calcular_costo_base",
+      "computa_credito_fiscal": true,
       "valor": "18000.00",
       "incluye_iva": true,
       "alicuota": "0.21",
@@ -47,6 +50,7 @@
     "entrada": {
       "motor": "cst02",
       "operacion": "calcular_costo_base",
+      "computa_credito_fiscal": true,
       "valor": "18000.00",
       "incluye_iva": false,
       "alicuota": "0",
@@ -61,6 +65,7 @@
     "entrada": {
       "motor": "cst02",
       "operacion": "calcular_costo_base",
+      "computa_credito_fiscal": true,
       "valor": "10000.00",
       "incluye_iva": false,
       "alicuota": "0",
@@ -75,6 +80,7 @@
     "entrada": {
       "motor": "cst02",
       "operacion": "calcular_costo_base",
+      "computa_credito_fiscal": true,
       "valor": "16.41",
       "incluye_iva": false,
       "alicuota": "0",
@@ -89,6 +95,7 @@
     "entrada": {
       "motor": "cst02",
       "operacion": "calcular_costo_base",
+      "computa_credito_fiscal": true,
       "valor": "1000.00",
       "incluye_iva": true,
       "alicuota": "0.21",
@@ -103,6 +110,7 @@
     "entrada": {
       "motor": "cst02",
       "operacion": "calcular_costo_base",
+      "computa_credito_fiscal": true,
       "valor": "500.00",
       "incluye_iva": true,
       "alicuota": "0",
@@ -117,6 +125,7 @@
     "entrada": {
       "motor": "cst02",
       "operacion": "calcular_costo_base",
+      "computa_credito_fiscal": true,
       "valor": "999999999999.99",
       "incluye_iva": true,
       "alicuota": "0.21",
@@ -131,6 +140,7 @@
     "entrada": {
       "motor": "cst02",
       "operacion": "calcular_costo_base",
+      "computa_credito_fiscal": true,
       "valor": "0.00",
       "incluye_iva": false,
       "alicuota": "0",
@@ -145,6 +155,7 @@
     "entrada": {
       "motor": "cst02",
       "operacion": "calcular_costo_base",
+      "computa_credito_fiscal": true,
       "valor": "-5.00",
       "incluye_iva": false,
       "alicuota": "0",
@@ -159,6 +170,7 @@
     "entrada": {
       "motor": "cst02",
       "operacion": "calcular_costo_base",
+      "computa_credito_fiscal": true,
       "valor": "18000.00",
       "incluye_iva": false,
       "alicuota": "0",
@@ -173,6 +185,7 @@
     "entrada": {
       "motor": "cst02",
       "operacion": "calcular_costo_base",
+      "computa_credito_fiscal": true,
       "valor": "18000.00",
       "incluye_iva": false,
       "alicuota": "0",
@@ -187,6 +200,7 @@
     "entrada": {
       "motor": "cst02",
       "operacion": "calcular_costo_base",
+      "computa_credito_fiscal": true,
       "valor": "18000.00",
       "incluye_iva": false,
       "alicuota": "0",
@@ -194,5 +208,50 @@
       "unidades": 0
     },
     "salida_esperada": { "error": true }
+  },
+  {
+    "id": "CST02-monotributo-caja-x12-iva-es-costo",
+    "reglas": ["CST-02", "CST-06"],
+    "entrada": {
+      "motor": "cst02",
+      "operacion": "calcular_costo_base",
+      "computa_credito_fiscal": false,
+      "valor": "21780.00",
+      "incluye_iva": false,
+      "alicuota": "0.21",
+      "bonificacion": "0",
+      "unidades": 12
+    },
+    "salida_esperada": { "costo_base": "1815.000000" }
+  },
+  {
+    "id": "CST02-monotributo-con-bonificacion-10",
+    "reglas": ["CST-02", "CST-06", "TR-02"],
+    "entrada": {
+      "motor": "cst02",
+      "operacion": "calcular_costo_base",
+      "computa_credito_fiscal": false,
+      "valor": "21780.00",
+      "incluye_iva": false,
+      "alicuota": "0.21",
+      "bonificacion": "0.10",
+      "unidades": 12
+    },
+    "salida_esperada": { "costo_base": "1633.500000" }
+  },
+  {
+    "id": "CST02-monotributo-alicuota-no-divide",
+    "reglas": ["CST-02", "CST-06"],
+    "entrada": {
+      "motor": "cst02",
+      "operacion": "calcular_costo_base",
+      "computa_credito_fiscal": false,
+      "valor": "18000.00",
+      "incluye_iva": false,
+      "alicuota": "0.21",
+      "bonificacion": "0",
+      "unidades": 12
+    },
+    "salida_esperada": { "costo_base": "1500.000000" }
   }
 ]

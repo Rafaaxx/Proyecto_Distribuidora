@@ -33,6 +33,7 @@ interface EntradaDeLineaJson {
   cantidad: string
   valor: string
   incluye_iva: boolean
+  computa_credito_fiscal: boolean
   alicuota: string
   bonificacion: string
 }
@@ -43,6 +44,7 @@ function aLinea(datos: EntradaDeLineaJson): EntradaDeLinea {
     cantidad: datos.cantidad,
     valor: datos.valor,
     incluyeIva: datos.incluye_iva,
+    computaCreditoFiscal: datos.computa_credito_fiscal,
     alicuota: datos.alicuota,
     bonificacion: datos.bonificacion,
   }

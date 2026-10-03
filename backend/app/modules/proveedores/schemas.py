@@ -104,6 +104,15 @@ class CostoDelLoteRequest(BaseModel):
     observacion: str | None = None
 
 
+class ResumenReglaIvaResponse(BaseModel):
+    """`GET /costos/resumen-regla-iva` (11b, D10): cuántos costos vigentes a `fecha` se
+    registraron con y sin crédito fiscal. Insumo de la confirmación del cambio de condición."""
+
+    fecha: date
+    con_credito_fiscal: int
+    sin_credito_fiscal: int
+
+
 class CostoInformarRequest(BaseModel):
     proveedor_id: UUID
     costos: list[CostoDelLoteRequest] = Field(min_length=1, max_length=200)
@@ -136,6 +145,7 @@ class CostoInformadoResponse(BaseModel):
     presentacion_id: UUID
     valor: Decimal
     incluye_iva: bool
+    computa_credito_fiscal: bool
     bonificacion: Decimal
     alicuota_aplicada: Decimal
     costo_base: Decimal
@@ -298,6 +308,7 @@ class CompraLineaResponse(BaseModel):
     cantidad_base: int
     valor_presentacion: str
     incluye_iva: bool
+    computa_credito_fiscal: bool
     bonificacion: str
     alicuota_aplicada: str
     costo_base: str

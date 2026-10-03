@@ -35,6 +35,7 @@ def test_caso_compartido_de_cst02(caso: object) -> None:
         with pytest.raises(Exception):  # noqa: B017 (6.3 define la excepción exacta; acá es ROJO)
             calcular_costo_base(
                 valor=Decimal(entrada["valor"]),
+                computa_credito_fiscal=entrada["computa_credito_fiscal"],
                 incluye_iva=entrada["incluye_iva"],
                 alicuota=Decimal(entrada["alicuota"]),
                 bonificacion=Decimal(entrada["bonificacion"]),
@@ -44,6 +45,7 @@ def test_caso_compartido_de_cst02(caso: object) -> None:
 
     resultado = calcular_costo_base(
         valor=Decimal(entrada["valor"]),
+        computa_credito_fiscal=entrada["computa_credito_fiscal"],
         incluye_iva=entrada["incluye_iva"],
         alicuota=Decimal(entrada["alicuota"]),
         bonificacion=Decimal(entrada["bonificacion"]),

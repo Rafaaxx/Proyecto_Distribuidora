@@ -13,7 +13,8 @@ Por línea (CMP-02):
     importe_neto  = redondear_importe(cantidad_base x costo_base)
 
 El total neto es la suma de los importes de línea (TR-03). El total de factura
-sugerido (D1) suma, por línea, `redondear_importe(importe_neto x (1 + alicuota))`.
+sugerido (D1) suma, por línea, `redondear_importe(importe_neto x (1 + alicuota))` si la
+organización computa crédito fiscal (CST-06) y el `importe_neto` a secas si no (11b, D5).
 """
 
 from __future__ import annotations
@@ -79,6 +80,9 @@ class EntradaDeLinea:
     cantidad: Decimal
     valor: Decimal
     incluye_iva: bool
+    computa_credito_fiscal: bool
+    """CST-06: la regla vigente de la organización al registrar (la decide el servidor,
+    nunca el cliente). Si es falso el valor es el pagado y el IVA es costo."""
     alicuota: Decimal
     bonificacion: Decimal
 
@@ -161,6 +165,7 @@ def calcular_linea(entrada: EntradaDeLinea) -> LineaCalculada:
     _validar_bonificacion(entrada.bonificacion)
 
     costo_base = calcular_costo_base(
+        computa_credito_fiscal=entrada.computa_credito_fiscal,
         valor=entrada.valor,
         incluye_iva=entrada.incluye_iva,
         alicuota=entrada.alicuota,
@@ -173,7 +178,12 @@ def calcular_linea(entrada: EntradaDeLinea) -> LineaCalculada:
     importe_neto = redondear_importe(Decimal(cantidad_base) * costo_base)
     if importe_neto > _IMPORTE_MAXIMO:
         raise ImporteInvalidoError(f"El importe de la línea supera {_IMPORTE_MAXIMO}.")
-    importe_con_iva = redondear_importe(importe_neto * (_UNO + entrada.alicuota))
+    # D5: sin crédito fiscal el valor cargado ya es el pagado; no se agrega IVA al sugerido.
+    importe_con_iva = (
+        redondear_importe(importe_neto * (_UNO + entrada.alicuota))
+        if entrada.computa_credito_fiscal
+        else importe_neto
+    )
     return LineaCalculada(
         cantidad_base=cantidad_base,
         costo_base=costo_base,

@@ -80,12 +80,13 @@ Estos valores son **configuración de la primera organización**, no reglas del 
 
 | Tema | Organización inicial | El sistema debe soportar además |
 | --- | --- | --- |
-| IVA en precios | Listas sin IVA; la venta se registra a precio neto (modo A) | Modo B (neto + IVA en la venta) y modo C (precios con IVA incluido) |
-| IVA al facturar | Elegible por factura: a cargo del cliente o absorbido, con valor por defecto por organización y cliente | — |
+| Condición frente al IVA | Monotributo: no recupera el IVA de compra, así que el IVA pagado es costo (CST-06, ADR-045) | Responsable inscripto (computa crédito fiscal) y exento |
+| IVA en precios | Ventas a precio final, sin IVA discriminado (modo A); Factura C al facturar | Modo B (neto + IVA en la venta) y modo C (precios con IVA incluido), solo para un responsable inscripto |
+| IVA al facturar | No aplica: un monotributista no discrimina IVA y no elige modalidad | Elegible por factura (a cargo del cliente o absorbido, con valor por defecto por organización y cliente), solo para un responsable inscripto (ADR-009, ADR-045) |
 | Impuestos internos | No aplica | Queda fuera del alcance hasta que otra organización lo requiera |
 | Facturación fiscal | Módulo separado; hoy la venta genera una nota de venta sin validez fiscal | Integración fiscal electrónica en una etapa posterior |
 | Precio de unidad suelta | Proporcional al precio de la caja | — |
-| Carga de costo | Por caja o por unidad, según cómo informe cada proveedor | Cualquier presentación de compra |
+| Carga de costo | Por caja o por unidad, según cómo informe cada proveedor; el valor cargado es el pagado (con IVA incluido, que es costo) | Cualquier presentación de compra; un responsable inscripto puede indicar que el valor incluye IVA y el sistema lo descuenta |
 | Proveedores por producto | Uno | Modelo con proveedor principal; múltiples proveedores como evolución |
 | Costeo | Promedio ponderado móvil (ADR-002) | FIFO como estrategia futura desde fecha de corte |
 | Cuenta corriente | General: la cobranza reduce el saldo global | Imputación por operación (etapa de producto comercial) |

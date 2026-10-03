@@ -135,6 +135,7 @@ Una fila por organización (`01` §4).
 | Columna | Tipo | Notas |
 | --- | --- | --- |
 | `organizacion_id` | `uuid` | PK y FK |
+| `condicion_iva` | `text` | `RESPONSABLE_INSCRIPTO`, `MONOTRIBUTO`, `EXENTO`; `NOT NULL`; la regla derivada es CST-06 (ADR-045) |
 | `modo_impositivo` | `text` | `A`, `B`, `C` |
 | `lista_precio_default_id` | `uuid` | |
 | `politica_credito_default` | `text` | `ADVERTIR`, `AUTORIZAR`, `BLOQUEAR` |
@@ -148,9 +149,11 @@ Una fila por organización (`01` §4).
 | `permite_consumidor_final` | `boolean` | |
 | `cliente_consumidor_final_id` | `uuid` | Opcional |
 | `estado_facturacion_default` | `text` | `NO_REQUIERE`, `PENDIENTE` |
-| `modalidad_iva_default` | `text` | `CLIENTE`, `ABSORBIDO` |
+| `modalidad_iva_default` | `text` | `CLIENTE`, `ABSORBIDO`; nulo si no es responsable inscripto |
 | `intentos_pin_max` | `integer` | |
 | `desvio_reloj_max_segundos` | `integer` | `02` §9 |
+
+`CHECK` de `condicion_iva` y de coherencia (ADR-045, D2): `condicion_iva = 'RESPONSABLE_INSCRIPTO' OR (modo_impositivo = 'A' AND modalidad_iva_default IS NULL)`: una organización no inscripta vende a precio final (modo A) y no tiene modalidad de IVA. `app_runtime` no puede borrar la fila.
 
 ### `usuario`
 
@@ -264,6 +267,7 @@ La presentación de referencia se resuelve por este indicador y no con una clave
 | `proveedor_id`, `producto_id`, `presentacion_id` | `uuid` | |
 | `valor` | `numeric(14,2)` | Valor informado por presentación |
 | `incluye_iva` | `boolean` | |
+| `computa_credito_fiscal` | `boolean` | `NOT NULL`. La regla de la organización (CST-06) al registrar el costo, congelada: reconstruye el cálculo. `CHECK (computa_credito_fiscal OR NOT incluye_iva)` (ADR-045, D3) |
 | `bonificacion` | `numeric(9,6)` | Default 0 |
 | `alicuota_aplicada` | `numeric(9,6)` | Congelada para reconstruir el cálculo |
 | `costo_base` | `numeric(18,6)` | Derivado (CST-02) |
@@ -278,9 +282,9 @@ La presentación de referencia se resuelve por este indicador y no con una clave
 | Tabla | Columnas |
 | --- | --- |
 | `compra` | `id`, `organizacion_id`, `proveedor_id`, `ubicacion_id`, `fecha` `date` (del comprobante), `condicion` (`CONTADO`, `CREDITO`), `total_neto` `numeric(14,2)`, `total_factura` `numeric(14,2)` (el importe que registra la cuenta del proveedor), `numero_comprobante` (opcional), `observacion` (opcional), `estado` (`CONFIRMADA`, `ANULADA`), `anulacion_motivo_id`, `anulada_en`, `anulada_por_id`, columnas de operación |
-| `compra_linea` | `id`, `organizacion_id`, `compra_id`, `orden` `integer`, `producto_id`, `presentacion_id`, `unidades_presentacion` `integer` (congelado), `cantidad` `numeric(14,3)`, `cantidad_base` `integer`, `valor_presentacion` `numeric(14,2)`, `incluye_iva`, `bonificacion` `numeric(9,6)`, `alicuota_aplicada` `numeric(9,6)` (congelada), `costo_base` `numeric(18,6)`, `importe_neto` `numeric(14,2)` |
+| `compra_linea` | `id`, `organizacion_id`, `compra_id`, `orden` `integer`, `producto_id`, `presentacion_id`, `unidades_presentacion` `integer` (congelado), `cantidad` `numeric(14,3)`, `cantidad_base` `integer`, `valor_presentacion` `numeric(14,2)` (el valor pagado), `incluye_iva`, `computa_credito_fiscal` `boolean` (congelada, CST-06), `bonificacion` `numeric(9,6)`, `alicuota_aplicada` `numeric(9,6)` (congelada), `costo_base` `numeric(18,6)`, `importe_neto` `numeric(14,2)` |
 
-`CHECK` de `condicion`, `estado`, `total_neto >= 0`, `total_factura > 0` y de coherencia "anulada ⇔ motivo, momento y usuario"; en la línea, `CHECK (cantidad > 0, cantidad_base > 0, valor_presentacion > 0, 0 <= bonificacion < 1, costo_base > 0)` y `UNIQUE (compra_id, orden)`. La existencia de al menos una línea (INV-07) se valida en el servicio dentro de la transacción. Índices: `(organizacion_id, fecha DESC, id DESC)`, `(organizacion_id, proveedor_id, fecha DESC)` y `compra_linea (organizacion_id, presentacion_id)` (verificador de INV-18). Todas las claves foráneas son compuestas e incluyen `organizacion_id`.
+`total_neto` es la suma de los importes de las líneas; en una organización que no computa crédito fiscal significa *total de costo* y **incluye el IVA pagado** (ADR-045, D5); la deuda es siempre `total_factura`. `CHECK` de `condicion`, `estado`, `total_neto >= 0`, `total_factura > 0` y de coherencia "anulada ⇔ motivo, momento y usuario"; en la línea, `CHECK (cantidad > 0, cantidad_base > 0, valor_presentacion > 0, 0 <= bonificacion < 1, costo_base > 0, computa_credito_fiscal OR NOT incluye_iva)` y `UNIQUE (compra_id, orden)`. La existencia de al menos una línea (INV-07) se valida en el servicio dentro de la transacción. Índices: `(organizacion_id, fecha DESC, id DESC)`, `(organizacion_id, proveedor_id, fecha DESC)` y `compra_linea (organizacion_id, presentacion_id)` (verificador de INV-18). Todas las claves foráneas son compuestas e incluyen `organizacion_id`.
 
 ### `pago_proveedor` y `pago_proveedor_medio`
 

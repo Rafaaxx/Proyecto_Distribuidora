@@ -29,6 +29,27 @@ from app.modules.proveedores.models import Compra
 
 
 @dataclass(frozen=True)
+class ResumenDeReglaDeIva:
+    """Cuántos costos informados vigentes a `fecha` se registraron computando crédito fiscal
+    y cuántos sin computarlo (11b, D10, CST-03, CST-06)."""
+
+    fecha: date
+    con_credito_fiscal: int
+    sin_credito_fiscal: int
+
+
+def resumir_costos_vigentes_por_regla_de_iva(
+    organizacion_id: UUID, fecha: date, sesion: Session
+) -> ResumenDeReglaDeIva:
+    con_credito, sin_credito = repository.contar_vigentes_por_regla_de_iva(
+        organizacion_id, fecha, sesion
+    )
+    return ResumenDeReglaDeIva(
+        fecha=fecha, con_credito_fiscal=con_credito, sin_credito_fiscal=sin_credito
+    )
+
+
+@dataclass(frozen=True)
 class CompraDelListado:
     compra: Compra
     proveedor_nombre: str
@@ -55,6 +76,7 @@ class LineaDelDetalle:
     cantidad_base: int
     valor_presentacion: Decimal
     incluye_iva: bool
+    computa_credito_fiscal: bool
     bonificacion: Decimal
     alicuota_aplicada: Decimal
     costo_base: Decimal
@@ -169,6 +191,7 @@ def obtener_detalle_de_compra(
                 cantidad_base=linea.cantidad_base,
                 valor_presentacion=linea.valor_presentacion,
                 incluye_iva=linea.incluye_iva,
+                computa_credito_fiscal=linea.computa_credito_fiscal,
                 bonificacion=linea.bonificacion,
                 alicuota_aplicada=linea.alicuota_aplicada,
                 costo_base=linea.costo_base,

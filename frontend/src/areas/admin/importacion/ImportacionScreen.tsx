@@ -18,7 +18,7 @@ import {
   useHistorialDeImportaciones,
   useImportarArchivo,
 } from '../../../features/importacion/hooks'
-import { TIPOS_DE_IMPORTACION, etiquetaDeTipo } from '../../../features/importacion/tipos'
+import { TIPOS_DE_IMPORTACION, ayudaDeTipo, etiquetaDeTipo } from '../../../features/importacion/tipos'
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { generarOperationId } from '../../../lib/api/operationId'
 import { formatearFechaHoraEnZona } from '../../../lib/fecha'
@@ -170,6 +170,11 @@ function Importacion() {
               Descargar plantilla
             </Boton>
           </div>
+          {ayudaDeTipo(tipo) !== null && (
+            <p role="note" className="text-sm text-primary/70">
+              {ayudaDeTipo(tipo)}
+            </p>
+          )}
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1 text-sm text-primary">
               Archivo

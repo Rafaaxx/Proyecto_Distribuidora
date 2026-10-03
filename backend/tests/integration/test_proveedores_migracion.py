@@ -238,10 +238,10 @@ def _costo_informado_kwargs(
 _INSERT_COSTO_INFORMADO = text(
     "INSERT INTO costo_informado "
     "(id, organizacion_id, proveedor_id, producto_id, presentacion_id, valor, "
-    "incluye_iva, bonificacion, alicuota_aplicada, costo_base, vigencia_desde, "
-    "operation_id, usuario_id, creado_en) "
+    "incluye_iva, computa_credito_fiscal, bonificacion, alicuota_aplicada, costo_base, "
+    "vigencia_desde, operation_id, usuario_id, creado_en) "
     "VALUES (:id, :organizacion_id, :proveedor_id, :producto_id, :presentacion_id, "
-    ":valor, :incluye_iva, :bonificacion, :alicuota_aplicada, :costo_base, "
+    ":valor, :incluye_iva, true, :bonificacion, :alicuota_aplicada, :costo_base, "
     ":vigencia_desde, :operation_id, :usuario_id, :momento)"
 )
 

@@ -42,6 +42,7 @@ def _configuracion_valida(organizacion_id: object) -> ConfiguracionOrganizacion:
     momento = datetime.now(UTC)
     return ConfiguracionOrganizacion(
         organizacion_id=organizacion_id,
+        condicion_iva="RESPONSABLE_INSCRIPTO",
         modo_impositivo="A",
         politica_credito_default="AUTORIZAR",
         descuento_manual_habilitado=True,

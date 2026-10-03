@@ -82,6 +82,13 @@ RUTAS_EXENTAS_DE_PERMISO = frozenset(
         # `test_medios_y_motivos_sin_sesion_responden_401`).
         ("GET", "/api/v1/configuracion/medios-pago"),
         ("GET", "/api/v1/configuracion/motivos"),
+        # Change 11b, grupo 5 (`identidad/api.py::router_fiscal`, tarea 5.2, `design.md` D8):
+        # la condición frente al IVA y la regla de crédito fiscal las lee cualquier usuario
+        # autenticado de la organización, porque las consumen las pantallas de compras y de
+        # carga de costos, cada una con su propio permiso de negocio. Exige sesión válida y
+        # habilitada (`Depends(requiere_sesion)`), no un permiso
+        # (`test_condicion_iva_api.py`: `test_la_configuracion_fiscal_sin_sesion_responde_401`).
+        ("GET", "/api/v1/configuracion/fiscal"),
     }
 )
 

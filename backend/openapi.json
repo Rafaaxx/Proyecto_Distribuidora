@@ -726,6 +726,131 @@
         }
       }
     },
+    "/api/v1/configuracion/fiscal": {
+      "get": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Obtener Configuracion Fiscal",
+        "operationId": "obtener_configuracion_fiscal_api_v1_configuracion_fiscal_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguracionFiscalResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/configuracion/fiscal/condicion-iva": {
+      "post": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Cambiar Condicion Iva",
+        "description": "`ORGANIZACION_CONDICION_IVA_CAMBIAR` (D7). La respuesta sale de `comando.resultado`,\nno de una relectura: un reenvío idempotente devuelve exactamente lo mismo (INV-06).",
+        "operationId": "cambiar_condicion_iva_api_v1_configuracion_fiscal_condicion_iva_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CondicionIvaCambiarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguracionFiscalResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/importaciones/{tipo}": {
       "post": {
         "tags": [
@@ -3626,6 +3751,73 @@
         }
       }
     },
+    "/api/v1/costos/resumen-regla-iva": {
+      "get": {
+        "tags": [
+          "proveedores"
+        ],
+        "summary": "Resumir Costos Por Regla De Iva",
+        "description": "11b, D10 (CST-03, CST-06): cuántos costos informados vigentes a `fecha` (por defecto,\nla fecha de negocio de hoy) se registraron computando crédito fiscal y cuántos sin\ncomputarlo. Lo usa la pantalla de cambio de condición para avisar cuántos costos conviene\nvolver a informar. La organización sale del token (INV-21).",
+        "operationId": "resumir_costos_por_regla_de_iva_api_v1_costos_resumen_regla_iva_get",
+        "parameters": [
+          {
+            "name": "fecha",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fecha"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumenReglaIvaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/costos/productos/{producto_id}/vigente": {
       "get": {
         "tags": [
@@ -5829,6 +6021,10 @@
             "type": "boolean",
             "title": "Incluye Iva"
           },
+          "computa_credito_fiscal": {
+            "type": "boolean",
+            "title": "Computa Credito Fiscal"
+          },
           "bonificacion": {
             "type": "string",
             "title": "Bonificacion"
@@ -5861,6 +6057,7 @@
           "cantidad_base",
           "valor_presentacion",
           "incluye_iva",
+          "computa_credito_fiscal",
           "bonificacion",
           "alicuota_aplicada",
           "costo_base",
@@ -6058,6 +6255,65 @@
         "title": "CompraResumenResponse",
         "description": "Una fila del listado de compras. Importes como string (INV-03)."
       },
+      "CondicionIvaCambiarRequest": {
+        "properties": {
+          "condicion_iva": {
+            "type": "string",
+            "enum": [
+              "RESPONSABLE_INSCRIPTO",
+              "MONOTRIBUTO",
+              "EXENTO"
+            ],
+            "title": "Condicion Iva"
+          }
+        },
+        "type": "object",
+        "required": [
+          "condicion_iva"
+        ],
+        "title": "CondicionIvaCambiarRequest",
+        "description": "Solo la condición nueva: `organizacion_id` nunca aparece (sale del token). Un valor\nfuera del dominio cerrado responde 422."
+      },
+      "ConfiguracionFiscalResponse": {
+        "properties": {
+          "condicion_iva": {
+            "type": "string",
+            "enum": [
+              "RESPONSABLE_INSCRIPTO",
+              "MONOTRIBUTO",
+              "EXENTO"
+            ],
+            "title": "Condicion Iva"
+          },
+          "computa_credito_fiscal": {
+            "type": "boolean",
+            "title": "Computa Credito Fiscal"
+          },
+          "modo_impositivo": {
+            "type": "string",
+            "title": "Modo Impositivo"
+          },
+          "modalidad_iva_default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modalidad Iva Default"
+          }
+        },
+        "type": "object",
+        "required": [
+          "condicion_iva",
+          "computa_credito_fiscal",
+          "modo_impositivo",
+          "modalidad_iva_default"
+        ],
+        "title": "ConfiguracionFiscalResponse"
+      },
       "ConsumidorFinalConfigurarRequest": {
         "properties": {
           "nombre": {
@@ -6200,6 +6456,10 @@
             "type": "boolean",
             "title": "Incluye Iva"
           },
+          "computa_credito_fiscal": {
+            "type": "boolean",
+            "title": "Computa Credito Fiscal"
+          },
           "bonificacion": {
             "type": "string",
             "title": "Bonificacion"
@@ -6264,6 +6524,7 @@
           "presentacion_id",
           "valor",
           "incluye_iva",
+          "computa_credito_fiscal",
           "bonificacion",
           "alicuota_aplicada",
           "costo_base",
@@ -8374,6 +8635,31 @@
           "error_codigo"
         ],
         "title": "ResultadoItemLoteResponse"
+      },
+      "ResumenReglaIvaResponse": {
+        "properties": {
+          "fecha": {
+            "type": "string",
+            "format": "date",
+            "title": "Fecha"
+          },
+          "con_credito_fiscal": {
+            "type": "integer",
+            "title": "Con Credito Fiscal"
+          },
+          "sin_credito_fiscal": {
+            "type": "integer",
+            "title": "Sin Credito Fiscal"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fecha",
+          "con_credito_fiscal",
+          "sin_credito_fiscal"
+        ],
+        "title": "ResumenReglaIvaResponse",
+        "description": "`GET /costos/resumen-regla-iva` (11b, D10): cuántos costos vigentes a `fecha` se\nregistraron con y sin crédito fiscal. Insumo de la confirmación del cambio de condición."
       },
       "RolResponse": {
         "properties": {

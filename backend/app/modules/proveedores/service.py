@@ -49,6 +49,7 @@ from app.modules.proveedores.domain.errores import (
     CompraYaAnuladaError,
     CondicionInvalidaError,
     CuitInvalidoError,
+    IncluyeIvaNoAplicaError,
     MedioPagoInactivoError,
     MotivoInvalidoError,
     PresentacionInvalidaError,
@@ -293,6 +294,14 @@ def informar_costos(
     para insertar."""
     validar_lote_de_costos(costos)
 
+    # CST-06, D3: la regla vigente se lee `FOR SHARE` al inicio, así un cambio de condición
+    # concurrente espera y este lote usa una sola regla de punta a punta.
+    computa_credito_fiscal = identidad_service.organizacion_computa_credito_fiscal(
+        organizacion_id, sesion, para_compartir=True
+    )
+    if computa_credito_fiscal is None:
+        raise RecursoNoEncontradoError("La organización no existe.")
+
     proveedor = repository.obtener_proveedor_por_id_para_compartir(
         organizacion_id, proveedor_id, sesion
     )
@@ -358,13 +367,18 @@ def informar_costos(
         )
         assert alicuota is not None  # la FK del producto garantiza su existencia.
 
-        costo_base = calcular_costo_base(
-            valor=costo.valor,
-            incluye_iva=costo.incluye_iva,
-            alicuota=alicuota.valor,
-            bonificacion=costo.bonificacion,
-            unidades=presentacion.unidades_base,
-        )
+        try:
+            costo_base = calcular_costo_base(
+                computa_credito_fiscal=computa_credito_fiscal,
+                valor=costo.valor,
+                incluye_iva=costo.incluye_iva,
+                alicuota=alicuota.valor,
+                bonificacion=costo.bonificacion,
+                unidades=presentacion.unidades_base,
+            )
+        except IncluyeIvaNoAplicaError as error:
+            error.extension = {**(error.extension or {}), "fila": fila_actual}
+            raise
 
         filas.append(
             repository.DatosCostoInformado(
@@ -374,6 +388,7 @@ def informar_costos(
                 presentacion_id=costo.presentacion_id,
                 valor=costo.valor,
                 incluye_iva=costo.incluye_iva,
+                computa_credito_fiscal=computa_credito_fiscal,
                 bonificacion=costo.bonificacion,
                 alicuota_aplicada=alicuota.valor,
                 costo_base=costo_base,
@@ -497,6 +512,7 @@ def _referencias_de_la_compra(
     proveedor_id: UUID,
     ubicacion_id: UUID,
     lineas: Sequence[LineaDeCompra],
+    computa_credito_fiscal: bool,
 ) -> tuple[list[EntradaDeLinea], list[Any]]:
     """Valida las referencias y devuelve, por línea, la entrada de cálculo y la alícuota.
 
@@ -589,6 +605,7 @@ def _referencias_de_la_compra(
                 cantidad=linea.cantidad,
                 valor=linea.valor,
                 incluye_iva=linea.incluye_iva,
+                computa_credito_fiscal=computa_credito_fiscal,
                 alicuota=alicuota_de_linea.valor,
                 bonificacion=linea.bonificacion,
             )
@@ -626,6 +643,14 @@ def confirmar_compra(
     `occurred_at` del comando (D6); la `fecha` es la del comprobante. Nunca registra un
     costo informado (CMP-04): solo devuelve las diferencias."""
     validar_cantidad_de_lineas(len(lineas))
+    # CST-06, D3: la regla vigente se lee `FOR SHARE` al inicio (antes que proveedor y
+    # productos): un cambio de condición concurrente espera, y todas las líneas de la compra
+    # usan la misma regla.
+    computa_credito_fiscal = identidad_service.organizacion_computa_credito_fiscal(
+        organizacion_id, sesion, para_compartir=True
+    )
+    if computa_credito_fiscal is None:
+        raise RecursoNoEncontradoError("La organización no existe.")
     hoy = identidad_service.fecha_de_negocio(organizacion_id, sesion, reloj)
     if hoy is None:
         raise RecursoNoEncontradoError("La organización no existe.")
@@ -645,6 +670,7 @@ def confirmar_compra(
         proveedor_id=proveedor_id,
         ubicacion_id=ubicacion_id,
         lineas=lineas,
+        computa_credito_fiscal=computa_credito_fiscal,
     )
     totales = calcular_compra(entradas)
 
@@ -755,6 +781,7 @@ def confirmar_compra(
                 cantidad_base=calculada.cantidad_base,
                 valor_presentacion=linea.valor,
                 incluye_iva=linea.incluye_iva,
+                computa_credito_fiscal=computa_credito_fiscal,
                 bonificacion=linea.bonificacion,
                 alicuota_aplicada=alicuota.valor,
                 costo_base=calculada.costo_base,

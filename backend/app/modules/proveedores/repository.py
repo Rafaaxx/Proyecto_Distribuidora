@@ -276,6 +276,7 @@ class DatosCostoInformado:
     presentacion_id: UUID
     valor: Decimal
     incluye_iva: bool
+    computa_credito_fiscal: bool
     bonificacion: Decimal
     alicuota_aplicada: Decimal
     costo_base: Decimal
@@ -303,6 +304,7 @@ def insertar_costos(
             presentacion_id=datos.presentacion_id,
             valor=datos.valor,
             incluye_iva=datos.incluye_iva,
+            computa_credito_fiscal=datos.computa_credito_fiscal,
             bonificacion=datos.bonificacion,
             alicuota_aplicada=datos.alicuota_aplicada,
             costo_base=datos.costo_base,
@@ -346,6 +348,39 @@ def obtener_vigente(
         .limit(1)
     )
     return sesion.scalars(consulta).one_or_none()
+
+
+def contar_vigentes_por_regla_de_iva(
+    organizacion_id: UUID, fecha: date, sesion: Session
+) -> tuple[int, int]:
+    """11b, D10: `(con_credito_fiscal, sin_credito_fiscal)`, la cantidad de costos informados
+    vigentes a `fecha` -- el último de cada producto y presentación (D4: `vigencia_desde
+    DESC, creado_en DESC, id DESC`) con `vigencia_desde <= fecha` -- según la regla de IVA con
+    que se registraron. Una única consulta `DISTINCT ON` agrupada en la base (`CLAUDE.md` §4:
+    nunca trayendo las filas a Python para contarlas)."""
+    ultimos = (
+        select(CostoInformado.computa_credito_fiscal)
+        .distinct(CostoInformado.producto_id, CostoInformado.presentacion_id)
+        .where(
+            CostoInformado.organizacion_id == organizacion_id,
+            CostoInformado.vigencia_desde <= fecha,
+        )
+        .order_by(
+            CostoInformado.producto_id,
+            CostoInformado.presentacion_id,
+            CostoInformado.vigencia_desde.desc(),
+            CostoInformado.creado_en.desc(),
+            CostoInformado.id.desc(),
+        )
+        .subquery()
+    )
+    filas = sesion.execute(
+        select(ultimos.c.computa_credito_fiscal, func.count()).group_by(
+            ultimos.c.computa_credito_fiscal
+        )
+    ).all()
+    por_regla = {bool(computa): int(cantidad) for computa, cantidad in filas}
+    return por_regla.get(True, 0), por_regla.get(False, 0)
 
 
 def obtener_ultimo_por_presentacion(
@@ -510,6 +545,7 @@ class DatosDeLineaDeCompra:
     cantidad_base: int
     valor_presentacion: Decimal
     incluye_iva: bool
+    computa_credito_fiscal: bool
     bonificacion: Decimal
     alicuota_aplicada: Decimal
     costo_base: Decimal
@@ -560,6 +596,7 @@ def insertar_compra(
             cantidad_base=datos.cantidad_base,
             valor_presentacion=datos.valor_presentacion,
             incluye_iva=datos.incluye_iva,
+            computa_credito_fiscal=datos.computa_credito_fiscal,
             bonificacion=datos.bonificacion,
             alicuota_aplicada=datos.alicuota_aplicada,
             costo_base=datos.costo_base,

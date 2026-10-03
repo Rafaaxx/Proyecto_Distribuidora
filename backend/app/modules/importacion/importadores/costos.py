@@ -17,6 +17,7 @@ from typing import Any
 from uuid import UUID
 
 from app.modules.catalogo import service as catalogo_service
+from app.modules.identidad import service as identidad_service
 from app.modules.importacion.domain.costos import claves_de_costo, datos_de_costo
 from app.modules.importacion.domain.duplicados import marcar_duplicadas
 from app.modules.importacion.domain.informe import ErrorDeFila
@@ -36,6 +37,14 @@ def importar_costos(
     contexto: ContextoDeImportacion, filas: Sequence[FilaPlanilla]
 ) -> list[ErrorDeFila]:
     org, sesion = contexto.organizacion_id, contexto.sesion
+    # CST-06, D6: la regla de la organización se lee una vez, `FOR SHARE`, y vale para todo
+    # el archivo: un cambio de condición concurrente espera a esta importación. Cada fila
+    # la vuelve a leer en `informar_costos`, que es quien rechaza `incluye_iva` (D4).
+    computa_credito_fiscal = identidad_service.organizacion_computa_credito_fiscal(
+        org,
+        sesion,  # type: ignore[arg-type]
+        para_compartir=True,
+    )
     productos: dict[str, list[Any]] = {}
     presentaciones: dict[UUID, list[Any]] = {}
 
@@ -60,7 +69,7 @@ def importar_costos(
 
     def registrar(fila: FilaPlanilla) -> Callable[[], None]:
         def accion() -> None:
-            datos = datos_de_costo(fila)
+            datos = datos_de_costo(fila, computa_credito_fiscal=computa_credito_fiscal is not False)
             producto = resolver_unica(
                 productos_de(datos.producto_codigo),
                 columna="producto_codigo",

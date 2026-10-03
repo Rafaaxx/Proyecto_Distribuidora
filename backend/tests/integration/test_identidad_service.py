@@ -9,18 +9,24 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
+import pytest
 from sqlalchemy.orm import Session
 
 from app.core.clock import FixedClock
 from app.core.ids import nuevo_id
 from app.modules.identidad import repository, service
+from app.modules.identidad.domain.valores import (
+    CondicionIvaInvalidaError,
+    ModoImpositivoIncompatibleError,
+)
 from app.modules.identidad.service import DatosConfiguracionInicial
 
 
 def _configuracion_basica() -> DatosConfiguracionInicial:
     return DatosConfiguracionInicial(
+        condicion_iva="RESPONSABLE_INSCRIPTO",
         modo_impositivo="A",
         politica_credito_default="AUTORIZAR",
         estado_facturacion_default="NO_REQUIERE",
@@ -213,3 +219,73 @@ def test_obtener_nombres_de_usuarios_con_conjunto_vacio_no_consulta_nada(
     nombres = service.obtener_nombres_de_usuarios(organizacion.id, set(), db_session)
 
     assert nombres == {}
+
+
+def _crear(db_session: Session, slug: str, **cambios: object) -> UUID:
+    base = {
+        "condicion_iva": "RESPONSABLE_INSCRIPTO",
+        "modo_impositivo": "A",
+        "politica_credito_default": "AUTORIZAR",
+        "estado_facturacion_default": "NO_REQUIERE",
+        "intentos_pin_max": 5,
+        "descuento_manual_habilitado": True,
+        "motivo_obligatorio_lista": True,
+    }
+    organizacion = service.crear_organizacion_con_configuracion(
+        db_session,
+        FixedClock(datetime(2026, 1, 1, tzinfo=UTC)),
+        nombre=slug,
+        slug=slug,
+        cuit=None,
+        moneda="ARS",
+        zona_horaria="America/Argentina/Mendoza",
+        estado="ACTIVA",
+        configuracion=DatosConfiguracionInicial(**{**base, **cambios}),  # type: ignore[arg-type]
+    )
+    return organizacion.id
+
+
+@pytest.mark.parametrize("para_compartir", [False, True])
+def test_obtener_condicion_iva_devuelve_la_de_cada_organizacion(
+    db_session: Session, para_compartir: bool
+) -> None:
+    """CST-06, TR-08: cada organización alcanza solo su propia condición, con o sin
+    bloqueo `FOR SHARE`."""
+    inscripta = _crear(db_session, "org-inscripta")
+    monotributista = _crear(db_session, "org-monotributista", condicion_iva="MONOTRIBUTO")
+
+    assert (
+        service.obtener_condicion_iva(inscripta, db_session, para_compartir=para_compartir)
+        == "RESPONSABLE_INSCRIPTO"
+    )
+    assert (
+        service.obtener_condicion_iva(monotributista, db_session, para_compartir=para_compartir)
+        == "MONOTRIBUTO"
+    )
+
+
+def test_obtener_condicion_iva_de_una_organizacion_inexistente_es_none(
+    db_session: Session,
+) -> None:
+    assert service.obtener_condicion_iva(uuid4(), db_session) is None
+    assert service.obtener_condicion_iva(uuid4(), db_session, para_compartir=True) is None
+
+
+@pytest.mark.parametrize(
+    "cambios",
+    [
+        {"condicion_iva": "MONOTRIBUTO", "modo_impositivo": "B"},
+        {"condicion_iva": "EXENTO", "modalidad_iva_default": "CLIENTE"},
+    ],
+)
+def test_el_alta_de_una_organizacion_no_inscripta_rechaza_modo_o_modalidad_incompatibles(
+    db_session: Session, cambios: dict[str, object]
+) -> None:
+    """D2: se valida en el dominio antes de escribir (la base lo vuelve a exigir)."""
+    with pytest.raises(ModoImpositivoIncompatibleError):
+        _crear(db_session, "org-incompatible", **cambios)
+
+
+def test_el_alta_rechaza_una_condicion_desconocida(db_session: Session) -> None:
+    with pytest.raises(CondicionIvaInvalidaError):
+        _crear(db_session, "org-desconocida", condicion_iva="CONSUMIDOR_FINAL")

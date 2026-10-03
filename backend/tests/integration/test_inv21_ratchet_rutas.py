@@ -239,6 +239,16 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         # `test_motivos_devuelve_solo_los_activos_del_ambito_pedido_de_la_organizacion`).
         ("get", "/api/v1/compras"),
         ("get", "/api/v1/compras/{compra_id}"),
+        # Change 11b, grupo 5 (tareas 5.1 y 5.2): la escritura dedicada del cambio de
+        # condición frente al IVA y las dos lecturas nuevas, cada una con su prueba real de
+        # aislamiento (login real de dos organizaciones; la organización sale siempre del
+        # token y se ignora la que venga en la petición) en `test_condicion_iva_api.py`
+        # (`test_inv21_cada_organizacion_lee_solo_su_propia_configuracion_fiscal`,
+        # `test_inv21_el_cambio_afecta_solo_a_la_organizacion_del_token` y
+        # `test_inv21_el_resumen_cuenta_solo_los_costos_de_la_organizacion_del_token`).
+        ("get", "/api/v1/configuracion/fiscal"),
+        ("post", "/api/v1/configuracion/fiscal/condicion-iva"),
+        ("get", "/api/v1/costos/resumen-regla-iva"),
         ("get", "/api/v1/configuracion/medios-pago"),
         ("get", "/api/v1/configuracion/motivos"),
     }

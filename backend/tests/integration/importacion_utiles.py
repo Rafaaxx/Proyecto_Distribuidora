@@ -77,6 +77,22 @@ class EntornoDeImportacion:
         )
         sesion.commit()
 
+    def fijar_condicion_iva(self, condicion: str) -> None:
+        """Pasa la organización a `condicion` por SQL (sin comando ni auditoría), con el modo
+        `A` y sin modalidad de IVA que la base exige a una no inscripta (11b, D2)."""
+        self.sesion.execute(
+            text(
+                "UPDATE configuracion_organizacion SET condicion_iva = :c, "
+                "modo_impositivo = CASE WHEN :c = 'RESPONSABLE_INSCRIPTO' "
+                "THEN modo_impositivo ELSE 'A' END, "
+                "modalidad_iva_default = CASE WHEN :c = 'RESPONSABLE_INSCRIPTO' "
+                "THEN modalidad_iva_default ELSE NULL END "
+                "WHERE organizacion_id = :org"
+            ),
+            {"c": condicion, "org": self.org},
+        )
+        self.sesion.commit()
+
     # --- el comando por el bus ----------------------------------------------------
 
     def sobre(self, cuerpo: dict[str, Any], *, operation_id: UUID | None = None) -> SobreComando:

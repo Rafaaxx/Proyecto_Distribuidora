@@ -42,6 +42,7 @@ from app.core.autenticacion import (
     requiere_permiso,
 )
 from app.core.clock import SystemClock
+from app.modules.identidad import service as identidad_service
 from app.modules.importacion import commands as importacion_commands
 from app.modules.importacion import queries
 from app.modules.importacion.domain.errores import (
@@ -94,7 +95,16 @@ def importar(
         raise ArchivoDemasiadoGrandeError(
             f"El archivo supera el máximo de {LIMITE_DE_BYTES // (1024 * 1024)} MB."
         )
-    planilla = armar_planilla(tipo, leer_archivo(nombre, datos))
+    # 11b, D6 (CST-06): en una organización sin crédito fiscal la columna `incluye_iva` de
+    # `COSTOS` puede faltar. Lectura sin bloqueo: la regla que vale la fija el importador.
+    computa_credito_fiscal = identidad_service.organizacion_computa_credito_fiscal(
+        entrada.contexto.organizacion_id, sesion
+    )
+    planilla = armar_planilla(
+        tipo,
+        leer_archivo(nombre, datos),
+        computa_credito_fiscal=computa_credito_fiscal is not False,
+    )
 
     reloj = SystemClock()
     contenido: dict[str, ContenidoComando] = {

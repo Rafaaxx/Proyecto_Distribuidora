@@ -20,6 +20,7 @@ import {
   UBICACION_ID,
   VINO_A_ID,
   montarApi,
+  reglaFiscal,
 } from './comprasDePrueba'
 
 function renderPantalla(rol: 'GES' | 'VEN' = 'GES') {
@@ -232,5 +233,109 @@ describe('CompraFormScreen (tarea 12.1)', () => {
     await waitFor(() => expect(llamadas(apiFetchMock, 'POST', '/compras').length).toBeGreaterThan(ids.length))
     const todos = llamadas(apiFetchMock, 'POST', '/compras').map((l) => new Headers(l.init.headers).get('Operation-Id'))
     expect(todos[todos.length - 1]).not.toBe(ids[0])
+  })
+
+  describe('organización que no computa crédito fiscal (11b, tarea 7.2, CST-06)', () => {
+    async function cargarCajaX12ValorPagado(usuario: ReturnType<typeof userEvent.setup>) {
+      await screen.findByRole('option', { name: 'Cerveza B' })
+      await usuario.selectOptions(screen.getByLabelText(/^producto$/i), CERVEZA_B_ID)
+      await screen.findByRole('option', { name: 'Caja x12' })
+      await usuario.selectOptions(screen.getByLabelText(/^presentaci[oó]n$/i), CAJA_X12_ID)
+      await usuario.type(screen.getByLabelText(/^cantidad$/i), '1')
+      await usuario.type(screen.getByLabelText(/^valor pagado$/i), '21780')
+    }
+
+    it('un monotributista no ve "Incluye IVA" ni "IVA sugerido" y ve "Valor pagado"', async () => {
+      montarApi(apiFetchMock, [reglaFiscal('MONOTRIBUTO')])
+      const usuario = userEvent.setup()
+      renderPantalla()
+      await elegirCabecera(usuario)
+
+      await screen.findByLabelText(/^valor pagado$/i)
+      expect(screen.queryByLabelText(/incluye iva/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/iva sugerido/i)).not.toBeInTheDocument()
+      expect(screen.queryByLabelText(/^valor$/i)).not.toBeInTheDocument()
+    })
+
+    it('Caja x12 a 21.780: costo base 1.815,000000, neto y total de factura prellenado 21.780,00; envía incluye_iva = false', async () => {
+      montarApi(apiFetchMock, [
+        reglaFiscal('MONOTRIBUTO'),
+        { metodo: 'POST', ruta: '/compras', responder: () => ({ status: 201, cuerpo: COMPRA_CONFIRMADA }) },
+      ])
+      const usuario = userEvent.setup()
+      renderPantalla()
+      await elegirCabecera(usuario)
+
+      await cargarCajaX12ValorPagado(usuario)
+
+      const vista = await screen.findByTestId('linea-0-vista-previa')
+      await waitFor(() => expect(vista).toHaveTextContent('1.815,000000'))
+      expect(screen.getByTestId('total-neto')).toHaveTextContent('21.780,00')
+      expect(screen.getByLabelText(/total de factura/i)).toHaveValue('21780.00')
+      expect(screen.getByTestId('total-neto').parentElement).toHaveTextContent(/^Total:\s*21\.780,00$/)
+
+      await usuario.click(screen.getByRole('button', { name: /confirmar compra/i }))
+      await waitFor(() => expect(llamadas(apiFetchMock, 'POST', '/compras')).toHaveLength(1))
+      const cuerpo = cuerpoDelPost()
+      expect(cuerpo.total_factura).toBe('21780.00')
+      expect(cuerpo.lineas).toEqual([
+        { producto_id: CERVEZA_B_ID, presentacion_id: CAJA_X12_ID, cantidad: '1', valor: '21780.00', incluye_iva: false, bonificacion: '0.000000' },
+      ])
+    })
+
+    it('un exento tampoco ve la casilla de IVA', async () => {
+      montarApi(apiFetchMock, [reglaFiscal('EXENTO')])
+      renderPantalla()
+
+      await screen.findByLabelText(/^valor pagado$/i)
+      expect(screen.queryByLabelText(/incluye iva/i)).not.toBeInTheDocument()
+    })
+
+    it('un inscripto sigue viendo "Incluye IVA", "IVA sugerido" y "Valor" (TR-06)', async () => {
+      montarApi(apiFetchMock, [reglaFiscal('RESPONSABLE_INSCRIPTO')])
+      renderPantalla()
+
+      expect(await screen.findByLabelText(/incluye iva/i)).toBeInTheDocument()
+      expect(screen.getByText(/iva sugerido/i)).toBeInTheDocument()
+      expect(screen.getByText(/total neto:/i)).toBeInTheDocument()
+      expect(screen.getByLabelText(/^valor$/i)).toBeInTheDocument()
+      expect(screen.queryByLabelText(/^valor pagado$/i)).not.toBeInTheDocument()
+    })
+
+    it('INCLUYE_IVA_NO_APLICA del servidor se muestra junto a la línea', async () => {
+      montarApi(apiFetchMock, [
+        reglaFiscal('MONOTRIBUTO'),
+        {
+          metodo: 'POST',
+          ruta: '/compras',
+          responder: () => ({
+            status: 422,
+            cuerpo: { title: 'Una organización que no computa crédito fiscal no informa IVA incluido.', codigo: 'INCLUYE_IVA_NO_APLICA', linea: 0 },
+          }),
+        },
+      ])
+      const usuario = userEvent.setup()
+      renderPantalla()
+      await elegirCabecera(usuario)
+      await cargarCajaX12ValorPagado(usuario)
+      await waitFor(() => expect(screen.getByRole('button', { name: /confirmar compra/i })).toBeEnabled())
+
+      await usuario.click(screen.getByRole('button', { name: /confirmar compra/i }))
+
+      const linea = await screen.findByTestId('linea-0')
+      expect(await within(linea).findByText(/no computa crédito fiscal/i)).toBeInTheDocument()
+    })
+
+    it('mientras la condición no llega no se puede confirmar', async () => {
+      montarApi(apiFetchMock, [
+        { metodo: 'GET', ruta: '/configuracion/fiscal', responder: () => ({ status: 500, cuerpo: { title: 'Falló' } }) },
+      ])
+      const usuario = userEvent.setup()
+      renderPantalla()
+      await elegirCabecera(usuario)
+
+      expect(screen.getByRole('button', { name: /confirmar compra/i })).toBeDisabled()
+      expect(await screen.findByText(/no se pudo leer la condici[oó]n frente al iva/i)).toBeInTheDocument()
+    })
   })
 })

@@ -17,6 +17,10 @@ from app.core.errors import DomainError
 _PATRON_SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 ESTADOS_ORGANIZACION = ("ACTIVA", "SUSPENDIDA")
+RESPONSABLE_INSCRIPTO = "RESPONSABLE_INSCRIPTO"
+MONOTRIBUTO = "MONOTRIBUTO"
+EXENTO = "EXENTO"
+CONDICIONES_IVA = (RESPONSABLE_INSCRIPTO, MONOTRIBUTO, EXENTO)
 MODOS_IMPOSITIVOS = ("A", "B", "C")
 POLITICAS_CREDITO_DEFAULT = ("ADVERTIR", "AUTORIZAR", "BLOQUEAR")
 TOLERANCIAS_OFFLINE_TIPO = ("IMPORTE", "PORCENTAJE")
@@ -31,6 +35,25 @@ class EstadoOrganizacionInvalidoError(DomainError):
 
 class SlugOrganizacionInvalidoError(DomainError):
     codigo = "IDENTIDAD_SLUG_ORGANIZACION_INVALIDO"
+
+
+class CondicionIvaInvalidaError(DomainError):
+    codigo = "IDENTIDAD_CONDICION_IVA_INVALIDA"
+    status_http = 422
+
+
+class CondicionIvaSinCambioError(DomainError):
+    """11b, D7, TR-10: se pidió cambiar la condición al mismo valor que ya tiene."""
+
+    codigo = "CONDICION_IVA_SIN_CAMBIO"
+    status_http = 409
+
+
+class ModoImpositivoIncompatibleError(DomainError):
+    """D2: una organización no inscripta es modo `A` y sin modalidad de IVA al facturar."""
+
+    codigo = "MODO_IMPOSITIVO_INCOMPATIBLE"
+    status_http = 409
 
 
 class ModoImpositivoInvalidoError(DomainError):
@@ -128,3 +151,33 @@ def validar_modalidad_iva_default(valor: str) -> str:
             f"Modalidad de IVA desconocida: {valor!r}. Valores válidos: {MODALIDADES_IVA_DEFAULT}."
         )
     return valor
+
+
+def validar_condicion_iva(valor: str) -> str:
+    if valor not in CONDICIONES_IVA:
+        raise CondicionIvaInvalidaError(
+            f"Condición frente al IVA desconocida: {valor!r}. Valores válidos: {CONDICIONES_IVA}."
+        )
+    return valor
+
+
+def computa_credito_fiscal(condicion: str) -> bool:
+    """CST-06: solo un responsable inscripto computa crédito fiscal de IVA en compras;
+    para `MONOTRIBUTO` y `EXENTO` el IVA de una compra es costo. Toda parte del sistema que
+    necesite saberlo usa esta regla y no la condición (`design.md` D1)."""
+    return validar_condicion_iva(condicion) == RESPONSABLE_INSCRIPTO
+
+
+def validar_compatibilidad_de_condicion(
+    condicion: str, modo_impositivo: str, modalidad_iva_default: str | None
+) -> None:
+    """D2: una organización no inscripta exige modo `A` y modalidad de IVA sin definir
+    (ADR-009 y FAC-02/03/04/08 solo se aplican a responsables inscriptos). La misma
+    restricción la impone la base con `ck_configuracion_organizacion__no_inscripto_modo_a`."""
+    if computa_credito_fiscal(condicion):
+        return
+    if modo_impositivo != "A" or modalidad_iva_default is not None:
+        raise ModoImpositivoIncompatibleError(
+            f"Una organización {condicion} es modo impositivo A y no tiene modalidad de IVA al "
+            f"facturar (modo {modo_impositivo}, modalidad {modalidad_iva_default})."
+        )

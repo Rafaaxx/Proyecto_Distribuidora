@@ -27,3 +27,19 @@ describe('sección "Compras" del menú (change 11, D14)', () => {
     expect(primeraSeccionPermitida(conPermisos('ANULAR_COMPRA'))?.ruta).toBe('/admin/compras')
   })
 })
+
+describe('sección "Configuración" del menú (change 11b, D7, tarea 7.4)', () => {
+  it('está declarada con /admin/configuracion', () => {
+    expect(SECCIONES.find((s) => s.ruta === '/admin/configuracion')?.etiqueta).toBe('Configuración')
+  })
+
+  it('se ofrece con ADMIN_CONFIGURACION', () => {
+    expect(seccionesPermitidas(conPermisos('ADMIN_CONFIGURACION')).map((s) => s.etiqueta)).toContain('Configuración')
+  })
+
+  it('no se ofrece sin ADMIN_CONFIGURACION', () => {
+    expect(
+      seccionesPermitidas(conPermisos('GESTIONAR_CATALOGO', 'REGISTRAR_COMPRA')).map((s) => s.etiqueta),
+    ).not.toContain('Configuración')
+  })
+})

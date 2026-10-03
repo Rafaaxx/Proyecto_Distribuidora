@@ -44,32 +44,40 @@ def crear_organizacion(sesion: Session, *, con_configuracion: bool = True) -> Or
     sesion.add(organizacion)
     sesion.flush()
     if con_configuracion:
-        sesion.add(
-            ConfiguracionOrganizacion(
-                organizacion_id=organizacion.id,
-                modo_impositivo="B",
-                lista_precio_default_id=None,
-                politica_credito_default="ADVERTIR",
-                tolerancia_offline_tipo=None,
-                tolerancia_offline_valor=None,
-                descuento_manual_habilitado=False,
-                motivo_obligatorio_descuento=None,
-                motivo_obligatorio_lista=True,
-                redondeo_multiplo=None,
-                redondeo_direccion=None,
-                permite_consumidor_final=None,
-                cliente_consumidor_final_id=None,
-                estado_facturacion_default="PENDIENTE",
-                modalidad_iva_default="CLIENTE",
-                intentos_pin_max=3,
-                desvio_reloj_max_segundos=None,
-                creado_en=MOMENTO,
-                actualizado_en=MOMENTO,
-                actualizado_por_id=None,
-            )
-        )
-        sesion.flush()
+        agregar_configuracion(sesion, organizacion.id)
     return organizacion
+
+
+def agregar_configuracion(sesion: Session, organizacion_id: UUID) -> None:
+    """La fila de configuración de una organización creada a mano (responsable inscripto,
+    modo B con modalidad `CLIENTE`): `COSTO_INFORMAR` y `COMPRA_CONFIRMAR` leen de ella la
+    regla de crédito fiscal (change 11b)."""
+    sesion.add(
+        ConfiguracionOrganizacion(
+            organizacion_id=organizacion_id,
+            condicion_iva="RESPONSABLE_INSCRIPTO",
+            modo_impositivo="B",
+            lista_precio_default_id=None,
+            politica_credito_default="ADVERTIR",
+            tolerancia_offline_tipo=None,
+            tolerancia_offline_valor=None,
+            descuento_manual_habilitado=False,
+            motivo_obligatorio_descuento=None,
+            motivo_obligatorio_lista=True,
+            redondeo_multiplo=None,
+            redondeo_direccion=None,
+            permite_consumidor_final=None,
+            cliente_consumidor_final_id=None,
+            estado_facturacion_default="PENDIENTE",
+            modalidad_iva_default="CLIENTE",
+            intentos_pin_max=3,
+            desvio_reloj_max_segundos=None,
+            creado_en=MOMENTO,
+            actualizado_en=MOMENTO,
+            actualizado_por_id=None,
+        )
+    )
+    sesion.flush()
 
 
 def crear_usuario_y_dispositivo(

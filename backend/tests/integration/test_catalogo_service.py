@@ -11,6 +11,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
+from cuentas_corrientes_utiles import agregar_configuracion
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -65,6 +66,7 @@ def organizacion_id(db_session: Session) -> uuid.UUID:
     )
     db_session.add(organizacion)
     db_session.flush()
+    agregar_configuracion(db_session, organizacion.id)
     return organizacion.id
 
 
@@ -714,6 +716,7 @@ def test_crear_producto_proveedor_de_otra_organizacion_da_404(
     )
     db_session.add(otra_organizacion)
     db_session.flush()
+    agregar_configuracion(db_session, otra_organizacion.id)
     proveedor_ajeno = proveedores_service.crear_proveedor(
         otra_organizacion.id,
         db_session,

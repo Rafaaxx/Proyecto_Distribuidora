@@ -40,6 +40,7 @@ function detalle(sobrescribir: Record<string, unknown> = {}) {
         cantidad_base: 31,
         valor_presentacion: '1000.00',
         incluye_iva: false,
+        computa_credito_fiscal: true,
         bonificacion: '0.000000',
         alicuota_aplicada: '0.210000',
         costo_base: '1000.000000',
@@ -97,6 +98,21 @@ describe('CompraDetalleScreen (tarea 12.3)', () => {
     expect(await screen.findByText('Vino A')).toBeInTheDocument()
     expect(screen.getByText('31 unidades (5 Caja x6 + 1 un.)')).toBeInTheDocument()
     expect(screen.getByText('31.000,00')).toBeInTheDocument()
+  })
+
+  it('cada línea dice si se descontó IVA según lo congelado en la línea, no la condición actual (11b, TR-06)', async () => {
+    const compra = detalle()
+    const linea = compra.lineas[0] as Record<string, unknown>
+    Object.assign(linea, { valor_presentacion: '21780.00', computa_credito_fiscal: false, incluye_iva: false, costo_base: '1815.000000' })
+    const segunda = { ...linea, orden: 2, computa_credito_fiscal: true, incluye_iva: true, costo_base: '1239.669421' }
+    ;(compra.lineas as unknown[]).push(segunda)
+    enrutar(apiFetchMock, reglas(compra))
+    renderDetalle()
+
+    expect(await screen.findByText('IVA descontado: No')).toBeInTheDocument()
+    expect(screen.getByText('IVA descontado: Sí')).toBeInTheDocument()
+    expect(screen.getByText('1.815,000000')).toBeInTheDocument()
+    expect(apiFetchMock.mock.calls.some(([ruta]) => String(ruta).startsWith('/configuracion/fiscal'))).toBe(false)
   })
 
   it('una línea sin presentación de referencia muestra solo unidades', async () => {

@@ -135,6 +135,14 @@ class LineasInvalidasError(DomainError):
     status_http = 422
 
 
+class IncluyeIvaNoAplicaError(DomainError):
+    """11b, D4, CST-06: `incluye_iva = true` en una organización que no computa crédito
+    fiscal. El valor que se carga es siempre el pagado; el IVA no se descuenta (TR-10)."""
+
+    codigo = "INCLUYE_IVA_NO_APLICA"
+    status_http = 422
+
+
 class ImporteInvalidoError(DomainError):
     """Importe (total de factura, importe de un medio, total neto) no positivo, con más
     de 2 decimales o fuera de `numeric(14,2)` (TR-01, D1)."""

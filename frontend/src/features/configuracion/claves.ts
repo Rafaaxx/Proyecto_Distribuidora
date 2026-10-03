@@ -4,4 +4,6 @@
  */
 export const clavesConfiguracion = {
   alicuotas: () => ['configuracion', 'alicuotas'] as const,
+  fiscal: () => ['configuracion', 'fiscal'] as const,
+  resumenReglaIva: () => ['costos', 'resumen-regla-iva'] as const,
 }

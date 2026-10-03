@@ -57,6 +57,7 @@ class ConfiguracionOrganizacion(Base):
     __tablename__ = "configuracion_organizacion"
 
     organizacion_id: Mapped[UUID] = mapped_column(ForeignKey("organizacion.id"), primary_key=True)
+    condicion_iva: Mapped[str] = mapped_column(Text, nullable=False)
     modo_impositivo: Mapped[str] = mapped_column(Text, nullable=False)
     lista_precio_default_id: Mapped[UUID | None] = mapped_column(nullable=True)
     politica_credito_default: Mapped[str] = mapped_column(Text, nullable=False)

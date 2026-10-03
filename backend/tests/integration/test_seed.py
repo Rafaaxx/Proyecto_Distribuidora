@@ -16,6 +16,7 @@ from app.modules.configuracion import service as configuracion_service
 from app.modules.identidad import repository as identidad_repository
 from app.modules.identidad import service as identidad_service
 from app.modules.identidad.domain.permisos import ADMINISTRADOR, PLANTILLAS_DE_ROL
+from app.modules.identidad.domain.valores import computa_credito_fiscal
 from app.seed import AdminPasswordNoDefinidaError, BaseSinMigrarError, sembrar
 
 RELOJ = FixedClock(datetime(2026, 1, 1, tzinfo=UTC))
@@ -40,6 +41,40 @@ def test_sembrar_crea_la_organizacion_inicial_con_los_valores_de_01_parrafo_4(
     assert configuracion.motivo_obligatorio_lista is True
     assert configuracion.estado_facturacion_default == "NO_REQUIERE"
     assert configuracion.intentos_pin_max == 5
+
+
+def test_la_organizacion_inicial_nace_monotributista_en_modo_a_sin_modalidad(
+    db_session: Session,
+) -> None:
+    """D9, `00` §5: la siembra de una organización nueva usa `MONOTRIBUTO`; la
+    modalidad de IVA al facturar no existe para un monotributista (D2). CST-06."""
+    organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+    assert organizacion is not None
+
+    configuracion = identidad_service.obtener_configuracion(organizacion.id, db_session)
+    assert configuracion is not None
+    assert configuracion.condicion_iva == "MONOTRIBUTO"
+    assert configuracion.modo_impositivo == "A"
+    assert configuracion.modalidad_iva_default is None
+    condicion = identidad_service.obtener_condicion_iva(organizacion.id, db_session)
+    assert condicion == "MONOTRIBUTO"
+    assert computa_credito_fiscal(condicion) is False
+
+
+def test_resembrar_no_pisa_una_condicion_cambiada(db_session: Session) -> None:
+    organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+    assert organizacion is not None
+    identidad_repository.actualizar_configuracion(
+        organizacion.id, db_session, momento=RELOJ.now(), condicion_iva="RESPONSABLE_INSCRIPTO"
+    )
+    db_session.flush()
+
+    segunda = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+
+    assert segunda is None
+    configuracion = identidad_service.obtener_configuracion(organizacion.id, db_session)
+    assert configuracion is not None
+    assert configuracion.condicion_iva == "RESPONSABLE_INSCRIPTO"
 
 
 def test_los_parametros_a_definir_al_configurar_quedan_explicitamente_nulos(

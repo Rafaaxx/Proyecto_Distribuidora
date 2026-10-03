@@ -25,6 +25,8 @@ export type CampoCosto = 'productoId' | 'presentacionId' | 'valor' | 'bonificaci
 
 const MAPA_CODIGO_A_CAMPO_COSTO: Record<string, CampoCosto> = {
   VALOR_INVALIDO: 'valor',
+  // 11b (CST-06): sin crédito fiscal no hay casilla de IVA; el error va en el valor pagado.
+  INCLUYE_IVA_NO_APLICA: 'valor',
   BONIFICACION_INVALIDA: 'bonificacion',
   PRESENTACION_INVALIDA: 'presentacionId',
   PRODUCTO_INACTIVO: 'productoId',

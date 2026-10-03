@@ -256,10 +256,10 @@ def _crear_costo_informado(
     conexion.execute(
         text(
             "INSERT INTO costo_informado (id, organizacion_id, proveedor_id, "
-            "producto_id, presentacion_id, valor, incluye_iva, bonificacion, "
-            "alicuota_aplicada, costo_base, vigencia_desde, observacion, "
+            "producto_id, presentacion_id, valor, incluye_iva, computa_credito_fiscal, "
+            "bonificacion, alicuota_aplicada, costo_base, vigencia_desde, observacion, "
             "operation_id, usuario_id, creado_en) VALUES (:id, :organizacion_id, "
-            ":proveedor_id, :producto_id, :presentacion_id, 1500.00, false, 0, "
+            ":proveedor_id, :producto_id, :presentacion_id, 1500.00, false, true, 0, "
             "0.210000, 1500.000000, :vigencia_desde, NULL, :operation_id, "
             ":usuario_id, :momento)"
         ),

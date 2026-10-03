@@ -57,7 +57,9 @@ from app.commands.catalogo import declarar_tipo
 from app.commands.registro import registrar_handler
 from app.commands.sobre import SobreComando
 from app.core.clock import Clock
+from app.core.errors import PermisoRequeridoError
 from app.modules.identidad import service as identidad_service
+from app.modules.identidad.domain.valores import computa_credito_fiscal
 
 ResultadoHandler = tuple[str, dict[str, object] | None, str | None]
 """Misma convención que `sync/service.py::ResultadoHandler`: `(estado,
@@ -284,3 +286,66 @@ registrar_handler("USUARIO_DESBLOQUEAR", 1, UsuarioDesbloquearContenidoV1)(
     manejar_usuario_desbloquear  # type: ignore[arg-type]
 )
 declarar_tipo("USUARIO_DESBLOQUEAR", admite_online=True, admite_offline=False)
+
+
+# --- ORGANIZACION_CONDICION_IVA_CAMBIAR (11b, D7, CST-06, envuelve
+# `identidad_service.cambiar_condicion_iva`) --------------------------------
+
+
+class OrganizacionCondicionIvaCambiarContenidoV1(BaseModel):
+    """Solo la condición nueva. `organizacion_id` sale del sobre (token), nunca del
+    contenido. Es un `str`: el dominio cerrado lo valida `validar_condicion_iva` con su
+    error de dominio (422)."""
+
+    condicion_iva: str
+
+
+def manejar_organizacion_condicion_iva_cambiar(
+    sobre: SobreComando,
+    contenido: OrganizacionCondicionIvaCambiarContenidoV1,
+    *,
+    sesion: object,
+    reloj: Clock,
+) -> ResultadoHandler:
+    """Handler de `ORGANIZACION_CONDICION_IVA_CAMBIAR` v1 (D7). El permiso se exige acá,
+    PRIMERO (`ADMIN_CONFIGURACION`, mismo criterio que `CLIENTE_CONSUMIDOR_FINAL_
+    CONFIGURAR`: lo que se toca es la organización, SEG-06). El resultado lleva la
+    configuración fiscal vigente tras el cambio: un reenvío idempotente devuelve exactamente
+    esto (INV-06)."""
+    permisos = identidad_service.listar_permisos_del_usuario(
+        sobre.organizacion_id,
+        sobre.usuario_id,
+        sesion,  # type: ignore[arg-type]
+    )
+    if "ADMIN_CONFIGURACION" not in permisos:
+        raise PermisoRequeridoError("Falta el permiso ADMIN_CONFIGURACION.")
+
+    configuracion = identidad_service.cambiar_condicion_iva(
+        sobre.organizacion_id,
+        sesion,  # type: ignore[arg-type]
+        reloj,
+        condicion_nueva=contenido.condicion_iva,
+        actor_id=sobre.usuario_id,
+        dispositivo_id_actor=sobre.dispositivo_id,
+        operation_id=sobre.operation_id,
+    )
+    if configuracion is None:
+        return "RECHAZADO", None, "ORGANIZACION_NO_ENCONTRADA"
+    return (
+        "ACEPTADO",
+        {
+            "condicion_iva": configuracion.condicion_iva,
+            "computa_credito_fiscal": computa_credito_fiscal(configuracion.condicion_iva),
+            "modo_impositivo": configuracion.modo_impositivo,
+            "modalidad_iva_default": configuracion.modalidad_iva_default,
+        },
+        None,
+    )
+
+
+registrar_handler(
+    "ORGANIZACION_CONDICION_IVA_CAMBIAR", 1, OrganizacionCondicionIvaCambiarContenidoV1
+)(
+    manejar_organizacion_condicion_iva_cambiar  # type: ignore[arg-type]
+)
+declarar_tipo("ORGANIZACION_CONDICION_IVA_CAMBIAR", admite_online=True, admite_offline=False)

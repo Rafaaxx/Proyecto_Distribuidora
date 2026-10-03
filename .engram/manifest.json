@@ -200,6 +200,22 @@
       "sessions": 0,
       "memories": 6,
       "prompts": 0
+    },
+    {
+      "id": "fc9977fe",
+      "created_by": "rafan",
+      "created_at": "2026-10-03T04:06:42Z",
+      "sessions": 0,
+      "memories": 3,
+      "prompts": 0
+    },
+    {
+      "id": "02c288f1",
+      "created_by": "rafan",
+      "created_at": "2026-10-03T18:49:52Z",
+      "sessions": 0,
+      "memories": 6,
+      "prompts": 0
     }
   ]
 }

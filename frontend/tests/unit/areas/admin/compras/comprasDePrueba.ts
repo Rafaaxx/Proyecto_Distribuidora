@@ -88,9 +88,25 @@ export const COMPRA_CONFIRMADA = {
   diferencias_de_costo: [] as unknown[],
 }
 
-/** Reglas de lectura que necesita el formulario de compra. */
+/** `GET /configuracion/fiscal` (11b, D8): la organización inscripta o monotributista. */
+export function configuracionFiscal(condicion: 'RESPONSABLE_INSCRIPTO' | 'MONOTRIBUTO' | 'EXENTO') {
+  const computa = condicion === 'RESPONSABLE_INSCRIPTO'
+  return {
+    condicion_iva: condicion,
+    computa_credito_fiscal: computa,
+    modo_impositivo: computa ? 'B' : 'A',
+    modalidad_iva_default: computa ? 'CLIENTE' : null,
+  }
+}
+
+export function reglaFiscal(condicion: 'RESPONSABLE_INSCRIPTO' | 'MONOTRIBUTO' | 'EXENTO'): ReglaDeApi {
+  return { metodo: 'GET', ruta: '/configuracion/fiscal', responder: () => ({ status: 200, cuerpo: configuracionFiscal(condicion) }) }
+}
+
+/** Reglas de lectura que necesita el formulario de compra (por defecto, un inscripto). */
 export function reglasDelFormulario(): ReglaDeApi[] {
   return [
+    reglaFiscal('RESPONSABLE_INSCRIPTO'),
     {
       metodo: 'GET',
       ruta: '/proveedores/opciones',

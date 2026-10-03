@@ -12,7 +12,8 @@
  *     importeNeto  = redondearImporte(cantidadBase x costoBase)
  *
  * El total neto es la suma de los importes de línea (TR-03). El total de factura
- * sugerido suma, por línea, `redondearImporte(importeNeto x (1 + alícuota))` (D1).
+ * sugerido suma, por línea, `redondearImporte(importeNeto x (1 + alícuota))` (D1) si la
+ * organización computa crédito fiscal (CST-06) y el `importeNeto` a secas si no (11b, D5).
  * Nada se convierte a `number` para calcular (INV-03).
  */
 
@@ -22,7 +23,11 @@ import {
   parsearImporteDesdeApi,
   redondearImporte,
 } from '../../lib/money'
-import { calcularCostoBase, ValorInvalidoError } from '../proveedores/costoBase'
+import {
+  calcularCostoBase,
+  IncluyeIvaNoAplicaError,
+  ValorInvalidoError,
+} from '../proveedores/costoBase'
 
 export const MAXIMO_DE_LINEAS = 200
 
@@ -54,6 +59,9 @@ export interface EntradaDeLinea {
   cantidad: string
   valor: string
   incluyeIva: boolean
+  /** CST-06: la regla vigente de la organización (`GET /configuracion/fiscal`). Si es falso
+   * el valor es el pagado y el IVA es costo. */
+  computaCreditoFiscal: boolean
   alicuota: string
   bonificacion: string
 }
@@ -155,10 +163,14 @@ export function calcularLinea(entrada: EntradaDeLinea): LineaCalculada {
       entrada.alicuota,
       entrada.bonificacion,
       entrada.unidadesPresentacion,
+      entrada.computaCreditoFiscal,
     )
   } catch (error) {
     if (error instanceof ValorInvalidoError) {
       throw new ErrorDeCompra('VALOR_INVALIDO', error.message)
+    }
+    if (error instanceof IncluyeIvaNoAplicaError) {
+      throw new ErrorDeCompra('INCLUYE_IVA_NO_APLICA', error.message)
     }
     throw error
   }
@@ -170,8 +182,11 @@ export function calcularLinea(entrada: EntradaDeLinea): LineaCalculada {
   if (importeNeto.gt(IMPORTE_MAXIMO)) {
     throw new ErrorDeCompra('IMPORTE_INVALIDO', `El importe de la línea supera ${IMPORTE_MAXIMO}.`)
   }
+  // D5: sin crédito fiscal el valor cargado ya es el pagado; no se agrega IVA al sugerido.
   const alicuota = parsearImporteDesdeApi(entrada.alicuota)
-  const importeConIva = redondearImporte(importeNeto.mul(alicuota.add(1)))
+  const importeConIva = entrada.computaCreditoFiscal
+    ? redondearImporte(importeNeto.mul(alicuota.add(1)))
+    : importeNeto
   return { cantidadBase, costoBase, importeNeto, importeConIva }
 }
 

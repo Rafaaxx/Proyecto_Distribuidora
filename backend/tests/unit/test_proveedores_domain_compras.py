@@ -9,6 +9,7 @@ acá se fija el error exacto, el rango y las propiedades.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 from uuid import uuid4
@@ -37,6 +38,7 @@ from app.modules.proveedores.domain.errores import (
     CondicionInvalidaError,
     FechaInvalidaError,
     ImporteInvalidoError,
+    IncluyeIvaNoAplicaError,
     LineasInvalidasError,
     MediosNoSumanImporteError,
     ReferenciaObligatoriaError,
@@ -50,6 +52,7 @@ def linea(
     cantidad: str = "1",
     valor: str = "6000.00",
     incluye_iva: bool = False,
+    computa_credito_fiscal: bool = True,
     alicuota: str = "0.210000",
     bonificacion: str = "0",
 ) -> EntradaDeLinea:
@@ -58,6 +61,7 @@ def linea(
         cantidad=Decimal(cantidad),
         valor=Decimal(valor),
         incluye_iva=incluye_iva,
+        computa_credito_fiscal=computa_credito_fiscal,
         alicuota=Decimal(alicuota),
         bonificacion=Decimal(bonificacion),
     )
@@ -211,6 +215,7 @@ _ENTRADAS = st.builds(
         allow_infinity=False,
     ),
     incluye_iva=st.booleans(),
+    computa_credito_fiscal=st.just(True),
     alicuota=st.sampled_from([Decimal("0"), Decimal("0.105000"), Decimal("0.210000")]),
     bonificacion=st.sampled_from([Decimal("0"), Decimal("0.100000"), Decimal("0.076923")]),
 )
@@ -379,6 +384,7 @@ def test_todos_los_errores_de_la_compra_son_errores_de_dominio_con_codigo_establ
         CondicionInvalidaError,
         FechaInvalidaError,
         ImporteInvalidoError,
+        IncluyeIvaNoAplicaError,
         LineasInvalidasError,
         MediosNoSumanImporteError,
         ReferenciaObligatoriaError,
@@ -387,6 +393,100 @@ def test_todos_los_errores_de_la_compra_son_errores_de_dominio_con_codigo_establ
     assert all(issubclass(error, DomainError) for error in errores)
     assert len({error.codigo for error in errores}) == len(errores)
     assert {error.status_http for error in errores} == {422}
+
+
+# --- 11b: organización sin crédito fiscal (CST-06, D4, D5) ------------------------------
+
+
+def test_cst06_linea_sin_credito_fiscal_toma_el_valor_pagado_como_costo() -> None:
+    parte = calcular_linea(
+        linea(unidades=12, valor="21780.00", computa_credito_fiscal=False, alicuota="0.210000")
+    )
+
+    assert parte.costo_base == Decimal("1815.000000")
+    assert parte.importe_neto == Decimal("21780.00")
+    assert parte.importe_con_iva == Decimal("21780.00"), "el sugerido no agrega IVA (D5)"
+
+
+def test_cst06_misma_linea_de_un_inscripto_con_iva_incluido_descuenta_y_sugiere_el_iva() -> None:
+    parte = calcular_linea(linea(unidades=12, valor="21780.00", incluye_iva=True))
+
+    assert parte.costo_base == Decimal("1500.000000")
+    assert parte.importe_neto == Decimal("18000.00")
+    assert parte.importe_con_iva == Decimal("21780.00")
+
+
+def test_d5_compra_del_criterio_2_de_un_monotributista_suma_valores_pagados() -> None:
+    totales = calcular_compra(
+        [
+            linea(unidades=6, cantidad="10", valor="7260.00", computa_credito_fiscal=False),
+            linea(unidades=1, cantidad="60", valor="1331.00", computa_credito_fiscal=False),
+        ]
+    )
+
+    assert totales.total_neto == Decimal("152460.00")
+    assert totales.total_factura_sugerido == Decimal("152460.00")
+    assert [parte.costo_base for parte in totales.lineas] == [
+        Decimal("1210.000000"),
+        Decimal("1331.000000"),
+    ]
+
+
+def test_d4_incluye_iva_sin_credito_fiscal_se_rechaza() -> None:
+    with pytest.raises(IncluyeIvaNoAplicaError) as error:
+        calcular_linea(linea(incluye_iva=True, computa_credito_fiscal=False))
+
+    assert error.value.codigo == "INCLUYE_IVA_NO_APLICA"
+    assert error.value.status_http == 422
+
+
+@pytest.mark.parametrize("posicion", [0, 1, 3])
+def test_d4_el_rechazo_indica_el_numero_de_linea(posicion: int) -> None:
+    lineas = [linea(computa_credito_fiscal=False) for _ in range(4)]
+    lineas[posicion] = linea(incluye_iva=True, computa_credito_fiscal=False)
+
+    with pytest.raises(IncluyeIvaNoAplicaError) as error:
+        calcular_compra(lineas)
+
+    assert error.value.extension == {"linea": posicion}
+
+
+_ENTRADAS_NO_INSCRIPTO = st.builds(
+    EntradaDeLinea,
+    unidades_presentacion=_UNIDADES,
+    cantidad=st.integers(min_value=1, max_value=500).map(Decimal),
+    valor=st.decimals(
+        min_value=Decimal("0.50"),
+        max_value=Decimal("500000.00"),
+        places=2,
+        allow_nan=False,
+        allow_infinity=False,
+    ),
+    incluye_iva=st.just(False),
+    computa_credito_fiscal=st.just(False),
+    alicuota=st.sampled_from([Decimal("0"), Decimal("0.105000"), Decimal("0.210000")]),
+    bonificacion=st.sampled_from([Decimal("0"), Decimal("0.100000"), Decimal("0.076923")]),
+)
+
+
+@given(entradas=st.lists(_ENTRADAS_NO_INSCRIPTO, min_size=1, max_size=12), data=st.data())
+def test_cst06_sin_credito_fiscal_el_costo_no_depende_de_la_alicuota_y_el_sugerido_es_el_neto(
+    entradas: list[EntradaDeLinea], data: st.DataObject
+) -> None:
+    otra_alicuota = data.draw(
+        st.sampled_from([Decimal("0"), Decimal("0.105000"), Decimal("0.210000")])
+    )
+    con_otra_alicuota = [replace(entrada, alicuota=otra_alicuota) for entrada in entradas]
+    try:
+        totales = calcular_compra(entradas)
+    except (ValorInvalidoError, ImporteInvalidoError):
+        return  # un costo base que redondea a cero o un total fuera de rango no es una compra
+
+    otros = calcular_compra(con_otra_alicuota)
+    assert [parte.costo_base for parte in totales.lineas] == [
+        parte.costo_base for parte in otros.lineas
+    ]
+    assert totales.total_factura_sugerido == totales.total_neto
 
 
 # --- 4.3: comparación con el costo informado vigente (CMP-04, D7) -----------------------

@@ -129,6 +129,9 @@ def sembrar(sesion: Session, reloj: Clock, *, password_administrador: str) -> Or
         zona_horaria=ZONA_HORARIA_INICIAL,
         estado="ACTIVA",
         configuracion=DatosConfiguracionInicial(
+            # `00` §5, 11b D9: la distribuidora es monotributista; vende a precio final
+            # (modo A) y no tiene modalidad de IVA al facturar (D2).
+            condicion_iva="MONOTRIBUTO",
             modo_impositivo="A",
             politica_credito_default="AUTORIZAR",
             estado_facturacion_default="NO_REQUIERE",

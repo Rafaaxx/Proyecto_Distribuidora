@@ -13,6 +13,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
+from cuentas_corrientes_utiles import agregar_configuracion
 from sqlalchemy.orm import Session
 
 from app.core.clock import FixedClock
@@ -56,6 +57,7 @@ def organizacion_id(db_session: Session) -> uuid.UUID:
     )
     db_session.add(organizacion)
     db_session.flush()
+    agregar_configuracion(db_session, organizacion.id)
     return organizacion.id
 
 
@@ -74,6 +76,7 @@ def otra_organizacion_id(db_session: Session) -> uuid.UUID:
     )
     db_session.add(organizacion)
     db_session.flush()
+    agregar_configuracion(db_session, organizacion.id)
     return organizacion.id
 
 

@@ -52,7 +52,7 @@ describe('porcentajeAFraccion', () => {
 
 describe('calcularVistaPrevia (CMP-02, mismos casos que el servidor)', () => {
   it('Caja x12 con IVA 21%: costo base 1239.669421, neto 14876.03, total de factura sugerido 18000.00', () => {
-    const vista = calcularVistaPrevia([CAJA_X12_CON_IVA], [CONTEXTO_CAJA_X12])
+    const vista = calcularVistaPrevia([CAJA_X12_CON_IVA], [CONTEXTO_CAJA_X12], true)
 
     const linea = vista.lineas[0]
     expect(linea?.estado).toBe('lista')
@@ -68,7 +68,7 @@ describe('calcularVistaPrevia (CMP-02, mismos casos que el servidor)', () => {
   it('con bonificación 10% sin IVA: costo base 1350.000000 y neto 16200.00', () => {
     const vista = calcularVistaPrevia(
       [{ ...CAJA_X12_CON_IVA, incluyeIva: false, bonificacionPorcentaje: '10' }],
-      [CONTEXTO_CAJA_X12],
+      [CONTEXTO_CAJA_X12], true,
     )
 
     const linea = vista.lineas[0]
@@ -80,7 +80,7 @@ describe('calcularVistaPrevia (CMP-02, mismos casos que el servidor)', () => {
   it('cantidad fraccionaria válida: 2.5 cajas x6 son 15 unidades base', () => {
     const vista = calcularVistaPrevia(
       [{ ...CAJA_X12_CON_IVA, cantidad: '2.5', valor: '6000.00', incluyeIva: false }],
-      [{ unidadesPresentacion: 6, alicuota: '0.210000' }],
+      [{ unidadesPresentacion: 6, alicuota: '0.210000' }], true,
     )
 
     const linea = vista.lineas[0]
@@ -92,7 +92,7 @@ describe('calcularVistaPrevia (CMP-02, mismos casos que el servidor)', () => {
   it('suma varias líneas: totales de neto y de factura sugerido', () => {
     const vista = calcularVistaPrevia(
       [CAJA_X12_CON_IVA, { ...CAJA_X12_CON_IVA, incluyeIva: false }],
-      [CONTEXTO_CAJA_X12, CONTEXTO_CAJA_X12],
+      [CONTEXTO_CAJA_X12, CONTEXTO_CAJA_X12], true,
     )
 
     expect(vista.totales?.totalNeto.toFixed(2)).toBe('32876.03')
@@ -102,7 +102,7 @@ describe('calcularVistaPrevia (CMP-02, mismos casos que el servidor)', () => {
   it('una línea sin datos todavía queda incompleta y no hay totales', () => {
     const vista = calcularVistaPrevia(
       [CAJA_X12_CON_IVA, { ...CAJA_X12_CON_IVA, valor: '' }],
-      [CONTEXTO_CAJA_X12, CONTEXTO_CAJA_X12],
+      [CONTEXTO_CAJA_X12, CONTEXTO_CAJA_X12], true,
     )
 
     expect(vista.lineas.map((l) => l.estado)).toEqual(['lista', 'incompleta'])
@@ -110,7 +110,7 @@ describe('calcularVistaPrevia (CMP-02, mismos casos que el servidor)', () => {
   })
 
   it('sin contexto de catálogo (presentación sin elegir) la línea está incompleta', () => {
-    const vista = calcularVistaPrevia([CAJA_X12_CON_IVA], [{ unidadesPresentacion: null, alicuota: null }])
+    const vista = calcularVistaPrevia([CAJA_X12_CON_IVA], [{ unidadesPresentacion: null, alicuota: null }], true)
 
     expect(vista.lineas[0]?.estado).toBe('incompleta')
   })
@@ -118,7 +118,7 @@ describe('calcularVistaPrevia (CMP-02, mismos casos que el servidor)', () => {
   it('una cantidad que no da entero en unidad base es un error de línea con el código del servidor', () => {
     const vista = calcularVistaPrevia(
       [{ ...CAJA_X12_CON_IVA, cantidad: '2.3' }],
-      [{ unidadesPresentacion: 6, alicuota: '0.210000' }],
+      [{ unidadesPresentacion: 6, alicuota: '0.210000' }], true,
     )
 
     const linea = vista.lineas[0]
@@ -129,7 +129,7 @@ describe('calcularVistaPrevia (CMP-02, mismos casos que el servidor)', () => {
   it('un error en una línea no esconde el cálculo de las otras', () => {
     const vista = calcularVistaPrevia(
       [CAJA_X12_CON_IVA, { ...CAJA_X12_CON_IVA, valor: '0' }],
-      [CONTEXTO_CAJA_X12, CONTEXTO_CAJA_X12],
+      [CONTEXTO_CAJA_X12, CONTEXTO_CAJA_X12], true,
     )
 
     expect(vista.lineas.map((l) => l.estado)).toEqual(['lista', 'error'])
@@ -137,7 +137,7 @@ describe('calcularVistaPrevia (CMP-02, mismos casos que el servidor)', () => {
   })
 
   it('sin líneas no hay totales', () => {
-    expect(calcularVistaPrevia([], []).totales).toBeNull()
+    expect(calcularVistaPrevia([], [], true).totales).toBeNull()
   })
 })
 
@@ -182,7 +182,7 @@ describe('construirSolicitudDeCompra', () => {
   }
 
   it('a crédito: importes como string, bonificación como fracción, sin medios', () => {
-    const solicitud = construirSolicitudDeCompra({ ...BASE, condicion: 'CREDITO' }, '18000')
+    const solicitud = construirSolicitudDeCompra({ ...BASE, condicion: 'CREDITO' }, '18000', true)
 
     expect(solicitud).toEqual({
       proveedor_id: PROVEEDOR,
@@ -218,7 +218,7 @@ describe('construirSolicitudDeCompra', () => {
           { medioPagoId: MEDIO, importe: '8000.50', referencia: ' 123 ' },
         ],
       },
-      '18000.50',
+      '18000.50', true,
     )
 
     expect(solicitud.condicion).toBe('CONTADO')
@@ -234,7 +234,7 @@ describe('construirSolicitudDeCompra', () => {
   it('a crédito ignora los medios que hubiera cargado el usuario', () => {
     const solicitud = construirSolicitudDeCompra(
       { ...BASE, condicion: 'CREDITO', medios: [{ medioPagoId: MEDIO, importe: '1', referencia: '' }] },
-      '18000',
+      '18000', true,
     )
 
     expect(solicitud.medios).toEqual([])
@@ -245,7 +245,7 @@ describe('construirCostoInformar (CMP-04, D7)', () => {
   it('toma presentación, valor, IVA y bonificación de la línea y la vigencia desde la fecha de la compra', () => {
     const costo = construirCostoInformar(
       { ...CAJA_X12_CON_IVA, bonificacionPorcentaje: '10' },
-      '2026-05-10',
+      '2026-05-10', true,
     )
 
     expect(costo).toEqual({
@@ -259,7 +259,7 @@ describe('construirCostoInformar (CMP-04, D7)', () => {
   })
 
   it('el valor se normaliza a dos decimales', () => {
-    expect(construirCostoInformar({ ...CAJA_X12_CON_IVA, valor: '1100' }, '2026-05-10').valor).toBe('1100.00')
+    expect(construirCostoInformar({ ...CAJA_X12_CON_IVA, valor: '1100' }, '2026-05-10', true).valor).toBe('1100.00')
   })
 })
 
@@ -304,7 +304,7 @@ describe('presentacionesDeCompra y contextoDeLinea (catálogo -> línea)', () =>
 })
 
 describe('puedeConfirmar', () => {
-  const lista = calcularVistaPrevia([CAJA_X12_CON_IVA], [CONTEXTO_CAJA_X12])
+  const lista = calcularVistaPrevia([CAJA_X12_CON_IVA], [CONTEXTO_CAJA_X12], true)
   const base = {
     formulario: {
       proveedorId: PROVEEDOR,
@@ -329,7 +329,7 @@ describe('puedeConfirmar', () => {
     ['sin proveedor', { formulario: { ...base.formulario, proveedorId: '' } }],
     ['sin ubicación', { formulario: { ...base.formulario, ubicacionId: '' } }],
     ['sin fecha', { formulario: { ...base.formulario, fecha: '' } }],
-    ['con una línea incompleta', { vistaPrevia: calcularVistaPrevia([{ ...CAJA_X12_CON_IVA, valor: '' }], [CONTEXTO_CAJA_X12]) }],
+    ['con una línea incompleta', { vistaPrevia: calcularVistaPrevia([{ ...CAJA_X12_CON_IVA, valor: '' }], [CONTEXTO_CAJA_X12], true) }],
     ['con total de factura vacío', { totalFactura: '' }],
     ['con total de factura cero', { totalFactura: '0' }],
     ['con total de factura inválido', { totalFactura: 'abc' }],
@@ -370,5 +370,71 @@ describe('puedeConfirmar', () => {
         }),
       ).toBe(true)
     })
+  })
+})
+
+describe('sin crédito fiscal (11b, tarea 7.2, CST-06, D5)', () => {
+  const CAJA_X12_VALOR_PAGADO: LineaDeFormulario = { ...CAJA_X12_CON_IVA, valor: '21780.00', incluyeIva: false }
+
+  it('monotributista: el valor pagado es el costo, Caja x12 a 21780 da 1815.000000 y no hay IVA sugerido', () => {
+    const vista = calcularVistaPrevia([CAJA_X12_VALOR_PAGADO], [CONTEXTO_CAJA_X12], false)
+
+    const linea = vista.lineas[0]
+    if (linea?.estado !== 'lista') throw new Error('se esperaba una línea lista')
+    expect(linea.calculada.costoBase.toFixed(6)).toBe('1815.000000')
+    expect(linea.calculada.importeNeto.toFixed(2)).toBe('21780.00')
+    expect(vista.totales?.totalFacturaSugerido.toFixed(2)).toBe('21780.00')
+    expect(vista.totales?.ivaSugerido.toFixed(2)).toBe('0.00')
+  })
+
+  it('el mismo formulario de un inscripto sigue dando 1239.669421 y 14876.03 (TR-06)', () => {
+    const vista = calcularVistaPrevia([CAJA_X12_CON_IVA], [CONTEXTO_CAJA_X12], true)
+
+    const linea = vista.lineas[0]
+    if (linea?.estado !== 'lista') throw new Error('se esperaba una línea lista')
+    expect(linea.calculada.costoBase.toFixed(6)).toBe('1239.669421')
+    expect(vista.totales?.totalNeto.toFixed(2)).toBe('14876.03')
+  })
+
+  it('una casilla "incluye IVA" que quedó tildada no cuenta cuando la organización no computa crédito', () => {
+    const vista = calcularVistaPrevia([{ ...CAJA_X12_VALOR_PAGADO, incluyeIva: true }], [CONTEXTO_CAJA_X12], false)
+
+    const linea = vista.lineas[0]
+    if (linea?.estado !== 'lista') throw new Error('se esperaba una línea lista')
+    expect(linea.calculada.costoBase.toFixed(6)).toBe('1815.000000')
+  })
+
+  it('mientras la condición no se conoce (null) toda línea queda incompleta y no hay totales', () => {
+    const vista = calcularVistaPrevia([CAJA_X12_VALOR_PAGADO], [CONTEXTO_CAJA_X12], null)
+
+    expect(vista.lineas[0]?.estado).toBe('incompleta')
+    expect(vista.totales).toBeNull()
+  })
+
+  it('la solicitud de compra envía incluye_iva = false aunque la línea lo tuviera tildado', () => {
+    const solicitud = construirSolicitudDeCompra(
+      {
+        proveedorId: PROVEEDOR,
+        fecha: '2026-05-10',
+        ubicacionId: UBICACION,
+        numeroComprobante: '',
+        observacion: '',
+        condicion: 'CREDITO',
+        lineas: [{ ...CAJA_X12_VALOR_PAGADO, incluyeIva: true }],
+        medios: [],
+      },
+      '21780',
+      false,
+    )
+
+    expect(solicitud.lineas[0]?.incluye_iva).toBe(false)
+    expect(solicitud.total_factura).toBe('21780.00')
+  })
+
+  it('el costo a informar desde la compra lleva incluye_iva = false si no se computa crédito, y verdadero si sí', () => {
+    const linea = { ...CAJA_X12_CON_IVA, incluyeIva: true }
+
+    expect(construirCostoInformar(linea, '2026-05-10', false).incluye_iva).toBe(false)
+    expect(construirCostoInformar(linea, '2026-05-10', true).incluye_iva).toBe(true)
   })
 })

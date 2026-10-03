@@ -404,3 +404,64 @@ def test_el_nombre_de_archivo_se_guarda_sin_ruta_ni_caracteres_de_control(
     crudo: str | None, esperado: str
 ) -> None:
     assert nombre_de_archivo(crudo) == esperado
+
+
+# --- 11b: la columna `incluye_iva` de COSTOS según el crédito fiscal (CST-06, D6) ----------
+
+_COSTOS_SIN_IVA = [
+    "producto_codigo",
+    "presentacion",
+    "valor",
+    "bonificacion",
+    "vigencia_desde",
+    "observacion",
+]
+
+
+def test_cst06_con_credito_fiscal_la_columna_incluye_iva_es_obligatoria() -> None:
+    """Un inscripto sin la columna en el encabezado rechaza el archivo, como hasta ahora."""
+    with pytest.raises(ColumnasInvalidasError) as excinfo:
+        armar_planilla(
+            "COSTOS",
+            _filas(_COSTOS_SIN_IVA, ["CB-473", "Caja x12", "18000", "", "2026-10-01", ""]),
+        )
+
+    assert excinfo.value.faltantes == ["incluye_iva"]
+
+
+def test_cst06_sin_credito_fiscal_la_columna_incluye_iva_puede_faltar() -> None:
+    filas = armar_planilla(
+        "COSTOS",
+        _filas(_COSTOS_SIN_IVA, ["CB-473", "Caja x12", "21780", "", "2026-10-01", ""]),
+        computa_credito_fiscal=False,
+    )
+
+    assert filas[0].valores["incluye_iva"] == ""
+    assert filas[0].valores["valor"] == "21780"
+
+
+def test_cst06_sin_credito_fiscal_la_columna_presente_se_lee_igual() -> None:
+    encabezado = encabezado_de_plantilla("COSTOS")
+    celdas = ["CB-473", "Caja x12", "21780", "N", "", "2026-10-01", ""]
+
+    filas = armar_planilla("COSTOS", _filas(encabezado, celdas), computa_credito_fiscal=False)
+
+    assert filas[0].valores["incluye_iva"] == "N"
+
+
+def test_cst06_sin_credito_fiscal_el_resto_de_las_columnas_siguen_obligatorias() -> None:
+    sin_valor = [nombre for nombre in _COSTOS_SIN_IVA if nombre != "valor"]
+
+    with pytest.raises(ColumnasInvalidasError) as excinfo:
+        armar_planilla(
+            "COSTOS",
+            _filas(sin_valor, ["CB-473", "Caja x12", "", "2026-10-01", ""]),
+            computa_credito_fiscal=False,
+        )
+
+    assert excinfo.value.faltantes == ["valor"]
+
+
+def test_cst06_la_plantilla_de_costos_conserva_todas_las_columnas() -> None:
+    """La columna es opcional en la lectura, no en la plantilla descargable."""
+    assert "incluye_iva" in encabezado_de_plantilla("COSTOS")

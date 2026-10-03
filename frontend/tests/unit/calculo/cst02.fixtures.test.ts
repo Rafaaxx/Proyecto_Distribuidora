@@ -28,6 +28,7 @@ describe('casos compartidos de CST-02', () => {
     const entrada = caso.entrada as {
       valor: string
       incluye_iva: boolean
+      computa_credito_fiscal: boolean
       alicuota: string
       bonificacion: string
       unidades: number
@@ -42,6 +43,7 @@ describe('casos compartidos de CST-02', () => {
           entrada.alicuota,
           entrada.bonificacion,
           entrada.unidades,
+          entrada.computa_credito_fiscal,
         ),
       ).toThrow()
       return
@@ -53,6 +55,7 @@ describe('casos compartidos de CST-02', () => {
       entrada.alicuota,
       entrada.bonificacion,
       entrada.unidades,
+      entrada.computa_credito_fiscal,
     )
     expect(resultado.toFixed(6)).toBe(salidaEsperada.costo_base)
   })

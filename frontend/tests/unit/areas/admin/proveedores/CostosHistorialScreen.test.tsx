@@ -22,6 +22,7 @@ const COSTO_VIGENTE = {
   presentacion_id: 'pr1',
   valor: '18000.00',
   incluye_iva: false,
+  computa_credito_fiscal: true,
   bonificacion: '0',
   alicuota_aplicada: '0.210000',
   costo_base: '1500.000000',
@@ -190,6 +191,43 @@ describe('CostosHistorialScreen (tareas 11.5 y 14.5)', () => {
 
     // COSTO_PROGRAMADO: bonificación 0.100000 -> "10 %".
     expect(filaFutura.getByText('10 %')).toBeInTheDocument()
+  })
+
+  it('cada costo dice si se descontó IVA según la regla congelada, no la condición actual (11b, CST-06, TR-06)', async () => {
+    const costoMonotributo = {
+      ...COSTO_VIGENTE,
+      id: 'm1',
+      valor: '21780.00',
+      incluye_iva: false,
+      computa_credito_fiscal: false,
+      costo_base: '1815.000000',
+      vigencia_desde: '2026-08-01',
+    }
+    const costoInscripto = {
+      ...COSTO_VIGENTE,
+      id: 'r1',
+      valor: '18000.00',
+      incluye_iva: true,
+      computa_credito_fiscal: true,
+      costo_base: '1239.669421',
+      vigencia_desde: '2026-09-01',
+    }
+    apiFetchMock.mockImplementation((ruta: string) => {
+      if (ruta.includes('/vigente')) {
+        return Promise.resolve(respuesta(200, { fecha: '2026-09-15', costo: costoInscripto, por_presentacion: [] }))
+      }
+      if (ruta.includes('/historial')) {
+        return Promise.resolve(respuesta(200, { items: [costoInscripto, costoMonotributo], cursor_siguiente: null }))
+      }
+      return Promise.resolve(respuesta(200, { items: [], cursor_siguiente: null }))
+    })
+    renderPantalla()
+
+    const filas = await filasDeHistorial()
+    expect(within(filas[0] as HTMLElement).getByText('IVA descontado: Sí')).toBeInTheDocument()
+    expect(within(filas[1] as HTMLElement).getByText('IVA descontado: No')).toBeInTheDocument()
+    expect(within(filas[1] as HTMLElement).getByText('1.815,000000')).toBeInTheDocument()
+    expect(apiFetchMock.mock.calls.some(([ruta]) => String(ruta).startsWith('/configuracion/fiscal'))).toBe(false)
   })
 
   it('muestra la alícuota aplicada como porcentaje, no como fracción', async () => {

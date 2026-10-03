@@ -60,16 +60,17 @@ La tabla indica qué changes deben estar archivados antes de empezar cada uno.
 | 09 stock-y-costeo | 05, 08 |
 | 10 importacion-inicial | 06, 07, 09 |
 | 11 compras-y-deuda-proveedor | 06, 09 |
-| 12 pagos-a-proveedores | 08, 11 |
-| 13 listas-de-precios | 06, 09 |
+| 11b condicion-iva-organizacion | 02, 06, 10, 11 |
+| 12 pagos-a-proveedores | 08, 11, 11b |
+| 13 listas-de-precios | 06, 09, 11b |
 | 14 transferencias-y-ajustes | 09 |
 | 15 jornadas | 09, 14 |
 | 16 motor-de-descuentos | 05, 13 |
 | 17 cobranzas | 07, 08 |
-| 18a venta-online-core | 07, 08, 09, 13, 15, 17 |
+| 18a venta-online-core | 07, 08, 09, 11b, 13, 15, 17 |
 | 18b venta-online-descuentos-credito | 16, 18a |
 | 19 venta-anulacion | 18b |
-| 20 nota-de-venta | 18b |
+| 20 nota-de-venta | 11b, 18b |
 | 27a despliegue-basico | 20 |
 | 21 pwa-y-bootstrap | 20 |
 | 22a cola-confirmacion-local | 21 |
@@ -151,6 +152,7 @@ La tabla indica qué changes deben estar archivados antes de empezar cada uno.
 | # | Change | Entrega | Invariantes que cierra |
 | --- | --- | --- | --- |
 | 11 | `compras-y-deuda-proveedor` | Compra con líneas en cualquier presentación, ingreso de stock, recálculo de promedio, deuda o pago de contado, anulación con reversión | INV-01 (atómica), INV-07 (al menos una línea), CST-11 |
+| 11b | `condicion-iva-organizacion` | Condición de la organización frente al IVA (`RESPONSABLE_INSCRIPTO`, `MONOTRIBUTO`, `EXENTO`) y la regla derivada de crédito fiscal en compras (CST-06): costo base y total sugerido según la regla, regla congelada por costo y por línea, cambio de condición auditado y sin efecto retroactivo, importación de costos y pantallas ajustadas | CST-06, TR-06, INV-05, INV-06 |
 | 12 | `pagos-a-proveedores` | Pago con varios medios, anulación, saldo de proveedor | INV-08 |
 | 13 | `listas-de-precios` | Listas, reglas de margen con precedencia, redondeo, generación de borrador, publicación, versiones anteriores, resolución de precio | INV-11 (versión inmutable), fixtures compartidos PRC-22 |
 
@@ -165,6 +167,8 @@ La tabla indica qué changes deben estar archivados antes de empezar cada uno.
 **Deuda nominada por el change 06 (`proveedores-y-costos-informados`) para el change 13 (`listas-de-precios`):** `proveedores/service.py::obtener_costo_informado_vigente(organizacion_id, producto_id, fecha, sesion)` (CST-03, D4) y `listar_historial_costos` ya están listos para que el 13 los lea al generar un borrador de lista (PRC-11); no requieren cambios de forma. Queda abierta una **decisión de negocio** surgida en la verificación manual del 06 (2026-09-25): si un proveedor vende varias presentaciones de compra con distinto costo por unidad base (por ejemplo `Caja x6` y `Caja x12`), CST-03 toma como costo de referencia el último informado sin importar la presentación, y el precio pasa a depender del orden de carga. Antes de implementar PRC-11, el usuario decide, con un ADR, si se mantiene la regla actual, si el costo de referencia sale de una presentación de compra habitual marcada por producto, o si se usa el mayor de los vigentes por presentación (ya disponibles en `GET /costos/productos/{id}/vigente` → `por_presentacion`, enmienda P11 del 06). En el mismo ADR se decide si se admiten precios de venta no proporcionales entre presentaciones (hoy ADR-010 y PRC-10 los descartan). El usuario indicó que se revisa "si es necesario": puede resolverse manteniendo la regla actual. La deuda de referencia y precios publicados (`precio_item` no congela la referencia) sigue siendo la nominada por el change 05, sin relación con este punto.
 
 **Deuda nominada por el change 10 (`importacion-inicial`) para el change 13 (`listas-de-precios`):** `00` §6.1 incluye "listas" en la importación inicial y `03` §13 declara el tipo `PRECIOS`, pero las listas nacen en el 13 (que no depende del 10). El change 10 deja el tipo `PRECIOS` en el `CHECK` de `importacion.tipo` y la API lo rechaza con 422 `TIPO_IMPORTACION_INVALIDO`. El 13 debe: (a) agregar un importador `PRECIOS` al registro `IMPORTADORES` de `importacion` (`importacion/importadores/__init__.py`) sobre el servicio de listas, con su definición de columnas en `importacion/domain/planilla.py` y su plantilla; (b) resolver las referencias por clave natural (lista por nombre, producto por código, presentación por nombre) con funciones `buscar_*` en su `service.py`; (c) mantener todo o nada (ADR-040) y los mismos códigos de error que la pantalla (TR-10); (d) sumar la opción en la pantalla `/admin/importacion` y en `frontend/src/features/importacion/tipos.ts`, y sacar `PRECIOS` de la lista de tipos rechazados en las pruebas del change 10.
+
+**Change 11b (`condicion-iva-organizacion`, ADR-045) — impacto en los changes siguientes:** la organización inicial es monotributista, así que el IVA de compra es costo (CST-06) y vende a precio final (modo A, Factura C sin IVA discriminado). Se inserta antes del 12 y del 13 porque cambia el significado del costo base y del total de la compra. (a) **Change 13 (`listas-de-precios`):** el costo informado vigente que alimenta PRC-11 puede haberse calculado con una u otra regla (`costo_informado.computa_credito_fiscal`); `GET /costos/resumen-regla-iva` cuenta los vigentes por regla y el 13 debe decidir qué hacer con los calculados con la regla anterior antes de fijar precios (D10 del 11b). (b) **Change 18a (`venta-online-core`):** una organización no inscripta tiene modo `A` y modalidad de IVA sin definir (restricción de base); el 18a no puede asumir `modalidad_iva_default` no nula. (c) **Change 20 (`nota-de-venta`) y la facturación:** ADR-009 y FAC-02, FAC-03, FAC-04 y FAC-08 solo se aplican a responsables inscriptos; para un monotributista la factura es Factura C, sin IVA discriminado. **Idea futura sin change asignado:** reporte de facturación de los últimos 12 meses contra el tope de la categoría del monotributo.
 
 **Punto de validación con el cliente después del change 13:** mostrarle cómo un costo nuevo genera una lista y qué precios salen. Es el momento más barato para corregir márgenes o redondeos.
 

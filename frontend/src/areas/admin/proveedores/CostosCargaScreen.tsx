@@ -8,6 +8,7 @@ import { Card } from '../../../components/ui/Card'
 import type { Producto } from '../../../features/catalogo/api'
 import { useProducto, useProductosDelProveedor } from '../../../features/catalogo/useListados'
 import { useAlicuotas } from '../../../features/configuracion/useAlicuotas'
+import { useConfiguracionFiscal } from '../../../features/configuracion/useConfiguracionFiscal'
 import {
   esquemaCargaDeCostos,
   FILA_VACIA,
@@ -37,6 +38,10 @@ import { useInformarCostos } from '../../../features/proveedores/useMutaciones'
  * seguridad** -- esta pantalla no lo tenía (caía en el mensaje genérico
  * "No se pudo obtener el proveedor") y solo ocurre si el permiso se quitó
  * del rol entre dos renovaciones del access token (SEG-06).
+ *
+ * 11b (CST-06, D4): la regla de IVA sale de `GET /configuracion/fiscal`. Sin crédito fiscal
+ * la fila no ofrece "Incluye IVA", rotula el valor como "Valor pagado" y envía
+ * `incluye_iva = false`. Sin conocer la condición no se calcula ni se envía.
  */
 
 const SIN_PERMISO_DE_COSTOS = 'No tenés permiso para cargar costos.'
@@ -105,6 +110,8 @@ function CargaDeCostosDeProveedor() {
 function CargaDeCostosFormulario({ proveedorId }: { proveedorId: string }) {
   const navigate = useNavigate()
   const informar = useInformarCostos()
+  const fiscal = useConfiguracionFiscal()
+  const computaCreditoFiscal = fiscal.data?.computa_credito_fiscal ?? null
   // Productos activos del proveedor: los filtra el servidor (`proveedor_id`, tarea 11.2).
   const { productos: productosDelProveedor } = useProductosDelProveedor(proveedorId)
 
@@ -123,12 +130,13 @@ function CargaDeCostosFormulario({ proveedorId }: { proveedorId: string }) {
   const filasActuales = watch('filas')
 
   const alEnviar = handleSubmit(async (datos) => {
+    if (computaCreditoFiscal === null) return
     try {
       const costos: CostoDelLote[] = datos.filas.map((fila) => ({
         producto_id: fila.productoId,
         presentacion_id: fila.presentacionId,
         valor: fila.valor,
-        incluye_iva: fila.incluyeIva,
+        incluye_iva: computaCreditoFiscal && fila.incluyeIva,
         bonificacion: parsearImporteDesdeApi(fila.bonificacionPorcentaje).div(100).toFixed(6),
         vigencia_desde: fila.vigenciaDesde,
         observacion: fila.observacion.trim() === '' ? null : fila.observacion.trim(),
@@ -156,6 +164,11 @@ function CargaDeCostosFormulario({ proveedorId }: { proveedorId: string }) {
           {errors.filas.message}
         </p>
       )}
+      {fiscal.isError && (
+        <p role="alert" className="text-sm text-danger">
+          No se pudo leer la condición frente al IVA de la organización. Recargá la pantalla.
+        </p>
+      )}
       {errors.root?.message && (
         <p role="alert" className="text-sm text-danger">
           {errors.root.message}
@@ -170,6 +183,7 @@ function CargaDeCostosFormulario({ proveedorId }: { proveedorId: string }) {
           errors={errors}
           fila={filasActuales[indice] ?? FILA_VACIA}
           productosDelProveedor={productosDelProveedor}
+          computaCreditoFiscal={computaCreditoFiscal}
           onQuitar={fields.length > 1 ? () => remove(indice) : undefined}
         />
       ))}
@@ -183,7 +197,7 @@ function CargaDeCostosFormulario({ proveedorId }: { proveedorId: string }) {
       </Boton>
 
       <div className="flex gap-2">
-        <Boton type="submit" disabled={informar.isPending}>
+        <Boton type="submit" disabled={informar.isPending || computaCreditoFiscal === null}>
           Cargar costos
         </Boton>
         <Link to={`/admin/proveedores/${proveedorId}`} className="text-sm text-primary/70 hover:text-primary">
@@ -223,10 +237,20 @@ interface FilaCostoInputProps {
   errors: ReturnType<typeof useForm<DatosCargaDeCostos>>['formState']['errors']
   fila: DatosFilaCosto
   productosDelProveedor: Producto[]
+  /** CST-06; `null` mientras no se conoce. */
+  computaCreditoFiscal: boolean | null
   onQuitar?: () => void
 }
 
-function FilaCostoInput({ indice, register, errors, fila, productosDelProveedor, onQuitar }: FilaCostoInputProps) {
+function FilaCostoInput({
+  indice,
+  register,
+  errors,
+  fila,
+  productosDelProveedor,
+  computaCreditoFiscal,
+  onQuitar,
+}: FilaCostoInputProps) {
   const producto = useProducto(fila.productoId || undefined)
   const alicuotas = useAlicuotas()
 
@@ -244,15 +268,16 @@ function FilaCostoInput({ indice, register, errors, fila, productosDelProveedor,
 
   let vistaPrevia: string | null = null
   let errorDeVistaPrevia: string | null = null
-  if (presentacionElegida && alicuotaDelProducto && fila.valor.trim() !== '') {
+  if (computaCreditoFiscal !== null && presentacionElegida && alicuotaDelProducto && fila.valor.trim() !== '') {
     try {
       const bonificacionFraccion = parsearImporteDesdeApi(fila.bonificacionPorcentaje || '0').div(100).toFixed(6)
       const costoBase = calcularCostoBase(
         fila.valor,
-        fila.incluyeIva,
+        computaCreditoFiscal && fila.incluyeIva,
         alicuotaDelProducto.valor,
         bonificacionFraccion,
         presentacionElegida.unidades_base,
+        computaCreditoFiscal,
       )
       vistaPrevia = formatearCosto(costoBase)
     } catch (error) {
@@ -301,7 +326,11 @@ function FilaCostoInput({ indice, register, errors, fila, productosDelProveedor,
         </select>
       </Campo>
 
-      <Campo id={`filas.${indice}.valor`} etiqueta="Valor" error={erroresFila?.valor?.message}>
+      <Campo
+        id={`filas.${indice}.valor`}
+        etiqueta={computaCreditoFiscal === false ? 'Valor pagado' : 'Valor'}
+        error={erroresFila?.valor?.message}
+      >
         <input
           id={`filas.${indice}.valor`}
           className="w-28 rounded-md border border-border px-2 py-1 text-sm"
@@ -309,10 +338,12 @@ function FilaCostoInput({ indice, register, errors, fila, productosDelProveedor,
         />
       </Campo>
 
-      <label className="flex items-center gap-1 text-sm text-primary">
-        <input type="checkbox" {...register(`filas.${indice}.incluyeIva` as const)} />
-        Incluye IVA
-      </label>
+      {computaCreditoFiscal === true && (
+        <label className="flex items-center gap-1 text-sm text-primary">
+          <input type="checkbox" {...register(`filas.${indice}.incluyeIva` as const)} />
+          Incluye IVA
+        </label>
+      )}
 
       <Campo
         id={`filas.${indice}.bonificacionPorcentaje`}

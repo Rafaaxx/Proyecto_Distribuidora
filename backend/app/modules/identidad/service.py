@@ -43,6 +43,10 @@ from app.modules.identidad.domain.usuarios import (
     validar_formato_pin_autorizacion,
 )
 from app.modules.identidad.domain.valores import (
+    CondicionIvaSinCambioError,
+    computa_credito_fiscal,
+    validar_compatibilidad_de_condicion,
+    validar_condicion_iva,
     validar_estado_facturacion_default,
     validar_estado_organizacion,
     validar_modo_impositivo,
@@ -65,6 +69,7 @@ class DatosConfiguracionInicial:
     organización nueva. Los que `01` §4 marca "a definir al configurar"
     quedan explícitamente en `None` cuando así se los pase (tarea 8.3)."""
 
+    condicion_iva: str
     modo_impositivo: str
     politica_credito_default: str
     estado_facturacion_default: str
@@ -101,7 +106,13 @@ def crear_organizacion_con_configuracion(
     de `slug` (`ADR-021`) antes de escribir nada."""
     validar_estado_organizacion(estado)
     validar_slug_organizacion(slug)
+    validar_condicion_iva(configuracion.condicion_iva)
     validar_modo_impositivo(configuracion.modo_impositivo)
+    validar_compatibilidad_de_condicion(
+        configuracion.condicion_iva,
+        configuracion.modo_impositivo,
+        configuracion.modalidad_iva_default,
+    )
     validar_politica_credito_default(configuracion.politica_credito_default)
     validar_estado_facturacion_default(configuracion.estado_facturacion_default)
 
@@ -122,6 +133,7 @@ def crear_organizacion_con_configuracion(
     repository.crear_configuracion(
         organizacion_id,
         sesion,
+        condicion_iva=configuracion.condicion_iva,
         modo_impositivo=configuracion.modo_impositivo,
         politica_credito_default=configuracion.politica_credito_default,
         estado_facturacion_default=configuracion.estado_facturacion_default,
@@ -163,6 +175,101 @@ def obtener_configuracion(
     (`design.md`: `identidad.service` expone esta lectura). Nunca devuelve
     la fila de otra organización: el filtro va siempre por `organizacion_id`."""
     return repository.obtener_configuracion(organizacion_id, sesion)
+
+
+def obtener_condicion_iva(
+    organizacion_id: UUID, sesion: Session, *, para_compartir: bool = False
+) -> str | None:
+    """Condición frente al IVA de `organizacion_id` (11b, D1), o `None` si la
+    organización no tiene configuración. Con `para_compartir`, la lee `FOR SHARE`: un
+    registro de costo o compra y el cambio de condición (`FOR UPDATE`) no se cruzan, así
+    que una compra usa una sola regla de punta a punta (D3). `proveedores` e `importacion`
+    leen la condición solo por acá (import-linter)."""
+    if para_compartir:
+        configuracion = repository.obtener_configuracion_bloqueada(
+            organizacion_id, sesion, exclusivo=False
+        )
+    else:
+        configuracion = repository.obtener_configuracion(organizacion_id, sesion)
+    return None if configuracion is None else configuracion.condicion_iva
+
+
+def organizacion_computa_credito_fiscal(
+    organizacion_id: UUID, sesion: Session, *, para_compartir: bool = False
+) -> bool | None:
+    """CST-06: si `organizacion_id` computa crédito fiscal de IVA en compras (solo un
+    responsable inscripto), o `None` si la organización no tiene configuración. Es la
+    única forma en que `proveedores` e `importacion` conocen la regla (`design.md` D1)."""
+    condicion = obtener_condicion_iva(organizacion_id, sesion, para_compartir=para_compartir)
+    return None if condicion is None else computa_credito_fiscal(condicion)
+
+
+def cambiar_condicion_iva(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    condicion_nueva: str,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> ConfiguracionOrganizacion | None:
+    """`ORGANIZACION_CONDICION_IVA_CAMBIAR` (11b, D7, CST-06): cambia la condición frente
+    al IVA de la organización. Sin efecto retroactivo: no toca ningún costo, compra ni
+    promedio ya registrado (TR-06); rige para lo que se registre después.
+
+    Toma la fila de configuración `FOR UPDATE`: `COSTO_INFORMAR` y `COMPRA_CONFIRMAR` la leen
+    `FOR SHARE`, así que un registro en curso termina con la regla anterior y el siguiente ve
+    la nueva, sin interbloqueo (la configuración es lo único que este cambio bloquea).
+
+    `CONDICION_IVA_SIN_CAMBIO` si el valor es el mismo; `MODO_IMPOSITIVO_INCOMPATIBLE` si se
+    pasa a no inscripta con modo distinto de `A` o con modalidad de IVA definida (D2). Escribe
+    UNA auditoría con el valor anterior y el nuevo (`origen='COMANDO'`, `operation_id` del
+    sobre); la fila genérica del comando la deja el bus (ADR-022, mismo patrón que
+    `clientes/service.py::modificar_credito`). Devuelve `None` si la organización no tiene
+    configuración. Sin `commit`: la transacción la gestiona el bus."""
+    validar_condicion_iva(condicion_nueva)
+    configuracion = repository.obtener_configuracion_bloqueada(
+        organizacion_id, sesion, exclusivo=True
+    )
+    if configuracion is None:
+        return None
+
+    condicion_anterior = configuracion.condicion_iva
+    if condicion_nueva == condicion_anterior:
+        raise CondicionIvaSinCambioError(
+            f"La organización ya tiene la condición frente al IVA {condicion_nueva}."
+        )
+    validar_compatibilidad_de_condicion(
+        condicion_nueva, configuracion.modo_impositivo, configuracion.modalidad_iva_default
+    )
+
+    momento = reloj.now()
+    actualizada = repository.actualizar_configuracion(
+        organizacion_id,
+        sesion,
+        momento=momento,
+        actualizado_por_id=actor_id,
+        condicion_iva=condicion_nueva,
+    )
+    assert actualizada is not None  # la fila existe: se acaba de bloquear.
+
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="ORGANIZACION_CONDICION_IVA_CAMBIAR",
+        entidad="configuracion_organizacion",
+        entidad_id=organizacion_id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        antes={"condicion_iva": condicion_anterior},
+        despues={"condicion_iva": condicion_nueva},
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+    return actualizada
 
 
 def configurar_consumidor_final(

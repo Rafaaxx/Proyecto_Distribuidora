@@ -47,6 +47,7 @@ from app.modules.proveedores.domain.errores import (
 )
 from app.modules.proveedores.domain.lote import CostoDelLote
 from app.modules.proveedores.models import CostoInformado, Proveedor
+from tests.integration.cuentas_corrientes_utiles import agregar_configuracion
 
 MOMENTO = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -84,6 +85,8 @@ def _preparar_organizacion(database_url: str) -> UUID:
         )
         sesion.add(organizacion)
         sesion.flush()
+        # 11b: `COSTO_INFORMAR` lee la regla de crédito fiscal de la configuración.
+        agregar_configuracion(sesion, organizacion.id)
         sesion.commit()
         return organizacion.id
     finally:

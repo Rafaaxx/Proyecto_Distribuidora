@@ -15,6 +15,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
+from cuentas_corrientes_utiles import agregar_configuracion
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -58,6 +59,7 @@ def _crear_organizacion(sesion: Session) -> Organizacion:
     )
     sesion.add(organizacion)
     sesion.flush()
+    agregar_configuracion(sesion, organizacion.id)
     return organizacion
 
 

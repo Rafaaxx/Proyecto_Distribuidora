@@ -28,11 +28,11 @@ importados", indistinguibles de un tipo que no existe (`registro.py`).
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from app.api_v1.dependencias import get_session
@@ -45,12 +45,14 @@ from app.core.autenticacion import (
     obtener_contexto_autenticado,
     requiere_comando_online,
     requiere_permiso,
+    requiere_sesion,
 )
 from app.core.clock import SystemClock
 from app.core.errors import DomainError
 from app.modules.identidad import commands as identidad_commands  # noqa: F401
 from app.modules.identidad import repository
 from app.modules.identidad import service as identidad_service
+from app.modules.identidad.domain.valores import computa_credito_fiscal
 from app.modules.sync import service as sync_service
 
 router = APIRouter(prefix="/identidad", tags=["identidad"])
@@ -472,3 +474,93 @@ def obtener_yo(
         rol=RolYoResponse(id=datos.rol.id, nombre=datos.rol.nombre),
         permisos=datos.permisos,
     )
+
+
+# --- configuración fiscal (change 11b, `design.md` D7, D8, CST-06) ---------------------
+#
+# `GET /configuracion/fiscal` la lee cualquier usuario autenticado de la organización:
+# la consumen las pantallas de compras y de carga de costos para ocultar la casilla de IVA
+# y elegir el total sugerido, cada una con su propio permiso de negocio. Exige sesión
+# válida y habilitada (`requiere_sesion`), no un permiso: figura en la lista de exenciones
+# del ratchet de permiso por ruta, igual que los medios de pago y los motivos.
+# `POST .../condicion-iva` exige `ADMIN_CONFIGURACION` y delega en el bus. La organización
+# sale siempre del token (INV-21).
+
+router_fiscal = APIRouter(prefix="/configuracion/fiscal", tags=["configuracion"])
+
+
+class ConfiguracionFiscalResponse(BaseModel):
+    condicion_iva: Literal["RESPONSABLE_INSCRIPTO", "MONOTRIBUTO", "EXENTO"]
+    computa_credito_fiscal: bool
+    modo_impositivo: str
+    modalidad_iva_default: str | None
+
+
+class CondicionIvaCambiarRequest(BaseModel):
+    """Solo la condición nueva: `organizacion_id` nunca aparece (sale del token). Un valor
+    fuera del dominio cerrado responde 422."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    condicion_iva: Literal["RESPONSABLE_INSCRIPTO", "MONOTRIBUTO", "EXENTO"]
+
+
+@router_fiscal.get("", response_model=ConfiguracionFiscalResponse)
+def obtener_configuracion_fiscal(
+    contexto: Annotated[ContextoAutenticado, Depends(requiere_sesion)],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> ConfiguracionFiscalResponse:
+    configuracion = identidad_service.obtener_configuracion(contexto.organizacion_id, sesion)
+    if configuracion is None:
+        raise RecursoNoEncontradoError("La organización no tiene configuración.")
+    return ConfiguracionFiscalResponse(
+        condicion_iva=configuracion.condicion_iva,  # type: ignore[arg-type]
+        computa_credito_fiscal=computa_credito_fiscal(configuracion.condicion_iva),
+        modo_impositivo=configuracion.modo_impositivo,
+        modalidad_iva_default=configuracion.modalidad_iva_default,
+    )
+
+
+@router_fiscal.post("/condicion-iva", response_model=ConfiguracionFiscalResponse)
+def cambiar_condicion_iva(
+    datos: CondicionIvaCambiarRequest,
+    entrada: Annotated[
+        EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_CONFIGURACION"))
+    ],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> ConfiguracionFiscalResponse:
+    """`ORGANIZACION_CONDICION_IVA_CAMBIAR` (D7). La respuesta sale de `comando.resultado`,
+    no de una relectura: un reenvío idempotente devuelve exactamente lo mismo (INV-06)."""
+    reloj = SystemClock()
+    contenido: dict[str, ContenidoComando] = {"condicion_iva": datos.condicion_iva}
+    sobre = construir_sobre_online(
+        operation_id=entrada.operation_id,
+        tipo="ORGANIZACION_CONDICION_IVA_CAMBIAR",
+        version=1,
+        modo="ONLINE",
+        organizacion_id=entrada.contexto.organizacion_id,
+        usuario_id=entrada.contexto.usuario_id,
+        dispositivo_id=entrada.contexto.dispositivo_id,
+        occurred_at=reloj.now(),
+        secuencia=1,
+        app_version="server",
+        contenido=contenido,
+    )
+    huella = calcular_huella(sobre.contenido)
+    handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
+    contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
+
+    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_organizacion_condicion_iva_cambiar(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO" or comando.resultado is None:
+        raise RecursoNoEncontradoError("La organización no tiene configuración.")
+    return ConfiguracionFiscalResponse.model_validate(comando.resultado)

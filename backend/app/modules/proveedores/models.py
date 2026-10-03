@@ -100,6 +100,9 @@ class CostoInformado(Base):
         ),
         CheckConstraint("alicuota_aplicada >= 0", name="ck_costo_informado__alicuota"),
         CheckConstraint("costo_base >= 0", name="ck_costo_informado__costo_base"),
+        CheckConstraint(
+            "computa_credito_fiscal OR NOT incluye_iva", name="ck_costo_informado__credito_fiscal"
+        ),
         Index(
             "ix_costo_informado__producto_vigencia",
             "organizacion_id",
@@ -117,6 +120,7 @@ class CostoInformado(Base):
     presentacion_id: Mapped[UUID] = mapped_column(nullable=False)
     valor: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     incluye_iva: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    computa_credito_fiscal: Mapped[bool] = mapped_column(Boolean, nullable=False)
     bonificacion: Mapped[Decimal] = mapped_column(
         Numeric(9, 6), nullable=False, server_default=text("0")
     )
@@ -222,6 +226,9 @@ class CompraLinea(Base):
         CheckConstraint("alicuota_aplicada >= 0", name="ck_compra_linea__alicuota"),
         CheckConstraint("costo_base > 0", name="ck_compra_linea__costo_base"),
         CheckConstraint("importe_neto >= 0", name="ck_compra_linea__importe_neto"),
+        CheckConstraint(
+            "computa_credito_fiscal OR NOT incluye_iva", name="ck_compra_linea__credito_fiscal"
+        ),
         Index("ix_compra_linea__presentacion", "organizacion_id", "presentacion_id"),
     )
 
@@ -236,6 +243,7 @@ class CompraLinea(Base):
     cantidad_base: Mapped[int] = mapped_column(Integer, nullable=False)
     valor_presentacion: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     incluye_iva: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    computa_credito_fiscal: Mapped[bool] = mapped_column(Boolean, nullable=False)
     bonificacion: Mapped[Decimal] = mapped_column(Numeric(9, 6), nullable=False)
     alicuota_aplicada: Mapped[Decimal] = mapped_column(Numeric(9, 6), nullable=False)
     costo_base: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)

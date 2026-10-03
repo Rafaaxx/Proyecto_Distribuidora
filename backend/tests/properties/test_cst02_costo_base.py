@@ -48,6 +48,7 @@ _UNIDADES = st.integers(min_value=1, max_value=100_000)
 
 @given(
     valor=_VALORES,
+    computa_credito_fiscal=st.booleans(),
     incluye_iva=st.booleans(),
     alicuota=_ALICUOTAS,
     bonificacion=_BONIFICACIONES,
@@ -55,13 +56,17 @@ _UNIDADES = st.integers(min_value=1, max_value=100_000)
 )
 def test_cst02_costo_base_no_negativo_y_monotono_en_valor(
     valor: Decimal,
+    computa_credito_fiscal: bool,
     incluye_iva: bool,
     alicuota: Decimal,
     bonificacion: Decimal,
     unidades: int,
 ) -> None:
+    # CST-06: `incluye_iva` solo es posible si la organización computa crédito fiscal.
+    incluye_iva = incluye_iva and computa_credito_fiscal
     resultado = calcular_costo_base(
         valor=valor,
+        computa_credito_fiscal=computa_credito_fiscal,
         incluye_iva=incluye_iva,
         alicuota=alicuota,
         bonificacion=bonificacion,
@@ -75,6 +80,7 @@ def test_cst02_costo_base_no_negativo_y_monotono_en_valor(
     valor_mayor = valor + Decimal("100.00")
     resultado_con_valor_mayor = calcular_costo_base(
         valor=valor_mayor,
+        computa_credito_fiscal=computa_credito_fiscal,
         incluye_iva=incluye_iva,
         alicuota=alicuota,
         bonificacion=bonificacion,

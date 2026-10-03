@@ -75,9 +75,10 @@ La columna **Etapa** indica cuándo se implementa la regla. Las reglas marcadas 
 | --- | --- | --- | --- |
 | Moneda | Código ISO | ARS | 1 |
 | Zona horaria | IANA | America/Argentina/Mendoza | 1 |
-| Modo impositivo | A / B / C | A | 1 (B y C: 4) |
+| Condición frente al IVA | RESPONSABLE_INSCRIPTO / MONOTRIBUTO / EXENTO | MONOTRIBUTO (ADR-045) | 1 |
+| Modo impositivo | A / B / C (solo A si la condición no es RESPONSABLE_INSCRIPTO) | A | 1 (B y C: 4) |
 | Alícuotas de IVA disponibles | Lista | 21%, 10,5%, 0% | 1 |
-| Modalidad de IVA por defecto al facturar | CLIENTE / ABSORBIDO | A definir al configurar | Facturación |
+| Modalidad de IVA por defecto al facturar | CLIENTE / ABSORBIDO (solo si la condición es RESPONSABLE_INSCRIPTO; sin definir en otro caso) | No aplica (monotributo) | Facturación |
 | Lista de precios por defecto | Lista | General | 1 |
 | Política de crédito por defecto | ADVERTIR / AUTORIZAR / BLOQUEAR | AUTORIZAR | 1 |
 | Tolerancia offline de crédito | Importe o porcentaje del límite | A definir al configurar | 1 |
@@ -119,9 +120,10 @@ La columna **Etapa** indica cuándo se implementa la regla. Las reglas marcadas 
 | ID | Regla | Etapa |
 | --- | --- | --- |
 | CST-01 | Un costo informado registra proveedor, producto, presentación, valor, si incluye IVA, bonificación opcional (porcentaje), vigencia desde y observación. | 1 |
-| CST-02 | El costo base derivado se calcula como `valor × (1 − bonificación) / (1 + alícuota si incluye IVA) / unidades de la presentación`, redondeado a 6 decimales solo al final. | 1 |
+| CST-02 | El costo base derivado se calcula como `valor × (1 − bonificación) / (1 + alícuota si incluye IVA y la organización computa crédito fiscal) / unidades de la presentación`, redondeado a 6 decimales solo al final. Si la organización no computa crédito fiscal (CST-06), el valor es el pagado y el IVA es parte del costo: no se divide por `(1 + alícuota)`. | 1 |
 | CST-03 | Los costos informados no se sobrescriben. El vigente para una fecha es el de mayor vigencia desde que no supere esa fecha. | 1 |
 | CST-04 | El costo informado se usa para calcular precios. No se usa para costear ventas. | 1 |
+| CST-06 | Solo un responsable inscripto computa crédito fiscal de IVA en compras: la regla *computa crédito fiscal* es verdadera para `RESPONSABLE_INSCRIPTO` y falsa para `MONOTRIBUTO` y `EXENTO`. Toda parte del sistema que necesite saber si el IVA de una compra es costo usa esta regla, no la condición. La regla se congela en cada costo informado y en cada línea de compra (`computa_credito_fiscal`): cambiar la condición rige solo para lo que se registre después y nunca recalcula lo registrado. En una organización que no computa crédito fiscal, `incluye_iva = true` se rechaza (`INCLUYE_IVA_NO_APLICA`) y el modo impositivo es `A` con la modalidad de IVA sin definir (ADR-045). | 1 |
 | CST-05 | Puede cargarse un costo por producto o varios de un proveedor en una sola operación. La importación **inicial** de costos desde una planilla es de la etapa 1 (change 10, por `informar_costos`); la importación masiva **recurrente** es de la etapa 2. | 1 (importación inicial; masiva recurrente: 2) |
 
 Ejemplos de CST-02:
@@ -132,6 +134,8 @@ Ejemplos de CST-02:
 | Botella a $1.000 | No | — | $1.000,000000 |
 | Caja x12 a $18.000 | Sí (21%) | — | 18.000 / 1,21 / 12 = $1.239,669421 |
 | Caja x12 a $18.000 | No | 10% | 18.000 × 0,9 / 12 = $1.350,000000 |
+| Caja x12 a $21.780 (organización monotributista: el IVA es costo) | No aplica | — | 21.780 / 12 = $1.815,000000 |
+| Caja x12 a $21.780 (organización monotributista) | No aplica | 10% | 21.780 × 0,9 / 12 = $1.633,500000 |
 
 ### 6.2 Costo promedio
 
@@ -157,8 +161,8 @@ Ejemplo de CST-11:
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| CMP-01 | Una compra registra proveedor, fecha, ubicación de destino, condición (contado o crédito) y al menos una línea. Cada línea indica producto, presentación de compra, cantidad, valor por presentación, si incluye IVA y bonificación opcional. La compra guarda además el total de factura informado (CMP-03) y, opcionalmente, un número de comprobante del proveedor (informativo, buscable, sin unicidad) y una observación. Solo se admiten productos cuyo proveedor es el de la compra; la cantidad tiene hasta 3 decimales y `cantidad × unidades de la presentación` debe ser entera; hasta 200 líneas; una compra sin líneas se rechaza (INV-07). La fecha es la del comprobante y no puede ser posterior a hoy; los movimientos usan el momento en que se registra. La ubicación de destino es cualquier ubicación activa (ADR-043). | 1 |
-| CMP-02 | Cada línea deriva cantidad base y costo base neto con la fórmula de CST-02. El total neto de la compra es la suma de `cantidad base × costo base` de sus líneas, redondeada a 2 decimales por línea. El total de factura sugerido es el total neto más el IVA de cada línea (alícuota del producto); el usuario puede corregirlo. | 1 |
+| CMP-01 | Una compra registra proveedor, fecha, ubicación de destino, condición (contado o crédito) y al menos una línea. Cada línea indica producto, presentación de compra, cantidad, valor pagado por presentación, si incluye IVA (solo si la organización computa crédito fiscal, CST-06) y bonificación opcional. La compra guarda además el total de factura informado (CMP-03) y, opcionalmente, un número de comprobante del proveedor (informativo, buscable, sin unicidad) y una observación. Solo se admiten productos cuyo proveedor es el de la compra; la cantidad tiene hasta 3 decimales y `cantidad × unidades de la presentación` debe ser entera; hasta 200 líneas; una compra sin líneas se rechaza (INV-07). La fecha es la del comprobante y no puede ser posterior a hoy; los movimientos usan el momento en que se registra. La ubicación de destino es cualquier ubicación activa (ADR-043). | 1 |
+| CMP-02 | Cada línea deriva cantidad base y costo base neto con la fórmula de CST-02. El total neto de la compra es la suma de `cantidad base × costo base` de sus líneas, redondeada a 2 decimales por línea. El total de factura sugerido es el total neto más el IVA de cada línea (alícuota del producto) si la organización computa crédito fiscal, y el total neto a secas si no la computa (el valor cargado ya es el pagado, CST-06); el usuario puede corregirlo. | 1 |
 | CMP-03 | Confirmar una compra, en una sola transacción: ingresa stock en la ubicación de destino, recalcula el costo promedio de cada producto, registra la compra en la cuenta corriente del proveedor **por el total de factura informado** (el stock y el promedio usan el neto), registra el pago si es de contado y audita. El pago de contado es por el total de factura, con uno o más medios activos que suman ese importe (INV-08) y la referencia que el medio exija; su fecha es la de la compra. Una compra a crédito no lleva medios (ADR-043). | 1 |
 | CMP-04 | Si el costo base de una línea difiere del costo informado vigente, el sistema ofrece registrarlo como nuevo costo informado. Nunca lo registra automáticamente. | 1 |
 | CMP-05 | Una compra confirmada solo se corrige por anulación total, con permiso y motivo. La anulación egresa el stock ingresado, valorizado al costo de cada línea, y revierte la cuenta corriente del proveedor. En una compra de contado se indica si el proveedor devuelve el pago: con devolución el pago se anula y el saldo vuelve a como estaba; sin devolución el pago se mantiene y queda saldo a favor nuestro. Se puede anular aunque el proveedor, el producto o la presentación se hayan desactivado (ADR-043, ADR-044). | 1 |
@@ -414,6 +418,8 @@ Ejemplo de DSC-03 con regla "cajas equivalentes ≥ 20 → 5%": 19 cajas + 5 uni
 | AUD-03 | La auditoría es de solo agregado: no se modifica ni se elimina. | 1 |
 
 ## 16. Facturación (módulo independiente)
+
+> **Alcance (ADR-045):** ADR-009 y las reglas FAC-02, FAC-03, FAC-04 y FAC-08 (modalidad de IVA CLIENTE/ABSORBIDO, IVA por alícuota) solo se aplican a organizaciones responsables inscriptas. Un monotributista emite Factura C, sin IVA discriminado ni modalidad de IVA.
 
 | ID | Regla | Etapa |
 | --- | --- | --- |

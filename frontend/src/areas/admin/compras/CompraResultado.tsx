@@ -22,12 +22,14 @@ import { formatearCosto, formatearImporte, parsearImporteDesdeApi } from '../../
 
 interface Props {
   resultado: CompraConfirmarResultado
+  /** CST-06: la regla con la que se registró la compra (el costo a informar la respeta). */
+  computaCreditoFiscal: boolean
   /** El formulario tal como se envió: de ahí salen presentación, valor, IVA y bonificación. */
   formulario: FormularioDeCompra
   nombresDeProductos: Readonly<Record<string, string>>
 }
 
-export function CompraResultado({ resultado, formulario, nombresDeProductos }: Props) {
+export function CompraResultado({ resultado, computaCreditoFiscal, formulario, nombresDeProductos }: Props) {
   return (
     <main className="flex flex-col gap-4">
       <PageHeader titulo="Compra registrada" />
@@ -53,6 +55,7 @@ export function CompraResultado({ resultado, formulario, nombresDeProductos }: P
                 key={diferencia.linea}
                 diferencia={diferencia}
                 formulario={formulario}
+                computaCreditoFiscal={computaCreditoFiscal}
                 nombre={nombresDeProductos[diferencia.producto_id] ?? 'Producto'}
               />
             ))}
@@ -78,16 +81,18 @@ export function CompraResultado({ resultado, formulario, nombresDeProductos }: P
 function OfertaDeCosto({
   diferencia,
   formulario,
+  computaCreditoFiscal,
   nombre,
 }: {
   diferencia: DiferenciaDeCosto
   formulario: FormularioDeCompra
+  computaCreditoFiscal: boolean
   nombre: string
 }) {
   const informar = useInformarCostos()
   const [registrado, setRegistrado] = useState(false)
   const linea = formulario.lineas[diferencia.linea]
-  const costo = linea ? construirCostoInformar(linea, formulario.fecha) : null
+  const costo = linea ? construirCostoInformar(linea, formulario.fecha, computaCreditoFiscal) : null
   const operationId = useOperationIdPorContenido(costo)
 
   const alRegistrar = async () => {

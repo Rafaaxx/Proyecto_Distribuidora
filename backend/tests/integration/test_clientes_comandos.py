@@ -91,6 +91,7 @@ def _crear_organizacion(sesion: Session, *, con_configuracion: bool = True) -> O
         sesion.add(
             ConfiguracionOrganizacion(
                 organizacion_id=organizacion.id,
+                condicion_iva="RESPONSABLE_INSCRIPTO",
                 modo_impositivo="B",
                 lista_precio_default_id=None,
                 politica_credito_default="ADVERTIR",

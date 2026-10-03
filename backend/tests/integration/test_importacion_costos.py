@@ -380,3 +380,102 @@ def test_una_presentacion_sin_costo_si_puede_cambiar_de_unidades(
     )
 
     assert cambiada.unidades_base == 24
+
+
+# --- 11b: la regla de IVA de la organización (CST-06, ADR-040, TR-10, D6) -------------------
+
+
+@pytest.mark.parametrize("texto", ["", "N"])
+def test_cst06_un_monotributista_importa_el_valor_pagado_con_la_columna_vacia_o_n(
+    entorno: EntornoDeImportacion, mundo: Mundo, texto: str
+) -> None:
+    entorno.fijar_condicion_iva("MONOTRIBUTO")
+
+    importar(entorno, fila(2, valor="21780", incluye_iva=texto))
+
+    [costo] = entorno.costos()
+    assert str(costo.costo_base) == "1815.000000", "21780 / 12, sin dividir por 1,21"
+    assert costo.computa_credito_fiscal is False
+    assert costo.incluye_iva is False
+    assert str(costo.alicuota_aplicada) == "0.210000"
+
+
+def test_cst06_un_monotributista_con_bonificacion_descuenta_solo_la_bonificacion(
+    entorno: EntornoDeImportacion, mundo: Mundo
+) -> None:
+    entorno.fijar_condicion_iva("MONOTRIBUTO")
+
+    importar(entorno, fila(2, valor="21780", incluye_iva="", bonificacion="10"))
+
+    [costo] = entorno.costos()
+    assert str(costo.costo_base) == "1633.500000"
+
+
+def test_cst06_una_s_en_la_fila_7_de_40_rechaza_toda_la_planilla_adr040(
+    entorno: EntornoDeImportacion, mundo: Mundo
+) -> None:
+    """ADR-040: todo o nada. 40 filas válidas salvo la 7, con `S`."""
+    entorno.fijar_condicion_iva("MONOTRIBUTO")
+    filas = [
+        fila(
+            numero,
+            valor="21780",
+            incluye_iva="S" if numero == 7 else "",
+            vigencia_desde=date.fromordinal(date(2026, 1, 1).toordinal() + numero).isoformat(),
+        )
+        for numero in range(2, 42)
+    ]
+
+    errores = fallar(entorno, *filas)
+
+    assert [(numero, codigo) for numero, _columna, codigo in errores] == [
+        (7, "INCLUYE_IVA_NO_APLICA")
+    ]
+    assert entorno.costos() == []
+    assert entorno.importaciones() == []
+
+
+def test_cst06_un_exento_tambien_rechaza_la_s(entorno: EntornoDeImportacion, mundo: Mundo) -> None:
+    entorno.fijar_condicion_iva("EXENTO")
+
+    errores = fallar(entorno, fila(2, valor="21780", incluye_iva="S"))
+
+    assert [(numero, codigo) for numero, _columna, codigo in errores] == [
+        (2, "INCLUYE_IVA_NO_APLICA")
+    ]
+    assert entorno.costos() == []
+
+
+def test_cst06_un_inscripto_con_la_columna_vacia_da_error_de_valor(
+    entorno: EntornoDeImportacion, mundo: Mundo
+) -> None:
+    """Sin cambios para un responsable inscripto (CST-01): la columna sigue siendo
+    obligatoria, `S` o `N`."""
+    errores = fallar(entorno, fila(2, incluye_iva=""))
+
+    assert errores == [(2, "incluye_iva", "VALOR_OBLIGATORIO")]
+    assert entorno.costos() == []
+
+
+def test_cst06_un_inscripto_con_s_sigue_dando_1239_669421(
+    entorno: EntornoDeImportacion, mundo: Mundo
+) -> None:
+    importar(entorno, fila(2, incluye_iva="S"))
+
+    [costo] = entorno.costos()
+    assert str(costo.costo_base) == "1239.669421"
+    assert costo.computa_credito_fiscal is True
+
+
+def test_cst06_cambiar_la_condicion_no_toca_los_costos_importados(
+    entorno: EntornoDeImportacion, mundo: Mundo
+) -> None:
+    """TR-06: el costo importado como inscripto sigue igual después de pasar a monotributo."""
+    importar(entorno, fila(2, incluye_iva="S"))
+    entorno.fijar_condicion_iva("MONOTRIBUTO")
+
+    importar(entorno, fila(3, valor="21780", incluye_iva="", vigencia_desde="2026-11-01"))
+
+    anterior, nuevo = sorted(entorno.costos(), key=lambda costo: costo.vigencia_desde)
+    assert (str(anterior.costo_base), anterior.computa_credito_fiscal) == ("1239.669421", True)
+    assert (str(nuevo.costo_base), nuevo.computa_credito_fiscal) == ("1815.000000", False)

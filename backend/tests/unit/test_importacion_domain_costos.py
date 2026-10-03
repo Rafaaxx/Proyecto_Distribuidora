@@ -81,7 +81,7 @@ def test_la_vigencia_admite_las_dos_formas_de_fecha(texto: str) -> None:
         ({"valor": "18.000"}, "valor", "NUMERO_INVALIDO"),
         ({"valor": ""}, "valor", "NUMERO_INVALIDO"),
         ({"incluye_iva": "tal vez"}, "incluye_iva", "VALOR_INVALIDO"),
-        ({"incluye_iva": ""}, "incluye_iva", "VALOR_INVALIDO"),
+        ({"incluye_iva": ""}, "incluye_iva", "VALOR_OBLIGATORIO"),
         ({"bonificacion": "diez"}, "bonificacion", "NUMERO_INVALIDO"),
         ({"bonificacion": "10.5"}, "bonificacion", "NUMERO_INVALIDO"),
         ({"vigencia_desde": "mañana"}, "vigencia_desde", "FECHA_INVALIDA"),
@@ -116,3 +116,42 @@ def test_cambia_la_clave_si_cambia_la_vigencia_o_la_presentacion() -> None:
 def test_sin_fecha_legible_no_hay_clave() -> None:
     """Su error de fecha lo informa la lectura de la fila."""
     assert claves_de_costo(fila(vigencia_desde="mañana")) == []
+
+
+# --- 11b: organización sin crédito fiscal (CST-06, D6) ---------------------------------------
+
+
+@pytest.mark.parametrize("texto", ["", "  ", "N", "no"])
+def test_cst06_sin_credito_fiscal_la_columna_vacia_o_n_es_falso(texto: str) -> None:
+    datos = datos_de_costo(fila(incluye_iva=texto), computa_credito_fiscal=False)
+
+    assert datos.incluye_iva is False
+
+
+def test_cst06_sin_credito_fiscal_la_s_se_lee_verdadera_y_la_rechaza_el_servicio() -> None:
+    """El dominio de importación solo lee la celda: rechazar `S` es de `proveedores` (D4,
+    `INCLUYE_IVA_NO_APLICA`), la misma regla que el alta individual (TR-10)."""
+    datos = datos_de_costo(fila(incluye_iva="S"), computa_credito_fiscal=False)
+
+    assert datos.incluye_iva is True
+
+
+def test_cst06_sin_credito_fiscal_una_celda_ilegible_sigue_siendo_invalida() -> None:
+    with pytest.raises(ErrorDeValor) as excinfo:
+        datos_de_costo(fila(incluye_iva="tal vez"), computa_credito_fiscal=False)
+
+    assert (excinfo.value.columna, excinfo.value.codigo) == ("incluye_iva", "VALOR_INVALIDO")
+
+
+def test_cst06_con_credito_fiscal_la_columna_vacia_es_valor_obligatorio() -> None:
+    with pytest.raises(ErrorDeValor) as excinfo:
+        datos_de_costo(fila(incluye_iva=""), computa_credito_fiscal=True)
+
+    assert (excinfo.value.columna, excinfo.value.codigo) == ("incluye_iva", "VALOR_OBLIGATORIO")
+
+
+def test_cst06_el_valor_es_el_pagado_con_importe_exacto() -> None:
+    datos = datos_de_costo(fila(valor="21780", incluye_iva=""), computa_credito_fiscal=False)
+
+    assert datos.valor == Decimal("21780")
+    assert isinstance(datos.valor, Decimal)

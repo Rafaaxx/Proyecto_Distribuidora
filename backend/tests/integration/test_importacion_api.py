@@ -47,6 +47,7 @@ ADMIN = frozenset({"IMPORTAR_DATOS"})
 SIN_PERMISO = frozenset({"GESTIONAR_PROVEEDORES", "ADMIN_CONFIGURACION"})
 
 ENCABEZADO = "nombre,cuit,contacto,telefono,email"
+ENCABEZADO_COSTOS_SIN_IVA = "producto_codigo,presentacion,valor,vigencia_desde"
 
 
 @pytest.fixture(autouse=True)
@@ -414,6 +415,55 @@ class TestImportar:
         assert cuerpo["codigo"] == "COLUMNAS_INVALIDAS"
         assert cuerpo["columnas_faltantes"] == ["nombre"]
         assert "nombre" in cuerpo["title"]
+
+    def test_cst06_una_planilla_de_costos_sin_incluye_iva_se_rechaza_para_un_inscripto(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """Sin cambios para un responsable inscripto: la columna es obligatoria (D6)."""
+        entorno = Entorno(sesion)
+        headers = entorno.confirmar_y_entrar(cliente)
+
+        respuesta = cliente.post(
+            f"{URL}/COSTOS",
+            files=_archivo(
+                _csv("CB-473,Caja x12,21780,2026-10-01", encabezado=ENCABEZADO_COSTOS_SIN_IVA)
+            ),
+            headers=_con_op(headers),
+        )
+
+        assert respuesta.status_code == 422
+        cuerpo = respuesta.json()
+        assert cuerpo["codigo"] == "COLUMNAS_INVALIDAS"
+        assert cuerpo["columnas_faltantes"] == ["incluye_iva"]
+
+    def test_cst06_una_planilla_de_costos_sin_incluye_iva_se_lee_para_un_monotributista(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """La columna puede faltar (D6): el archivo pasa el encabezado y cada fila se procesa;
+        acá el producto no existe, así que el error es el de la fila y no el de columnas."""
+        entorno = Entorno(sesion)
+        sesion.execute(
+            text(
+                "UPDATE configuracion_organizacion SET condicion_iva = 'MONOTRIBUTO', "
+                "modo_impositivo = 'A', modalidad_iva_default = NULL "
+                "WHERE organizacion_id = :o"
+            ),
+            {"o": entorno.org},
+        )
+        headers = entorno.confirmar_y_entrar(cliente)
+
+        respuesta = cliente.post(
+            f"{URL}/COSTOS",
+            files=_archivo(
+                _csv("CB-473,Caja x12,21780,2026-10-01", encabezado=ENCABEZADO_COSTOS_SIN_IVA)
+            ),
+            headers=_con_op(headers),
+        )
+
+        assert respuesta.status_code == 422
+        cuerpo = respuesta.json()
+        assert cuerpo["codigo"] == "IMPORTACION_CON_ERRORES"
+        assert [e["codigo"] for e in cuerpo["errores"]] == ["REFERENCIA_NO_ENCONTRADA"]
 
     def test_una_columna_de_organizacion_se_rechaza(
         self, cliente: TestClient, sesion: Session

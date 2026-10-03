@@ -168,6 +168,50 @@ describe('ImportacionScreen (tareas 8.1 y 8.2; spec administracion-de-importacio
     })
   })
 
+  describe('ayuda de la plantilla (change 11b, CST-06)', () => {
+    it('Costos explica que el valor es el pagado y que incluye_iva es solo de un inscripto', async () => {
+      const usuario = userEvent.setup()
+      renderPantalla()
+
+      await elegirTipo(usuario, 'COSTOS')
+
+      const ayuda = await screen.findByRole('note')
+      expect(ayuda).toHaveTextContent('valor pagado')
+      expect(ayuda).toHaveTextContent('incluye_iva')
+      expect(ayuda).toHaveTextContent('monotributista')
+    })
+
+    it('Stock inicial explica que el costo es por unidad base, tal como se pagó', async () => {
+      const usuario = userEvent.setup()
+      renderPantalla()
+
+      await elegirTipo(usuario, 'STOCK_INICIAL')
+
+      const ayuda = await screen.findByRole('note')
+      expect(ayuda).toHaveTextContent('por unidad base')
+      expect(ayuda).toHaveTextContent('tal como lo pagaste')
+    })
+
+    it('un tipo sin ayuda no muestra ninguna nota', async () => {
+      const usuario = userEvent.setup()
+      renderPantalla()
+
+      await elegirTipo(usuario, 'PROVEEDORES')
+
+      expect(screen.queryByRole('note')).not.toBeInTheDocument()
+    })
+
+    it('la ayuda cambia al cambiar de tipo', async () => {
+      const usuario = userEvent.setup()
+      renderPantalla()
+
+      await elegirTipo(usuario, 'COSTOS')
+      await elegirTipo(usuario, 'STOCK_INICIAL')
+
+      expect(await screen.findByRole('note')).not.toHaveTextContent('incluye_iva')
+    })
+  })
+
   describe('importación exitosa', () => {
     it('sube el archivo por multipart con su Operation-Id y muestra "2 filas importadas"', async () => {
       const usuario = userEvent.setup()

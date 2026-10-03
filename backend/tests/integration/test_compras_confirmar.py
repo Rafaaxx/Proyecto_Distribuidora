@@ -35,6 +35,7 @@ from app.core.errors import DomainError, PermisoRequeridoError
 from app.modules.catalogo import service as catalogo_service
 from app.modules.catalogo.domain.errores import UnidadesCongeladasError
 from app.modules.cuentas_corrientes import service as cuentas_service
+from app.modules.proveedores import queries as proveedores_queries
 from app.modules.proveedores import service as proveedores_service
 from app.modules.proveedores.domain.lote import CostoDelLote
 from app.modules.proveedores.models import CostoInformado
@@ -740,3 +741,110 @@ def test_el_error_informado_es_el_de_la_primera_linea_con_problema_sin_depender_
 
     assert error.value.codigo == "PROVEEDOR_NO_CORRESPONDE"
     assert error.value.extension == {"linea": 0}
+
+
+# --- 11b: condición frente al IVA de la organización (CST-06, D3, D4, D5) --------------------
+
+
+def _contenido_de_monotributista(entorno: Entorno, **cambios: object) -> dict[str, Any]:
+    """El criterio 2 con los valores de la factura (lo pagado, IVA incluido): 10 cajas de
+    Vino A x6 a 7.260 y 60 botellas de Cerveza B a 1.331."""
+    lineas = [entorno.linea("vino", valor="7260.00"), entorno.linea("cerveza", valor="1331.00")]
+    return entorno.contenido(**{"lineas": lineas, **cambios})
+
+
+def test_cst06_compra_del_criterio_2_de_un_monotributista(entorno: Entorno) -> None:
+    """D5: el total neto ya incluye el IVA pagado; la deuda es la misma que la de un
+    inscripto y los promedios son los del valor pagado."""
+    entorno.fijar_condicion_iva("MONOTRIBUTO")
+
+    entorno.enviar(_contenido_de_monotributista(entorno, total_factura="152460.00"))
+
+    (compra,) = entorno.compras()
+    assert compra.total_neto == Decimal("152460.00")
+    assert compra.total_factura == Decimal("152460.00")
+    assert entorno.saldo_de_cuenta() == Decimal("152460.00")
+    assert entorno.promedio(entorno.vino_id) == Decimal("1210.000000")
+    assert entorno.promedio(entorno.cerveza_id) == Decimal("1331.000000")
+    vino, cerveza = entorno.lineas()
+    assert (vino.costo_base, vino.importe_neto) == (Decimal("1210.000000"), Decimal("72600.00"))
+    assert (cerveza.costo_base, cerveza.importe_neto) == (
+        Decimal("1331.000000"),
+        Decimal("79860.00"),
+    )
+    assert vino.computa_credito_fiscal is False
+    assert cerveza.computa_credito_fiscal is False
+    assert vino.incluye_iva is False
+
+
+def test_cst06_las_lineas_de_un_inscripto_congelan_credito_fiscal_verdadero(
+    entorno: Entorno,
+) -> None:
+    entorno.enviar()
+
+    assert [linea.computa_credito_fiscal for linea in entorno.lineas()] == [True, True]
+
+
+def test_d4_una_linea_con_incluye_iva_en_una_organizacion_no_inscripta_se_rechaza(
+    entorno: Entorno,
+) -> None:
+    entorno.fijar_condicion_iva("MONOTRIBUTO")
+    lineas = [
+        entorno.linea("vino", valor="7260.00"),
+        entorno.linea("cerveza", valor="1331.00", incluye_iva=True),
+    ]
+
+    with pytest.raises(DomainError) as error:
+        entorno.enviar(_contenido_de_monotributista(entorno, lineas=lineas))
+
+    assert error.value.codigo == "INCLUYE_IVA_NO_APLICA"
+    assert error.value.status_http == 422
+    assert error.value.extension == {"linea": 1}
+    entorno.sin_efectos()
+
+
+def test_d3_el_detalle_expone_si_la_linea_computo_credito_fiscal(entorno: Entorno) -> None:
+    entorno.enviar()
+    entorno.fijar_condicion_iva("MONOTRIBUTO")
+    entorno.enviar(_contenido_de_monotributista(entorno, total_factura="152460.00"))
+
+    inscripta, no_inscripta = sorted(entorno.compras(), key=lambda compra: compra.total_neto)
+    detalle_inscripta = proveedores_queries.obtener_detalle_de_compra(
+        entorno.org, inscripta.id, entorno.sesion
+    )
+    detalle_no_inscripta = proveedores_queries.obtener_detalle_de_compra(
+        entorno.org, no_inscripta.id, entorno.sesion
+    )
+
+    assert [linea.computa_credito_fiscal for linea in detalle_inscripta.lineas] == [True, True]
+    assert [linea.computa_credito_fiscal for linea in detalle_no_inscripta.lineas] == [False, False]
+
+
+def test_tr06_cambiar_la_condicion_no_toca_la_compra_y_su_anulacion_egresa_al_mismo_costo(
+    db_session: Session,
+) -> None:
+    entorno = Entorno(db_session, permisos=frozenset({"REGISTRAR_COMPRA", "ANULAR_COMPRA"}))
+    entorno.fijar_condicion_iva("MONOTRIBUTO")
+    entorno.enviar(_contenido_de_monotributista(entorno, total_factura="152460.00"))
+    (compra,) = entorno.compras()
+
+    entorno.fijar_condicion_iva("RESPONSABLE_INSCRIPTO")
+    vino, _ = entorno.lineas()
+    assert (vino.costo_base, vino.computa_credito_fiscal) == (Decimal("1210.000000"), False)
+
+    entorno.anular(compra.id)
+
+    anulacion = [m for m in entorno.movimientos_de_stock() if m.tipo != "COMPRA"]
+    assert {m.costo_unitario for m in anulacion} == {Decimal("1210.000000"), Decimal("1331.000000")}
+    vino, _ = entorno.lineas()
+    assert (vino.costo_base, vino.computa_credito_fiscal) == (Decimal("1210.000000"), False)
+
+
+def test_d3_confirmar_una_compra_lee_la_condicion_con_bloqueo_compartido(
+    entorno: Entorno,
+) -> None:
+    assert entorno.toma_lock_de_configuracion() is False
+
+    entorno.enviar()
+
+    assert entorno.toma_lock_de_configuracion() is True

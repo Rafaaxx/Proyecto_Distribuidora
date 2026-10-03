@@ -125,16 +125,23 @@ _COLUMNAS_POR_TIPO: dict[str, tuple[Columna, ...]] = {
 }
 
 
-def columnas_de(tipo: str) -> tuple[Columna, ...]:
+def columnas_de(tipo: str, *, computa_credito_fiscal: bool = True) -> tuple[Columna, ...]:
     """Columnas de la plantilla de `tipo`, en el orden de la plantilla.
     `TIPO_IMPORTACION_INVALIDO` si el tipo es desconocido o todavía no tiene
-    importador (`PRECIOS`, `design.md` D9)."""
+    importador (`PRECIOS`, `design.md` D9).
+
+    11b, D6 (CST-06): en una organización que no computa crédito fiscal, la columna
+    `incluye_iva` de `COSTOS` deja de ser obligatoria en el encabezado: el valor es el
+    pagado y no hay IVA que informar. La plantilla descargable conserva todas las columnas."""
     try:
-        return _COLUMNAS_POR_TIPO[tipo]
+        columnas = _COLUMNAS_POR_TIPO[tipo]
     except KeyError:
         raise TipoImportacionInvalidoError(
             f"El tipo de importación {tipo!r} no es válido o todavía no está disponible."
         ) from None
+    if tipo == "COSTOS" and not computa_credito_fiscal:
+        return tuple(Columna(c.nombre, False) if c.nombre == "incluye_iva" else c for c in columnas)
+    return columnas
 
 
 def encabezado_de_plantilla(tipo: str) -> list[str]:
@@ -164,8 +171,8 @@ def _nombres_del_encabezado(celdas: Sequence[str]) -> list[str]:
     return nombres
 
 
-def _validar_columnas(tipo: str, nombres: list[str]) -> None:
-    definidas = columnas_de(tipo)
+def _validar_columnas(tipo: str, nombres: list[str], *, computa_credito_fiscal: bool) -> None:
+    definidas = columnas_de(tipo, computa_credito_fiscal=computa_credito_fiscal)
     conocidas = {columna.nombre for columna in definidas}
 
     repetidas: list[str] = []
@@ -192,7 +199,9 @@ def _validar_columnas(tipo: str, nombres: list[str]) -> None:
     )
 
 
-def armar_planilla(tipo: str, filas: Sequence[FilaCruda]) -> list[FilaPlanilla]:
+def armar_planilla(
+    tipo: str, filas: Sequence[FilaCruda], *, computa_credito_fiscal: bool = True
+) -> list[FilaPlanilla]:
     """Valida el encabezado y arma las filas de datos de `tipo` (`design.md` D11).
 
     La fila 1 es el encabezado. Una columna obligatoria faltante, desconocida o
@@ -200,8 +209,12 @@ def armar_planilla(tipo: str, filas: Sequence[FilaCruda]) -> list[FilaPlanilla]:
     no importa. Las filas totalmente vacías se ignoran (y no cuentan para el
     límite). Una fila con celdas con datos más allá del encabezado rechaza el
     archivo (`ARCHIVO_INVALIDO`: no se pierden datos en silencio).
+
+    `computa_credito_fiscal` (11b, D6, CST-06) solo cambia la obligatoriedad de la columna
+    `incluye_iva` de `COSTOS` en el encabezado (`columnas_de`).
     """
-    columnas_definidas = columnas_de(tipo)  # valida el tipo antes de mirar el archivo
+    # valida el tipo antes de mirar el archivo
+    columnas_definidas = columnas_de(tipo, computa_credito_fiscal=computa_credito_fiscal)
     if not filas:
         raise ArchivoInvalidoError("El archivo está vacío.")
     numero_encabezado, celdas_encabezado = filas[0]
@@ -209,7 +222,7 @@ def armar_planilla(tipo: str, filas: Sequence[FilaCruda]) -> list[FilaPlanilla]:
         raise ArchivoInvalidoError("La primera fila del archivo debe ser el encabezado.")
 
     nombres = _nombres_del_encabezado(celdas_encabezado)
-    _validar_columnas(tipo, nombres)
+    _validar_columnas(tipo, nombres, computa_credito_fiscal=computa_credito_fiscal)
 
     resultado: list[FilaPlanilla] = []
     for numero, celdas in filas[1:]:

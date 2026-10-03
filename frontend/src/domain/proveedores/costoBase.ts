@@ -11,6 +11,9 @@
  *     costoPorPresentacion = valor * (1 - bonificacion) / (1 + alicuota si incluyeIva sino 1)
  *     costoBase = costoPorPresentacion / unidades
  *
+ * Solo un responsable inscripto computa crédito fiscal (CST-06, change 11b): para los
+ * demás el valor informado es el pagado, `incluyeIva` no existe y el IVA es costo.
+ *
  * El cociente se calcula con la instancia de `lib/money.ts`
  * (`precision: 50`, misma ampliación que `_PRECISION_INTERMEDIA` del
  * backend) para que la única cuantización sea la de `redondearCosto`
@@ -42,6 +45,17 @@ export class BonificacionInvalidaError extends Error {
   }
 }
 
+/** `incluyeIva = true` en una organización que no computa crédito fiscal (11b, D4, TR-10).
+ * Mismo código que `IncluyeIvaNoAplicaError` del backend (`INCLUYE_IVA_NO_APLICA`). */
+export class IncluyeIvaNoAplicaError extends Error {
+  readonly codigo = 'INCLUYE_IVA_NO_APLICA'
+
+  constructor(mensaje: string) {
+    super(mensaje)
+    this.name = 'IncluyeIvaNoAplicaError'
+  }
+}
+
 /**
  * Calcula el costo base por unidad base de una presentación informada
  * (CST-02).
@@ -53,6 +67,8 @@ export class BonificacionInvalidaError extends Error {
  *   exacta, `>= 0`).
  * - `bonificacion`: fracción en `[0, 1)`, cadena decimal exacta
  *   (`BonificacionInvalidaError` si no).
+ * - `computaCreditoFiscal`: la regla de CST-06 de la organización. Si es falso, el valor
+ *   es el pagado e `incluyeIva = true` lanza `IncluyeIvaNoAplicaError` (D4).
  * - `unidades`: unidades base de la presentación informada, entero seguro
  *   `>= 1` (una presentación ya validada por `catalogo`, CAT-02/INV-04 --
  *   acá es un invariante del llamador, no una entrada de usuario, así que
@@ -65,7 +81,13 @@ export function calcularCostoBase(
   alicuota: string,
   bonificacion: string,
   unidades: number,
+  computaCreditoFiscal: boolean,
 ): Importe {
+  if (incluyeIva && !computaCreditoFiscal) {
+    throw new IncluyeIvaNoAplicaError(
+      'La organización no computa crédito fiscal de IVA: el valor que se carga es el pagado, sin la opción de IVA incluido.',
+    )
+  }
   const valorDecimal = parsearImporteDesdeApi(valor)
   const alicuotaDecimal = parsearImporteDesdeApi(alicuota)
   const bonificacionDecimal = parsearImporteDesdeApi(bonificacion)

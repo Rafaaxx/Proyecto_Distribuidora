@@ -79,6 +79,36 @@ class Entorno:
         self.motivo_id = self.crear_motivo("ANULACION_COMPRA", "Error de carga")
         sesion.commit()
 
+    def fijar_condicion_iva(self, condicion: str) -> None:
+        """Pasa la organización a `condicion` por SQL (sin comando ni auditoría), dejando
+        el modo y la modalidad que la base exige para una organización no inscripta (D2)."""
+        self.sesion.execute(
+            text(
+                "UPDATE configuracion_organizacion SET condicion_iva = :c, "
+                "modo_impositivo = CASE WHEN :c = 'RESPONSABLE_INSCRIPTO' "
+                "THEN modo_impositivo ELSE 'A' END, "
+                "modalidad_iva_default = CASE WHEN :c = 'RESPONSABLE_INSCRIPTO' "
+                "THEN modalidad_iva_default ELSE NULL END "
+                "WHERE organizacion_id = :org"
+            ),
+            {"c": condicion, "org": self.org},
+        )
+        self.sesion.commit()
+
+    def toma_lock_de_configuracion(self) -> bool:
+        """Si esta transacción tiene un bloqueo `FOR SHARE`/`FOR UPDATE` (`RowShareLock`)
+        sobre `configuracion_organizacion`: una lectura sin bloqueo solo toma
+        `AccessShareLock`."""
+        return bool(
+            self.sesion.scalar(
+                text(
+                    "SELECT count(*) FROM pg_locks WHERE pid = pg_backend_pid() "
+                    "AND mode = 'RowShareLock' "
+                    "AND relation = 'configuracion_organizacion'::regclass"
+                )
+            )
+        )
+
     def crear_medio(
         self,
         nombre: str,

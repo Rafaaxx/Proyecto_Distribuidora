@@ -45,12 +45,13 @@ const DIFERENCIA = {
   costo_base_vigente: '1200.000000',
 }
 
-function renderResultado(rol: RolDePrueba, diferencias: unknown[]) {
+function renderResultado(rol: RolDePrueba, diferencias: unknown[], computaCreditoFiscal = true) {
   return render(
     <QueryClientProvider client={queryClientConYo(rol)}>
       <MemoryRouter>
         <CompraResultado
           resultado={resultado(diferencias) as never}
+          computaCreditoFiscal={computaCreditoFiscal}
           formulario={FORMULARIO}
           nombresDeProductos={NOMBRES}
         />
@@ -105,6 +106,19 @@ describe('CompraResultado (tarea 12.2, CMP-04, D7)', () => {
     })
     expect(await screen.findByText(/costo informado registrado/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /registrar como costo informado/i })).not.toBeInTheDocument()
+  })
+
+  it('sin crédito fiscal el costo informado desde la compra va con incluye_iva = false (CST-06)', async () => {
+    const usuario = userEvent.setup()
+    renderResultado('GES', [DIFERENCIA], false)
+
+    await usuario.click(screen.getByRole('button', { name: /registrar como costo informado/i }))
+
+    await waitFor(() => expect(llamadas(apiFetchMock, 'POST', '/costos')).toHaveLength(1))
+    const cuerpo = JSON.parse(String(llamadas(apiFetchMock, 'POST', '/costos')[0]?.init.body)) as {
+      costos: { incluye_iva: boolean }[]
+    }
+    expect(cuerpo.costos[0]?.incluye_iva).toBe(false)
   })
 
   it('sin hacer nada no se envía ningún costo', () => {

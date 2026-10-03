@@ -27,6 +27,7 @@ import { useConfirmarCompra, useMediosPago } from '../../../features/compras/hoo
 import { useOperationIdPorContenido } from '../../../features/compras/useOperationIdPorContenido'
 import { useDetallesDeProductos, useProductosDelProveedor } from '../../../features/catalogo/useListados'
 import { useAlicuotas } from '../../../features/configuracion/useAlicuotas'
+import { useConfiguracionFiscal } from '../../../features/configuracion/useConfiguracionFiscal'
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { useOpcionesDeProveedores } from '../../../features/proveedores/useListados'
 import { useUbicaciones } from '../../../features/stock/hooks'
@@ -38,6 +39,11 @@ import { CompraResultado } from './CompraResultado'
  * medios, cuerpo del comando) vive en `domain/compras/formularioCompra.ts`; este
  * componente solo la pinta. El `Operation-Id` se conserva mientras el contenido no cambia
  * (INV-06).
+ *
+ * 11b (CST-06): la regla de IVA sale de `GET /configuracion/fiscal`. Sin crédito fiscal
+ * (monotributo, exento) el valor de la línea es el pagado: no hay casilla "Incluye IVA" ni
+ * "IVA sugerido" y el IVA es costo. Mientras la condición no se conoce no se calcula ni se
+ * confirma.
  */
 
 const SIN_PERMISO = 'No tenés permiso para registrar compras.'
@@ -91,6 +97,7 @@ export function CompraFormScreen() {
 
 interface CompraEnviada {
   resultado: CompraConfirmarResultado
+  computaCreditoFiscal: boolean
   formulario: FormularioDeCompra
   nombresDeProductos: Record<string, string>
 }
@@ -115,10 +122,12 @@ function CompraFormulario() {
   const alicuotas = useAlicuotas()
   const mediosPago = useMediosPago()
   const confirmar = useConfirmarCompra()
+  const fiscal = useConfiguracionFiscal()
+  const computaCreditoFiscal = fiscal.data?.computa_credito_fiscal ?? null
 
   const listaDeAlicuotas = alicuotas.data?.pages.flatMap((pagina) => pagina.items) ?? []
   const contextos = lineas.map((linea, indice) => contextoDeLinea(detalles[indice]?.data, linea.presentacionId, listaDeAlicuotas))
-  const vistaPrevia = calcularVistaPrevia(lineas, contextos)
+  const vistaPrevia = calcularVistaPrevia(lineas, contextos, computaCreditoFiscal)
   const totalSugerido = vistaPrevia.totales?.totalFacturaSugerido.toFixed(2) ?? ''
   const totalFactura = totalManual ?? totalSugerido
   const medioDePago = (id: string): MedioPago | undefined => mediosPago.data?.items.find((m) => m.id === id)
@@ -129,14 +138,15 @@ function CompraFormulario() {
 
   const alEnviar = async (evento: React.SyntheticEvent) => {
     evento.preventDefault()
-    if (!habilitado) return
+    if (!habilitado || computaCreditoFiscal === null) return
     setErrorGeneral(null)
     setErroresDeLinea({})
     const enviado = getValues()
     try {
-      const resultado = await confirmar.mutateAsync({ ...construirSolicitudDeCompra(enviado, totalFactura), operationId })
+      const resultado = await confirmar.mutateAsync({ ...construirSolicitudDeCompra(enviado, totalFactura, computaCreditoFiscal), operationId })
       setEnviada({
         resultado,
+        computaCreditoFiscal,
         formulario: enviado,
         nombresDeProductos: Object.fromEntries(productos.map((p) => [p.id, p.nombre])),
       })
@@ -157,6 +167,7 @@ function CompraFormulario() {
     return (
       <CompraResultado
         resultado={enviada.resultado}
+        computaCreditoFiscal={enviada.computaCreditoFiscal}
         formulario={enviada.formulario}
         nombresDeProductos={enviada.nombresDeProductos}
       />
@@ -175,6 +186,7 @@ function CompraFormulario() {
       <PageHeader titulo="Nueva compra" />
       <form onSubmit={(e) => void alEnviar(e)} noValidate className="flex flex-col gap-4">
         {errorGeneral && <Alert>{errorGeneral}</Alert>}
+        {fiscal.isError && <Alert>No se pudo leer la condición frente al IVA de la organización. Recargá la pantalla.</Alert>}
 
         <Card className="flex flex-wrap items-end gap-3">
           <Campo id="compra-proveedor" etiqueta="Proveedor">
@@ -228,6 +240,7 @@ function CompraFormulario() {
             presentaciones={presentacionesDeCompra(detalles[indice]?.data?.presentaciones)}
             referencia={referenciaDePresentaciones(detalles[indice]?.data?.presentaciones)}
             vista={vistaPrevia.lineas[indice] ?? { estado: 'incompleta' }}
+            computaCreditoFiscal={computaCreditoFiscal}
             errorDelServidor={erroresDeLinea[indice]}
             alCambiarProducto={() => setValue(`lineas.${indice}.presentacionId`, '')}
             onQuitar={lineasField.fields.length > 1 ? () => lineasField.remove(indice) : undefined}
@@ -239,13 +252,15 @@ function CompraFormulario() {
 
         <Card className="flex flex-col gap-2 text-sm text-primary">
           <p>
-            Total neto:{' '}
+            {computaCreditoFiscal === false ? 'Total' : 'Total neto'}:{' '}
             <span data-testid="total-neto">{vistaPrevia.totales ? formatearImporte(vistaPrevia.totales.totalNeto) : '—'}</span>
           </p>
-          <p>
-            IVA sugerido:{' '}
-            <span data-testid="iva-sugerido">{vistaPrevia.totales ? formatearImporte(vistaPrevia.totales.ivaSugerido) : '—'}</span>
-          </p>
+          {computaCreditoFiscal === true && (
+            <p>
+              IVA sugerido:{' '}
+              <span data-testid="iva-sugerido">{vistaPrevia.totales ? formatearImporte(vistaPrevia.totales.ivaSugerido) : '—'}</span>
+            </p>
+          )}
           <Campo id="compra-total-factura" etiqueta="Total de factura">
             <input
               id="compra-total-factura"
@@ -324,6 +339,8 @@ interface LineaProps {
   presentaciones: { id: string; nombre: string }[]
   referencia: ReferenciaDePresentacion | null
   vista: VistaPreviaDeLinea
+  /** CST-06; `null` mientras no se conoce. */
+  computaCreditoFiscal: boolean | null
   errorDelServidor: string | undefined
   alCambiarProducto: () => void
   onQuitar?: () => void
@@ -336,6 +353,7 @@ function LineaDeCompra({
   presentaciones,
   referencia,
   vista,
+  computaCreditoFiscal,
   errorDelServidor,
   alCambiarProducto,
   onQuitar,
@@ -371,13 +389,15 @@ function LineaDeCompra({
         <Campo id={`${base}.cantidad`} etiqueta="Cantidad">
           <input id={`${base}.cantidad`} className={`${CLASE_CONTROL} w-24`} {...register(`${base}.cantidad`)} />
         </Campo>
-        <Campo id={`${base}.valor`} etiqueta="Valor">
+        <Campo id={`${base}.valor`} etiqueta={computaCreditoFiscal === false ? 'Valor pagado' : 'Valor'}>
           <input id={`${base}.valor`} className={`${CLASE_CONTROL} w-28`} {...register(`${base}.valor`)} />
         </Campo>
-        <label className="flex items-center gap-1 text-sm text-primary">
-          <input type="checkbox" {...register(`${base}.incluyeIva`)} />
-          Incluye IVA
-        </label>
+        {computaCreditoFiscal === true && (
+          <label className="flex items-center gap-1 text-sm text-primary">
+            <input type="checkbox" {...register(`${base}.incluyeIva`)} />
+            Incluye IVA
+          </label>
+        )}
         <Campo id={`${base}.bonificacionPorcentaje`} etiqueta="Bonificación %">
           <input id={`${base}.bonificacionPorcentaje`} className={`${CLASE_CONTROL} w-20`} {...register(`${base}.bonificacionPorcentaje`)} />
         </Campo>

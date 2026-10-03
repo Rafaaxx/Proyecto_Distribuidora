@@ -7,7 +7,7 @@ Define el registro de costos informados por los proveedores: en cualquier presen
 ## Requirements
 
 ### Requirement: Un costo informado se registra por comando con su costo base derivado
-El sistema DEBE registrar costos informados con el comando `COSTO_INFORMAR` (`ONLINE`, permiso `EDITAR_COSTOS`). Cada costo registra proveedor, producto, presentación, valor por presentación, si incluye IVA, bonificación opcional como fracción (default `0`), vigencia desde (fecha) y observación opcional (CST-01). El servidor DEBE congelar en el costo la alícuota vigente del producto al registrarlo y DEBE calcular y guardar el costo base con la fórmula de CST-02, redondeado a 6 decimales con `ROUND_HALF_UP` una sola vez al final. Valor, bonificación, alícuota y costo base DEBEN viajar como string en JSON.
+El sistema DEBE registrar costos informados con el comando `COSTO_INFORMAR` (`ONLINE`, permiso `EDITAR_COSTOS`). Cada costo registra proveedor, producto, presentación, valor por presentación, si incluye IVA, bonificación opcional como fracción (default `0`), vigencia desde (fecha) y observación opcional (CST-01). El servidor DEBE congelar en el costo la alícuota vigente del producto y si la organización computa crédito fiscal de IVA al registrarlo (`computa_credito_fiscal`, CST-06). DEBE calcular y guardar el costo base con la fórmula de CST-02, que divide por `1 + alícuota` solo si el valor incluye IVA **y** la organización computa crédito fiscal, redondeado a 6 decimales con `ROUND_HALF_UP` una sola vez al final. En una organización que no computa crédito fiscal, el valor es el pagado y `incluye_iva = true` DEBE rechazarse con `INCLUYE_IVA_NO_APLICA`. Valor, bonificación, alícuota y costo base DEBEN viajar como string en JSON. Cambiar después la condición de la organización NO DEBE modificar costos ya registrados.
 
 #### Scenario: Caja x12 sin IVA
 - **GIVEN** el producto activo `Cerveza B` del proveedor activo `Distribuidora Norte`, con la presentación activa de compra `Caja x12` (12 unidades) y alícuota `21%`
@@ -32,6 +32,30 @@ El sistema DEBE registrar costos informados con el comando `COSTO_INFORMAR` (`ON
 - **WHEN** se informa `Caja x12` a `"18000.00"`, sin IVA, con bonificación `"0.100000"`
 - **THEN** el costo base es `"1350.000000"` (18.000 × 0,9 / 12)
 - **Regla:** CST-02 (ejemplo 4); TR-02
+
+#### Scenario: Monotributista informa el valor pagado
+- **GIVEN** `Cerveza B` con alícuota `21%` y `Caja x12`, en una organización `MONOTRIBUTO`
+- **WHEN** se informa `Caja x12` a `"21780.00"` (lo que factura el proveedor con IVA), sin marcar IVA, sin bonificación
+- **THEN** el costo base es `"1815.000000"` (21.780 / 12, sin dividir por 1,21), con alícuota aplicada `"0.210000"` y `computa_credito_fiscal = false`
+- **Regla:** CST-02; CST-06; `design.md` D1 y D3
+
+#### Scenario: Monotributista con bonificación
+- **GIVEN** una organización `MONOTRIBUTO`, `Cerveza B` y `Caja x12`
+- **WHEN** se informa `Caja x12` a `"21780.00"` con bonificación `"0.100000"`
+- **THEN** el costo base es `"1633.500000"` (21.780 × 0,9 / 12)
+- **Regla:** CST-02; CST-06
+
+#### Scenario: Incluye IVA en una organización no inscripta
+- **GIVEN** una organización `MONOTRIBUTO` o `EXENTO`
+- **WHEN** se envía `COSTO_INFORMAR` con un costo `incluye_iva = true`
+- **THEN** se rechaza con 422 `INCLUYE_IVA_NO_APLICA` indicando el costo y no se registra ninguno
+- **Regla:** CST-06; TR-10; `design.md` D4
+
+#### Scenario: El cambio de condición no toca costos registrados
+- **GIVEN** un costo informado como `RESPONSABLE_INSCRIPTO` con IVA incluido y costo base `"1239.669421"`
+- **WHEN** la organización pasa a `MONOTRIBUTO`
+- **THEN** ese costo sigue con costo base `"1239.669421"`, `incluye_iva = true` y `computa_credito_fiscal = true`, y sigue siendo el vigente hasta que se informe otro
+- **Regla:** CST-03; TR-06; `design.md` D3 y D10
 
 #### Scenario: Doble envío no duplica el costo
 - **GIVEN** un `COSTO_INFORMAR` aceptado con `operation_id` X
@@ -176,6 +200,27 @@ La fórmula de CST-02 DEBE existir como función pura en el backend y en el fron
 - **WHEN** se calcula el costo base en ambas suites
 - **THEN** el resultado es `"833.333333"`
 - **Regla:** CST-02; TR-03; ADR-010 (ejemplo $10.000 / 12)
+
+#### Scenario: Los casos sin crédito fiscal pasan en ambas suites
+- **GIVEN** los casos compartidos con `computa_credito_fiscal = false`
+- **WHEN** corren pytest y Vitest
+- **THEN** ambas obtienen `"1815.000000"` para Caja x12 a `"21780.00"` y `"1633.500000"` con bonificación del 10%
+- **Regla:** CST-02; CST-06; ADR-016
+
+### Requirement: Los costos vigentes se resumen por regla de IVA
+El sistema DEBE informar, para la organización del token y a una fecha, cuántos costos informados vigentes (CST-03, uno por producto y presentación) se registraron computando crédito fiscal y cuántos sin computarlo, con permiso `ADMIN_CONFIGURACION` o `EDITAR_COSTOS`. Es la lectura que usa la pantalla de cambio de condición (`design.md` D10).
+
+#### Scenario: Resumen tras cambiar la condición
+- **GIVEN** una organización con 12 costos vigentes registrados como `MONOTRIBUTO` y 3 registrados después como `RESPONSABLE_INSCRIPTO`
+- **WHEN** se pide el resumen a hoy
+- **THEN** informa 3 con crédito fiscal y 12 sin crédito fiscal
+- **Regla:** CST-03; CST-06
+
+#### Scenario: Sin permiso
+- **GIVEN** un usuario sin `ADMIN_CONFIGURACION` ni `EDITAR_COSTOS`
+- **WHEN** pide el resumen
+- **THEN** la respuesta es 403 `PERMISO_REQUERIDO`
+- **Regla:** `01` §19
 
 ### Requirement: Un costo informado congela las unidades de su presentación
 Una presentación sobre la que se registró al menos un costo informado DEBE considerarse usada: sus unidades base NO DEBEN modificarse (`design.md` D1: `proveedores` registra su verificador en el puerto de ADR-023).

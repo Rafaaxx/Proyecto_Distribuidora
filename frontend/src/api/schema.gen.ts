@@ -280,6 +280,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/configuracion/fiscal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtener Configuracion Fiscal */
+        get: operations["obtener_configuracion_fiscal_api_v1_configuracion_fiscal_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/configuracion/fiscal/condicion-iva": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cambiar Condicion Iva
+         * @description `ORGANIZACION_CONDICION_IVA_CAMBIAR` (D7). La respuesta sale de `comando.resultado`,
+         *     no de una relectura: un reenvío idempotente devuelve exactamente lo mismo (INV-06).
+         */
+        post: operations["cambiar_condicion_iva_api_v1_configuracion_fiscal_condicion_iva_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/importaciones/{tipo}": {
         parameters: {
             query?: never;
@@ -818,6 +856,29 @@ export interface paths {
         put?: never;
         /** Informar Costos */
         post: operations["informar_costos_api_v1_costos_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/costos/resumen-regla-iva": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resumir Costos Por Regla De Iva
+         * @description 11b, D10 (CST-03, CST-06): cuántos costos informados vigentes a `fecha` (por defecto,
+         *     la fecha de negocio de hoy) se registraron computando crédito fiscal y cuántos sin
+         *     computarlo. Lo usa la pantalla de cambio de condición para avisar cuántos costos conviene
+         *     volver a informar. La organización sale del token (INV-21).
+         */
+        get: operations["resumir_costos_por_regla_de_iva_api_v1_costos_resumen_regla_iva_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1486,6 +1547,8 @@ export interface components {
             valor_presentacion: string;
             /** Incluye Iva */
             incluye_iva: boolean;
+            /** Computa Credito Fiscal */
+            computa_credito_fiscal: boolean;
             /** Bonificacion */
             bonificacion: string;
             /** Alicuota Aplicada */
@@ -1574,6 +1637,32 @@ export interface components {
             estado: string;
             /** Numero Comprobante */
             numero_comprobante: string | null;
+        };
+        /**
+         * CondicionIvaCambiarRequest
+         * @description Solo la condición nueva: `organizacion_id` nunca aparece (sale del token). Un valor
+         *     fuera del dominio cerrado responde 422.
+         */
+        CondicionIvaCambiarRequest: {
+            /**
+             * Condicion Iva
+             * @enum {string}
+             */
+            condicion_iva: "RESPONSABLE_INSCRIPTO" | "MONOTRIBUTO" | "EXENTO";
+        };
+        /** ConfiguracionFiscalResponse */
+        ConfiguracionFiscalResponse: {
+            /**
+             * Condicion Iva
+             * @enum {string}
+             */
+            condicion_iva: "RESPONSABLE_INSCRIPTO" | "MONOTRIBUTO" | "EXENTO";
+            /** Computa Credito Fiscal */
+            computa_credito_fiscal: boolean;
+            /** Modo Impositivo */
+            modo_impositivo: string;
+            /** Modalidad Iva Default */
+            modalidad_iva_default: string | null;
         };
         /**
          * ConsumidorFinalConfigurarRequest
@@ -1689,6 +1778,8 @@ export interface components {
             valor: string;
             /** Incluye Iva */
             incluye_iva: boolean;
+            /** Computa Credito Fiscal */
+            computa_credito_fiscal: boolean;
             /** Bonificacion */
             bonificacion: string;
             /** Alicuota Aplicada */
@@ -2648,6 +2739,22 @@ export interface components {
             /** Error Codigo */
             error_codigo: string | null;
         };
+        /**
+         * ResumenReglaIvaResponse
+         * @description `GET /costos/resumen-regla-iva` (11b, D10): cuántos costos vigentes a `fecha` se
+         *     registraron con y sin crédito fiscal. Insumo de la confirmación del cambio de condición.
+         */
+        ResumenReglaIvaResponse: {
+            /**
+             * Fecha
+             * Format: date
+             */
+            fecha: string;
+            /** Con Credito Fiscal */
+            con_credito_fiscal: number;
+            /** Sin Credito Fiscal */
+            sin_credito_fiscal: number;
+        };
         /** RolResponse */
         RolResponse: {
             /**
@@ -3290,6 +3397,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["YoResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_configuracion_fiscal_api_v1_configuracion_fiscal_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfiguracionFiscalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cambiar_condicion_iva_api_v1_configuracion_fiscal_condicion_iva_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CondicionIvaCambiarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfiguracionFiscalResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4577,6 +4751,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CostoInformarResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resumir_costos_por_regla_de_iva_api_v1_costos_resumen_regla_iva_get: {
+        parameters: {
+            query?: {
+                fecha?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumenReglaIvaResponse"];
                 };
             };
             /** @description Validation Error */

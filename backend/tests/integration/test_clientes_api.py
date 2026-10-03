@@ -632,6 +632,7 @@ def _organizacion_con_permisos(
         sesion.add(
             ConfiguracionOrganizacion(
                 organizacion_id=organizacion.id,
+                condicion_iva="RESPONSABLE_INSCRIPTO",
                 modo_impositivo="B",
                 lista_precio_default_id=None,
                 politica_credito_default="ADVERTIR",

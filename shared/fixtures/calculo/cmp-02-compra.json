@@ -5,6 +5,7 @@
     "entrada": {
       "motor": "cmp02",
       "operacion": "calcular_linea",
+      "computa_credito_fiscal": true,
       "unidades_presentacion": 12,
       "cantidad": "1",
       "valor": "18000.00",
@@ -24,6 +25,7 @@
     "entrada": {
       "motor": "cmp02",
       "operacion": "calcular_linea",
+      "computa_credito_fiscal": true,
       "unidades_presentacion": 12,
       "cantidad": "1",
       "valor": "18000.00",
@@ -43,6 +45,7 @@
     "entrada": {
       "motor": "cmp02",
       "operacion": "calcular_linea",
+      "computa_credito_fiscal": true,
       "unidades_presentacion": 12,
       "cantidad": "1",
       "valor": "18000.00",
@@ -62,6 +65,7 @@
     "entrada": {
       "motor": "cmp02",
       "operacion": "calcular_linea",
+      "computa_credito_fiscal": true,
       "unidades_presentacion": 6,
       "cantidad": "2.5",
       "valor": "6000.00",
@@ -81,6 +85,7 @@
     "entrada": {
       "motor": "cmp02",
       "operacion": "calcular_linea",
+      "computa_credito_fiscal": true,
       "unidades_presentacion": 6,
       "cantidad": "2.3",
       "valor": "6000.00",
@@ -96,6 +101,7 @@
     "entrada": {
       "motor": "cmp02",
       "operacion": "calcular_linea",
+      "computa_credito_fiscal": true,
       "unidades_presentacion": 1,
       "cantidad": "1.0001",
       "valor": "1000.00",
@@ -111,6 +117,7 @@
     "entrada": {
       "motor": "cmp02",
       "operacion": "calcular_linea",
+      "computa_credito_fiscal": true,
       "unidades_presentacion": 6,
       "cantidad": "0",
       "valor": "6000.00",
@@ -126,6 +133,7 @@
     "entrada": {
       "motor": "cmp02",
       "operacion": "calcular_linea",
+      "computa_credito_fiscal": true,
       "unidades_presentacion": 6,
       "cantidad": "1",
       "valor": "0.00",
@@ -141,6 +149,7 @@
     "entrada": {
       "motor": "cmp02",
       "operacion": "calcular_linea",
+      "computa_credito_fiscal": true,
       "unidades_presentacion": 6,
       "cantidad": "1",
       "valor": "6000.001",
@@ -156,6 +165,7 @@
     "entrada": {
       "motor": "cmp02",
       "operacion": "calcular_linea",
+      "computa_credito_fiscal": true,
       "unidades_presentacion": 6,
       "cantidad": "1",
       "valor": "6000.00",
@@ -173,6 +183,7 @@
       "operacion": "calcular_compra",
       "lineas": [
         {
+          "computa_credito_fiscal": true,
           "unidades_presentacion": 6,
           "cantidad": "10",
           "valor": "6000.00",
@@ -181,6 +192,7 @@
           "bonificacion": "0"
         },
         {
+          "computa_credito_fiscal": true,
           "unidades_presentacion": 1,
           "cantidad": "60",
           "valor": "1100.00",
@@ -203,6 +215,7 @@
       "operacion": "calcular_compra",
       "lineas": [
         {
+          "computa_credito_fiscal": true,
           "unidades_presentacion": 12,
           "cantidad": "1",
           "valor": "18000.00",
@@ -225,6 +238,7 @@
       "operacion": "calcular_compra",
       "lineas": [
         {
+          "computa_credito_fiscal": true,
           "unidades_presentacion": 1,
           "cantidad": "3",
           "valor": "1000.00",
@@ -238,5 +252,73 @@
       "total_neto": "3000.00",
       "total_factura_sugerido": "3000.00"
     }
+  },
+  {
+    "id": "CMP02-linea-monotributo-caja-x12-valor-pagado",
+    "reglas": ["CMP-02", "CST-02", "CST-06"],
+    "entrada": {
+      "motor": "cmp02",
+      "operacion": "calcular_linea",
+      "computa_credito_fiscal": false,
+      "unidades_presentacion": 12,
+      "cantidad": "1",
+      "valor": "21780.00",
+      "incluye_iva": false,
+      "alicuota": "0.210000",
+      "bonificacion": "0"
+    },
+    "salida_esperada": {
+      "cantidad_base": 12,
+      "costo_base": "1815.000000",
+      "importe_neto": "21780.00"
+    }
+  },
+  {
+    "id": "CMP02-compra-criterio-2-monotributo-valores-pagados",
+    "reglas": ["CMP-02", "CST-06", "00-criterio-2"],
+    "entrada": {
+      "motor": "cmp02",
+      "operacion": "calcular_compra",
+      "lineas": [
+        {
+          "computa_credito_fiscal": false,
+          "unidades_presentacion": 6,
+          "cantidad": "10",
+          "valor": "7260.00",
+          "incluye_iva": false,
+          "alicuota": "0.210000",
+          "bonificacion": "0"
+        },
+        {
+          "computa_credito_fiscal": false,
+          "unidades_presentacion": 1,
+          "cantidad": "60",
+          "valor": "1331.00",
+          "incluye_iva": false,
+          "alicuota": "0.210000",
+          "bonificacion": "0"
+        }
+      ]
+    },
+    "salida_esperada": {
+      "total_neto": "152460.00",
+      "total_factura_sugerido": "152460.00"
+    }
+  },
+  {
+    "id": "CMP02-linea-monotributo-incluye-iva-no-aplica",
+    "reglas": ["CMP-02", "CST-06", "TR-10"],
+    "entrada": {
+      "motor": "cmp02",
+      "operacion": "calcular_linea",
+      "computa_credito_fiscal": false,
+      "unidades_presentacion": 12,
+      "cantidad": "1",
+      "valor": "21780.00",
+      "incluye_iva": true,
+      "alicuota": "0.210000",
+      "bonificacion": "0"
+    },
+    "salida_esperada": { "error": "INCLUYE_IVA_NO_APLICA" }
   }
 ]

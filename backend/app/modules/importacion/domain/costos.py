@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
-from app.modules.importacion.domain.errores import ErrorDeValor
+from app.modules.importacion.domain.errores import ErrorDeValor, ValorObligatorioError
 from app.modules.importacion.domain.planilla import FilaPlanilla
 from app.modules.importacion.domain.referencias import (
     clave_de_texto,
@@ -38,16 +38,30 @@ class DatosDeCosto:
     observacion: str | None
 
 
-def datos_de_costo(fila: FilaPlanilla) -> DatosDeCosto:
+def datos_de_costo(fila: FilaPlanilla, *, computa_credito_fiscal: bool = True) -> DatosDeCosto:
     """Lee la fila o lanza el `ErrorDeValor` de la primera celda ilegible (con su
-    columna). Sin bonificación es cero; sin observación, `None`."""
+    columna). Sin bonificación es cero; sin observación, `None`.
+
+    11b, D6 (CST-06): en una organización que computa crédito fiscal, `incluye_iva` es
+    obligatoria (`S`/`N`; vacía es `VALOR_OBLIGATORIO`). En una que no lo computa, vacía o
+    `N` es falso, y `S` se lee verdadera: rechazarla con `INCLUYE_IVA_NO_APLICA` es del
+    servicio de `proveedores` (D4, la misma regla que el alta individual, TR-10)."""
     valores = fila.valores
     texto_bonificacion = valores["bonificacion"].strip()
+    texto_iva = valores["incluye_iva"]
+    if not texto_iva.strip():
+        if computa_credito_fiscal:
+            raise ValorObligatorioError(
+                "La columna incluye_iva es obligatoria: use S o N.", columna="incluye_iva"
+            )
+        incluye_iva = False
+    else:
+        incluye_iva = a_booleano(texto_iva, columna="incluye_iva")
     return DatosDeCosto(
         producto_codigo=obligatorio(valores["producto_codigo"], columna="producto_codigo"),
         presentacion=obligatorio(valores["presentacion"], columna="presentacion"),
         valor=a_decimal(valores["valor"], columna="valor"),
-        incluye_iva=a_booleano(valores["incluye_iva"], columna="incluye_iva"),
+        incluye_iva=incluye_iva,
         bonificacion=(
             porcentaje_a_fraccion(texto_bonificacion, columna="bonificacion")
             if texto_bonificacion

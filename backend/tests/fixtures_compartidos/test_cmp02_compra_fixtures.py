@@ -34,6 +34,7 @@ def _linea(datos: dict[str, Any]) -> EntradaDeLinea:
         cantidad=Decimal(datos["cantidad"]),
         valor=Decimal(datos["valor"]),
         incluye_iva=datos["incluye_iva"],
+        computa_credito_fiscal=datos["computa_credito_fiscal"],
         alicuota=Decimal(datos["alicuota"]),
         bonificacion=Decimal(datos["bonificacion"]),
     )

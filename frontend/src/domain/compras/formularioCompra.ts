@@ -105,21 +105,39 @@ function estaIncompleta(linea: LineaDeFormulario, contexto: ContextoDeLinea): bo
   )
 }
 
-function entradaDeLinea(linea: LineaDeFormulario, contexto: ContextoDeLinea): EntradaDeLinea {
+/**
+ * `incluye_iva` efectivo de una línea (CST-06, 11b D4): sin crédito fiscal el IVA es costo y
+ * la casilla no existe, así que cuenta siempre como falso aunque el formulario la tuviera
+ * tildada de antes.
+ */
+function incluyeIvaEfectivo(linea: LineaDeFormulario, computaCreditoFiscal: boolean): boolean {
+  return computaCreditoFiscal && linea.incluyeIva
+}
+
+function entradaDeLinea(
+  linea: LineaDeFormulario,
+  contexto: ContextoDeLinea,
+  computaCreditoFiscal: boolean,
+): EntradaDeLinea {
   return {
     unidadesPresentacion: contexto.unidadesPresentacion as number,
     cantidad: linea.cantidad.trim(),
     valor: linea.valor.trim(),
-    incluyeIva: linea.incluyeIva,
+    incluyeIva: incluyeIvaEfectivo(linea, computaCreditoFiscal),
+    computaCreditoFiscal,
     alicuota: contexto.alicuota as string,
     bonificacion: porcentajeAFraccion(linea.bonificacionPorcentaje),
   }
 }
 
-function calcularVistaDeLinea(linea: LineaDeFormulario, contexto: ContextoDeLinea): VistaPreviaDeLinea {
-  if (estaIncompleta(linea, contexto)) return { estado: 'incompleta' }
+function calcularVistaDeLinea(
+  linea: LineaDeFormulario,
+  contexto: ContextoDeLinea,
+  computaCreditoFiscal: boolean | null,
+): VistaPreviaDeLinea {
+  if (computaCreditoFiscal === null || estaIncompleta(linea, contexto)) return { estado: 'incompleta' }
   try {
-    return { estado: 'lista', calculada: calcularLinea(entradaDeLinea(linea, contexto)) }
+    return { estado: 'lista', calculada: calcularLinea(entradaDeLinea(linea, contexto, computaCreditoFiscal)) }
   } catch (error) {
     if (error instanceof ErrorDeCompra) {
       return { estado: 'error', codigo: error.codigo, mensaje: error.message }
@@ -133,18 +151,28 @@ function calcularVistaDeLinea(linea: LineaDeFormulario, contexto: ContextoDeLine
  * error en una no esconde el resultado de las otras; los totales (neto, IVA sugerido y
  * total de factura sugerido, D1) solo existen cuando todas las líneas están listas.
  * `contextos[i]` es el del catálogo para `lineas[i]`.
+ *
+ * `computaCreditoFiscal` es la regla de la organización (CST-06, `GET /configuracion/fiscal`);
+ * `null` mientras todavía no se conoce: no se calcula con una regla supuesta.
  */
 export function calcularVistaPrevia(
   lineas: readonly LineaDeFormulario[],
   contextos: readonly ContextoDeLinea[],
+  computaCreditoFiscal: boolean | null,
 ): VistaPreviaDeCompra {
   const vistas = lineas.map((linea, indice) =>
-    calcularVistaDeLinea(linea, contextos[indice] ?? { unidadesPresentacion: null, alicuota: null }),
+    calcularVistaDeLinea(
+      linea,
+      contextos[indice] ?? { unidadesPresentacion: null, alicuota: null },
+      computaCreditoFiscal,
+    ),
   )
   const todasListas = vistas.length > 0 && vistas.every((vista) => vista.estado === 'lista')
   if (!todasListas) return { lineas: vistas, totales: null }
 
-  const entradas = lineas.map((linea, indice) => entradaDeLinea(linea, contextos[indice] as ContextoDeLinea))
+  const entradas = lineas.map((linea, indice) =>
+    entradaDeLinea(linea, contextos[indice] as ContextoDeLinea, computaCreditoFiscal as boolean),
+  )
   try {
     const totales = calcularCompra(entradas)
     return {
@@ -193,6 +221,7 @@ function textoONulo(texto: string): string | null {
 export function construirSolicitudDeCompra(
   formulario: FormularioDeCompra,
   totalFactura: string,
+  computaCreditoFiscal: boolean,
 ): components['schemas']['CompraConfirmarRequest'] {
   const medios =
     formulario.condicion === 'CONTADO'
@@ -215,7 +244,7 @@ export function construirSolicitudDeCompra(
       presentacion_id: linea.presentacionId,
       cantidad: linea.cantidad.trim(),
       valor: redondearImporte(linea.valor.trim()).toFixed(2),
-      incluye_iva: linea.incluyeIva,
+      incluye_iva: incluyeIvaEfectivo(linea, computaCreditoFiscal),
       bonificacion: porcentajeAFraccion(linea.bonificacionPorcentaje),
     })),
     medios,
@@ -230,12 +259,13 @@ export function construirSolicitudDeCompra(
 export function construirCostoInformar(
   linea: LineaDeFormulario,
   fechaDeCompra: string,
+  computaCreditoFiscal: boolean,
 ): components['schemas']['CostoDelLoteRequest'] {
   return {
     producto_id: linea.productoId,
     presentacion_id: linea.presentacionId,
     valor: redondearImporte(linea.valor.trim()).toFixed(2),
-    incluye_iva: linea.incluyeIva,
+    incluye_iva: incluyeIvaEfectivo(linea, computaCreditoFiscal),
     bonificacion: porcentajeAFraccion(linea.bonificacionPorcentaje),
     vigencia_desde: fechaDeCompra,
   }

@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { Badge } from '../../../components/ui/Badge'
 import { Card } from '../../../components/ui/Card'
 import { PageHeader } from '../../../components/ui/PageHeader'
+import { etiquetaIvaDescontado } from '../../../domain/proveedores/ivaDescontado'
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import type { CostoInformado } from '../../../features/proveedores/api'
 import { PermisoRequeridoProveedoresError } from '../../../features/proveedores/errores'
@@ -170,6 +171,8 @@ function FilaHistorial({
       <td className="px-3 py-2">
         <span>{formatearImporte(redondearImporte(costo.valor))}</span>{' '}
         <span>{costo.incluye_iva ? '(con IVA)' : '(sin IVA)'}</span>
+        {/* 11b (CST-06): la regla congelada en el costo, no la condición actual. */}
+        <span className="block text-xs text-primary/70">{etiquetaIvaDescontado(costo)}</span>
       </td>
       <td className="px-3 py-2">{formatearPorcentaje(redondearCosto(costo.bonificacion))}</td>
       <td className="px-3 py-2">{formatearCosto(parsearImporteDesdeApi(costo.costo_base))}</td>

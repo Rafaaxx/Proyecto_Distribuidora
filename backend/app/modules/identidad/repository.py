@@ -109,6 +109,7 @@ def crear_configuracion(
     organizacion_id: UUID,
     sesion: Session,
     *,
+    condicion_iva: str,
     modo_impositivo: str,
     politica_credito_default: str,
     estado_facturacion_default: str,
@@ -136,6 +137,7 @@ def crear_configuracion(
     """
     configuracion = ConfiguracionOrganizacion(
         organizacion_id=organizacion_id,
+        condicion_iva=condicion_iva,
         modo_impositivo=modo_impositivo,
         lista_precio_default_id=lista_precio_default_id,
         politica_credito_default=politica_credito_default,
@@ -165,6 +167,21 @@ def obtener_configuracion(
     organizacion_id: UUID, sesion: Session
 ) -> ConfiguracionOrganizacion | None:
     return sesion.get(ConfiguracionOrganizacion, organizacion_id)
+
+
+def obtener_configuracion_bloqueada(
+    organizacion_id: UUID, sesion: Session, *, exclusivo: bool
+) -> ConfiguracionOrganizacion | None:
+    """La fila de configuración de `organizacion_id` con bloqueo: `FOR UPDATE` si
+    `exclusivo`, `FOR SHARE` si no (11b, D3: el cambio de condición y los registros que
+    la leen no se cruzan). Refresca los valores: nunca devuelve un estado en caché."""
+    consulta = (
+        select(ConfiguracionOrganizacion)
+        .where(ConfiguracionOrganizacion.organizacion_id == organizacion_id)
+        .with_for_update(read=not exclusivo)
+        .execution_options(populate_existing=True)
+    )
+    return sesion.scalars(consulta).one_or_none()
 
 
 def actualizar_configuracion(

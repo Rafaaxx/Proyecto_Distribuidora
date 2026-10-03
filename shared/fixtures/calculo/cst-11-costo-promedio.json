@@ -241,5 +241,44 @@
       "costo_ingreso": "1000000000000.000000"
     },
     "salida_esperada": { "error": "COSTO_INVALIDO" }
+  },
+  {
+    "id": "CST11-reversion-recalcula",
+    "reglas": ["CMP-06", "CST-13"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "reversion",
+      "stock_previo": 120,
+      "promedio_previo": "1050.000000",
+      "cantidad": 60,
+      "costo_ingreso": "1100.000000"
+    },
+    "salida_esperada": { "promedio_nuevo": "1000.000000", "stock_nuevo": 60, "recalculado": true }
+  },
+  {
+    "id": "CST11-reversion-stock-restante-no-positivo-mantiene",
+    "reglas": ["CMP-06", "CST-13"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "reversion",
+      "stock_previo": 48,
+      "promedio_previo": "1050.000000",
+      "cantidad": 60,
+      "costo_ingreso": "1100.000000"
+    },
+    "salida_esperada": { "promedio_nuevo": "1050.000000", "stock_nuevo": -12, "recalculado": false }
+  },
+  {
+    "id": "CST11-reversion-promedio-resultante-no-positivo-mantiene",
+    "reglas": ["CMP-06", "CST-13"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "reversion",
+      "stock_previo": 65,
+      "promedio_previo": "1728.571429",
+      "cantidad": 60,
+      "costo_ingreso": "2000.000000"
+    },
+    "salida_esperada": { "promedio_nuevo": "1728.571429", "stock_nuevo": 5, "recalculado": false }
   }
 ]

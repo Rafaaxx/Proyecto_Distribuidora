@@ -22,6 +22,7 @@ from app.modules.costeo.domain.errores import (
     CantidadInvalidaError,
     CostoInvalidoError,
     OrigenDeCostoInvalidoError,
+    PromedioInconsistenteError,
     RecursoNoEncontradoError,
 )
 from app.modules.costeo.models import CostoProducto, CostoProductoMov
@@ -67,6 +68,20 @@ class Entorno:
             RELOJ,
             producto_id=producto_id or self.producto_id,
             cantidad=cantidad,
+        )
+
+    def revertir(
+        self, cantidad: int, costo: str | Decimal, *, producto_id: UUID | None = None
+    ) -> service.ResultadoDeReversionAplicada:
+        return service.revertir_ingreso(
+            self.org,
+            self.sesion,
+            RELOJ,
+            producto_id=producto_id or self.producto_id,
+            cantidad=cantidad,
+            costo_unitario=costo,
+            origen_id=uuid4(),
+            operation_id=uuid4(),
         )
 
     def costo(self, producto_id: UUID | None = None) -> CostoProducto:
@@ -337,6 +352,108 @@ def test_un_egreso_de_un_producto_sin_promedio_no_valoriza(entorno: Entorno) -> 
 def test_un_egreso_exige_cantidad_positiva(entorno: Entorno, cantidad: int) -> None:
     with pytest.raises(CantidadInvalidaError):
         entorno.egresar(cantidad)
+
+
+# --- revertir_ingreso (CMP-06, CST-13, D9) -------------------------------------
+
+
+def test_revertir_recalcula_el_promedio_y_deja_la_fila_de_historia(entorno: Entorno) -> None:
+    """CMP-06 y CST-13: 120 a 1050, se anula un ingreso de 60 a 1100."""
+    entorno.ingresar(120, "1050")
+
+    resultado = entorno.revertir(60, "1100")
+
+    assert resultado.recalculado is True
+    assert resultado.promedio_nuevo == Decimal("1000.000000")
+    assert (resultado.stock_anterior, resultado.stock_nuevo) == (120, 60)
+    fila = entorno.costo()
+    assert (fila.costo_promedio, fila.stock_total) == (Decimal("1000.000000"), 60)
+    _ingreso, reversion = entorno.historia()
+    assert reversion.origen_tipo == "ANULACION_COMPRA"
+    assert reversion.cantidad == -60
+    assert reversion.costo_ingreso == Decimal("1100.000000")
+    assert (reversion.stock_anterior, reversion.stock_nuevo) == (120, 60)
+    assert reversion.promedio_anterior == Decimal("1050.000000")
+    assert reversion.promedio_nuevo == Decimal("1000.000000")
+    assert reversion.recalculado is True
+    assert reversion.registered_at == MOMENTO
+
+
+def test_revertir_sin_recalculo_mantiene_el_promedio_y_escribe_igual_la_historia(
+    entorno: Entorno,
+) -> None:
+    """D9: la fila queda aunque el promedio no cambie (deuda del 09, CST-13)."""
+    entorno.ingresar(48, "1050")
+
+    resultado = entorno.revertir(60, "1100")
+
+    assert resultado.recalculado is False
+    assert resultado.promedio_nuevo == Decimal("1050.000000")
+    assert resultado.stock_nuevo == -12
+    fila = entorno.costo()
+    assert (fila.costo_promedio, fila.stock_total) == (Decimal("1050.000000"), -12)
+    _ingreso, reversion = entorno.historia()
+    assert reversion.cantidad == -60
+    assert reversion.costo_ingreso == Decimal("1100.000000")
+    assert (reversion.stock_anterior, reversion.stock_nuevo) == (48, -12)
+    assert reversion.promedio_anterior == reversion.promedio_nuevo == Decimal("1050.000000")
+    assert reversion.recalculado is False
+
+
+def test_la_historia_se_reconstruye_con_ingresos_y_reversiones(entorno: Entorno) -> None:
+    """CST-13: cada fila encadena `stock_nuevo` y `promedio_nuevo` con la siguiente."""
+    entorno.ingresar(60, "1000")
+    entorno.ingresar(60, "1100")
+    entorno.revertir(60, "1100")
+
+    historia = entorno.historia()
+
+    assert [(h.cantidad, h.promedio_nuevo, h.recalculado) for h in historia] == [
+        (60, Decimal("1000.000000"), True),
+        (60, Decimal("1050.000000"), True),
+        (-60, Decimal("1000.000000"), True),
+    ]
+    for anterior, siguiente in zip(historia, historia[1:], strict=False):
+        assert siguiente.stock_anterior == anterior.stock_nuevo
+        assert siguiente.promedio_anterior == anterior.promedio_nuevo
+
+
+def test_revertir_un_producto_sin_promedio_es_inconsistente_sin_efectos(
+    entorno: Entorno,
+) -> None:
+    with pytest.raises(PromedioInconsistenteError):
+        entorno.revertir(5, "100")
+
+    assert entorno.historia() == []
+
+
+@pytest.mark.parametrize("costo", ["0", "1.1234567", 100])
+def test_revertir_con_costo_invalido_no_deja_efectos(entorno: Entorno, costo: object) -> None:
+    entorno.ingresar(10, "100")
+
+    with pytest.raises(CostoInvalidoError):
+        entorno.revertir(5, costo)  # type: ignore[arg-type]
+
+    assert len(entorno.historia()) == 1
+    assert entorno.costo().stock_total == 10
+
+
+@pytest.mark.parametrize("cantidad", [0, -1])
+def test_revertir_exige_cantidad_positiva(entorno: Entorno, cantidad: int) -> None:
+    entorno.ingresar(10, "100")
+
+    with pytest.raises(CantidadInvalidaError):
+        entorno.revertir(cantidad, "100")
+
+
+def test_revertir_un_producto_ajeno_es_404_sin_efectos(entorno: Entorno) -> None:
+    otra = crear_organizacion(entorno.sesion).id
+    producto_ajeno = crear_producto_sql(entorno.sesion, otra)
+
+    with pytest.raises(RecursoNoEncontradoError):
+        entorno.revertir(1, "10", producto_id=producto_ajeno)
+
+    assert entorno.historia(producto_ajeno) == []
 
 
 # --- obtener_costo (CST-10) ---------------------------------------------------

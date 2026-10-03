@@ -48,10 +48,13 @@ from app.modules.stock.domain.kardex import (
     rango_de_instantes,
 )
 from app.modules.stock.domain.movimientos import (
+    ANULACION_COMPRA,
     STOCK_INICIAL,
     LineaDeMovimiento,
     LineaDeStockInicial,
     diferencias_de_stock_total,
+    productos_que_exigen_estar_activos,
+    puede_quedar_negativo,
     validar_lineas_de_movimiento,
     validar_lineas_de_stock_inicial,
     validar_producto_activo,
@@ -94,6 +97,11 @@ class ResultadoDeMovimiento:
 
     movimiento: StockMovimiento
     saldo: int
+    saldo_negativo: bool = False
+    """El egreso dejó el saldo de la ubicación por debajo de cero (CMP-07, D10)."""
+    promedio_recalculado: bool | None = None
+    """Solo en un egreso `ANULACION_COMPRA`: si `costeo` recalculó el promedio (CMP-06);
+    `None` en cualquier otro movimiento."""
 
 
 @dataclass(frozen=True)
@@ -109,6 +117,7 @@ class LineaDeStock:
     producto_nombre: str
     cantidad_base: int
     unidades_referencia: int | None
+    nombre_referencia: str | None
     costo_promedio: Decimal | None
 
 
@@ -285,11 +294,13 @@ def _preparar(
         validar_ubicacion_activa(activo=ubicacion.activo)
 
     productos = sorted({linea.producto_id for linea in validadas})
+    exigen_activo = productos_que_exigen_estar_activos(validadas)
     for producto_id in productos:
         producto = catalogo_service.obtener_producto(organizacion_id, producto_id, sesion)
         if producto is None:
             raise RecursoNoEncontradoError("El producto no existe en esta organización.")
-        validar_producto_activo(activo=producto.activo)
+        if producto_id in exigen_activo:  # D11: la reversión admite un producto inactivo
+            validar_producto_activo(activo=producto.activo)
 
     costeo_service.bloquear_costos(organizacion_id, sesion, reloj, productos)
 
@@ -319,6 +330,7 @@ def _aplicar(
     dispositivo_id: UUID,
     operation_id: UUID,
     occurred_at: datetime,
+    permitir_negativo: bool = False,
 ) -> list[ResultadoDeMovimiento]:
     """Aplica las líneas, en el orden recibido, con todos los bloqueos tomados por
     `_preparar`: cada una actualiza `costo_producto` (vía `costeo`) y
@@ -329,6 +341,7 @@ def _aplicar(
     resultados: list[ResultadoDeMovimiento] = []
     for linea in lineas:
         costo_unitario: Decimal | None
+        promedio_recalculado: bool | None = None
         if linea.cantidad_base > 0:
             costeo_service.aplicar_ingreso(
                 organizacion_id,
@@ -359,6 +372,7 @@ def _aplicar(
                 ubicacion_id=linea.ubicacion_id,
                 cantidad=magnitud,
                 momento=ahora,
+                permitir_negativo=puede_quedar_negativo(linea, permitir_negativo=permitir_negativo),
             )
             if nuevo_saldo is None:
                 actual = repository.obtener_saldo(
@@ -371,14 +385,29 @@ def _aplicar(
                     f"El saldo es {actual or 0} y se pretende egresar {magnitud}."
                 )
             saldo = nuevo_saldo
-            egreso = costeo_service.aplicar_egreso(
-                organizacion_id,
-                sesion,
-                reloj,
-                producto_id=linea.producto_id,
-                cantidad=magnitud,
-            )
-            costo_unitario = egreso.costo_valorizacion
+            if linea.tipo == ANULACION_COMPRA:
+                # D9: revierte el ingreso en `costeo` y queda con el costo de la línea.
+                reversion = costeo_service.revertir_ingreso(
+                    organizacion_id,
+                    sesion,
+                    reloj,
+                    producto_id=linea.producto_id,
+                    cantidad=magnitud,
+                    costo_unitario=linea.costo_unitario,
+                    origen_id=linea.origen_id,
+                    operation_id=operation_id,
+                )
+                costo_unitario = costeo_service.validar_costo(linea.costo_unitario)
+                promedio_recalculado = reversion.recalculado
+            else:
+                egreso = costeo_service.aplicar_egreso(
+                    organizacion_id,
+                    sesion,
+                    reloj,
+                    producto_id=linea.producto_id,
+                    cantidad=magnitud,
+                )
+                costo_unitario = egreso.costo_valorizacion
 
         movimiento = repository.insertar_movimiento(
             organizacion_id,
@@ -399,7 +428,14 @@ def _aplicar(
             occurred_at=occurred_at,
             registered_at=ahora,
         )
-        resultados.append(ResultadoDeMovimiento(movimiento=movimiento, saldo=saldo))
+        resultados.append(
+            ResultadoDeMovimiento(
+                movimiento=movimiento,
+                saldo=saldo,
+                saldo_negativo=saldo < 0,
+                promedio_recalculado=promedio_recalculado,
+            )
+        )
     return resultados
 
 
@@ -413,6 +449,7 @@ def registrar_movimientos(
     dispositivo_id: UUID,
     operation_id: UUID,
     occurred_at: datetime,
+    permitir_negativo: bool = False,
 ) -> list[ResultadoDeMovimiento]:
     """Registra movimientos de stock con todas las filas bloqueadas en el orden
     global (`02` §7.3), todo en la transacción de quien llama (INV-01, INV-12).
@@ -424,7 +461,13 @@ def registrar_movimientos(
     de venta (CST-11); los egresos, de cualquier tipo, se valorizan al promedio
     vigente y no dejan el saldo negativo (STK-05, `02` §7.4, D4). Un ingreso de otro
     tipo (ajuste, transferencia, rendición) se rechaza: lo definen los changes 14,
-    15 y 24. Una referencia ajena o inexistente es 404 (INV-21)."""
+    15 y 24. Una referencia ajena o inexistente es 404 (INV-21).
+
+    Change 11: un egreso `ANULACION_COMPRA` lleva el costo base de la línea que
+    revierte y delega en `costeo.revertir_ingreso` (CMP-06, D9); admite un producto
+    inactivo (CAT-05, D11) y, con `permitir_negativo` (el permiso
+    `PERMITIR_STOCK_NEGATIVO`, CMP-07), puede dejar el saldo negativo, que el
+    resultado marca (D10). `permitir_negativo` no alcanza a otros tipos."""
     validadas = validar_lineas_de_movimiento(lineas)
     preparadas = _preparar(organizacion_id, sesion, reloj, validadas)
     return _aplicar(
@@ -436,6 +479,7 @@ def registrar_movimientos(
         dispositivo_id=dispositivo_id,
         operation_id=operation_id,
         occurred_at=occurred_at,
+        permitir_negativo=permitir_negativo,
     )
 
 
@@ -556,6 +600,7 @@ def stock_por_ubicacion(
                 producto_nombre=producto.nombre,
                 cantidad_base=cantidad,
                 unidades_referencia=None if referencia is None else referencia.unidades_base,
+                nombre_referencia=None if referencia is None else referencia.nombre,
                 costo_promedio=promedios.get(producto_id),
             )
         )
@@ -627,6 +672,7 @@ def kardex(
         producto_codigo=producto.codigo,
         producto_nombre=producto.nombre,
         unidades_referencia=None if referencia is None else referencia.unidades_base,
+        nombre_referencia=None if referencia is None else referencia.nombre,
         movimientos=movimientos,
         cursor_siguiente=cursor_siguiente,
     )

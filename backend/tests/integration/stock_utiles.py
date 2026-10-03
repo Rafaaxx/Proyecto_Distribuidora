@@ -35,12 +35,20 @@ except ModuleNotFoundError:  # desde `tests/properties`, `tests/integration` no 
 MOMENTO = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def crear_producto_sql(sesion: Session, organizacion_id: UUID, *, nombre: str = "Vino A") -> UUID:
-    """Producto activo mínimo (categoría, alícuota y proveedor propios)."""
+def crear_producto_sql(
+    sesion: Session,
+    organizacion_id: UUID,
+    *,
+    nombre: str = "Vino A",
+    proveedor_id: UUID | None = None,
+) -> UUID:
+    """Producto activo mínimo (categoría y alícuota propias; proveedor propio salvo que
+    se pase `proveedor_id`, que el change 11 necesita para comprar a un proveedor)."""
     categoria_id = uuid4()
     alicuota_id = uuid4()
     producto_id = uuid4()
-    proveedor_id = crear_proveedor(sesion, organizacion_id)
+    if proveedor_id is None:
+        proveedor_id = crear_proveedor(sesion, organizacion_id)
     sesion.execute(
         text(
             "INSERT INTO categoria (id, organizacion_id, nombre, activo, creado_en, "
@@ -170,6 +178,42 @@ def crear_presentacion_referencia_sql(
             "prod": producto_id,
             "nombre": f"Caja x{unidades_base}",
             "u": unidades_base,
+            "m": MOMENTO,
+        },
+    )
+    return presentacion_id
+
+
+def crear_presentacion_sql(
+    sesion: Session,
+    organizacion_id: UUID,
+    producto_id: UUID,
+    *,
+    nombre: str,
+    unidades_base: int,
+    usar_en_compra: bool = True,
+    usar_en_venta: bool = True,
+    es_referencia: bool = False,
+    activo: bool = True,
+) -> UUID:
+    """Presentación con los usos y la actividad que pide la prueba (change 11)."""
+    presentacion_id = uuid4()
+    sesion.execute(
+        text(
+            "INSERT INTO presentacion (id, organizacion_id, producto_id, nombre, unidades_base, "
+            "usar_en_venta, usar_en_compra, es_referencia, activo, creado_en, actualizado_en) "
+            "VALUES (:id, :org, :prod, :nombre, :u, :venta, :compra, :ref, :activo, :m, :m)"
+        ),
+        {
+            "id": presentacion_id,
+            "org": organizacion_id,
+            "prod": producto_id,
+            "nombre": nombre,
+            "u": unidades_base,
+            "venta": usar_en_venta,
+            "compra": usar_en_compra,
+            "ref": es_referencia,
+            "activo": activo,
             "m": MOMENTO,
         },
     )

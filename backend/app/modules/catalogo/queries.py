@@ -57,6 +57,7 @@ def listar_productos_paginado(
     categoria_id: UUID | None,
     marca_id: UUID | None,
     activo: bool | None,
+    proveedor_id: UUID | None = None,
 ) -> tuple[list[Producto], str | None]:
     return repository.listar_productos_paginado(
         organizacion_id,
@@ -67,6 +68,7 @@ def listar_productos_paginado(
         categoria_id=categoria_id,
         marca_id=marca_id,
         activo=activo,
+        proveedor_id=proveedor_id,
     )
 
 

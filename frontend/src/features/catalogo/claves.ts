@@ -8,6 +8,8 @@ export interface FiltrosProductos {
   categoriaId?: string
   marcaId?: string
   activo?: boolean
+  /** Solo los productos de este proveedor (filtro del servidor, change 11, D17). */
+  proveedorId?: string
 }
 
 export const clavesCatalogo = {

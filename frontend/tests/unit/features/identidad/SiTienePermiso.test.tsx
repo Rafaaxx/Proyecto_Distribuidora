@@ -95,4 +95,27 @@ describe('<SiTienePermiso> (tarea 6.4, design.md D4-A)', () => {
     await waitFor(() => expect(container.textContent).toBe(''))
     expect(consultaDelHijoMock).not.toHaveBeenCalled()
   })
+
+  it('con una lista de permisos alcanza con tener uno cualquiera (change 11: REGISTRAR_COMPRA o ANULAR_COMPRA)', async () => {
+    apiFetchMock.mockResolvedValueOnce(respuesta(200, { ...YO_ADMINISTRACION, permisos: ['ANULAR_COMPRA'] }))
+    renderConProveedor(
+      <SiTienePermiso permiso={['REGISTRAR_COMPRA', 'ANULAR_COMPRA']} fallback={<p>No tenés permiso.</p>}>
+        <HijoQuePide />
+      </SiTienePermiso>,
+    )
+
+    expect(await screen.findByText('Datos del hijo')).toBeInTheDocument()
+  })
+
+  it('con una lista de permisos y ninguno de ellos, muestra el fallback y no monta los hijos', async () => {
+    apiFetchMock.mockResolvedValueOnce(respuesta(200, YO_ADMINISTRACION))
+    renderConProveedor(
+      <SiTienePermiso permiso={['REGISTRAR_COMPRA', 'ANULAR_COMPRA']} fallback={<p>No tenés permiso.</p>}>
+        <HijoQuePide />
+      </SiTienePermiso>,
+    )
+
+    expect(await screen.findByText('No tenés permiso.')).toBeInTheDocument()
+    expect(consultaDelHijoMock).not.toHaveBeenCalled()
+  })
 })

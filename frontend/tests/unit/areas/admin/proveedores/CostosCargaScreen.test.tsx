@@ -382,3 +382,55 @@ describe('CostosCargaScreen (tarea 11.4)', () => {
     expect(screen.queryByRole('button', { name: /cargar costos/i })).not.toBeInTheDocument()
   })
 })
+
+/**
+ * Change 11, tarea 11.2 (deuda del change 06): el selector ofrece los productos del
+ * proveedor que el SERVIDOR devuelve con `proveedor_id`, no los de la primera página
+ * del catálogo filtrados en el cliente (con más de una página, un producto del proveedor
+ * podía no aparecer nunca).
+ */
+describe('CostosCargaScreen pide los productos del proveedor al servidor (tarea 11.2)', () => {
+  const PRODUCTO_AJENO = { ...PRODUCTO_VINO_A, id: '99999999-9999-4999-8999-999999999999', nombre: 'Gaseosa Ajena', proveedor_id: 'otro' }
+
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+    apiFetchMock.mockImplementation((ruta: string) => {
+      if (ruta === `/proveedores/${PROVEEDOR_ID}`) return Promise.resolve(respuesta(200, PROVEEDOR))
+      if (ruta.startsWith('/catalogo/productos?')) {
+        const url = new URL(ruta, 'http://x')
+        const items =
+          url.searchParams.get('proveedor_id') === PROVEEDOR_ID ? [PRODUCTO_CERVEZA_B] : [PRODUCTO_CERVEZA_B, PRODUCTO_AJENO]
+        return Promise.resolve(respuesta(200, { items, cursor_siguiente: null }))
+      }
+      if (ruta.startsWith('/configuracion/alicuotas')) return Promise.resolve(respuesta(200, ALICUOTAS))
+      return Promise.resolve(respuesta(200, { items: [], cursor_siguiente: null }))
+    })
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('manda proveedor_id y activo al listar productos', async () => {
+    renderPantalla()
+
+    await screen.findByRole('option', { name: 'Cerveza B' })
+    const pedidos = apiFetchMock.mock.calls
+      .map(([ruta]) => String(ruta))
+      .filter((ruta) => ruta.startsWith('/catalogo/productos?'))
+      .map((ruta) => new URL(ruta, 'http://x').searchParams)
+    expect(pedidos.length).toBeGreaterThan(0)
+    for (const params of pedidos) {
+      expect(params.get('proveedor_id')).toBe(PROVEEDOR_ID)
+      expect(params.get('activo')).toBe('true')
+    }
+  })
+
+  it('ofrece exactamente lo que devuelve el servidor y no filtra de nuevo en el cliente', async () => {
+    renderPantalla()
+
+    await screen.findByRole('option', { name: 'Cerveza B' })
+    const opciones = within(screen.getByLabelText(/^producto$/i) as HTMLSelectElement).getAllByRole('option')
+    expect(opciones.map((o) => o.textContent)).toEqual(['Elegí un producto', 'Cerveza B'])
+  })
+})

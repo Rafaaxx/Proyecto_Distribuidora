@@ -4,7 +4,9 @@ import type { CodigoPermiso } from '../../domain/identidad/permisos'
 import { usePermisos } from './usePermisos'
 
 export interface SiTienePermisoProps {
-  permiso: CodigoPermiso
+  /** Un permiso, o una lista de la que alcanza con tener uno cualquiera (p. ej. las
+   * pantallas de compras: `REGISTRAR_COMPRA` o `ANULAR_COMPRA`, change 11 D14). */
+  permiso: CodigoPermiso | readonly CodigoPermiso[]
   /** Se muestra sin el permiso. Sin este prop, no se muestra nada
    * (tarea 6.4). */
   fallback?: ReactNode
@@ -32,7 +34,8 @@ export function SiTienePermiso({ permiso, fallback = null, cargando = null, chil
     return <>{cargando}</>
   }
 
-  if (!permisos.tiene(permiso)) {
+  const alguno = Array.isArray(permiso) ? permiso.some((p) => permisos.tiene(p)) : permisos.tiene(permiso as CodigoPermiso)
+  if (!alguno) {
     return <>{fallback}</>
   }
 

@@ -336,19 +336,23 @@ def egresar_del_saldo(
     ubicacion_id: UUID,
     cantidad: int,
     momento: datetime,
+    permitir_negativo: bool = False,
 ) -> int | None:
     """`UPDATE stock_saldo SET cantidad_base = cantidad_base - :cantidad WHERE
     ... AND cantidad_base >= :cantidad RETURNING cantidad_base` (`02` §7.4): el
     egreso se aplica solo si el saldo alcanza, en una sentencia. Devuelve el saldo
-    nuevo, o `None` si el saldo no alcanzaba (nada cambió)."""
+    nuevo, o `None` si el saldo no alcanzaba (nada cambió). Con `permitir_negativo`
+    (solo `ANULACION_COMPRA` con permiso, CMP-07) se omite la condición."""
+    condiciones = [
+        StockSaldo.organizacion_id == organizacion_id,
+        StockSaldo.producto_id == producto_id,
+        StockSaldo.ubicacion_id == ubicacion_id,
+    ]
+    if not permitir_negativo:
+        condiciones.append(StockSaldo.cantidad_base >= cantidad)
     sentencia = (
         update(StockSaldo)
-        .where(
-            StockSaldo.organizacion_id == organizacion_id,
-            StockSaldo.producto_id == producto_id,
-            StockSaldo.ubicacion_id == ubicacion_id,
-            StockSaldo.cantidad_base >= cantidad,
-        )
+        .where(*condiciones)
         .values(cantidad_base=StockSaldo.cantidad_base - cantidad, actualizado_en=momento)
         .returning(StockSaldo.cantidad_base)
         .execution_options(synchronize_session=False)

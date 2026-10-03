@@ -199,6 +199,8 @@ El catálogo de `permiso` se sincroniza por migración con `01` §19. Permisos p
 | `medio_pago` | `id`, `organizacion_id`, `nombre`, `requiere_referencia` `boolean`, `activo` |
 | `motivo` | `id`, `organizacion_id`, `ambito` (`AJUSTE_STOCK`, `ANULACION_VENTA`, `ANULACION_COMPRA`, `ANULACION_COBRANZA`, `DESCUENTO_MANUAL`, `LISTA_ANTERIOR`, `LIBERACION_JORNADA`), `nombre`, `activo` |
 
+Las organizaciones nuevas nacen con tres motivos del ámbito `ANULACION_COMPRA` ("Error de carga", "Devolución al proveedor" y "Otro"); la migración del change 11 los agrega, de forma idempotente, a las organizaciones existentes que no tengan ninguno. Los medios de pago y los motivos activos se leen por API (`GET /configuracion/medios-pago` y `GET /configuracion/motivos?ambito=`) (ADR-043).
+
 ## 5. Catálogo
 
 ### `categoria`, `marca`
@@ -275,19 +277,19 @@ La presentación de referencia se resuelve por este indicador y no con una clave
 
 | Tabla | Columnas |
 | --- | --- |
-| `compra` | `id`, `organizacion_id`, `proveedor_id`, `ubicacion_id`, `fecha` `date`, `condicion` (`CONTADO`, `CREDITO`), `total_neto`, `estado` (`CONFIRMADA`, `ANULADA`), `anulacion_motivo_id`, `anulada_en`, `anulada_por_id`, columnas de operación |
-| `compra_linea` | `id`, `organizacion_id`, `compra_id`, `producto_id`, `presentacion_id`, `unidades_presentacion` `integer` (congelado), `cantidad` `numeric(14,3)`, `cantidad_base` `integer`, `valor_presentacion` `numeric(14,2)`, `incluye_iva`, `bonificacion`, `costo_base` `numeric(18,6)`, `importe_neto` `numeric(14,2)` |
+| `compra` | `id`, `organizacion_id`, `proveedor_id`, `ubicacion_id`, `fecha` `date` (del comprobante), `condicion` (`CONTADO`, `CREDITO`), `total_neto` `numeric(14,2)`, `total_factura` `numeric(14,2)` (el importe que registra la cuenta del proveedor), `numero_comprobante` (opcional), `observacion` (opcional), `estado` (`CONFIRMADA`, `ANULADA`), `anulacion_motivo_id`, `anulada_en`, `anulada_por_id`, columnas de operación |
+| `compra_linea` | `id`, `organizacion_id`, `compra_id`, `orden` `integer`, `producto_id`, `presentacion_id`, `unidades_presentacion` `integer` (congelado), `cantidad` `numeric(14,3)`, `cantidad_base` `integer`, `valor_presentacion` `numeric(14,2)`, `incluye_iva`, `bonificacion` `numeric(9,6)`, `alicuota_aplicada` `numeric(9,6)` (congelada), `costo_base` `numeric(18,6)`, `importe_neto` `numeric(14,2)` |
 
-`CHECK (cantidad_base > 0)`. La existencia de al menos una línea (INV-07) se valida en el servicio dentro de la transacción.
+`CHECK` de `condicion`, `estado`, `total_neto >= 0`, `total_factura > 0` y de coherencia "anulada ⇔ motivo, momento y usuario"; en la línea, `CHECK (cantidad > 0, cantidad_base > 0, valor_presentacion > 0, 0 <= bonificacion < 1, costo_base > 0)` y `UNIQUE (compra_id, orden)`. La existencia de al menos una línea (INV-07) se valida en el servicio dentro de la transacción. Índices: `(organizacion_id, fecha DESC, id DESC)`, `(organizacion_id, proveedor_id, fecha DESC)` y `compra_linea (organizacion_id, presentacion_id)` (verificador de INV-18). Todas las claves foráneas son compuestas e incluyen `organizacion_id`.
 
 ### `pago_proveedor` y `pago_proveedor_medio`
 
 | Tabla | Columnas |
 | --- | --- |
-| `pago_proveedor` | `id`, `organizacion_id`, `proveedor_id`, `fecha`, `importe` `numeric(14,2)` `CHECK (> 0)`, `estado`, columnas de operación |
+| `pago_proveedor` | `id`, `organizacion_id`, `proveedor_id`, `fecha`, `importe` `numeric(14,2)` `CHECK (> 0)`, `estado` (`CONFIRMADA`, `ANULADA`), `origen` (`COMPRA`, `INDEPENDIENTE`), `compra_id` (nulo si el origen es `INDEPENDIENTE`; único si no es nulo), `anulado_en`, `anulado_por_id`, `anulacion_motivo_id` (nulable: el change 12 decide el motivo de anulación de un pago), columnas de operación |
 | `pago_proveedor_medio` | `id`, `organizacion_id`, `pago_id`, `medio_pago_id`, `importe`, `referencia` |
 
-INV-08 (suma de medios = importe) se valida en el servicio y se cubre con prueba de propiedad.
+INV-08 (suma de medios = importe) se valida en el servicio y se cubre con prueba de propiedad. El change 11 crea estas tablas para el pago de una compra de contado (`origen = COMPRA`, ADR-043); el change 12 agrega el pago independiente sobre las mismas tablas. `app_runtime` tiene `SELECT, INSERT, UPDATE` sobre `compra` y `pago_proveedor` (el `UPDATE` solo alcanza el estado y los campos de anulación), `SELECT, INSERT` sobre `compra_linea` y `pago_proveedor_medio`, y nunca `DELETE` (INV-05).
 
 ## 7. Costeo
 

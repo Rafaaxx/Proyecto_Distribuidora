@@ -10,7 +10,7 @@ import { Campo } from '../../../components/ui/Field'
 import { PageHeader } from '../../../components/ui/PageHeader'
 import { Tabla, type ColumnaTabla } from '../../../components/ui/Table'
 import { aFiltros, esquemaPeriodo, type DatosPeriodo } from '../../../domain/cuentas-corrientes/periodoSchema'
-import { formatearCantidad } from '../../../domain/stock/cantidades'
+import { formatearCantidad, referenciaDeRespuesta } from '../../../domain/stock/cantidades'
 import { formatearCostoDeApi } from '../../../domain/stock/costos'
 import { etiquetaDeTipoDeMovimiento } from '../../../domain/stock/ubicacionSchema'
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
@@ -47,7 +47,7 @@ function mensajeDeError(error: unknown): string {
  * Movimientos en orden con el saldo acumulado que calcula el servidor sobre la
  * historia completa, filtro de período (fechas de negocio `aaaa-mm-dd` en la zona
  * de la organización, TR-04), saldo anterior y "cargar más" por cursor. Las
- * cantidades se muestran en cajas + unidades con la presentación de referencia
+ * cantidades se muestran en unidades con la equivalencia en la presentación de referencia
  * que informa el propio kardex. El costo unitario solo con `VER_COSTOS`.
  */
 export function KardexScreen() {
@@ -148,7 +148,7 @@ function ContenidoDelKardex({
   const verCostos = permisos.tiene('VER_COSTOS')
   const primera = paginas[0]
   if (!primera) return null
-  const referencia = primera.unidades_referencia
+  const referencia = referenciaDeRespuesta(primera.unidades_referencia, primera.nombre_referencia)
   const zona = primera.zona_horaria
   const movimientos = paginas.flatMap((pagina) => pagina.items)
 

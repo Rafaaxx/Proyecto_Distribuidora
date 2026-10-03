@@ -180,3 +180,45 @@ export function calcularEgreso(
 
   return { promedioNuevo: promedio, costoValorizacion: promedio, stockNuevo }
 }
+
+export interface ResultadoDeReversion {
+  promedioNuevo: Importe
+  stockNuevo: number
+  /** `false` cuando el promedio se mantiene (CMP-06). */
+  recalculado: boolean
+}
+
+/**
+ * CMP-06: revierte un ingreso con costo (anulación de una compra). Con stock
+ * restante `> 0` recalcula `(stock * promedio - cantidad * costo) / (stock - cantidad)`
+ * y lo acepta solo si es `> 0`; si no, mantiene el promedio (`recalculado = false`).
+ * Espejo de `calcular_reversion` del backend.
+ */
+export function calcularReversion(
+  stockPrevio: number,
+  promedioPrevio: string | null,
+  cantidad: number,
+  costoIngreso: string,
+): ResultadoDeReversion {
+  const costo = validarCosto(costoIngreso)
+  const cantidadValidada = validarCantidad(cantidad)
+  const stockNuevo = validarStock(stockPrevio - cantidadValidada)
+  if (promedioPrevio === null) {
+    throw new PromedioInconsistenteError(
+      'No se puede revertir un ingreso de un producto sin costo promedio.',
+    )
+  }
+  const promedio = parsearImporteDesdeApi(promedioPrevio)
+
+  if (stockNuevo > 0) {
+    const restante = promedio.mul(stockPrevio).sub(costo.mul(cantidadValidada)).div(stockNuevo)
+    if (restante.gt(0)) {
+      const redondeado = redondearCosto(restante)
+      if (redondeado.gt(0)) {
+        return { promedioNuevo: redondeado, stockNuevo, recalculado: true }
+      }
+    }
+  }
+
+  return { promedioNuevo: redondearCosto(promedio), stockNuevo, recalculado: false }
+}

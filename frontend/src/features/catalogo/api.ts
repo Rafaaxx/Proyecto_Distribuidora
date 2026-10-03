@@ -113,6 +113,7 @@ function paramsProductos(cursor: string | undefined, limite: number, filtros: Fi
   if (filtros.categoriaId) params.set('categoria_id', filtros.categoriaId)
   if (filtros.marcaId) params.set('marca_id', filtros.marcaId)
   if (filtros.activo !== undefined) params.set('activo', String(filtros.activo))
+  if (filtros.proveedorId) params.set('proveedor_id', filtros.proveedorId)
   return params.toString()
 }
 

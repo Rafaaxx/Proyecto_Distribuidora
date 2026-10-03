@@ -83,6 +83,14 @@ def crear_medio_pago(
     )
 
 
+def obtener_medio_pago(
+    organizacion_id: UUID, medio_pago_id: UUID, sesion: Session
+) -> MedioPago | None:
+    """Lectura pública de un medio de pago por id, activo o no (change 11: compras de
+    contado). Nunca devuelve la fila de otra organización."""
+    return repository.obtener_medio_pago_por_id(organizacion_id, sesion, medio_pago_id)
+
+
 def listar_medios_pago_activos(organizacion_id: UUID, sesion: Session) -> list[MedioPago]:
     return repository.listar_medios_pago_activos(organizacion_id, sesion)
 
@@ -105,6 +113,12 @@ def crear_motivo(
     return repository.crear_motivo(
         organizacion_id, sesion, ambito=ambito, nombre=nombre, momento=reloj.now()
     )
+
+
+def obtener_motivo(organizacion_id: UUID, motivo_id: UUID, sesion: Session) -> Motivo | None:
+    """Lectura pública de un motivo por id, activo o no (change 11: anulación de
+    compras). Nunca devuelve la fila de otra organización."""
+    return repository.obtener_motivo_por_id(organizacion_id, sesion, motivo_id)
 
 
 def listar_motivos_activos(organizacion_id: UUID, sesion: Session) -> list[Motivo]:

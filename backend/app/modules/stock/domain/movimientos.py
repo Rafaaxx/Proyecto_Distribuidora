@@ -33,12 +33,13 @@ from app.modules.stock.domain.errores import (
 from app.modules.stock.domain.kardex import DiferenciaDeStock
 
 STOCK_INICIAL = "STOCK_INICIAL"
+ANULACION_COMPRA = "ANULACION_COMPRA"
 
 TIPOS_DE_MOVIMIENTO = frozenset(
     {
         STOCK_INICIAL,
         "COMPRA",
-        "ANULACION_COMPRA",
+        ANULACION_COMPRA,
         "VENTA",
         "ANULACION_VENTA",
         "TRANSFERENCIA_SALIDA",
@@ -110,12 +111,19 @@ def _validar_cantidad(cantidad: object) -> int:
     return cantidad
 
 
-def _validar_costo_segun_signo(cantidad: int, costo_unitario: object) -> None:
+def _validar_costo_segun_signo(
+    cantidad: int, costo_unitario: object, tipo: str | None = None
+) -> None:
     """D5: el costo es obligatorio si la cantidad es positiva y prohibido si es
-    negativa."""
+    negativa. Excepción (change 11, D9): el egreso `ANULACION_COMPRA` lleva el
+    costo base de la línea que revierte (CMP-06) y sin él es `COSTO_INVALIDO`."""
     if cantidad > 0 and costo_unitario is None:
         raise CostoInvalidoError("Una línea que ingresa stock necesita su costo unitario.")
-    if cantidad < 0 and costo_unitario is not None:
+    if cantidad < 0 and tipo == ANULACION_COMPRA and costo_unitario is None:
+        raise CostoInvalidoError(
+            "Un egreso de anulación de compra necesita el costo de la línea que revierte."
+        )
+    if cantidad < 0 and tipo != ANULACION_COMPRA and costo_unitario is not None:
         raise CostoInvalidoError(
             "Una línea que egresa stock no lleva costo: se valoriza al promedio vigente."
         )
@@ -133,12 +141,26 @@ def validar_lineas_de_movimiento(
     for linea in lineas:
         validar_tipo_de_movimiento(linea.tipo)
         cantidad = _validar_cantidad(linea.cantidad_base)
-        _validar_costo_segun_signo(cantidad, linea.costo_unitario)
+        _validar_costo_segun_signo(cantidad, linea.costo_unitario, linea.tipo)
         if cantidad > 0 and linea.tipo not in TIPOS_QUE_INGRESAN_CON_COSTO:
             raise TipoDeMovimientoInvalidoError(
                 f"Un ingreso de tipo {linea.tipo} todavía no tiene reglas de costo."
             )
     return list(lineas)
+
+
+def puede_quedar_negativo(linea: LineaDeMovimiento, *, permitir_negativo: bool) -> bool:
+    """CMP-07, D10: solo el egreso `ANULACION_COMPRA` y solo con permiso puede
+    dejar el saldo negativo; cualquier otro egreso sigue exigiendo saldo
+    suficiente (STK-05)."""
+    return permitir_negativo and linea.tipo == ANULACION_COMPRA
+
+
+def productos_que_exigen_estar_activos(lineas: Iterable[LineaDeMovimiento]) -> set[UUID]:
+    """CAT-05, D11: un producto cuyas líneas son todas `ANULACION_COMPRA` puede
+    estar inactivo (revertir no es una operación nueva); si tiene alguna línea de
+    otro tipo debe estar activo."""
+    return {linea.producto_id for linea in lineas if linea.tipo != ANULACION_COMPRA}
 
 
 def validar_lineas_de_stock_inicial(

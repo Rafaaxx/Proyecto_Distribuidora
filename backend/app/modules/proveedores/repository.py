@@ -23,11 +23,19 @@ from sqlalchemy import func, select, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.modules.proveedores.domain.compras import codificar_cursor, decodificar_cursor
 from app.modules.proveedores.domain.errores import (
     CuitDuplicadoError,
     NombreDuplicadoError,
 )
-from app.modules.proveedores.models import CostoInformado, Proveedor
+from app.modules.proveedores.models import (
+    Compra,
+    CompraLinea,
+    CostoInformado,
+    PagoProveedor,
+    PagoProveedorMedio,
+    Proveedor,
+)
 
 LIMITE_PAGINA_MAXIMO = 100
 LIMITE_PAGINA_DEFAULT = 50
@@ -466,3 +474,372 @@ def buscar_proveedores_por_nombre(
         .order_by(Proveedor.nombre, Proveedor.id)
     )
     return list(sesion.scalars(consulta).all())
+
+
+# --- compras (change 11, `design.md` D12) --------------------------------------------
+
+
+@dataclass(frozen=True)
+class DatosDeCompra:
+    """Una compra por insertar: todo calculado y validado por el servicio."""
+
+    id: UUID
+    proveedor_id: UUID
+    ubicacion_id: UUID
+    fecha: date
+    condicion: str
+    total_neto: Decimal
+    total_factura: Decimal
+    numero_comprobante: str | None
+    observacion: str | None
+    operation_id: UUID
+    usuario_id: UUID
+    dispositivo_id: UUID
+    occurred_at: datetime
+    registered_at: datetime
+
+
+@dataclass(frozen=True)
+class DatosDeLineaDeCompra:
+    id: UUID
+    orden: int
+    producto_id: UUID
+    presentacion_id: UUID
+    unidades_presentacion: int
+    cantidad: Decimal
+    cantidad_base: int
+    valor_presentacion: Decimal
+    incluye_iva: bool
+    bonificacion: Decimal
+    alicuota_aplicada: Decimal
+    costo_base: Decimal
+    importe_neto: Decimal
+
+
+def insertar_compra(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    compra: DatosDeCompra,
+    lineas: list[DatosDeLineaDeCompra],
+) -> tuple[Compra, list[CompraLinea]]:
+    """Inserta la compra `CONFIRMADA` y sus líneas, en la transacción de quien llama
+    (INV-01). Una compra es inmutable salvo su anulación (TR-06): no hay `actualizar`
+    de importes ni `borrar` en este módulo."""
+    fila = Compra(
+        id=compra.id,
+        organizacion_id=organizacion_id,
+        proveedor_id=compra.proveedor_id,
+        ubicacion_id=compra.ubicacion_id,
+        fecha=compra.fecha,
+        condicion=compra.condicion,
+        total_neto=compra.total_neto,
+        total_factura=compra.total_factura,
+        numero_comprobante=compra.numero_comprobante,
+        observacion=compra.observacion,
+        estado="CONFIRMADA",
+        anulacion_motivo_id=None,
+        anulada_en=None,
+        anulada_por_id=None,
+        operation_id=compra.operation_id,
+        usuario_id=compra.usuario_id,
+        dispositivo_id=compra.dispositivo_id,
+        occurred_at=compra.occurred_at,
+        registered_at=compra.registered_at,
+    )
+    filas_de_linea = [
+        CompraLinea(
+            id=datos.id,
+            organizacion_id=organizacion_id,
+            compra_id=compra.id,
+            orden=datos.orden,
+            producto_id=datos.producto_id,
+            presentacion_id=datos.presentacion_id,
+            unidades_presentacion=datos.unidades_presentacion,
+            cantidad=datos.cantidad,
+            cantidad_base=datos.cantidad_base,
+            valor_presentacion=datos.valor_presentacion,
+            incluye_iva=datos.incluye_iva,
+            bonificacion=datos.bonificacion,
+            alicuota_aplicada=datos.alicuota_aplicada,
+            costo_base=datos.costo_base,
+            importe_neto=datos.importe_neto,
+        )
+        for datos in lineas
+    ]
+
+    def _mutar() -> None:
+        sesion.add(fila)
+        sesion.flush()  # la compra antes que sus líneas (FK compuesta)
+        for linea in filas_de_linea:
+            sesion.add(linea)
+
+    guardar_con_traduccion_de_integridad(organizacion_id, sesion, _mutar)
+    return fila, filas_de_linea
+
+
+def existe_linea_para_presentacion(
+    organizacion_id: UUID, presentacion_id: UUID, sesion: Session
+) -> bool:
+    """INV-18, ADR-023: verificador de uso que `proveedores/service.py` registra en
+    `catalogo_service.registrar_verificador_uso` -- `True` si ALGUNA línea de compra,
+    de una compra confirmada o anulada, referencia esa presentación."""
+    consulta = (
+        select(func.count())
+        .select_from(CompraLinea)
+        .where(
+            CompraLinea.organizacion_id == organizacion_id,
+            CompraLinea.presentacion_id == presentacion_id,
+        )
+    )
+    return int(sesion.execute(consulta).scalar_one()) > 0
+
+
+@dataclass(frozen=True)
+class DatosDePagoDeCompra:
+    """El pago de una compra de contado por insertar (D2, D12)."""
+
+    id: UUID
+    proveedor_id: UUID
+    compra_id: UUID
+    fecha: date
+    importe: Decimal
+    operation_id: UUID
+    usuario_id: UUID
+    dispositivo_id: UUID
+    occurred_at: datetime
+    registered_at: datetime
+
+
+@dataclass(frozen=True)
+class DatosDeMedioDePago:
+    medio_pago_id: UUID
+    importe: Decimal
+    referencia: str | None
+
+
+def insertar_pago_de_compra(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    pago: DatosDePagoDeCompra,
+    medios: list[DatosDeMedioDePago],
+) -> PagoProveedor:
+    """Inserta el pago `CONFIRMADA` de origen `COMPRA` y sus medios, en la transacción
+    de quien llama (INV-01, INV-08: la suma de los medios la valida el servicio). La
+    compra ya debe estar insertada (FK compuesta)."""
+    fila = PagoProveedor(
+        id=pago.id,
+        organizacion_id=organizacion_id,
+        proveedor_id=pago.proveedor_id,
+        fecha=pago.fecha,
+        importe=pago.importe,
+        estado="CONFIRMADA",
+        origen="COMPRA",
+        compra_id=pago.compra_id,
+        anulado_en=None,
+        anulado_por_id=None,
+        anulacion_motivo_id=None,
+        operation_id=pago.operation_id,
+        usuario_id=pago.usuario_id,
+        dispositivo_id=pago.dispositivo_id,
+        occurred_at=pago.occurred_at,
+        registered_at=pago.registered_at,
+    )
+    filas_de_medio = [
+        PagoProveedorMedio(
+            organizacion_id=organizacion_id,
+            pago_id=pago.id,
+            medio_pago_id=medio.medio_pago_id,
+            importe=medio.importe,
+            referencia=medio.referencia,
+        )
+        for medio in medios
+    ]
+
+    def _mutar() -> None:
+        sesion.add(fila)
+        sesion.flush()  # el pago antes que sus medios (FK compuesta)
+        for medio in filas_de_medio:
+            sesion.add(medio)
+
+    guardar_con_traduccion_de_integridad(organizacion_id, sesion, _mutar)
+    return fila
+
+
+def obtener_compra_para_actualizar(
+    organizacion_id: UUID, compra_id: UUID, sesion: Session
+) -> Compra | None:
+    """`SELECT ... FOR UPDATE` de la compra (`02` §7.3, `design.md` D12 y "Orden de
+    bloqueo"): serializa dos anulaciones simultáneas. `populate_existing` para que el
+    segundo en llegar vea el `estado` que dejó el primero y no el de una instancia que
+    la sesión ya tuviera cargada."""
+    consulta = (
+        select(Compra)
+        .where(Compra.organizacion_id == organizacion_id, Compra.id == compra_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return sesion.scalars(consulta).one_or_none()
+
+
+def listar_lineas_de_compra(
+    organizacion_id: UUID, compra_id: UUID, sesion: Session
+) -> list[CompraLinea]:
+    """Las líneas de la compra en el orden en que se cargaron."""
+    consulta = (
+        select(CompraLinea)
+        .where(CompraLinea.organizacion_id == organizacion_id, CompraLinea.compra_id == compra_id)
+        .order_by(CompraLinea.orden)
+    )
+    return list(sesion.scalars(consulta).all())
+
+
+def obtener_pago_de_compra(
+    organizacion_id: UUID, compra_id: UUID, sesion: Session
+) -> PagoProveedor | None:
+    """El pago de contado de la compra (a lo sumo uno: `ux_pago_proveedor__compra`)."""
+    consulta = (
+        select(PagoProveedor)
+        .where(
+            PagoProveedor.organizacion_id == organizacion_id, PagoProveedor.compra_id == compra_id
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return sesion.scalars(consulta).one_or_none()
+
+
+def marcar_compra_anulada(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    compra: Compra,
+    motivo_id: UUID,
+    anulada_en: datetime,
+    anulada_por_id: UUID,
+) -> None:
+    """Pasa la compra a `ANULADA` (`design.md` D12). Solo toca las columnas de estado y
+    anulación, las únicas con `UPDATE` para `app_runtime` (INV-05)."""
+    del (
+        organizacion_id
+    )  # la fila ya viene filtrada y bloqueada por `obtener_compra_para_actualizar`.
+
+    def _mutar() -> None:
+        compra.estado = "ANULADA"
+        compra.anulacion_motivo_id = motivo_id
+        compra.anulada_en = anulada_en
+        compra.anulada_por_id = anulada_por_id
+
+    guardar_con_traduccion_de_integridad(compra.organizacion_id, sesion, _mutar)
+
+
+def marcar_pago_anulado(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    pago: PagoProveedor,
+    motivo_id: UUID,
+    anulado_en: datetime,
+    anulado_por_id: UUID,
+) -> None:
+    """Pasa el pago de contado a `ANULADA` cuando se devuelve (`design.md` D3, D12)."""
+
+    def _mutar() -> None:
+        pago.estado = "ANULADA"
+        pago.anulacion_motivo_id = motivo_id
+        pago.anulado_en = anulado_en
+        pago.anulado_por_id = anulado_por_id
+
+    guardar_con_traduccion_de_integridad(organizacion_id, sesion, _mutar)
+
+
+def listar_compras_paginado(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    limite: int,
+    cursor: str | None,
+    proveedor_id: UUID | None,
+    estado: str | None,
+    desde: date | None,
+    hasta: date | None,
+    numero_comprobante: str | None,
+) -> tuple[list[tuple[Compra, str]], str | None]:
+    """Compras de la organización de la más reciente a la más vieja, por cursor
+    `(fecha, id)` descendente (índice `(organizacion_id, fecha DESC, id)`, D12). Cada
+    fila trae el nombre del proveedor. `desde` y `hasta` son fechas de comprobante
+    inclusivas. Devuelve `(filas, cursor_siguiente)`."""
+    consulta = (
+        select(Compra, Proveedor.nombre)
+        .join(
+            Proveedor,
+            (Proveedor.organizacion_id == Compra.organizacion_id)
+            & (Proveedor.id == Compra.proveedor_id),
+        )
+        .where(Compra.organizacion_id == organizacion_id)
+    )
+    if proveedor_id is not None:
+        consulta = consulta.where(Compra.proveedor_id == proveedor_id)
+    if estado is not None:
+        consulta = consulta.where(Compra.estado == estado)
+    if desde is not None:
+        consulta = consulta.where(Compra.fecha >= desde)
+    if hasta is not None:
+        consulta = consulta.where(Compra.fecha <= hasta)
+    if numero_comprobante is not None:
+        consulta = consulta.where(Compra.numero_comprobante.ilike(f"%{numero_comprobante}%"))
+    if cursor is not None:
+        fecha_cursor, id_cursor = decodificar_cursor(cursor)
+        consulta = consulta.where(tuple_(Compra.fecha, Compra.id) < (fecha_cursor, id_cursor))
+    consulta = consulta.order_by(Compra.fecha.desc(), Compra.id.desc()).limit(limite + 1)
+
+    filas = [(compra, nombre) for compra, nombre in sesion.execute(consulta).all()]
+    if len(filas) > limite:
+        pagina = filas[:limite]
+        ultima = pagina[-1][0]
+        return pagina, codificar_cursor(ultima.fecha, ultima.id)
+    return filas, None
+
+
+def obtener_compra(
+    organizacion_id: UUID, compra_id: UUID, sesion: Session
+) -> tuple[Compra, str] | None:
+    """La compra con el nombre de su proveedor, sin bloquear, o `None` si no existe en
+    la organización (INV-21)."""
+    consulta = (
+        select(Compra, Proveedor.nombre)
+        .join(
+            Proveedor,
+            (Proveedor.organizacion_id == Compra.organizacion_id)
+            & (Proveedor.id == Compra.proveedor_id),
+        )
+        .where(Compra.organizacion_id == organizacion_id, Compra.id == compra_id)
+    )
+    fila = sesion.execute(consulta).one_or_none()
+    return None if fila is None else (fila[0], fila[1])
+
+
+def listar_medios_de_pago(
+    organizacion_id: UUID, pago_id: UUID, sesion: Session
+) -> list[PagoProveedorMedio]:
+    """Los medios del pago, del de mayor importe al de menor."""
+    consulta = (
+        select(PagoProveedorMedio)
+        .where(
+            PagoProveedorMedio.organizacion_id == organizacion_id,
+            PagoProveedorMedio.pago_id == pago_id,
+        )
+        .order_by(PagoProveedorMedio.importe.desc(), PagoProveedorMedio.id)
+    )
+    return list(sesion.scalars(consulta).all())
+
+
+def obtener_pago_de_compra_sin_bloquear(
+    organizacion_id: UUID, compra_id: UUID, sesion: Session
+) -> PagoProveedor | None:
+    """El pago de contado de la compra, para lectura."""
+    consulta = select(PagoProveedor).where(
+        PagoProveedor.organizacion_id == organizacion_id, PagoProveedor.compra_id == compra_id
+    )
+    return sesion.scalars(consulta).one_or_none()

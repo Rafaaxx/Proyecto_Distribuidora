@@ -32,7 +32,7 @@ devuelven una lista vacía o `None`, y la spec exige 404 para el ajeno
 from __future__ import annotations
 
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -45,6 +45,7 @@ from app.commands.sobre import construir_sobre_online
 from app.core.autenticacion import (
     ContextoAutenticado,
     EntradaComandoOnline,
+    requiere_algun_permiso,
     requiere_comando_online,
     requiere_permiso,
 )
@@ -54,17 +55,29 @@ from app.modules.cuentas_corrientes import service as cuentas_corrientes_service
 from app.modules.cuentas_corrientes.service import EstadoDeCuentaResponse, estado_de_cuenta_response
 from app.modules.identidad import service as identidad_service
 from app.modules.proveedores import commands as proveedores_commands  # noqa: F401
+from app.modules.proveedores import queries as proveedores_queries
 from app.modules.proveedores import repository as proveedores_repository
 from app.modules.proveedores import service as proveedores_service
 from app.modules.proveedores.domain.errores import RecursoNoEncontradoError
-from app.modules.proveedores.models import CostoInformado
+from app.modules.proveedores.models import Compra, CostoInformado
 from app.modules.proveedores.repository import LIMITE_PAGINA_DEFAULT
 from app.modules.proveedores.schemas import (
+    CompraAnulacionResponse,
+    CompraAnularRequest,
+    CompraAnularResponse,
+    CompraConfirmarRequest,
+    CompraConfirmarResponse,
+    CompraDetalleResponse,
+    CompraLineaResponse,
+    CompraMedioResponse,
+    CompraPagoResponse,
+    CompraResumenResponse,
     CostoDelResultadoResponse,
     CostoInformadoResponse,
     CostoInformarRequest,
     CostoInformarResponse,
     CostoVigenteResponse,
+    PaginaCompras,
     PaginaCostosInformados,
     PaginaProveedores,
     PaginaProveedorOpciones,
@@ -79,9 +92,12 @@ PERMISO_GESTIONAR_PROVEEDORES = "GESTIONAR_PROVEEDORES"
 PERMISO_OPCIONES = "GESTIONAR_CATALOGO"
 PERMISO_EDITAR_COSTOS = "EDITAR_COSTOS"
 PERMISO_VER_COSTOS = "VER_COSTOS"
+PERMISO_REGISTRAR_COMPRA = "REGISTRAR_COMPRA"
+PERMISO_ANULAR_COMPRA = "ANULAR_COMPRA"
 
 router_proveedores = APIRouter(prefix="/proveedores", tags=["proveedores"])
 router_costos = APIRouter(prefix="/costos", tags=["proveedores"])
+router_compras = APIRouter(prefix="/compras", tags=["proveedores"])
 
 
 def _resultado_de(comando: sync_service.Comando) -> dict[str, object]:
@@ -220,7 +236,10 @@ def listar_proveedores(
 
 @router_proveedores.get("/opciones", response_model=PaginaProveedorOpciones)
 def listar_opciones_de_proveedores(
-    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso(PERMISO_OPCIONES))],
+    contexto: Annotated[
+        ContextoAutenticado,
+        Depends(requiere_algun_permiso(PERMISO_OPCIONES, PERMISO_REGISTRAR_COMPRA)),
+    ],
     sesion: Annotated[Session, Depends(get_session)],
     limite: int = LIMITE_PAGINA_DEFAULT,
     cursor: str | None = None,
@@ -503,6 +522,249 @@ def listar_historial_de_costos(
     )
 
 
+# --- compras (change 11: CMP-01 a CMP-04, CMP-08; `design.md` D1 a D7, D14) ------------
+
+
+@router_compras.post("", response_model=CompraConfirmarResponse, status_code=201)
+def confirmar_compra(
+    datos: CompraConfirmarRequest,
+    entrada: Annotated[
+        EntradaComandoOnline, Depends(requiere_comando_online(PERMISO_REGISTRAR_COMPRA))
+    ],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> CompraConfirmarResponse:
+    reloj = SystemClock()
+    contenido: dict[str, ContenidoComando] = {
+        "proveedor_id": str(datos.proveedor_id),
+        "fecha": datos.fecha.isoformat(),
+        "ubicacion_id": str(datos.ubicacion_id),
+        "condicion": datos.condicion,
+        "total_factura": datos.total_factura,
+        "numero_comprobante": datos.numero_comprobante,
+        "observacion": datos.observacion,
+        "lineas": [
+            {
+                "producto_id": str(linea.producto_id),
+                "presentacion_id": str(linea.presentacion_id),
+                "cantidad": linea.cantidad,
+                "valor": linea.valor,
+                "incluye_iva": linea.incluye_iva,
+                "bonificacion": linea.bonificacion,
+            }
+            for linea in datos.lineas
+        ],
+        "medios": [
+            {
+                "medio_pago_id": str(medio.medio_pago_id),
+                "importe": medio.importe,
+                "referencia": medio.referencia,
+            }
+            for medio in datos.medios
+        ],
+    }
+    sobre = construir_sobre_online(
+        operation_id=entrada.operation_id,
+        tipo="COMPRA_CONFIRMAR",
+        version=1,
+        modo="ONLINE",
+        organizacion_id=entrada.contexto.organizacion_id,
+        usuario_id=entrada.contexto.usuario_id,
+        dispositivo_id=entrada.contexto.dispositivo_id,
+        occurred_at=reloj.now(),
+        secuencia=1,
+        app_version="server",
+        contenido=contenido,
+    )
+    huella = calcular_huella(sobre.contenido)
+    handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
+    contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
+
+    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+        return proveedores_commands.manejar_compra_confirmar(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    return CompraConfirmarResponse.model_validate(_resultado_de(comando))
+
+
+@router_compras.post("/{compra_id}/anulacion", response_model=CompraAnularResponse)
+def anular_compra(
+    compra_id: UUID,
+    datos: CompraAnularRequest,
+    entrada: Annotated[
+        EntradaComandoOnline, Depends(requiere_comando_online(PERMISO_ANULAR_COMPRA))
+    ],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> CompraAnularResponse:
+    reloj = SystemClock()
+    contenido: dict[str, ContenidoComando] = {
+        "compra_id": str(compra_id),
+        "motivo_id": str(datos.motivo_id),
+        "devuelve_pago": datos.devuelve_pago,
+    }
+    sobre = construir_sobre_online(
+        operation_id=entrada.operation_id,
+        tipo="COMPRA_ANULAR",
+        version=1,
+        modo="ONLINE",
+        organizacion_id=entrada.contexto.organizacion_id,
+        usuario_id=entrada.contexto.usuario_id,
+        dispositivo_id=entrada.contexto.dispositivo_id,
+        occurred_at=reloj.now(),
+        secuencia=1,
+        app_version="server",
+        contenido=contenido,
+    )
+    huella = calcular_huella(sobre.contenido)
+    handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
+    contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
+
+    def _ejecutar_handler(
+        sesion_protegida: object,
+    ) -> sync_service.ResultadoHandler | sync_service.ResultadoHandlerConObservaciones:
+        return proveedores_commands.manejar_compra_anular(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    return CompraAnularResponse.model_validate(_resultado_de(comando))
+
+
+def _resumen_de(compra: Compra, proveedor_nombre: str) -> CompraResumenResponse:
+    return CompraResumenResponse(
+        id=compra.id,
+        fecha=compra.fecha,
+        proveedor_id=compra.proveedor_id,
+        proveedor_nombre=proveedor_nombre,
+        condicion=compra.condicion,
+        total_neto=str(compra.total_neto),
+        total_factura=str(compra.total_factura),
+        estado=compra.estado,
+        numero_comprobante=compra.numero_comprobante,
+    )
+
+
+@router_compras.get("", response_model=PaginaCompras)
+def listar_compras(
+    contexto: Annotated[
+        ContextoAutenticado,
+        Depends(requiere_algun_permiso(PERMISO_REGISTRAR_COMPRA, PERMISO_ANULAR_COMPRA)),
+    ],
+    sesion: Annotated[Session, Depends(get_session)],
+    proveedor_id: UUID | None = None,
+    estado: Literal["CONFIRMADA", "ANULADA"] | None = None,
+    desde: date | None = None,
+    hasta: date | None = None,
+    numero_comprobante: str | None = None,
+    cursor: str | None = None,
+    limite: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> PaginaCompras:
+    """Compras de la organización de la más reciente a la más vieja, por cursor
+    (`design.md` D14: `REGISTRAR_COMPRA` o `ANULAR_COMPRA`). `desde` y `hasta` son fechas
+    de comprobante inclusivas; un `limite` fuera de 1 a 200 es 422, no un recorte."""
+    pagina = proveedores_queries.listar_compras(
+        contexto.organizacion_id,
+        sesion,
+        proveedor_id=proveedor_id,
+        estado=estado,
+        desde=desde,
+        hasta=hasta,
+        numero_comprobante=numero_comprobante,
+        cursor=cursor,
+        limite=limite,
+    )
+    return PaginaCompras(
+        items=[_resumen_de(item.compra, item.proveedor_nombre) for item in pagina.compras],
+        cursor_siguiente=pagina.cursor_siguiente,
+    )
+
+
+@router_compras.get("/{compra_id}", response_model=CompraDetalleResponse)
+def obtener_compra(
+    compra_id: UUID,
+    contexto: Annotated[
+        ContextoAutenticado,
+        Depends(requiere_algun_permiso(PERMISO_REGISTRAR_COMPRA, PERMISO_ANULAR_COMPRA)),
+    ],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> CompraDetalleResponse:
+    """Detalle de una compra con líneas, pago y anulación. 404 si es de otra organización
+    o no existe (INV-21)."""
+    detalle = proveedores_queries.obtener_detalle_de_compra(
+        contexto.organizacion_id, compra_id, sesion
+    )
+    resumen = _resumen_de(detalle.compra, detalle.proveedor_nombre)
+    return CompraDetalleResponse(
+        **resumen.model_dump(),
+        ubicacion_id=detalle.compra.ubicacion_id,
+        observacion=detalle.compra.observacion,
+        lineas=[
+            CompraLineaResponse(
+                orden=linea.orden,
+                producto_id=linea.producto_id,
+                producto_codigo=linea.producto_codigo,
+                producto_nombre=linea.producto_nombre,
+                presentacion_id=linea.presentacion_id,
+                presentacion_nombre=linea.presentacion_nombre,
+                unidades_presentacion=linea.unidades_presentacion,
+                unidades_referencia=linea.unidades_referencia,
+                nombre_referencia=linea.nombre_referencia,
+                cantidad=str(linea.cantidad),
+                cantidad_base=linea.cantidad_base,
+                valor_presentacion=str(linea.valor_presentacion),
+                incluye_iva=linea.incluye_iva,
+                bonificacion=str(linea.bonificacion),
+                alicuota_aplicada=str(linea.alicuota_aplicada),
+                costo_base=str(linea.costo_base),
+                importe_neto=str(linea.importe_neto),
+            )
+            for linea in detalle.lineas
+        ],
+        pago=(
+            None
+            if detalle.pago is None
+            else CompraPagoResponse(
+                id=detalle.pago.id,
+                fecha=detalle.pago.fecha,
+                importe=str(detalle.pago.importe),
+                estado=detalle.pago.estado,
+                anulado_en=detalle.pago.anulado_en,
+                medios=[
+                    CompraMedioResponse(
+                        medio_pago_id=medio.medio_pago_id,
+                        medio_nombre=medio.medio_nombre,
+                        importe=str(medio.importe),
+                        referencia=medio.referencia,
+                    )
+                    for medio in detalle.pago.medios
+                ],
+            )
+        ),
+        anulacion=(
+            None
+            if detalle.anulacion is None
+            else CompraAnulacionResponse(
+                motivo_id=detalle.anulacion.motivo_id,
+                motivo_nombre=detalle.anulacion.motivo_nombre,
+                anulada_en=detalle.anulacion.anulada_en,
+                anulada_por_id=detalle.anulacion.anulada_por_id,
+            )
+        ),
+    )
+
+
 router = APIRouter()
 router.include_router(router_proveedores)
 router.include_router(router_costos)
+router.include_router(router_compras)

@@ -16,6 +16,7 @@ const CatalogoArea = lazy(() => import('./catalogo/CatalogoArea'))
 const ProveedoresArea = lazy(() => import('./proveedores/ProveedoresArea'))
 const ClientesArea = lazy(() => import('./clientes/ClientesArea'))
 const StockArea = lazy(() => import('./stock/StockArea'))
+const ComprasArea = lazy(() => import('./compras/ComprasArea'))
 const ImportacionArea = lazy(() => import('./importacion/ImportacionArea'))
 
 /**
@@ -100,6 +101,14 @@ export function AdminScreen() {
             element={
               <Suspense fallback={null}>
                 <ProveedoresArea />
+              </Suspense>
+            }
+          />
+          <Route
+            path="compras/*"
+            element={
+              <Suspense fallback={null}>
+                <ComprasArea />
               </Suspense>
             }
           />

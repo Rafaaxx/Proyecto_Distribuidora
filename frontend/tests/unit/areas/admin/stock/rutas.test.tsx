@@ -34,7 +34,7 @@ describe('rutas de stock en /admin (change 09)', () => {
     enrutar(apiFetchMock, [
       { ruta: '/stock/ubicaciones', responder: () => ({ status: 200, cuerpo: { items: [{ id: ID, nombre: 'Depósito central', tipo: 'DEPOSITO', requiere_toma: false, activo: true, actualizado_en: '2026-01-01T00:00:00Z' }], cursor_siguiente: null } }) },
       { ruta: `/stock/ubicaciones/${ID}/saldos`, responder: () => ({ status: 200, cuerpo: { items: [], cursor_siguiente: null } }) },
-      { ruta: '/stock/kardex', responder: () => ({ status: 200, cuerpo: { saldo_anterior: 0, saldo_actual: 0, zona_horaria: 'UTC', producto_codigo: 'C', producto_nombre: 'Vino A', unidades_referencia: null, items: [], cursor_siguiente: null } }) },
+      { ruta: '/stock/kardex', responder: () => ({ status: 200, cuerpo: { saldo_anterior: 0, saldo_actual: 0, zona_horaria: 'UTC', producto_codigo: 'C', producto_nombre: 'Vino A', unidades_referencia: null, nombre_referencia: null, items: [], cursor_siguiente: null } }) },
       { ruta: '/catalogo/productos', responder: () => ({ status: 200, cuerpo: { items: [], cursor_siguiente: null } }) },
     ])
   })

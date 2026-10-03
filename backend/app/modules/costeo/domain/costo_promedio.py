@@ -66,6 +66,16 @@ class ResultadoDeEgreso:
     stock_nuevo: int
 
 
+@dataclass(frozen=True)
+class ResultadoDeReversion:
+    """Promedio y stock total del producto después de revertir un ingreso.
+    `recalculado` es `False` cuando el promedio se mantiene (CMP-06)."""
+
+    promedio_nuevo: Decimal
+    stock_nuevo: int
+    recalculado: bool
+
+
 def validar_costo(valor: object) -> Decimal:
     """Devuelve el costo por unidad base con exactamente 6 decimales o levanta
     `COSTO_INVALIDO` (`design.md` D6-A).
@@ -181,4 +191,49 @@ def calcular_egreso(
         promedio_nuevo=promedio_previo,
         costo_valorizacion=promedio_previo,
         stock_nuevo=stock_nuevo,
+    )
+
+
+def calcular_reversion(
+    *,
+    stock_previo: int,
+    promedio_previo: Decimal | None,
+    cantidad: int,
+    costo_ingreso: str | Decimal,
+) -> ResultadoDeReversion:
+    """CMP-06: revierte un ingreso con costo (anulación de una compra).
+
+    El stock restante es el stock total de la organización después de quitar
+    `cantidad` (CST-10). Con stock restante `> 0` se recalcula el promedio como
+    inverso exacto de CST-11:
+
+        (stock x promedio - cantidad x costo) / (stock - cantidad)
+
+    y se acepta solo si es `> 0`; con stock restante `<= 0` o promedio resultante
+    `<= 0` el promedio se mantiene y `recalculado` es `False` (`design.md` D9). El
+    promedio previo es obligatorio (`PROMEDIO_INCONSISTENTE` si falta).
+    """
+    costo = validar_costo(costo_ingreso)
+    cantidad_validada = _validar_cantidad(cantidad)
+    stock_nuevo = _validar_stock(stock_previo - cantidad_validada)
+    if promedio_previo is None:
+        raise PromedioInconsistenteError(
+            "No se puede revertir un ingreso de un producto sin costo promedio."
+        )
+
+    if stock_nuevo > 0:
+        with localcontext() as contexto:
+            contexto.prec = _PRECISION_INTERMEDIA
+            restante = (
+                Decimal(stock_previo) * promedio_previo - Decimal(cantidad_validada) * costo
+            ) / Decimal(stock_nuevo)
+        if restante > 0:
+            promedio = redondear_costo(restante)
+            if promedio > 0:
+                return ResultadoDeReversion(
+                    promedio_nuevo=promedio, stock_nuevo=stock_nuevo, recalculado=True
+                )
+
+    return ResultadoDeReversion(
+        promedio_nuevo=promedio_previo, stock_nuevo=stock_nuevo, recalculado=False
     )

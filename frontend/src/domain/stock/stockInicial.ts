@@ -39,12 +39,18 @@ function parteEntera(texto: string, nombre: string): number | string {
 
 /**
  * Convierte y valida una línea. `unidadesPorCaja` es el de la presentación de
- * referencia del producto (`null` si no tiene: solo unidades).
+ * referencia del producto (`null` si no tiene: solo unidades) y
+ * `nombrePresentacion` su nombre, que rotula la parte en presentaciones en los
+ * mensajes (sin nombre, "Cajas").
  */
-export function validarLinea(linea: LineaDeFormulario, unidadesPorCaja: number | null): ResultadoDeLinea {
+export function validarLinea(
+  linea: LineaDeFormulario,
+  unidadesPorCaja: number | null,
+  nombrePresentacion: string | null = null,
+): ResultadoDeLinea {
   if (linea.productoId === '') return { ok: false, mensaje: 'Elegí un producto.' }
 
-  const cajas = parteEntera(linea.cajas, 'Cajas')
+  const cajas = parteEntera(linea.cajas, nombrePresentacion ?? 'Cajas')
   if (typeof cajas === 'string') return { ok: false, mensaje: cajas }
   const unidades = parteEntera(linea.unidades, 'Unidades')
   if (typeof unidades === 'string') return { ok: false, mensaje: unidades }
@@ -80,7 +86,7 @@ export type ResultadoDeEnvio =
 /** Valida todas las líneas (1 a 200, sin producto repetido, D5) y arma el cuerpo. */
 export function armarEnvio(
   ubicacionId: string,
-  lineas: { linea: LineaDeFormulario; unidadesPorCaja: number | null }[],
+  lineas: { linea: LineaDeFormulario; unidadesPorCaja: number | null; nombrePresentacion?: string | null }[],
 ): ResultadoDeEnvio {
   if (lineas.length === 0) return { ok: false, mensaje: 'Agregá al menos una línea.' }
   if (lineas.length > MAXIMO_DE_LINEAS) {
@@ -89,8 +95,8 @@ export function armarEnvio(
 
   const vistos = new Set<string>()
   const payloads: LineaDeCuerpo[] = []
-  for (const [indice, { linea, unidadesPorCaja }] of lineas.entries()) {
-    const resultado = validarLinea(linea, unidadesPorCaja)
+  for (const [indice, { linea, unidadesPorCaja, nombrePresentacion }] of lineas.entries()) {
+    const resultado = validarLinea(linea, unidadesPorCaja, nombrePresentacion ?? null)
     if (!resultado.ok) return { ok: false, mensaje: resultado.mensaje, indice }
     if (vistos.has(linea.productoId)) {
       return { ok: false, mensaje: 'Un producto no puede repetirse en el mismo envío.', indice }

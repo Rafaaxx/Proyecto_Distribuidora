@@ -14,7 +14,10 @@ import { describe, expect, it } from 'vitest'
 import { calcularEgreso, calcularIngreso } from '../../../src/domain/costeo/costoPromedio'
 import { descubrirCasos } from './cargador'
 
-const casos = descubrirCasos().filter((caso) => caso.entrada['motor'] === 'cst11')
+// Las operaciones `reversion` (CMP-06, change 11) las ejecuta `cst11.reversion.fixtures.test.ts`.
+const casos = descubrirCasos().filter(
+  (caso) => caso.entrada['motor'] === 'cst11' && caso.entrada['operacion'] !== 'reversion',
+)
 
 if (casos.length === 0) {
   throw new Error(

@@ -367,7 +367,11 @@ class TestYoContrato:
             kid="1",
             emitido_en=FixedClock(MOMENTO).now(),
         )
-        token_alterado = token_valido[:-1] + ("A" if token_valido[-1] != "A" else "B")
+        # Se altera el PRIMER carácter de la firma: el último de una firma
+        # HS256 en base64url tiene 2 bits de relleno, y cambiarlo (B/C/D <-> A)
+        # puede decodificar a los mismos bytes y dejar el token válido.
+        cabecera_y_carga, firma = token_valido.rsplit(".", 1)
+        token_alterado = f"{cabecera_y_carga}.{'B' if firma[0] == 'A' else 'A'}{firma[1:]}"
 
         respuesta = cliente.get("/api/v1/yo", headers={"Authorization": f"Bearer {token_alterado}"})
 

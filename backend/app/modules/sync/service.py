@@ -57,6 +57,7 @@ from app.commands.errores import (
     ModoNoAdmitidoParaTipoError,
 )
 from app.commands.huella import ContenidoComando, calcular_huella
+from app.commands.observaciones import ObservacionProducida as ObservacionProducida
 from app.commands.sobre import SobreComando
 from app.core.clock import Clock
 from app.core.errors import DomainError
@@ -82,23 +83,6 @@ logger = logging.getLogger("app.sync")
 
 ResultadoHandler = tuple[str, dict[str, object] | None, str | None]
 """`(estado, resultado, error_codigo)`, tal como lo devuelve un handler."""
-
-
-@dataclass(frozen=True)
-class ObservacionProducida:
-    """Una observación que un handler produce como parte de su resultado
-    (`design.md`, Goals: "un handler ... devuelve resultado y
-    observaciones"; change 04, grupo 9, SYN-04, SYN-07, SYN-08).
-
-    `operacion_tipo`/`operacion_id` identifican la operación de negocio
-    sobre la que recae la observación -- no necesariamente el comando
-    mismo (`comando_id` la asocia por separado): un handler de venta puede
-    observar la venta que él mismo crea."""
-
-    codigo: str
-    operacion_tipo: str
-    operacion_id: UUID
-    detalle: dict[str, object] | None = None
 
 
 ResultadoHandlerConObservaciones = tuple[
@@ -306,7 +290,7 @@ def procesar_comando(
     *,
     sobre: SobreComando,
     huella: str,
-    ejecutar_handler: Callable[[object], ResultadoHandler],
+    ejecutar_handler: Callable[[object], ResultadoHandler | ResultadoHandlerConObservaciones],
     verificar_permiso: Callable[[], None] = lambda: None,
     config: ConfiguracionReintentos | None = None,
     dormir: Callable[[float], None] = time.sleep,
@@ -347,7 +331,7 @@ def procesar_comando(
         nonlocal se_ejecuto_el_handler
         verificar_permiso()
         se_ejecuto_el_handler = True
-        return ejecutar_handler(sesion_protegida)
+        return resolver_observaciones_del_handler(sesion, sobre, ejecutar_handler(sesion_protegida))
 
     # Change 04, grupo 12 (tarea 12.2): contexto de comando propagado a
     # cualquier registro emitido durante esta ejecución -- por CUALQUIER
@@ -532,6 +516,52 @@ def poner_en_cuarentena(
     return resultado.registro
 
 
+def resolver_observaciones_del_handler(
+    sesion: Session,
+    sobre: SobreComando,
+    resultado_bruto: object,
+) -> ResultadoHandler:
+    """Normaliza lo que devuelve un handler (3-tupla, o 4-tupla con observaciones,
+    tarea 9.5) y registra sus observaciones EN LA MISMA transacción del comando.
+
+    Un handler registrado (`app.commands.registro`) DEBE devolver una tupla
+    `(estado, resultado, error_codigo)` o, si produce observaciones, `(estado,
+    resultado, error_codigo, observaciones)`: convención del bus (`design.md` D3), no
+    impuesta por el tipo de `HandlerFuncion` porque `app.commands` no puede importar
+    `ResultadoHandler` de `app.modules.sync` (contrato `commands-no-modulos`).
+
+    `sesion` es la real (no la envoltura `SesionSinCommit` del handler), ya con la
+    reserva de `comando` flusheada por `procesar_idempotente`, así que el comando
+    siempre existe. Un ACEPTADO con observaciones pasa a ACEPTADO_CON_OBSERVACIONES;
+    un RECHAZADO no deja observaciones (SYN-04). Lo usan el lote de sincronización y
+    los endpoints REST que pasan por `procesar_comando` (change 11, `COMPRA_ANULAR`)."""
+    assert isinstance(resultado_bruto, tuple) and len(resultado_bruto) in (3, 4), (
+        "Un handler registrado DEBE devolver (estado, resultado, error_codigo) o "
+        "(estado, resultado, error_codigo, observaciones)."
+    )
+    if len(resultado_bruto) == 4:
+        estado, resultado, error_codigo, observaciones = resultado_bruto
+    else:
+        estado, resultado, error_codigo = resultado_bruto
+        observaciones = ()
+
+    if observaciones:
+        if estado == "ACEPTADO":
+            estado = "ACEPTADO_CON_OBSERVACIONES"
+        if estado == "ACEPTADO_CON_OBSERVACIONES":
+            comando_actual = repository.obtener_comando_por_operation_id(
+                sesion, sobre.organizacion_id, sobre.operation_id
+            )
+            assert comando_actual is not None  # ya reservado antes de llegar acá.
+            registrar_observaciones(
+                sesion,
+                comando_id=comando_actual.id,
+                organizacion_id=sobre.organizacion_id,
+                observaciones=observaciones,
+            )
+    return estado, resultado, error_codigo
+
+
 def _procesar_item_de_lote(
     sesion: Session,
     reloj: Clock,
@@ -564,47 +594,7 @@ def _procesar_item_de_lote(
 
     def _ejecutar_handler(_sesion_protegida: object) -> ResultadoHandler:
         resultado_bruto = handler_registrado.funcion(sobre, contenido_validado)
-        assert isinstance(resultado_bruto, tuple) and len(resultado_bruto) in (3, 4), (
-            "Un handler registrado (`app.commands.registro`) DEBE devolver "
-            "una tupla (estado, resultado, error_codigo) o, si produce "
-            "observaciones (tarea 9.5), (estado, resultado, error_codigo, "
-            "observaciones): convención del bus (`design.md` D3), no "
-            "impuesta por el tipo de `HandlerFuncion` porque `app.commands` "
-            "no puede importar `ResultadoHandler` de `app.modules.sync` "
-            "(contrato `commands-no-modulos`)."
-        )
-        if len(resultado_bruto) == 4:
-            estado, resultado, error_codigo, observaciones = resultado_bruto
-        else:
-            estado, resultado, error_codigo = resultado_bruto
-            observaciones = ()
-
-        # Tarea 9.5: las observaciones se registran EN LA MISMA transacción
-        # del comando, a través de `sync/service.py` -- `sesion` (la real,
-        # no la envoltura `SesionSinCommit` que recibe el handler de
-        # negocio) está disponible por clausura de `_procesar_item_de_lote`,
-        # ya con la reserva de `comando` flusheada por `procesar_idempotente`
-        # antes de invocar este callback, así que `comando_actual` siempre
-        # existe. Un comando RECHAZADO no deja observaciones (SYN-04): si el
-        # handler devolviera observaciones junto con un rechazo (no debería,
-        # SYN-07 lo prohíbe implícitamente), se descartan en vez de
-        # registrarse.
-        if observaciones:
-            if estado == "ACEPTADO":
-                estado = "ACEPTADO_CON_OBSERVACIONES"
-            if estado == "ACEPTADO_CON_OBSERVACIONES":
-                comando_actual = repository.obtener_comando_por_operation_id(
-                    sesion, sobre.organizacion_id, sobre.operation_id
-                )
-                assert comando_actual is not None  # ya reservado antes de llegar acá.
-                registrar_observaciones(
-                    sesion,
-                    comando_id=comando_actual.id,
-                    organizacion_id=sobre.organizacion_id,
-                    observaciones=observaciones,
-                )
-
-        return estado, resultado, error_codigo
+        return resolver_observaciones_del_handler(sesion, sobre, resultado_bruto)
 
     return procesar_comando(
         sesion,

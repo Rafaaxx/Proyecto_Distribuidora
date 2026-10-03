@@ -70,6 +70,7 @@ class Kardex:
     producto_codigo: str
     producto_nombre: str
     unidades_referencia: int | None
+    nombre_referencia: str | None
     movimientos: list[LineaDeKardex]
     cursor_siguiente: str | None
 

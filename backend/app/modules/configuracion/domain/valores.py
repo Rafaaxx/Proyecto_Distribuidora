@@ -28,6 +28,15 @@ class AmbitoMotivoInvalidoError(DomainError):
     codigo = "CONFIGURACION_AMBITO_MOTIVO_INVALIDO"
 
 
+class AmbitoInvalidoError(DomainError):
+    """Ámbito fuera de la lista cerrada al consultar motivos por API (change 11): 422
+    con el código estable `AMBITO_INVALIDO`. Distinto de `AmbitoMotivoInvalidoError`,
+    que protege el alta de un motivo."""
+
+    codigo = "AMBITO_INVALIDO"
+    status_http = 422
+
+
 class ValorAlicuotaInvalidoError(DomainError):
     codigo = "CONFIGURACION_VALOR_ALICUOTA_INVALIDO"
 

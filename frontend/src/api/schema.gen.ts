@@ -679,6 +679,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/configuracion/medios-pago": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Medios Pago */
+        get: operations["listar_medios_pago_api_v1_configuracion_medios_pago_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/configuracion/motivos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Motivos */
+        get: operations["listar_motivos_api_v1_configuracion_motivos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cuentas-corrientes/saldos-iniciales": {
         parameters: {
             query?: never;
@@ -830,6 +864,67 @@ export interface paths {
         };
         /** Listar Historial De Costos */
         get: operations["listar_historial_de_costos_api_v1_costos_productos__producto_id__historial_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Compras
+         * @description Compras de la organización de la más reciente a la más vieja, por cursor
+         *     (`design.md` D14: `REGISTRAR_COMPRA` o `ANULAR_COMPRA`). `desde` y `hasta` son fechas
+         *     de comprobante inclusivas; un `limite` fuera de 1 a 200 es 422, no un recorte.
+         */
+        get: operations["listar_compras_api_v1_compras_get"];
+        put?: never;
+        /** Confirmar Compra */
+        post: operations["confirmar_compra_api_v1_compras_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compras/{compra_id}/anulacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Anular Compra */
+        post: operations["anular_compra_api_v1_compras__compra_id__anulacion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compras/{compra_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Compra
+         * @description Detalle de una compra con líneas, pago y anulación. 404 si es de otra organización
+         *     o no existe (INV-21).
+         */
+        get: operations["obtener_compra_api_v1_compras__compra_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1173,6 +1268,313 @@ export interface components {
             /** Permisos */
             permisos: string[];
         };
+        /** CompraAnulacionResponse */
+        CompraAnulacionResponse: {
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+            /** Motivo Nombre */
+            motivo_nombre: string | null;
+            /**
+             * Anulada En
+             * Format: date-time
+             */
+            anulada_en: string;
+            /**
+             * Anulada Por Id
+             * Format: uuid
+             */
+            anulada_por_id: string;
+        };
+        /**
+         * CompraAnularRequest
+         * @description `POST /compras/{id}/anulacion`. `devuelve_pago` es obligatorio en una compra de
+         *     contado y prohibido en una a crédito (D3): lo decide el servicio con
+         *     `CONDICION_INVALIDA`, que conoce la condición. `organizacion_id` nunca aparece
+         *     (sale del token).
+         */
+        CompraAnularRequest: {
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+            /** Devuelve Pago */
+            devuelve_pago?: boolean | null;
+        };
+        /**
+         * CompraAnularResponse
+         * @description Sale de `comando.resultado` (INV-06). `observaciones` son los códigos de SYN-07
+         *     que dejó la anulación (`ANULACION_COMPRA_SIN_RECALCULO`, `STOCK_NEGATIVO`).
+         */
+        CompraAnularResponse: {
+            /**
+             * Compra Id
+             * Format: uuid
+             */
+            compra_id: string;
+            /** Estado */
+            estado: string;
+            /** Pago Anulado */
+            pago_anulado: boolean;
+            /** Observaciones */
+            observaciones: string[];
+        };
+        /**
+         * CompraConfirmarRequest
+         * @description `organizacion_id` nunca aparece (sale del token). `lineas` no declara
+         *     `min_length`: una compra sin líneas la rechaza el dominio con `COMPRA_SIN_LINEAS`
+         *     (INV-07), no un 422 genérico de Pydantic. `condicion` es `CONTADO` o `CREDITO`:
+         *     cualquier otro valor lo rechaza el dominio con `CONDICION_INVALIDA`.
+         */
+        CompraConfirmarRequest: {
+            /**
+             * Proveedor Id
+             * Format: uuid
+             */
+            proveedor_id: string;
+            /**
+             * Fecha
+             * Format: date
+             */
+            fecha: string;
+            /**
+             * Ubicacion Id
+             * Format: uuid
+             */
+            ubicacion_id: string;
+            /** Condicion */
+            condicion: string;
+            /** Total Factura */
+            total_factura: string;
+            /** Numero Comprobante */
+            numero_comprobante?: string | null;
+            /** Observacion */
+            observacion?: string | null;
+            /** Lineas */
+            lineas: components["schemas"]["CompraLineaRequest"][];
+            /** Medios */
+            medios?: components["schemas"]["CompraMedioRequest"][];
+        };
+        /**
+         * CompraConfirmarResponse
+         * @description Sale de `comando.resultado`, no de una relectura: un reenvío idempotente del mismo
+         *     `Operation-Id` devuelve exactamente lo mismo (INV-06). Importes como string.
+         */
+        CompraConfirmarResponse: {
+            /**
+             * Compra Id
+             * Format: uuid
+             */
+            compra_id: string;
+            /** Total Neto */
+            total_neto: string;
+            /** Total Factura */
+            total_factura: string;
+            /** Pago Id */
+            pago_id: string | null;
+            /** Diferencias De Costo */
+            diferencias_de_costo: components["schemas"]["DiferenciaDeCostoResponse"][];
+        };
+        /** CompraDetalleResponse */
+        CompraDetalleResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Fecha
+             * Format: date
+             */
+            fecha: string;
+            /**
+             * Proveedor Id
+             * Format: uuid
+             */
+            proveedor_id: string;
+            /** Proveedor Nombre */
+            proveedor_nombre: string;
+            /** Condicion */
+            condicion: string;
+            /** Total Neto */
+            total_neto: string;
+            /** Total Factura */
+            total_factura: string;
+            /** Estado */
+            estado: string;
+            /** Numero Comprobante */
+            numero_comprobante: string | null;
+            /**
+             * Ubicacion Id
+             * Format: uuid
+             */
+            ubicacion_id: string;
+            /** Observacion */
+            observacion: string | null;
+            /** Lineas */
+            lineas: components["schemas"]["CompraLineaResponse"][];
+            pago: components["schemas"]["CompraPagoResponse"] | null;
+            anulacion: components["schemas"]["CompraAnulacionResponse"] | null;
+        };
+        /**
+         * CompraLineaRequest
+         * @description Una línea de `POST /compras` (D5). `cantidad`, `valor` y `bonificacion` viajan
+         *     como string estricto (INV-03); la cantidad de decimales la valida el dominio con su
+         *     código estable (`CANTIDAD_INVALIDA`, `VALOR_INVALIDO`, `BONIFICACION_INVALIDA`).
+         */
+        CompraLineaRequest: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /**
+             * Presentacion Id
+             * Format: uuid
+             */
+            presentacion_id: string;
+            /** Cantidad */
+            cantidad: string;
+            /** Valor */
+            valor: string;
+            /** Incluye Iva */
+            incluye_iva: boolean;
+            /**
+             * Bonificacion
+             * @default 0
+             */
+            bonificacion: string;
+        };
+        /**
+         * CompraLineaResponse
+         * @description Una línea del detalle. `unidades_referencia` permite mostrar la cantidad en cajas
+         *     + unidades (CAT-08); `None` si el producto no tiene presentación de referencia.
+         */
+        CompraLineaResponse: {
+            /** Orden */
+            orden: number;
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Producto Codigo */
+            producto_codigo: string | null;
+            /** Producto Nombre */
+            producto_nombre: string | null;
+            /**
+             * Presentacion Id
+             * Format: uuid
+             */
+            presentacion_id: string;
+            /** Presentacion Nombre */
+            presentacion_nombre: string | null;
+            /** Unidades Presentacion */
+            unidades_presentacion: number;
+            /** Unidades Referencia */
+            unidades_referencia: number | null;
+            /** Nombre Referencia */
+            nombre_referencia: string | null;
+            /** Cantidad */
+            cantidad: string;
+            /** Cantidad Base */
+            cantidad_base: number;
+            /** Valor Presentacion */
+            valor_presentacion: string;
+            /** Incluye Iva */
+            incluye_iva: boolean;
+            /** Bonificacion */
+            bonificacion: string;
+            /** Alicuota Aplicada */
+            alicuota_aplicada: string;
+            /** Costo Base */
+            costo_base: string;
+            /** Importe Neto */
+            importe_neto: string;
+        };
+        /** CompraMedioRequest */
+        CompraMedioRequest: {
+            /**
+             * Medio Pago Id
+             * Format: uuid
+             */
+            medio_pago_id: string;
+            /** Importe */
+            importe: string;
+            /** Referencia */
+            referencia?: string | null;
+        };
+        /** CompraMedioResponse */
+        CompraMedioResponse: {
+            /**
+             * Medio Pago Id
+             * Format: uuid
+             */
+            medio_pago_id: string;
+            /** Medio Nombre */
+            medio_nombre: string | null;
+            /** Importe */
+            importe: string;
+            /** Referencia */
+            referencia: string | null;
+        };
+        /** CompraPagoResponse */
+        CompraPagoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Fecha
+             * Format: date
+             */
+            fecha: string;
+            /** Importe */
+            importe: string;
+            /** Estado */
+            estado: string;
+            /** Anulado En */
+            anulado_en: string | null;
+            /** Medios */
+            medios: components["schemas"]["CompraMedioResponse"][];
+        };
+        /**
+         * CompraResumenResponse
+         * @description Una fila del listado de compras. Importes como string (INV-03).
+         */
+        CompraResumenResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Fecha
+             * Format: date
+             */
+            fecha: string;
+            /**
+             * Proveedor Id
+             * Format: uuid
+             */
+            proveedor_id: string;
+            /** Proveedor Nombre */
+            proveedor_nombre: string;
+            /** Condicion */
+            condicion: string;
+            /** Total Neto */
+            total_neto: string;
+            /** Total Factura */
+            total_factura: string;
+            /** Estado */
+            estado: string;
+            /** Numero Comprobante */
+            numero_comprobante: string | null;
+        };
         /**
          * ConsumidorFinalConfigurarRequest
          * @description Cuerpo de `POST /clientes/consumidor-final` (D4, ADR-029). Solo el
@@ -1387,6 +1789,25 @@ export interface components {
              */
             rol_id: string;
         };
+        /**
+         * DiferenciaDeCostoResponse
+         * @description CMP-04, D7: una línea cuyo costo base difiere del costo informado vigente (o no
+         *     tiene vigente, `costo_base_vigente: null`). Informativa: la compra nunca registra un
+         *     costo informado.
+         */
+        DiferenciaDeCostoResponse: {
+            /** Linea */
+            linea: number;
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Costo Base Compra */
+            costo_base_compra: string;
+            /** Costo Base Vigente */
+            costo_base_vigente: string | null;
+        };
         /** DispositivoResponse */
         DispositivoResponse: {
             /**
@@ -1538,6 +1959,8 @@ export interface components {
             producto_nombre: string;
             /** Unidades Referencia */
             unidades_referencia: number | null;
+            /** Nombre Referencia */
+            nombre_referencia: string | null;
             /** Items */
             items: components["schemas"]["LineaDeKardexResponse"][];
             /** Cursor Siguiente */
@@ -1601,6 +2024,8 @@ export interface components {
             cantidad_base: number;
             /** Unidades Referencia */
             unidades_referencia: number | null;
+            /** Nombre Referencia */
+            nombre_referencia: string | null;
             /** Costo Promedio */
             costo_promedio?: string | null;
         };
@@ -1632,6 +2057,16 @@ export interface components {
             cantidad_base: number;
             /** Saldo */
             saldo: number;
+        };
+        /** ListaMediosPago */
+        ListaMediosPago: {
+            /** Items */
+            items: components["schemas"]["MedioPagoResponse"][];
+        };
+        /** ListaMotivos */
+        ListaMotivos: {
+            /** Items */
+            items: components["schemas"]["MotivoResponse"][];
         };
         /** LoginRequest */
         LoginRequest: {
@@ -1699,6 +2134,31 @@ export interface components {
              * Format: date-time
              */
             actualizado_en: string;
+        };
+        /**
+         * MedioPagoResponse
+         * @description Un medio de pago activo con su indicador de referencia obligatoria.
+         */
+        MedioPagoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Requiere Referencia */
+            requiere_referencia: boolean;
+        };
+        /** MotivoResponse */
+        MotivoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
         };
         /**
          * MovimientoEstadoDeCuentaResponse
@@ -1779,6 +2239,13 @@ export interface components {
         PaginaClientes: {
             /** Items */
             items: components["schemas"]["ClienteResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
+        /** PaginaCompras */
+        PaginaCompras: {
+            /** Items */
+            items: components["schemas"]["CompraResumenResponse"][];
             /** Cursor Siguiente */
             cursor_siguiente: string | null;
         };
@@ -3168,6 +3635,7 @@ export interface operations {
                 categoria_id?: string | null;
                 marca_id?: string | null;
                 activo?: boolean | null;
+                proveedor_id?: string | null;
             };
             header?: {
                 authorization?: string | null;
@@ -3771,6 +4239,70 @@ export interface operations {
             };
         };
     };
+    listar_medios_pago_api_v1_configuracion_medios_pago_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListaMediosPago"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_motivos_api_v1_configuracion_motivos_get: {
+        parameters: {
+            query: {
+                ambito: string;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListaMotivos"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     registrar_saldo_inicial_api_v1_cuentas_corrientes_saldos_iniciales_post: {
         parameters: {
             query?: never;
@@ -4116,6 +4648,152 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaginaCostosInformados"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_compras_api_v1_compras_get: {
+        parameters: {
+            query?: {
+                proveedor_id?: string | null;
+                estado?: ("CONFIRMADA" | "ANULADA") | null;
+                desde?: string | null;
+                hasta?: string | null;
+                numero_comprobante?: string | null;
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaCompras"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirmar_compra_api_v1_compras_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompraConfirmarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompraConfirmarResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    anular_compra_api_v1_compras__compra_id__anulacion_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                compra_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompraAnularRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompraAnularResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_compra_api_v1_compras__compra_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                compra_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompraDetalleResponse"];
                 };
             };
             /** @description Validation Error */

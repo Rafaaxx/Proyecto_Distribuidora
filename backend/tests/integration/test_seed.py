@@ -128,6 +128,38 @@ def test_los_seis_motivos_de_ajuste_stock_se_listan_por_ambito_y_ninguno_de_otro
     assert motivos_de_otro_ambito == []
 
 
+def test_una_organizacion_nueva_tiene_los_tres_motivos_de_anulacion_de_compra(
+    db_session: Session,
+) -> None:
+    """Change 11, tarea 3.2 (CMP-05, TR-09, `design.md` D8): la siembra crea los motivos
+    del ámbito `ANULACION_COMPRA` aprobados el 2026-10-02."""
+    organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+    assert organizacion is not None
+
+    motivos = configuracion_service.listar_motivos_por_ambito(
+        organizacion.id, db_session, "ANULACION_COMPRA"
+    )
+
+    assert sorted(motivo.nombre for motivo in motivos) == [
+        "Devolución al proveedor",
+        "Error de carga",
+        "Otro",
+    ]
+    assert all(motivo.ambito == "ANULACION_COMPRA" and motivo.activo for motivo in motivos)
+
+
+def test_sembrar_dos_veces_no_duplica_los_motivos_de_anulacion_de_compra(
+    db_session: Session,
+) -> None:
+    sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+    assert sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA) is None
+
+    cantidad = db_session.execute(
+        text("SELECT count(*) FROM motivo WHERE ambito = 'ANULACION_COMPRA'")
+    ).scalar_one()
+    assert cantidad == 3
+
+
 def test_un_elemento_desactivado_deja_de_ofrecerse_pero_sigue_legible_por_id(
     db_session: Session,
 ) -> None:

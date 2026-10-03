@@ -5,7 +5,7 @@ import { Boton } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { PageHeader } from '../../../components/ui/PageHeader'
 import { Tabla, type ColumnaTabla } from '../../../components/ui/Table'
-import { formatearCantidad } from '../../../domain/stock/cantidades'
+import { formatearCantidad, referenciaDeRespuesta } from '../../../domain/stock/cantidades'
 import { formatearCostoDeApi } from '../../../domain/stock/costos'
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { usePermisos } from '../../../features/identidad/usePermisos'
@@ -32,7 +32,7 @@ function StockSinPermiso() {
  * `administracion-de-stock`; STK-01, CAT-08). Ruta
  * `/admin/stock/ubicaciones/:ubicacionId/stock`. Lo ve quien tiene
  * `TRANSFERIR_STOCK`: sin él no se monta y no se pide nada. Las cantidades se
- * muestran en cajas + unidades con la presentación de referencia del producto
+ * muestran en unidades con la equivalencia en la presentación de referencia del producto
  * (`lib`/`domain`, aritmética entera) y el costo promedio solo con `VER_COSTOS`
  * (de `['yo']`): quien no lo tiene no ve la columna aunque la respuesta trajera
  * el dato (el servidor además lo omite).
@@ -64,7 +64,7 @@ function StockDeLaUbicacion({ ubicacionId }: { ubicacionId: string }) {
     {
       clave: 'cantidad',
       encabezado: 'Cantidad',
-      render: (l) => formatearCantidad(l.cantidad_base, l.unidades_referencia),
+      render: (l) => formatearCantidad(l.cantidad_base, referenciaDeRespuesta(l.unidades_referencia, l.nombre_referencia)),
     },
     ...(verCostos
       ? [

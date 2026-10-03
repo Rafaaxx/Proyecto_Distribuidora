@@ -54,6 +54,33 @@ def test_inv03_la_base_migrada_no_tiene_columnas_de_punto_flotante_binario(
     )
 
 
+COLUMNAS_NUMERIC_DE_COMPRAS = {
+    ("compra", "total_neto"),
+    ("compra", "total_factura"),
+    ("compra_linea", "valor_presentacion"),
+    ("compra_linea", "bonificacion"),
+    ("compra_linea", "alicuota_aplicada"),
+    ("compra_linea", "costo_base"),
+    ("compra_linea", "importe_neto"),
+    ("pago_proveedor", "importe"),
+    ("pago_proveedor_medio", "importe"),
+}
+
+
+def test_inv03_el_catalogo_incluye_los_importes_y_costos_de_compras_como_numeric(
+    _engine_de_sesion: Engine,
+) -> None:
+    """Change 11: la regla no queda vacía para las tablas de compras y pagos; todo
+    importe, costo, bonificación y alícuota es `numeric`."""
+    with _engine_de_sesion.connect() as conexion:
+        tipos = {
+            (tabla, columna): tipo
+            for tabla, columna, tipo in conexion.execute(_CONSULTA_CATALOGO).all()
+        }
+
+    assert {tipos.get(columna) for columna in COLUMNAS_NUMERIC_DE_COMPRAS} == {"numeric"}
+
+
 @pytest.fixture
 def _tabla_temporal_con_columna_flotante(database_url: str) -> Iterator[Engine]:
     """Crea una tabla temporal con una columna `double precision`, para

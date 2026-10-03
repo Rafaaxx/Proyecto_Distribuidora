@@ -1,5 +1,4 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMemo } from 'react'
 import { useFieldArray, useForm, type FieldPath } from 'react-hook-form'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
@@ -7,7 +6,7 @@ import { Boton } from '../../../components/ui/Button'
 import { Campo } from '../../../components/ui/Field'
 import { Card } from '../../../components/ui/Card'
 import type { Producto } from '../../../features/catalogo/api'
-import { useProducto, useProductos } from '../../../features/catalogo/useListados'
+import { useProducto, useProductosDelProveedor } from '../../../features/catalogo/useListados'
 import { useAlicuotas } from '../../../features/configuracion/useAlicuotas'
 import {
   esquemaCargaDeCostos,
@@ -106,15 +105,8 @@ function CargaDeCostosDeProveedor() {
 function CargaDeCostosFormulario({ proveedorId }: { proveedorId: string }) {
   const navigate = useNavigate()
   const informar = useInformarCostos()
-  const productos = useProductos({ activo: true })
-
-  const productosDelProveedor = useMemo(
-    () =>
-      (productos.data?.pages.flatMap((pagina) => pagina.items) ?? []).filter(
-        (producto) => producto.proveedor_id === proveedorId,
-      ),
-    [productos.data, proveedorId],
-  )
+  // Productos activos del proveedor: los filtra el servidor (`proveedor_id`, tarea 11.2).
+  const { productos: productosDelProveedor } = useProductosDelProveedor(proveedorId)
 
   const {
     control,

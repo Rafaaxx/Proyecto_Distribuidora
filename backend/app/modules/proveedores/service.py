@@ -15,7 +15,10 @@ importar este módulo para que los puertos queden registrados."""
 
 from __future__ import annotations
 
-from datetime import date
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -25,23 +28,51 @@ from app.core.clock import Clock
 from app.core.ids import nuevo_id
 from app.modules.catalogo import service as catalogo_service
 from app.modules.configuracion import service as configuracion_service
+from app.modules.cuentas_corrientes import service as cuentas_corrientes_service
+from app.modules.identidad import service as identidad_service
 from app.modules.proveedores import repository
+from app.modules.proveedores.domain.compras import (
+    CONTADO,
+    CostoDeLinea,
+    DiferenciaDeCosto,
+    EntradaDeLinea,
+    MedioDeEntrada,
+    calcular_compra,
+    diferencias_de_costo,
+    validar_cantidad_de_lineas,
+    validar_fecha,
+    validar_pago,
+    validar_total_factura,
+)
 from app.modules.proveedores.domain.costo_base import calcular_costo_base
 from app.modules.proveedores.domain.errores import (
+    CompraYaAnuladaError,
+    CondicionInvalidaError,
     CuitInvalidoError,
+    MedioPagoInactivoError,
+    MotivoInvalidoError,
     PresentacionInvalidaError,
     ProductoInactivoError,
     ProveedorConProductosActivosError,
     ProveedorInactivoError,
     ProveedorNoCorrespondeError,
     RecursoNoEncontradoError,
+    UbicacionInactivaError,
 )
 from app.modules.proveedores.domain.lote import (
     CostoDelLote as CostoDelLote,  # re-exportado: lo usa `importacion` (change 10)
 )
 from app.modules.proveedores.domain.lote import validar_lote_de_costos
 from app.modules.proveedores.domain.normalizacion import normalizar_cuit, normalizar_nombre
-from app.modules.proveedores.models import CostoInformado, Proveedor
+from app.modules.proveedores.models import (
+    Compra,
+    CompraLinea,
+    CostoInformado,
+    PagoProveedor,
+    Proveedor,
+)
+from app.modules.stock import service as stock_service
+from app.modules.stock.service import LineaDeMovimiento
 
 # --- D9/ADR-025: registro del puerto de consulta al importar este módulo --
 
@@ -70,6 +101,18 @@ def _presentacion_tiene_costo_informado(
 
 
 catalogo_service.registrar_verificador_uso("costo_informado", _presentacion_tiene_costo_informado)
+
+
+# --- INV-18/ADR-023: registro del verificador de uso de compra_linea (change 11) --------
+
+
+def _presentacion_tiene_compra(
+    organizacion_id: UUID, presentacion_id: UUID, sesion: Session
+) -> bool:
+    return repository.existe_linea_para_presentacion(organizacion_id, presentacion_id, sesion)
+
+
+catalogo_service.registrar_verificador_uso("compra_linea", _presentacion_tiene_compra)
 
 
 # --- proveedor (D7, D5/ADR-026) --------------------------------------------
@@ -378,3 +421,577 @@ def listar_ultimo_costo_por_presentacion(
     presentaciones sin costo se omiten. Informativo: el precio (PRC-11)
     sigue calculándose solo con `obtener_costo_informado_vigente`."""
     return repository.obtener_ultimo_por_presentacion(organizacion_id, producto_id, fecha, sesion)
+
+
+# --- compras (change 11, CMP-01 a CMP-04) -----------------------------------------------
+
+
+@dataclass(frozen=True)
+class LineaDeCompra:
+    """Una línea de `COMPRA_CONFIRMAR` tal como la informa el usuario (D5)."""
+
+    producto_id: UUID
+    presentacion_id: UUID
+    cantidad: Decimal
+    valor: Decimal
+    incluye_iva: bool
+    bonificacion: Decimal
+
+
+@dataclass(frozen=True)
+class MedioDeCompra:
+    """Un medio del pago de una compra de contado (D2)."""
+
+    medio_pago_id: UUID
+    importe: Decimal
+    referencia: str | None
+
+
+@dataclass(frozen=True)
+class ResultadoDeCompra:
+    """La compra confirmada, sus líneas y las diferencias con el costo informado
+    vigente (CMP-04, D7). `pago` es `None` en una compra a crédito."""
+
+    compra: Compra
+    lineas: list[CompraLinea]
+    diferencias_de_costo: list[DiferenciaDeCosto]
+    pago: PagoProveedor | None = None
+
+
+_CUENTA_PROVEEDOR = "PROVEEDOR"
+
+
+def _resolver_medios(
+    organizacion_id: UUID, sesion: Session, medios: Sequence[MedioDeCompra]
+) -> list[MedioDeEntrada]:
+    """D2: cada medio existe en la organización (404 si no, INV-21) y está activo
+    (`MEDIO_PAGO_INACTIVO`); devuelve la entrada de validación con si el medio exige
+    referencia. Los errores llevan el índice del medio en `extension["medio"]`."""
+    entradas: list[MedioDeEntrada] = []
+    for indice, medio in enumerate(medios):
+        fila = configuracion_service.obtener_medio_pago(
+            organizacion_id, medio.medio_pago_id, sesion
+        )
+        if fila is None:
+            raise RecursoNoEncontradoError(
+                f"El medio de pago {medio.medio_pago_id} no existe en esta organización.",
+                extension={"medio": indice},
+            )
+        if not fila.activo:
+            raise MedioPagoInactivoError(
+                f"El medio de pago {medio.medio_pago_id} está inactivo.",
+                extension={"medio": indice},
+            )
+        entradas.append(
+            MedioDeEntrada(
+                medio.importe, medio.referencia, requiere_referencia=fila.requiere_referencia
+            )
+        )
+    return entradas
+
+
+def _referencias_de_la_compra(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    proveedor_id: UUID,
+    ubicacion_id: UUID,
+    lineas: Sequence[LineaDeCompra],
+) -> tuple[list[EntradaDeLinea], list[Any]]:
+    """Valida las referencias y devuelve, por línea, la entrada de cálculo y la alícuota.
+
+    Bloquea `FOR SHARE` el proveedor y los productos (en orden ascendente de id, D14 del
+    change 06) y deja intacto el estado: lee, no escribe. Los errores de una línea llevan
+    su índice (0-based) en `extension["linea"]`. Una referencia inexistente o de otra
+    organización es 404 (INV-21)."""
+    proveedor = repository.obtener_proveedor_por_id_para_compartir(
+        organizacion_id, proveedor_id, sesion
+    )
+    if proveedor is None:
+        raise RecursoNoEncontradoError(
+            f"El proveedor {proveedor_id} no existe en esta organización."
+        )
+    if not proveedor.activo:
+        raise ProveedorInactivoError(f"El proveedor {proveedor_id} está inactivo.")
+
+    ubicacion = stock_service.obtener_ubicacion(organizacion_id, sesion, ubicacion_id)
+    if ubicacion is None:
+        raise RecursoNoEncontradoError(
+            f"La ubicación {ubicacion_id} no existe en esta organización."
+        )
+    if not ubicacion.activo:
+        raise UbicacionInactivaError(f"La ubicación {ubicacion_id} está inactiva.")
+
+    primera_linea_por_producto: dict[UUID, int] = {}
+    for indice, linea in enumerate(lineas):
+        primera_linea_por_producto.setdefault(linea.producto_id, indice)
+
+    # Se bloquean `FOR SHARE` en orden ascendente de id (D14 del change 06) y recién
+    # después se valida en el orden de las líneas: así el error informado es siempre el
+    # de la primera línea con problema, no el del producto con menor UUID.
+    leidos = {
+        producto_id: catalogo_service.obtener_producto_para_compartir(
+            organizacion_id, producto_id, sesion
+        )
+        for producto_id in sorted(primera_linea_por_producto)
+    }
+    productos: dict[UUID, Any] = {}
+    for producto_id, indice_de_linea in sorted(
+        primera_linea_por_producto.items(), key=lambda par: par[1]
+    ):
+        extension = {"linea": indice_de_linea}
+        producto = leidos[producto_id]
+        if producto is None:
+            raise RecursoNoEncontradoError(
+                f"El producto {producto_id} no existe en esta organización.", extension=extension
+            )
+        if producto.proveedor_id != proveedor_id:
+            raise ProveedorNoCorrespondeError(
+                f"El producto {producto_id} no tiene a {proveedor_id} como proveedor actual (D4).",
+                extension=extension,
+            )
+        if not producto.activo:
+            raise ProductoInactivoError(
+                f"El producto {producto_id} está inactivo.", extension=extension
+            )
+        productos[producto_id] = producto
+
+    alicuotas: dict[UUID, Any] = {}
+    entradas: list[EntradaDeLinea] = []
+    alicuotas_de_linea: list[Any] = []
+    for indice, linea in enumerate(lineas):
+        presentacion = catalogo_service.obtener_presentacion(
+            organizacion_id, linea.presentacion_id, sesion
+        )
+        if (
+            presentacion is None
+            or presentacion.producto_id != linea.producto_id
+            or not presentacion.activo
+            or not presentacion.usar_en_compra
+        ):
+            raise PresentacionInvalidaError(
+                f"La presentación {linea.presentacion_id} no es una presentación de compra "
+                f"activa del producto {linea.producto_id}.",
+                extension={"linea": indice},
+            )
+        alicuota_id = productos[linea.producto_id].alicuota_id
+        if alicuota_id not in alicuotas:
+            alicuota = configuracion_service.obtener_alicuota_por_id(
+                organizacion_id, alicuota_id, sesion
+            )
+            assert alicuota is not None  # la FK del producto garantiza su existencia.
+            alicuotas[alicuota_id] = alicuota
+        alicuota_de_linea = alicuotas[alicuota_id]
+        alicuotas_de_linea.append(alicuota_de_linea)
+        entradas.append(
+            EntradaDeLinea(
+                unidades_presentacion=presentacion.unidades_base,
+                cantidad=linea.cantidad,
+                valor=linea.valor,
+                incluye_iva=linea.incluye_iva,
+                alicuota=alicuota_de_linea.valor,
+                bonificacion=linea.bonificacion,
+            )
+        )
+    return entradas, alicuotas_de_linea
+
+
+def confirmar_compra(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    proveedor_id: UUID,
+    fecha: date,
+    ubicacion_id: UUID,
+    condicion: str,
+    total_factura: Decimal,
+    numero_comprobante: str | None,
+    observacion: str | None,
+    lineas: Sequence[LineaDeCompra],
+    medios: Sequence[MedioDeCompra],
+    operation_id: UUID,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+    occurred_at: datetime,
+) -> ResultadoDeCompra:
+    """`COMPRA_CONFIRMAR` (CMP-01 a CMP-04, INV-01, INV-07; `design.md` D1 a D7, D16).
+
+    En una sola transacción ingresa el stock de cada línea (movimiento `COMPRA` con su
+    costo base, que recalcula el promedio, CST-11), registra `COMPRA` en la cuenta del
+    proveedor por el total de factura y deja la compra. TODA validación y todo cálculo
+    ocurren antes del primer bloqueo de saldo o escritura (INV-01). Orden de bloqueo
+    (`02` §7.3): proveedor y productos `FOR SHARE` -> `saldo_cuenta` del proveedor ->
+    `costo_producto` y `stock_saldo` (dentro de `stock`). Los movimientos usan el
+    `occurred_at` del comando (D6); la `fecha` es la del comprobante. Nunca registra un
+    costo informado (CMP-04): solo devuelve las diferencias."""
+    validar_cantidad_de_lineas(len(lineas))
+    hoy = identidad_service.fecha_de_negocio(organizacion_id, sesion, reloj)
+    if hoy is None:
+        raise RecursoNoEncontradoError("La organización no existe.")
+    validar_fecha(fecha, hoy=hoy)
+    total = validar_total_factura(total_factura)
+    if condicion == CONTADO:
+        entradas_de_medio = _resolver_medios(organizacion_id, sesion, medios)
+    else:  # el crédito no trae medios: `validar_pago` lo rechaza si los hay
+        entradas_de_medio = [
+            MedioDeEntrada(m.importe, m.referencia, requiere_referencia=False) for m in medios
+        ]
+    validar_pago(condicion, total, entradas_de_medio)
+
+    entradas, alicuotas = _referencias_de_la_compra(
+        organizacion_id,
+        sesion,
+        proveedor_id=proveedor_id,
+        ubicacion_id=ubicacion_id,
+        lineas=lineas,
+    )
+    totales = calcular_compra(entradas)
+
+    vigentes: dict[UUID, Decimal | None] = {}
+    for linea in lineas:
+        if linea.producto_id not in vigentes:
+            vigente = repository.obtener_vigente(organizacion_id, linea.producto_id, fecha, sesion)
+            vigentes[linea.producto_id] = None if vigente is None else vigente.costo_base
+    diferencias = diferencias_de_costo(
+        [
+            CostoDeLinea(
+                linea=indice, producto_id=linea.producto_id, costo_base=calculada.costo_base
+            )
+            for indice, (linea, calculada) in enumerate(zip(lineas, totales.lineas, strict=True))
+        ],
+        vigentes,
+    )
+
+    compra_id = nuevo_id()
+    cuentas_corrientes_service.bloquear_saldo(
+        organizacion_id, sesion, reloj, cuenta_tipo=_CUENTA_PROVEEDOR, entidad_id=proveedor_id
+    )
+    stock_service.registrar_movimientos(
+        organizacion_id,
+        sesion,
+        reloj,
+        lineas=[
+            LineaDeMovimiento(
+                producto_id=linea.producto_id,
+                ubicacion_id=ubicacion_id,
+                cantidad_base=calculada.cantidad_base,
+                tipo="COMPRA",
+                costo_unitario=calculada.costo_base,
+                origen_tipo="COMPRA",
+                origen_id=compra_id,
+            )
+            for linea, calculada in zip(lineas, totales.lineas, strict=True)
+        ],
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        operation_id=operation_id,
+        occurred_at=occurred_at,
+    )
+    cuentas_corrientes_service.registrar_movimiento(
+        organizacion_id,
+        sesion,
+        reloj,
+        cuenta_tipo=_CUENTA_PROVEEDOR,
+        entidad_id=proveedor_id,
+        tipo="COMPRA",
+        sentido="AUMENTA",
+        importe=total,
+        origen_tipo="COMPRA",
+        origen_id=compra_id,
+        occurred_at=occurred_at,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        operation_id=operation_id,
+    )
+    pago_id = nuevo_id()
+    if condicion == CONTADO:
+        # CC-05, D2: el pago de contado entra por separado en la cuenta, así el saldo
+        # no cambia y el estado de cuenta muestra los dos hechos.
+        cuentas_corrientes_service.registrar_movimiento(
+            organizacion_id,
+            sesion,
+            reloj,
+            cuenta_tipo=_CUENTA_PROVEEDOR,
+            entidad_id=proveedor_id,
+            tipo="PAGO",
+            sentido="REDUCE",
+            importe=total,
+            origen_tipo="PAGO",
+            origen_id=pago_id,
+            occurred_at=occurred_at,
+            usuario_id=usuario_id,
+            dispositivo_id=dispositivo_id,
+            operation_id=operation_id,
+        )
+
+    compra, filas = repository.insertar_compra(
+        organizacion_id,
+        sesion,
+        compra=repository.DatosDeCompra(
+            id=compra_id,
+            proveedor_id=proveedor_id,
+            ubicacion_id=ubicacion_id,
+            fecha=fecha,
+            condicion=condicion,
+            total_neto=totales.total_neto,
+            total_factura=total,
+            numero_comprobante=numero_comprobante,
+            observacion=observacion,
+            operation_id=operation_id,
+            usuario_id=usuario_id,
+            dispositivo_id=dispositivo_id,
+            occurred_at=occurred_at,
+            registered_at=reloj.now(),
+        ),
+        lineas=[
+            repository.DatosDeLineaDeCompra(
+                id=nuevo_id(),
+                orden=indice + 1,
+                producto_id=linea.producto_id,
+                presentacion_id=linea.presentacion_id,
+                unidades_presentacion=entrada.unidades_presentacion,
+                cantidad=linea.cantidad,
+                cantidad_base=calculada.cantidad_base,
+                valor_presentacion=linea.valor,
+                incluye_iva=linea.incluye_iva,
+                bonificacion=linea.bonificacion,
+                alicuota_aplicada=alicuota.valor,
+                costo_base=calculada.costo_base,
+                importe_neto=calculada.importe_neto,
+            )
+            for indice, (linea, entrada, calculada, alicuota) in enumerate(
+                zip(lineas, entradas, totales.lineas, alicuotas, strict=True)
+            )
+        ],
+    )
+    pago: PagoProveedor | None = None
+    if condicion == CONTADO:
+        pago = repository.insertar_pago_de_compra(
+            organizacion_id,
+            sesion,
+            pago=repository.DatosDePagoDeCompra(
+                id=pago_id,
+                proveedor_id=proveedor_id,
+                compra_id=compra_id,
+                fecha=fecha,
+                importe=total,
+                operation_id=operation_id,
+                usuario_id=usuario_id,
+                dispositivo_id=dispositivo_id,
+                occurred_at=occurred_at,
+                registered_at=reloj.now(),
+            ),
+            medios=[
+                repository.DatosDeMedioDePago(
+                    medio_pago_id=medio.medio_pago_id,
+                    importe=entrada.importe,
+                    referencia=medio.referencia,
+                )
+                for medio, entrada in zip(medios, entradas_de_medio, strict=True)
+            ],
+        )
+    return ResultadoDeCompra(
+        compra=compra, lineas=filas, diferencias_de_costo=diferencias, pago=pago
+    )
+
+
+# --- anulación de compras (change 11, CMP-05 a CMP-07) ----------------------------------
+
+_AMBITO_ANULACION_COMPRA = "ANULACION_COMPRA"
+OBSERVACION_SIN_RECALCULO = "ANULACION_COMPRA_SIN_RECALCULO"
+OBSERVACION_STOCK_NEGATIVO = "STOCK_NEGATIVO"
+
+
+@dataclass(frozen=True)
+class AvisoDeAnulacion:
+    """Un hecho de la anulación que el bus registra como observación (SYN-07):
+    `codigo` es `ANULACION_COMPRA_SIN_RECALCULO` o `STOCK_NEGATIVO`; `productos` lleva
+    el detalle por producto."""
+
+    codigo: str
+    productos: list[dict[str, object]]
+
+
+@dataclass(frozen=True)
+class ResultadoDeAnulacion:
+    """La compra anulada, si se anuló su pago de contado y los avisos de la anulación."""
+
+    compra: Compra
+    pago_anulado: bool
+    avisos: list[AvisoDeAnulacion]
+
+
+def _validar_motivo_de_anulacion(organizacion_id: UUID, sesion: Session, motivo_id: UUID) -> None:
+    motivo = configuracion_service.obtener_motivo(organizacion_id, motivo_id, sesion)
+    if motivo is None:
+        raise RecursoNoEncontradoError(f"El motivo {motivo_id} no existe en esta organización.")
+    if not motivo.activo or motivo.ambito != _AMBITO_ANULACION_COMPRA:
+        raise MotivoInvalidoError(
+            f"El motivo {motivo_id} no es un motivo activo de {_AMBITO_ANULACION_COMPRA}."
+        )
+
+
+def anular_compra(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    compra_id: UUID,
+    motivo_id: UUID,
+    devuelve_pago: bool | None,
+    permitir_stock_negativo: bool,
+    operation_id: UUID,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+    occurred_at: datetime,
+) -> ResultadoDeAnulacion:
+    """`COMPRA_ANULAR` (CMP-05 a CMP-07, INV-01, INV-05; `design.md` D3, D9 a D12).
+
+    Anula una compra `CONFIRMADA` en una sola transacción: egresa el stock de cada línea
+    en orden inverso al de la compra (movimiento `ANULACION_COMPRA` con el costo base de
+    la línea, que revierte el promedio, CMP-06), registra `ANULACION_COMPRA` en la cuenta
+    del proveedor y, en una compra de contado, `devuelve_pago` decide si el pago se anula
+    (`ANULACION_PAGO`) o se mantiene (saldo a favor). Orden de bloqueo (`02` §7.3):
+    compra `FOR UPDATE` -> `saldo_cuenta` -> `costo_producto` -> `stock_saldo`. Admite
+    maestros inactivos, salvo la ubicación (D11). Sin `permitir_stock_negativo` un egreso
+    que no alcanza es `STOCK_INSUFICIENTE`. TODA validación va antes de la primera
+    escritura (INV-01)."""
+    compra = repository.obtener_compra_para_actualizar(organizacion_id, compra_id, sesion)
+    if compra is None:
+        raise RecursoNoEncontradoError(f"La compra {compra_id} no existe en esta organización.")
+    if compra.estado == "ANULADA":
+        raise CompraYaAnuladaError(f"La compra {compra_id} ya está anulada.")
+
+    _validar_motivo_de_anulacion(organizacion_id, sesion, motivo_id)
+    es_contado = compra.condicion == CONTADO
+    if es_contado and devuelve_pago is None:
+        raise CondicionInvalidaError(
+            "Al anular una compra de contado hay que indicar si el proveedor devuelve el pago."
+        )
+    if not es_contado and devuelve_pago is not None:
+        raise CondicionInvalidaError("Una compra a crédito no lleva `devuelve_pago`.")
+
+    ubicacion = stock_service.obtener_ubicacion(organizacion_id, sesion, compra.ubicacion_id)
+    if ubicacion is None:  # la FK compuesta de la compra lo impide
+        raise RecursoNoEncontradoError("La ubicación de la compra no existe.")
+    if not ubicacion.activo:
+        raise UbicacionInactivaError(f"La ubicación {compra.ubicacion_id} está inactiva.")
+
+    lineas = repository.listar_lineas_de_compra(organizacion_id, compra_id, sesion)
+    pago = (
+        repository.obtener_pago_de_compra(organizacion_id, compra_id, sesion)
+        if es_contado
+        else None
+    )
+
+    cuentas_corrientes_service.bloquear_saldo(
+        organizacion_id,
+        sesion,
+        reloj,
+        cuenta_tipo=_CUENTA_PROVEEDOR,
+        entidad_id=compra.proveedor_id,
+    )
+    en_orden_inverso = list(reversed(lineas))
+    resultados = stock_service.registrar_movimientos(
+        organizacion_id,
+        sesion,
+        reloj,
+        lineas=[
+            LineaDeMovimiento(
+                producto_id=linea.producto_id,
+                ubicacion_id=compra.ubicacion_id,
+                cantidad_base=-linea.cantidad_base,
+                tipo="ANULACION_COMPRA",
+                costo_unitario=linea.costo_base,
+                origen_tipo="ANULACION_COMPRA",
+                origen_id=compra_id,
+                motivo_id=motivo_id,
+            )
+            for linea in en_orden_inverso
+        ],
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        operation_id=operation_id,
+        occurred_at=occurred_at,
+        permitir_negativo=permitir_stock_negativo,
+    )
+
+    sin_recalculo: list[dict[str, object]] = []
+    en_negativo: list[dict[str, object]] = []
+    for linea, resultado in zip(en_orden_inverso, resultados, strict=True):
+        if resultado.promedio_recalculado is False:
+            sin_recalculo.append(
+                {
+                    "producto_id": str(linea.producto_id),
+                    "linea": linea.orden,
+                    "costo_base": str(linea.costo_base),
+                }
+            )
+        if resultado.saldo_negativo:
+            en_negativo.append(
+                {
+                    "producto_id": str(linea.producto_id),
+                    "ubicacion_id": str(compra.ubicacion_id),
+                    "saldo": resultado.saldo,
+                }
+            )
+
+    cuentas_corrientes_service.registrar_movimiento(
+        organizacion_id,
+        sesion,
+        reloj,
+        cuenta_tipo=_CUENTA_PROVEEDOR,
+        entidad_id=compra.proveedor_id,
+        tipo="ANULACION_COMPRA",
+        sentido="REDUCE",
+        importe=compra.total_factura,
+        origen_tipo="ANULACION_COMPRA",
+        origen_id=compra_id,
+        occurred_at=occurred_at,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        operation_id=operation_id,
+    )
+    pago_anulado = False
+    if pago is not None and devuelve_pago:
+        cuentas_corrientes_service.registrar_movimiento(
+            organizacion_id,
+            sesion,
+            reloj,
+            cuenta_tipo=_CUENTA_PROVEEDOR,
+            entidad_id=compra.proveedor_id,
+            tipo="ANULACION_PAGO",
+            sentido="AUMENTA",
+            importe=pago.importe,
+            origen_tipo="ANULACION_PAGO",
+            origen_id=pago.id,
+            occurred_at=occurred_at,
+            usuario_id=usuario_id,
+            dispositivo_id=dispositivo_id,
+            operation_id=operation_id,
+        )
+        repository.marcar_pago_anulado(
+            organizacion_id,
+            sesion,
+            pago=pago,
+            motivo_id=motivo_id,
+            anulado_en=occurred_at,
+            anulado_por_id=usuario_id,
+        )
+        pago_anulado = True
+    repository.marcar_compra_anulada(
+        organizacion_id,
+        sesion,
+        compra=compra,
+        motivo_id=motivo_id,
+        anulada_en=occurred_at,
+        anulada_por_id=usuario_id,
+    )
+
+    avisos: list[AvisoDeAnulacion] = []
+    if sin_recalculo:
+        avisos.append(AvisoDeAnulacion(OBSERVACION_SIN_RECALCULO, sin_recalculo))
+    if en_negativo:
+        avisos.append(AvisoDeAnulacion(OBSERVACION_STOCK_NEGATIVO, en_negativo))
+    return ResultadoDeAnulacion(compra=compra, pago_anulado=pago_anulado, avisos=avisos)

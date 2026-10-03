@@ -20,7 +20,13 @@ from cargador import descubrir_casos
 
 from app.modules.costeo.domain.costo_promedio import calcular_egreso, calcular_ingreso
 
-_CASOS_CST11 = [caso for caso in descubrir_casos() if caso.entrada.get("motor") == "cst11"]
+_CASOS_CST11 = [
+    caso
+    for caso in descubrir_casos()
+    if caso.entrada.get("motor") == "cst11" and caso.entrada.get("operacion") != "reversion"
+]
+# Las operaciones `reversion` (CMP-06, change 11) las ejecuta
+# `test_cst11_reversion_fixtures.py`.
 
 if not _CASOS_CST11:
     raise AssertionError(

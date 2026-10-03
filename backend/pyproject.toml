@@ -81,6 +81,7 @@ ignore_imports = [
     "app.modules.proveedores.models -> sqlalchemy",
     "app.modules.proveedores.repository -> sqlalchemy",
     "app.modules.proveedores.service -> sqlalchemy",
+    "app.modules.proveedores.queries -> sqlalchemy",
     "app.modules.proveedores.api -> fastapi",
     "app.modules.proveedores.api -> sqlalchemy",
     "app.modules.proveedores.api -> app.api_v1.dependencias",
@@ -340,6 +341,20 @@ forbidden_modules = [
     "app.modules.cuentas_corrientes.api",
     "app.modules.cuentas_corrientes.domain",
     "app.modules.cuentas_corrientes.commands",
+    # Change 11 (`02` §5.3: `proveedores -> catalogo, stock, costeo,
+    # cuentas_corrientes, configuracion`): compras y anulaciones usan `stock`,
+    # `costeo`, `cuentas_corrientes`, `configuracion` y `catalogo` solo por su
+    # `service.py`; nunca por sus libros, repositorios, apis, dominios ni comandos.
+    "app.modules.stock.models",
+    "app.modules.stock.repository",
+    "app.modules.stock.domain",
+    "app.modules.stock.api",
+    "app.modules.stock.commands",
+    "app.modules.costeo.models",
+    "app.modules.costeo.repository",
+    "app.modules.costeo.domain",
+    "app.modules.configuracion.commands",
+    "app.modules.catalogo.commands",
 ]
 # Grupo 10 (tarea 10.2): `proveedores/api.py` ya existe y llama a
 # `sync_service.procesar_comando` (mismo patron que `catalogo-solo-por-

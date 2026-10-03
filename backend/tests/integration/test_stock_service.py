@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from stock_utiles import (
     crear_motivo_sql,
     crear_presentacion_referencia_sql,
+    crear_presentacion_sql,
     crear_producto_sql,
     crear_ubicacion_sql,
     desactivar_producto_sql,
@@ -813,6 +814,7 @@ def test_stock_por_ubicacion_muestra_cantidad_referencia_y_promedio(entorno: Ent
     assert linea.producto_codigo.startswith("COD-")
     assert linea.cantidad_base == 31
     assert linea.unidades_referencia == 6
+    assert linea.nombre_referencia == "Caja x6"
     assert linea.costo_promedio == Decimal("1000.000000")
     assert pagina.cursor_siguiente is None
 
@@ -833,6 +835,7 @@ def test_stock_por_ubicacion_omite_los_saldos_en_cero_y_los_de_otras_ubicaciones
         (entorno.producto_id, 10)
     ]
     assert pagina.lineas[0].unidades_referencia is None  # sin presentación de referencia
+    assert pagina.lineas[0].nombre_referencia is None
 
 
 def test_stock_por_ubicacion_pagina_por_cursor(entorno: Entorno) -> None:
@@ -930,8 +933,10 @@ def test_el_kardex_identifica_el_producto_y_su_presentacion_de_referencia(
     assert con_referencia.producto_nombre == "Vino A"
     assert con_referencia.producto_codigo.startswith("COD-")
     assert con_referencia.unidades_referencia == 6
+    assert con_referencia.nombre_referencia == "Caja x6"
     assert sin_referencia.producto_nombre == "Cerveza B"
     assert sin_referencia.unidades_referencia is None
+    assert sin_referencia.nombre_referencia is None
 
 
 def test_el_kardex_filtra_por_periodo_con_saldo_anterior(entorno: Entorno) -> None:
@@ -1075,3 +1080,32 @@ def test_la_consistencia_solo_mira_la_organizacion_pedida(entorno: Entorno) -> N
     )
 
     assert service.verificar_consistencia(otra, entorno.sesion) == []
+
+
+def test_stock_y_kardex_nombran_la_referencia_de_cada_producto(entorno: Entorno) -> None:
+    """Triangulación: dos productos con referencia distinta y uno sin ella."""
+    botellas = entorno.producto("Gaseosa C")
+    crear_presentacion_sql(
+        entorno.sesion,
+        entorno.org,
+        botellas,
+        nombre="Botella",
+        unidades_base=1,
+        es_referencia=True,
+    )
+    crear_presentacion_referencia_sql(
+        entorno.sesion, entorno.org, entorno.producto_id, unidades_base=12
+    )
+    cerveza = entorno.producto("Cerveza B")
+    entorno.inicial((entorno.producto_id, 24, "1"), (botellas, 3, "1"), (cerveza, 5, "1"))
+
+    pagina = service.stock_por_ubicacion(
+        entorno.org, entorno.sesion, ubicacion_id=entorno.deposito_id, cursor=None, limite=None
+    )
+
+    por_producto = {li.producto_id: li for li in pagina.lineas}
+    assert por_producto[entorno.producto_id].nombre_referencia == "Caja x12"
+    assert por_producto[botellas].nombre_referencia == "Botella"
+    assert por_producto[botellas].unidades_referencia == 1
+    assert por_producto[cerveza].nombre_referencia is None
+    assert _kardex(entorno, producto_id=botellas).nombre_referencia == "Botella"

@@ -30,3 +30,28 @@ class AlicuotaResponse(BaseModel):
 class PaginaAlicuotas(BaseModel):
     items: list[AlicuotaResponse]
     cursor_siguiente: str | None
+
+
+class MedioPagoResponse(BaseModel):
+    """Un medio de pago activo con su indicador de referencia obligatoria."""
+
+    id: UUID
+    nombre: str
+    requiere_referencia: bool
+
+    model_config = {"from_attributes": True}
+
+
+class ListaMediosPago(BaseModel):
+    items: list[MedioPagoResponse]
+
+
+class MotivoResponse(BaseModel):
+    id: UUID
+    nombre: str
+
+    model_config = {"from_attributes": True}
+
+
+class ListaMotivos(BaseModel):
+    items: list[MotivoResponse]

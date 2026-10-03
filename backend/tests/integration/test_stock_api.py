@@ -932,6 +932,7 @@ class TestSaldosDeUbicacion:
         assert linea["producto_nombre"] == "Vino A"
         assert linea["cantidad_base"] == 120
         assert linea["unidades_referencia"] == 6
+        assert linea["nombre_referencia"] == "Caja x6"
         assert linea["costo_promedio"] == "1050.000000"
 
     def test_sin_ver_costos_omite_el_campo_de_costo(
@@ -1062,6 +1063,7 @@ class TestKardex:
         assert cuerpo["producto_nombre"] == "Vino A"
         assert cuerpo["producto_codigo"].startswith("COD-")
         assert cuerpo["unidades_referencia"] is None
+        assert cuerpo["nombre_referencia"] is None
         assert [(m["cantidad_base"], m["saldo_acumulado"]) for m in cuerpo["items"]] == [
             (60, 60),
             (-12, 48),

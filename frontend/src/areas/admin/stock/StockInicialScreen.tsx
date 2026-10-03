@@ -7,6 +7,7 @@ import { Alert } from '../../../components/ui/Alert'
 import { Boton } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { PageHeader } from '../../../components/ui/PageHeader'
+import { referenciaDePresentaciones } from '../../../domain/stock/cantidades'
 import { formatearCostoDeApi } from '../../../domain/stock/costos'
 import {
   armarEnvio,
@@ -98,7 +99,7 @@ function Formulario({ ubicacionId }: { ubicacionId: string }) {
     setError(null)
     setEnviando(true)
     try {
-      const lineas: { linea: LineaDeFormulario; unidadesPorCaja: number | null }[] = []
+      const lineas: { linea: LineaDeFormulario; unidadesPorCaja: number | null; nombrePresentacion: string | null }[] = []
       for (const cruda of datos.lineas) {
         // Un campo deshabilitado (cajas sin presentación de referencia) no entra
         // en los valores del formulario: se toma como vacío.
@@ -110,14 +111,17 @@ function Formulario({ ubicacionId }: { ubicacionId: string }) {
           costo: cruda.costo ?? '',
         }
         let unidadesPorCaja: number | null = null
+        let nombrePresentacion: string | null = null
         if (linea.productoId !== '') {
           const detalle = await queryClient.fetchQuery({
             queryKey: clavesCatalogo.producto(linea.productoId),
             queryFn: () => obtenerProducto(linea.productoId),
           })
-          unidadesPorCaja = detalle.presentaciones.find((p) => p.es_referencia)?.unidades_base ?? null
+          const referenciaDelProducto = referenciaDePresentaciones(detalle.presentaciones)
+          unidadesPorCaja = referenciaDelProducto?.unidades ?? null
+          nombrePresentacion = referenciaDelProducto?.nombre ?? null
         }
-        lineas.push({ linea, unidadesPorCaja })
+        lineas.push({ linea, unidadesPorCaja, nombrePresentacion })
       }
 
       const envio = armarEnvio(ubicacionId, lineas)
@@ -210,7 +214,9 @@ function LineaEditor({ indice, register, control, verCostos, puedeQuitar, onQuit
 
   const productoId = linea.productoId === '' ? undefined : linea.productoId
   const detalle = useProducto(productoId)
-  const referencia = detalle.data?.presentaciones.find((p) => p.es_referencia)?.unidades_base ?? null
+  const presentacionDeReferencia = referenciaDePresentaciones(detalle.data?.presentaciones)
+  const referencia = presentacionDeReferencia?.unidades ?? null
+  const nombreReferencia = presentacionDeReferencia?.nombre ?? null
   const sinReferencia = productoId !== undefined && detalle.isSuccess && referencia === null
   const costo = useCostoPromedio(productoId, verCostos && productoId !== undefined)
   const esIngreso = linea.sentido !== 'CORRECCION'
@@ -226,6 +232,7 @@ function LineaEditor({ indice, register, control, verCostos, puedeQuitar, onQuit
         costo: linea.costo ?? '',
       },
       referencia,
+      nombreReferencia,
     )
     if (validada.ok) {
       promedio = previsualizarPromedio({
@@ -276,7 +283,7 @@ function LineaEditor({ indice, register, control, verCostos, puedeQuitar, onQuit
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-sm text-primary">
-          Cajas
+          {nombreReferencia ?? 'Cajas'}
           <input
             inputMode="numeric"
             autoComplete="off"
@@ -303,7 +310,7 @@ function LineaEditor({ indice, register, control, verCostos, puedeQuitar, onQuit
       </div>
 
       {referencia !== null && (
-        <p className="text-xs text-primary/70">Una caja tiene {referencia} unidades.</p>
+        <p className="text-xs text-primary/70">Una {nombreReferencia ?? 'caja'} tiene {referencia} unidades.</p>
       )}
       {promedio !== null && (
         <p className="text-sm text-primary">Promedio resultante: {formatearCostoDeApi(promedio)}</p>

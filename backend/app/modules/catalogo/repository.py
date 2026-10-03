@@ -402,6 +402,7 @@ def listar_productos_paginado(
     categoria_id: UUID | None = None,
     marca_id: UUID | None = None,
     activo: bool | None = None,
+    proveedor_id: UUID | None = None,
 ) -> tuple[list[Producto], str | None]:
     """Paginación por cursor (`02` §11): ordenado por `codigo` (único por
     organización, CAT-01 -- una clave estable para el cursor), con límite
@@ -421,6 +422,8 @@ def listar_productos_paginado(
         consulta = consulta.where(Producto.marca_id == marca_id)
     if activo is not None:
         consulta = consulta.where(Producto.activo.is_(activo))
+    if proveedor_id is not None:
+        consulta = consulta.where(Producto.proveedor_id == proveedor_id)
     consulta = consulta.order_by(Producto.codigo).limit(limite_efectivo + 1)
 
     filas = list(sesion.scalars(consulta).all())

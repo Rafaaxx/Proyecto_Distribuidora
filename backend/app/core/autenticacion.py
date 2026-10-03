@@ -120,6 +120,48 @@ def requiere_permiso(codigo_permiso: str) -> Callable[..., ContextoAutenticado]:
     return _dependencia
 
 
+def requiere_sesion(
+    contexto: Annotated[ContextoAutenticado, Depends(obtener_contexto_autenticado)],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> ContextoAutenticado:
+    """Dependencia de una ruta que exige una sesión válida y habilitada pero NINGÚN
+    permiso en particular (change 11, `design.md` D14: medios de pago y motivos los lee
+    cualquier usuario autenticado). Mismo rechazo que `requiere_permiso` ante un usuario
+    o rol inactivo (ADR-028 D9.1). No lleva el marcador `permiso_requerido`: las rutas que
+    la usan figuran en la lista de exenciones del ratchet de permiso por ruta."""
+    identidad_service.exigir_sesion_habilitada(
+        contexto.organizacion_id, contexto.usuario_id, sesion
+    )
+    return contexto
+
+
+def requiere_algun_permiso(*codigos_permiso: str) -> Callable[..., ContextoAutenticado]:
+    """Como `requiere_permiso`, pero alcanza con tener CUALQUIERA de los permisos
+    (change 11, `design.md` D14: leer compras exige `REGISTRAR_COMPRA` o
+    `ANULAR_COMPRA`). El marcador `permiso_requerido` lleva los códigos unidos con
+    ` o `, así el ratchet de permiso por ruta la reconoce igual."""
+    assert codigos_permiso, "requiere_algun_permiso necesita al menos un permiso."
+
+    def _dependencia(
+        contexto: Annotated[ContextoAutenticado, Depends(obtener_contexto_autenticado)],
+        sesion: Annotated[Session, Depends(get_session)],
+    ) -> ContextoAutenticado:
+        identidad_service.exigir_sesion_habilitada(
+            contexto.organizacion_id, contexto.usuario_id, sesion
+        )
+        permisos_del_usuario = identidad_service.listar_permisos_del_usuario(
+            contexto.organizacion_id, contexto.usuario_id, sesion
+        )
+        if not any(codigo in permisos_del_usuario for codigo in codigos_permiso):
+            raise PermisoRequeridoError(
+                f"Falta alguno de los permisos {', '.join(codigos_permiso)}."
+            )
+        return contexto
+
+    _dependencia.permiso_requerido = " o ".join(codigos_permiso)  # type: ignore[attr-defined]
+    return _dependencia
+
+
 @dataclass(frozen=True)
 class EntradaComandoOnline:
     """Contexto autenticado más el `operation_id` ya validado (change 04,

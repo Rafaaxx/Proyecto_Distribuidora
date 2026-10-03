@@ -116,6 +116,7 @@ class LineaDeStockResponse(BaseModel):
     producto_nombre: str
     cantidad_base: int
     unidades_referencia: int | None
+    nombre_referencia: str | None
     costo_promedio: Decimal | None = None
 
     @field_serializer("costo_promedio")
@@ -136,6 +137,7 @@ def linea_de_stock_response(linea: LineaDeStock, *, con_costos: bool) -> LineaDe
         "producto_nombre": linea.producto_nombre,
         "cantidad_base": linea.cantidad_base,
         "unidades_referencia": linea.unidades_referencia,
+        "nombre_referencia": linea.nombre_referencia,
     }
     if con_costos:
         return LineaDeStockResponse(**datos, costo_promedio=linea.costo_promedio)  # type: ignore[arg-type]
@@ -179,6 +181,7 @@ class KardexResponse(BaseModel):
     producto_codigo: str
     producto_nombre: str
     unidades_referencia: int | None
+    nombre_referencia: str | None
     items: list[LineaDeKardexResponse]
     cursor_siguiente: str | None
 
@@ -209,6 +212,7 @@ def kardex_response(kardex: Kardex, *, con_costos: bool) -> KardexResponse:
         producto_codigo=kardex.producto_codigo,
         producto_nombre=kardex.producto_nombre,
         unidades_referencia=kardex.unidades_referencia,
+        nombre_referencia=kardex.nombre_referencia,
         items=items,
         cursor_siguiente=kardex.cursor_siguiente,
     )

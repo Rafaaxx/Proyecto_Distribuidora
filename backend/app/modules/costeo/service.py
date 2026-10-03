@@ -40,6 +40,7 @@ from app.modules.costeo import repository
 from app.modules.costeo.domain.costo_promedio import (
     calcular_egreso,
     calcular_ingreso,
+    calcular_reversion,
     validar_costo,
     validar_origen_de_costo,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "CostoVigente",
     "ResultadoDeEgresoAplicado",
     "ResultadoDeIngresoAplicado",
+    "ResultadoDeReversionAplicada",
     "aplicar_egreso",
     "aplicar_ingreso",
     "bloquear_costos",
@@ -56,6 +58,7 @@ __all__ = [
     "obtener_promedio",
     "obtener_promedios",
     "obtener_stock_totales",
+    "revertir_ingreso",
     "validar_costo",
 ]
 
@@ -86,6 +89,18 @@ class ResultadoDeEgresoAplicado:
 
     costo_valorizacion: Decimal | None
     stock_nuevo: int
+
+
+@dataclass(frozen=True)
+class ResultadoDeReversionAplicada:
+    """Estado del producto antes y después de revertir un ingreso (CMP-06).
+    `recalculado` es `False` cuando el promedio se mantuvo (D9)."""
+
+    stock_anterior: int
+    promedio_anterior: Decimal | None
+    stock_nuevo: int
+    promedio_nuevo: Decimal
+    recalculado: bool
 
 
 def bloquear_costos(
@@ -175,6 +190,72 @@ def aplicar_ingreso(
         promedio_anterior=previo.costo_promedio,
         stock_nuevo=resultado.stock_nuevo,
         promedio_nuevo=resultado.promedio_nuevo,
+    )
+
+
+def revertir_ingreso(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    producto_id: UUID,
+    cantidad: int,
+    costo_unitario: object,
+    origen_id: UUID,
+    operation_id: UUID,
+) -> ResultadoDeReversionAplicada:
+    """Reversión de un ingreso con costo (CMP-06, `design.md` D9): quita
+    `cantidad` del stock total y recalcula el promedio como inverso de CST-11 si
+    el stock restante y el promedio resultante son positivos. Escribe SIEMPRE una
+    fila de `costo_producto_mov` con origen `ANULACION_COMPRA`, cantidad negativa y
+    el costo de la línea; si no recalcula, `promedio_nuevo` es el anterior y
+    `recalculado` es `False` (CST-13). Valida ANTES de escribir."""
+    costo = validar_costo(costo_unitario)
+    ahora = reloj.now()
+
+    previo = _bloquear(organizacion_id, sesion, reloj, producto_id)
+    resultado = calcular_reversion(
+        stock_previo=previo.stock_total,
+        promedio_previo=previo.costo_promedio,
+        cantidad=cantidad,
+        costo_ingreso=costo,
+    )
+    if resultado.recalculado:
+        repository.aplicar_ingreso_al_costo(
+            organizacion_id,
+            sesion,
+            producto_id=producto_id,
+            costo_promedio=resultado.promedio_nuevo,
+            cantidad=-cantidad,
+            momento=ahora,
+        )
+    else:
+        repository.aplicar_egreso_al_costo(
+            organizacion_id, sesion, producto_id=producto_id, cantidad=cantidad, momento=ahora
+        )
+    repository.insertar_historia(
+        organizacion_id,
+        sesion,
+        historia_id=nuevo_id(),
+        producto_id=producto_id,
+        origen_tipo="ANULACION_COMPRA",
+        origen_id=origen_id,
+        cantidad=-cantidad,
+        costo_ingreso=costo,
+        stock_anterior=previo.stock_total,
+        promedio_anterior=previo.costo_promedio,
+        stock_nuevo=resultado.stock_nuevo,
+        promedio_nuevo=resultado.promedio_nuevo,
+        recalculado=resultado.recalculado,
+        operation_id=operation_id,
+        registered_at=ahora,
+    )
+    return ResultadoDeReversionAplicada(
+        stock_anterior=previo.stock_total,
+        promedio_anterior=previo.costo_promedio,
+        stock_nuevo=resultado.stock_nuevo,
+        promedio_nuevo=resultado.promedio_nuevo,
+        recalculado=resultado.recalculado,
     )
 
 

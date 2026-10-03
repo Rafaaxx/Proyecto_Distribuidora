@@ -176,6 +176,30 @@
       "sessions": 0,
       "memories": 6,
       "prompts": 0
+    },
+    {
+      "id": "9e1bdbbd",
+      "created_by": "rafan",
+      "created_at": "2026-10-01T22:30:42Z",
+      "sessions": 0,
+      "memories": 2,
+      "prompts": 0
+    },
+    {
+      "id": "38ef8081",
+      "created_by": "rafan",
+      "created_at": "2026-10-02T18:22:57Z",
+      "sessions": 0,
+      "memories": 4,
+      "prompts": 0
+    },
+    {
+      "id": "b16846ca",
+      "created_by": "rafan",
+      "created_at": "2026-10-03T02:27:48Z",
+      "sessions": 0,
+      "memories": 6,
+      "prompts": 0
     }
   ]
 }

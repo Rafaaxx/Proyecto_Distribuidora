@@ -56,6 +56,34 @@ describe('validarLinea', () => {
   })
 })
 
+describe('validarLinea con el nombre de la presentación', () => {
+  it('el mensaje de una parte inválida usa el nombre; sin nombre dice Cajas', () => {
+    expect(validarLinea(linea({ cajas: '1.5' }), 6, 'Caja x6')).toEqual({
+      ok: false,
+      mensaje: 'Caja x6: ingresá un entero mayor o igual a cero.',
+    })
+    expect(validarLinea(linea({ cajas: 'x' }), 12, 'Pack x12')).toEqual({
+      ok: false,
+      mensaje: 'Pack x12: ingresá un entero mayor o igual a cero.',
+    })
+    expect(validarLinea(linea({ cajas: '1.5' }), null)).toEqual({
+      ok: false,
+      mensaje: 'Cajas: ingresá un entero mayor o igual a cero.',
+    })
+  })
+
+  it('armarEnvio propaga el nombre al mensaje de la línea', () => {
+    const envio = armarEnvio(UBICACION, [
+      { linea: linea({ cajas: '1.5' }), unidadesPorCaja: 6, nombrePresentacion: 'Caja x6' },
+    ])
+    expect(envio).toEqual({
+      ok: false,
+      mensaje: 'Caja x6: ingresá un entero mayor o igual a cero.',
+      indice: 0,
+    })
+  })
+})
+
 describe('armarEnvio', () => {
   it('arma el cuerpo con la ubicación y las líneas convertidas', () => {
     const envio = armarEnvio(UBICACION, [

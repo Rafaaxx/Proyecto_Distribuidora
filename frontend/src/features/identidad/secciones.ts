@@ -14,6 +14,9 @@ import type { CodigoPermiso } from '../../domain/identidad/permisos'
  * - `permiso` es el que el usuario tiene que tener en la consulta de
  *   sesión (`GET /api/v1/yo`) para ver la sección, según `01-dominio.md`
  *   §19.
+ * - `otrosPermisos` (opcional): permisos alternativos; la sección se ofrece con `permiso`
+ *   **o** con cualquiera de ellos (Compras: `REGISTRAR_COMPRA` o `ANULAR_COMPRA`, change 11
+ *   D14).
  * - `ruta` es **absoluta** (`/admin/...`), nunca relativa: la tarea 10.8
  *   del change 05 fijo que un `to` relativo se resolvía contra el
  *   segmento en el que estaba parado quien navega
@@ -26,11 +29,18 @@ export interface SeccionAdmin {
   ruta: string
   etiqueta: string
   permiso: CodigoPermiso
+  otrosPermisos?: readonly CodigoPermiso[]
 }
 
 export const SECCIONES: readonly SeccionAdmin[] = [
   { ruta: '/admin/catalogo', etiqueta: 'Catálogo', permiso: 'GESTIONAR_CATALOGO' },
   { ruta: '/admin/proveedores', etiqueta: 'Proveedores', permiso: 'GESTIONAR_PROVEEDORES' },
+  {
+    ruta: '/admin/compras',
+    etiqueta: 'Compras',
+    permiso: 'REGISTRAR_COMPRA',
+    otrosPermisos: ['ANULAR_COMPRA'],
+  },
   { ruta: '/admin/clientes', etiqueta: 'Clientes', permiso: 'GESTIONAR_CLIENTES' },
   { ruta: '/admin/stock', etiqueta: 'Stock', permiso: 'TRANSFERIR_STOCK' },
   { ruta: '/admin/importacion', etiqueta: 'Importación', permiso: 'IMPORTAR_DATOS' },
@@ -48,7 +58,9 @@ export type TienePermiso = (permiso: CodigoPermiso) => boolean
  * aparece ninguna sección protegida.
  */
 export function seccionesPermitidas(tiene: TienePermiso): SeccionAdmin[] {
-  return SECCIONES.filter((seccion) => tiene(seccion.permiso))
+  return SECCIONES.filter(
+    (seccion) => tiene(seccion.permiso) || (seccion.otrosPermisos ?? []).some((permiso) => tiene(permiso)),
+  )
 }
 
 /**

@@ -38,6 +38,7 @@ function kardex(items: unknown[], cursor: string | null, extra: Record<string, u
     producto_codigo: 'COD-1',
     producto_nombre: 'Vino A',
     unidades_referencia: 6,
+    nombre_referencia: 'Caja x6',
     items,
     cursor_siguiente: cursor,
     ...extra,
@@ -79,11 +80,11 @@ describe('KardexScreen (tarea 8.3, STK-04, D11)', () => {
     expect(await screen.findByText(/Vino A/)).toBeInTheDocument()
     const filas = screen.getAllByRole('row').slice(1)
     expect(within(filas[0] as HTMLElement).getByText('Stock inicial')).toBeInTheDocument()
-    expect(within(filas[0] as HTMLElement).getAllByText('10 cajas')).toHaveLength(2) // cantidad y acumulado
+    expect(within(filas[0] as HTMLElement).getAllByText('60 unidades (10 Caja x6)')).toHaveLength(2) // cantidad y acumulado
     expect(within(filas[0] as HTMLElement).getByText('$ 1.000,000000')).toBeInTheDocument()
-    expect(within(filas[1] as HTMLElement).getByText('-2 cajas')).toBeInTheDocument()
-    expect(within(filas[1] as HTMLElement).getByText('8 cajas')).toBeInTheDocument() // acumulado 48
-    expect(screen.getByText('Saldo actual: 8 cajas')).toBeInTheDocument()
+    expect(within(filas[1] as HTMLElement).getByText('-12 unidades (-2 Caja x6)')).toBeInTheDocument()
+    expect(within(filas[1] as HTMLElement).getByText('48 unidades (8 Caja x6)')).toBeInTheDocument() // acumulado 48
+    expect(screen.getByText('Saldo actual: 48 unidades (8 Caja x6)')).toBeInTheDocument()
     const [pedido] = llamadas(apiFetchMock, 'GET', '/stock/kardex')
     expect(pedido?.url.searchParams.get('producto_id')).toBe(PRODUCTO)
     expect(pedido?.url.searchParams.get('ubicacion_id')).toBe(UBICACION)
@@ -109,13 +110,13 @@ describe('KardexScreen (tarea 8.3, STK-04, D11)', () => {
         ruta: '/stock/kardex',
         responder: () => ({
           status: 200,
-          cuerpo: kardex([movimiento('a', 7, 7)], null, { unidades_referencia: null, saldo_actual: 7 }),
+          cuerpo: kardex([movimiento('a', 7, 7)], null, { unidades_referencia: null, nombre_referencia: null, saldo_actual: 7 }),
         }),
       },
     ])
     renderKardex('VEN')
 
-    expect(await screen.findByText('Saldo actual: 7 un.')).toBeInTheDocument()
+    expect(await screen.findByText('Saldo actual: 7 unidades')).toBeInTheDocument()
   })
 
   it('el período vuelve a pedir el kardex y muestra el saldo anterior', async () => {
@@ -137,7 +138,7 @@ describe('KardexScreen (tarea 8.3, STK-04, D11)', () => {
     await usuario.type(screen.getByLabelText('Hasta'), '2026-04-10')
     await usuario.click(screen.getByRole('button', { name: 'Filtrar' }))
 
-    expect(await screen.findByText('Saldo anterior: 10 cajas')).toBeInTheDocument()
+    expect(await screen.findByText('Saldo anterior: 60 unidades (10 Caja x6)')).toBeInTheDocument()
     const consultas = llamadas(apiFetchMock, 'GET', '/stock/kardex')
     const ultima = consultas[consultas.length - 1]
     expect(ultima?.url.searchParams.get('desde')).toBe('2026-04-05')

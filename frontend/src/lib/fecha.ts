@@ -45,3 +45,12 @@ export function formatearFechaHoraEnZona(momentoIso: string, zonaHoraria: string
   const valor = (tipo: Intl.DateTimeFormatPartTypes): string => partes.find((parte) => parte.type === tipo)?.value ?? ''
   return `${valor('day')}/${valor('month')}/${valor('year')} ${valor('hour')}:${valor('minute')}`
 }
+
+/**
+ * Fecha de negocio `aaaa-mm-dd` (TR-04, sin hora ni zona) como `dd/mm/aaaa`. Manipula la
+ * cadena: pasar por `Date` correría el día según la zona del navegador.
+ */
+export function formatearFechaDeNegocio(fecha: string): string {
+  const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fecha)
+  return partes ? `${partes[3] ?? ''}/${partes[2] ?? ''}/${partes[1] ?? ''}` : fecha
+}

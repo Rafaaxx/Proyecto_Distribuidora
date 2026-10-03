@@ -60,6 +60,13 @@ MOTIVOS_AJUSTE_STOCK_INICIALES = (
     "Diferencia de inventario",
     "Otro",
 )
+MOTIVOS_ANULACION_COMPRA_INICIALES = (
+    "Error de carga",
+    "Devolución al proveedor",
+    "Otro",
+)
+"""Change 11 (CMP-05, `design.md` D8, aprobados el 2026-10-02). La migración
+`c0d1e2f3a4b5` siembra los mismos nombres en las organizaciones existentes."""
 
 
 class BaseSinMigrarError(RuntimeError):
@@ -149,6 +156,11 @@ def sembrar(sesion: Session, reloj: Clock, *, password_administrador: str) -> Or
     for nombre in MOTIVOS_AJUSTE_STOCK_INICIALES:
         configuracion_service.crear_motivo(
             organizacion.id, sesion, reloj, ambito="AJUSTE_STOCK", nombre=nombre
+        )
+
+    for nombre in MOTIVOS_ANULACION_COMPRA_INICIALES:
+        configuracion_service.crear_motivo(
+            organizacion.id, sesion, reloj, ambito="ANULACION_COMPRA", nombre=nombre
         )
 
     roles = identidad_service.crear_plantillas_de_rol_iniciales(organizacion.id, sesion, reloj)

@@ -1606,6 +1606,23 @@
             }
           },
           {
+            "name": "proveedor_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Proveedor Id"
+            }
+          },
+          {
             "name": "authorization",
             "in": "header",
             "required": false,
@@ -2833,6 +2850,113 @@
         }
       }
     },
+    "/api/v1/configuracion/medios-pago": {
+      "get": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Listar Medios Pago",
+        "operationId": "listar_medios_pago_api_v1_configuracion_medios_pago_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListaMediosPago"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/configuracion/motivos": {
+      "get": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Listar Motivos",
+        "operationId": "listar_motivos_api_v1_configuracion_motivos_get",
+        "parameters": [
+          {
+            "name": "ambito",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ambito"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListaMotivos"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/cuentas-corrientes/saldos-iniciales": {
       "post": {
         "tags": [
@@ -3647,6 +3771,389 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PaginaCostosInformados"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compras": {
+      "post": {
+        "tags": [
+          "proveedores"
+        ],
+        "summary": "Confirmar Compra",
+        "operationId": "confirmar_compra_api_v1_compras_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompraConfirmarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompraConfirmarResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "proveedores"
+        ],
+        "summary": "Listar Compras",
+        "description": "Compras de la organización de la más reciente a la más vieja, por cursor\n(`design.md` D14: `REGISTRAR_COMPRA` o `ANULAR_COMPRA`). `desde` y `hasta` son fechas\nde comprobante inclusivas; un `limite` fuera de 1 a 200 es 422, no un recorte.",
+        "operationId": "listar_compras_api_v1_compras_get",
+        "parameters": [
+          {
+            "name": "proveedor_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Proveedor Id"
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "CONFIRMADA",
+                    "ANULADA"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Estado"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Desde"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hasta"
+            }
+          },
+          {
+            "name": "numero_comprobante",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Numero Comprobante"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaCompras"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compras/{compra_id}/anulacion": {
+      "post": {
+        "tags": [
+          "proveedores"
+        ],
+        "summary": "Anular Compra",
+        "operationId": "anular_compra_api_v1_compras__compra_id__anulacion_post",
+        "parameters": [
+          {
+            "name": "compra_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Compra Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompraAnularRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompraAnularResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compras/{compra_id}": {
+      "get": {
+        "tags": [
+          "proveedores"
+        ],
+        "summary": "Obtener Compra",
+        "description": "Detalle de una compra con líneas, pago y anulación. 404 si es de otra organización\no no existe (INV-21).",
+        "operationId": "obtener_compra_api_v1_compras__compra_id__get",
+        "parameters": [
+          {
+            "name": "compra_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Compra Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompraDetalleResponse"
                 }
               }
             }
@@ -4857,6 +5364,700 @@
         ],
         "title": "ComposicionRolRequest"
       },
+      "CompraAnulacionResponse": {
+        "properties": {
+          "motivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Motivo Id"
+          },
+          "motivo_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Nombre"
+          },
+          "anulada_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Anulada En"
+          },
+          "anulada_por_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Anulada Por Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "motivo_id",
+          "motivo_nombre",
+          "anulada_en",
+          "anulada_por_id"
+        ],
+        "title": "CompraAnulacionResponse"
+      },
+      "CompraAnularRequest": {
+        "properties": {
+          "motivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Motivo Id"
+          },
+          "devuelve_pago": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Devuelve Pago"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "motivo_id"
+        ],
+        "title": "CompraAnularRequest",
+        "description": "`POST /compras/{id}/anulacion`. `devuelve_pago` es obligatorio en una compra de\ncontado y prohibido en una a crédito (D3): lo decide el servicio con\n`CONDICION_INVALIDA`, que conoce la condición. `organizacion_id` nunca aparece\n(sale del token)."
+      },
+      "CompraAnularResponse": {
+        "properties": {
+          "compra_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Compra Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "pago_anulado": {
+            "type": "boolean",
+            "title": "Pago Anulado"
+          },
+          "observaciones": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Observaciones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "compra_id",
+          "estado",
+          "pago_anulado",
+          "observaciones"
+        ],
+        "title": "CompraAnularResponse",
+        "description": "Sale de `comando.resultado` (INV-06). `observaciones` son los códigos de SYN-07\nque dejó la anulación (`ANULACION_COMPRA_SIN_RECALCULO`, `STOCK_NEGATIVO`)."
+      },
+      "CompraConfirmarRequest": {
+        "properties": {
+          "proveedor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Proveedor Id"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date",
+            "title": "Fecha"
+          },
+          "ubicacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Id"
+          },
+          "condicion": {
+            "type": "string",
+            "title": "Condicion"
+          },
+          "total_factura": {
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Total Factura"
+          },
+          "numero_comprobante": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Numero Comprobante"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          },
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/CompraLineaRequest"
+            },
+            "type": "array",
+            "title": "Lineas"
+          },
+          "medios": {
+            "items": {
+              "$ref": "#/components/schemas/CompraMedioRequest"
+            },
+            "type": "array",
+            "title": "Medios"
+          }
+        },
+        "type": "object",
+        "required": [
+          "proveedor_id",
+          "fecha",
+          "ubicacion_id",
+          "condicion",
+          "total_factura",
+          "lineas"
+        ],
+        "title": "CompraConfirmarRequest",
+        "description": "`organizacion_id` nunca aparece (sale del token). `lineas` no declara\n`min_length`: una compra sin líneas la rechaza el dominio con `COMPRA_SIN_LINEAS`\n(INV-07), no un 422 genérico de Pydantic. `condicion` es `CONTADO` o `CREDITO`:\ncualquier otro valor lo rechaza el dominio con `CONDICION_INVALIDA`."
+      },
+      "CompraConfirmarResponse": {
+        "properties": {
+          "compra_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Compra Id"
+          },
+          "total_neto": {
+            "type": "string",
+            "title": "Total Neto"
+          },
+          "total_factura": {
+            "type": "string",
+            "title": "Total Factura"
+          },
+          "pago_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pago Id"
+          },
+          "diferencias_de_costo": {
+            "items": {
+              "$ref": "#/components/schemas/DiferenciaDeCostoResponse"
+            },
+            "type": "array",
+            "title": "Diferencias De Costo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "compra_id",
+          "total_neto",
+          "total_factura",
+          "pago_id",
+          "diferencias_de_costo"
+        ],
+        "title": "CompraConfirmarResponse",
+        "description": "Sale de `comando.resultado`, no de una relectura: un reenvío idempotente del mismo\n`Operation-Id` devuelve exactamente lo mismo (INV-06). Importes como string."
+      },
+      "CompraDetalleResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date",
+            "title": "Fecha"
+          },
+          "proveedor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Proveedor Id"
+          },
+          "proveedor_nombre": {
+            "type": "string",
+            "title": "Proveedor Nombre"
+          },
+          "condicion": {
+            "type": "string",
+            "title": "Condicion"
+          },
+          "total_neto": {
+            "type": "string",
+            "title": "Total Neto"
+          },
+          "total_factura": {
+            "type": "string",
+            "title": "Total Factura"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "numero_comprobante": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Numero Comprobante"
+          },
+          "ubicacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Id"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          },
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/CompraLineaResponse"
+            },
+            "type": "array",
+            "title": "Lineas"
+          },
+          "pago": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CompraPagoResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "anulacion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CompraAnulacionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "fecha",
+          "proveedor_id",
+          "proveedor_nombre",
+          "condicion",
+          "total_neto",
+          "total_factura",
+          "estado",
+          "numero_comprobante",
+          "ubicacion_id",
+          "observacion",
+          "lineas",
+          "pago",
+          "anulacion"
+        ],
+        "title": "CompraDetalleResponse"
+      },
+      "CompraLineaRequest": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "presentacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Presentacion Id"
+          },
+          "cantidad": {
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Cantidad"
+          },
+          "valor": {
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Valor"
+          },
+          "incluye_iva": {
+            "type": "boolean",
+            "title": "Incluye Iva"
+          },
+          "bonificacion": {
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Bonificacion",
+            "default": "0"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto_id",
+          "presentacion_id",
+          "cantidad",
+          "valor",
+          "incluye_iva"
+        ],
+        "title": "CompraLineaRequest",
+        "description": "Una línea de `POST /compras` (D5). `cantidad`, `valor` y `bonificacion` viajan\ncomo string estricto (INV-03); la cantidad de decimales la valida el dominio con su\ncódigo estable (`CANTIDAD_INVALIDA`, `VALOR_INVALIDO`, `BONIFICACION_INVALIDA`)."
+      },
+      "CompraLineaResponse": {
+        "properties": {
+          "orden": {
+            "type": "integer",
+            "title": "Orden"
+          },
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "producto_codigo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Producto Codigo"
+          },
+          "producto_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Producto Nombre"
+          },
+          "presentacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Presentacion Id"
+          },
+          "presentacion_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presentacion Nombre"
+          },
+          "unidades_presentacion": {
+            "type": "integer",
+            "title": "Unidades Presentacion"
+          },
+          "unidades_referencia": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unidades Referencia"
+          },
+          "nombre_referencia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nombre Referencia"
+          },
+          "cantidad": {
+            "type": "string",
+            "title": "Cantidad"
+          },
+          "cantidad_base": {
+            "type": "integer",
+            "title": "Cantidad Base"
+          },
+          "valor_presentacion": {
+            "type": "string",
+            "title": "Valor Presentacion"
+          },
+          "incluye_iva": {
+            "type": "boolean",
+            "title": "Incluye Iva"
+          },
+          "bonificacion": {
+            "type": "string",
+            "title": "Bonificacion"
+          },
+          "alicuota_aplicada": {
+            "type": "string",
+            "title": "Alicuota Aplicada"
+          },
+          "costo_base": {
+            "type": "string",
+            "title": "Costo Base"
+          },
+          "importe_neto": {
+            "type": "string",
+            "title": "Importe Neto"
+          }
+        },
+        "type": "object",
+        "required": [
+          "orden",
+          "producto_id",
+          "producto_codigo",
+          "producto_nombre",
+          "presentacion_id",
+          "presentacion_nombre",
+          "unidades_presentacion",
+          "unidades_referencia",
+          "nombre_referencia",
+          "cantidad",
+          "cantidad_base",
+          "valor_presentacion",
+          "incluye_iva",
+          "bonificacion",
+          "alicuota_aplicada",
+          "costo_base",
+          "importe_neto"
+        ],
+        "title": "CompraLineaResponse",
+        "description": "Una línea del detalle. `unidades_referencia` permite mostrar la cantidad en cajas\n+ unidades (CAT-08); `None` si el producto no tiene presentación de referencia."
+      },
+      "CompraMedioRequest": {
+        "properties": {
+          "medio_pago_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Medio Pago Id"
+          },
+          "importe": {
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Importe"
+          },
+          "referencia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referencia"
+          }
+        },
+        "type": "object",
+        "required": [
+          "medio_pago_id",
+          "importe"
+        ],
+        "title": "CompraMedioRequest"
+      },
+      "CompraMedioResponse": {
+        "properties": {
+          "medio_pago_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Medio Pago Id"
+          },
+          "medio_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Medio Nombre"
+          },
+          "importe": {
+            "type": "string",
+            "title": "Importe"
+          },
+          "referencia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referencia"
+          }
+        },
+        "type": "object",
+        "required": [
+          "medio_pago_id",
+          "medio_nombre",
+          "importe",
+          "referencia"
+        ],
+        "title": "CompraMedioResponse"
+      },
+      "CompraPagoResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date",
+            "title": "Fecha"
+          },
+          "importe": {
+            "type": "string",
+            "title": "Importe"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "anulado_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anulado En"
+          },
+          "medios": {
+            "items": {
+              "$ref": "#/components/schemas/CompraMedioResponse"
+            },
+            "type": "array",
+            "title": "Medios"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "fecha",
+          "importe",
+          "estado",
+          "anulado_en",
+          "medios"
+        ],
+        "title": "CompraPagoResponse"
+      },
+      "CompraResumenResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date",
+            "title": "Fecha"
+          },
+          "proveedor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Proveedor Id"
+          },
+          "proveedor_nombre": {
+            "type": "string",
+            "title": "Proveedor Nombre"
+          },
+          "condicion": {
+            "type": "string",
+            "title": "Condicion"
+          },
+          "total_neto": {
+            "type": "string",
+            "title": "Total Neto"
+          },
+          "total_factura": {
+            "type": "string",
+            "title": "Total Factura"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "numero_comprobante": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Numero Comprobante"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "fecha",
+          "proveedor_id",
+          "proveedor_nombre",
+          "condicion",
+          "total_neto",
+          "total_factura",
+          "estado",
+          "numero_comprobante"
+        ],
+        "title": "CompraResumenResponse",
+        "description": "Una fila del listado de compras. Importes como string (INV-03)."
+      },
       "ConsumidorFinalConfigurarRequest": {
         "properties": {
           "nombre": {
@@ -5225,6 +6426,43 @@
         ],
         "title": "CrearUsuarioRequest"
       },
+      "DiferenciaDeCostoResponse": {
+        "properties": {
+          "linea": {
+            "type": "integer",
+            "title": "Linea"
+          },
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "costo_base_compra": {
+            "type": "string",
+            "title": "Costo Base Compra"
+          },
+          "costo_base_vigente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Costo Base Vigente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "linea",
+          "producto_id",
+          "costo_base_compra",
+          "costo_base_vigente"
+        ],
+        "title": "DiferenciaDeCostoResponse",
+        "description": "CMP-04, D7: una línea cuyo costo base difiere del costo informado vigente (o no\ntiene vigente, `costo_base_vigente: null`). Informativa: la compra nunca registra un\ncosto informado."
+      },
       "DispositivoResponse": {
         "properties": {
           "id": {
@@ -5534,6 +6772,17 @@
             ],
             "title": "Unidades Referencia"
           },
+          "nombre_referencia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nombre Referencia"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/LineaDeKardexResponse"
@@ -5561,6 +6810,7 @@
           "producto_codigo",
           "producto_nombre",
           "unidades_referencia",
+          "nombre_referencia",
           "items",
           "cursor_siguiente"
         ],
@@ -5671,6 +6921,17 @@
             ],
             "title": "Unidades Referencia"
           },
+          "nombre_referencia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nombre Referencia"
+          },
           "costo_promedio": {
             "anyOf": [
               {
@@ -5689,7 +6950,8 @@
           "producto_codigo",
           "producto_nombre",
           "cantidad_base",
-          "unidades_referencia"
+          "unidades_referencia",
+          "nombre_referencia"
         ],
         "title": "LineaDeStockResponse"
       },
@@ -5759,6 +7021,38 @@
           "saldo"
         ],
         "title": "LineaStockInicialResponse"
+      },
+      "ListaMediosPago": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MedioPagoResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListaMediosPago"
+      },
+      "ListaMotivos": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MotivoResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListaMotivos"
       },
       "LoginRequest": {
         "properties": {
@@ -5891,6 +7185,50 @@
           "actualizado_en"
         ],
         "title": "MarcaResponse"
+      },
+      "MedioPagoResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "requiere_referencia": {
+            "type": "boolean",
+            "title": "Requiere Referencia"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "requiere_referencia"
+        ],
+        "title": "MedioPagoResponse",
+        "description": "Un medio de pago activo con su indicador de referencia obligatoria."
+      },
+      "MotivoResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre"
+        ],
+        "title": "MotivoResponse"
       },
       "MovimientoEstadoDeCuentaResponse": {
         "properties": {
@@ -6065,6 +7403,34 @@
         ],
         "title": "PaginaClientes",
         "description": "Paginada por cursor: el listado pagina por `(nombre, id)` y devuelve\nel cursor de la próxima página, no un offset (`02` §11; el listado no\npuede traer filas a Python para(sumarlas, `CLAUDE.md` §4)."
+      },
+      "PaginaCompras": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CompraResumenResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "cursor_siguiente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Siguiente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "cursor_siguiente"
+        ],
+        "title": "PaginaCompras"
       },
       "PaginaCostosInformados": {
         "properties": {

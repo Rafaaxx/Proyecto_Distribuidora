@@ -227,7 +227,7 @@ Reglas:
 
 ```
 ventas ──► precios, descuentos, clientes, stock, costeo, cuentas_corrientes, cobranzas, catalogo
-proveedores ──► catalogo, stock, costeo, cuentas_corrientes
+proveedores ──► catalogo, stock, costeo, cuentas_corrientes, configuracion (compras y pagos de contado, solo por service.py, ADR-043)
 cobranzas ──► cuentas_corrientes
 clientes ──► cuentas_corrientes
 precios ──► catalogo, proveedores (costos informados)
@@ -317,6 +317,8 @@ Errores transitorios de PostgreSQL (serialización `40001`, deadlock `40P01`) se
 | Altas y modificaciones de maestros (productos, clientes, proveedores, reglas, configuración) | ✓ | |
 
 Las altas y modificaciones de maestros también llevan `operation_id` y pasan por el bus, aunque no generen movimientos.
+
+Un handler puede devolver, además del resultado, observaciones de negocio (SYN-04, SYN-07): el comando queda `ACEPTADO_CON_OBSERVACIONES` y las observaciones se registran con la operación afectada. `COMPRA_ANULAR` lleva `devuelve_pago` (obligatorio en compras de contado, prohibido en las de crédito) y emite `ANULACION_COMPRA_SIN_RECALCULO` y `STOCK_NEGATIVO` (ADR-043, ADR-044). Las lecturas de compras exigen `REGISTRAR_COMPRA` o `ANULAR_COMPRA`; el formulario de compra también lee productos, alícuotas, proveedores y ubicaciones con `REGISTRAR_COMPRA` (ADR-043).
 
 Una importación es un comando por archivo: todo o nada, con savepoints por fila dentro del handler (ADR-040).
 

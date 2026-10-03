@@ -58,11 +58,44 @@ export function desdeUnidadesBase(cantidadBase: number, unidadesPorCaja: number 
   }
 }
 
-/** `"5 cajas + 1 un."`, `"2 cajas"`, `"4 un."`. */
-export function formatearCantidad(cantidadBase: number, unidadesPorCaja: number | null): string {
-  const { cajas, unidades } = desdeUnidadesBase(cantidadBase, unidadesPorCaja)
-  const partes: string[] = []
-  if (cajas !== 0) partes.push(`${String(cajas)} ${Math.abs(cajas) === 1 ? 'caja' : 'cajas'}`)
-  if (unidades !== 0) partes.push(`${String(unidades)} un.`)
-  return partes.length === 0 ? '0 un.' : partes.join(' + ')
+/**
+ * Presentación de referencia del producto. `nombre` es `null` cuando la fuente
+ * solo conoce las unidades (un origen sin catálogo).
+ */
+export interface ReferenciaDePresentacion {
+  unidades: number
+  nombre: string | null
+}
+
+/** Referencia a partir de `unidades_referencia` y `nombre_referencia` de la API; `null` si no hay. */
+export function referenciaDeRespuesta(unidades: number | null, nombre: string | null): ReferenciaDePresentacion | null {
+  return unidades === null ? null : { unidades, nombre }
+}
+
+/** La presentación marcada `es_referencia` del catálogo, con su nombre; `null` si no hay. */
+export function referenciaDePresentaciones(
+  presentaciones: readonly { nombre: string; unidades_base: number; es_referencia: boolean }[] | undefined,
+): ReferenciaDePresentacion | null {
+  const referencia = presentaciones?.find((p) => p.es_referencia)
+  return referencia === undefined ? null : { unidades: referencia.unidades_base, nombre: referencia.nombre }
+}
+
+function unidadesTexto(n: number): string {
+  return `${String(n)} ${Math.abs(n) === 1 ? 'unidad' : 'unidades'}`
+}
+
+/**
+ * Unidades base primero y, entre paréntesis, la equivalencia en la presentación
+ * de referencia por su nombre (CAT-08): `"61 unidades (10 Caja x6 + 1 un.)"`,
+ * `"60 unidades (10 Caja x6)"`, `"5 unidades"`, `"24 unidades"` (referencia de
+ * 1 unidad o sin referencia), `"-13 unidades (-2 Caja x6 - 1 un.)"`.
+ */
+export function formatearCantidad(cantidadBase: number, referencia: ReferenciaDePresentacion | null): string {
+  const base = unidadesTexto(cantidadBase)
+  if (referencia === null || referencia.unidades <= 1) return base
+  const { cajas, unidades } = desdeUnidadesBase(cantidadBase, referencia.unidades)
+  if (cajas === 0) return base
+  const nombre = referencia.nombre ?? `Presentación x${String(referencia.unidades)}`
+  const resto = unidades === 0 ? '' : ` ${unidades < 0 ? '-' : '+'} ${String(Math.abs(unidades))} un.`
+  return `${base} (${String(cajas)} ${nombre}${resto})`
 }

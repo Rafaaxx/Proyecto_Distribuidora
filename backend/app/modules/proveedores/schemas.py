@@ -24,7 +24,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 _PATRON_DECIMAL = r"^-?\d+(\.\d+)?$"
 
@@ -177,3 +177,159 @@ class CostoVigenteResponse(BaseModel):
     ordenado por `presentacion_nombre` -- cambio aditivo, no toca `costo`.
     Puramente informativo: el precio (PRC-11) sigue calculándose solo con
     `costo` (el costo vigente del producto)."""
+
+
+# --- compras (change 11, `design.md` D1 a D7) ------------------------------------------
+
+
+class CompraLineaRequest(BaseModel):
+    """Una línea de `POST /compras` (D5). `cantidad`, `valor` y `bonificacion` viajan
+    como string estricto (INV-03); la cantidad de decimales la valida el dominio con su
+    código estable (`CANTIDAD_INVALIDA`, `VALOR_INVALIDO`, `BONIFICACION_INVALIDA`)."""
+
+    producto_id: UUID
+    presentacion_id: UUID
+    cantidad: str = Field(pattern=_PATRON_DECIMAL)
+    valor: str = Field(pattern=_PATRON_DECIMAL)
+    incluye_iva: bool
+    bonificacion: str = Field(default="0", pattern=_PATRON_DECIMAL)
+
+
+class CompraMedioRequest(BaseModel):
+    medio_pago_id: UUID
+    importe: str = Field(pattern=_PATRON_DECIMAL)
+    referencia: str | None = None
+
+
+class CompraConfirmarRequest(BaseModel):
+    """`organizacion_id` nunca aparece (sale del token). `lineas` no declara
+    `min_length`: una compra sin líneas la rechaza el dominio con `COMPRA_SIN_LINEAS`
+    (INV-07), no un 422 genérico de Pydantic. `condicion` es `CONTADO` o `CREDITO`:
+    cualquier otro valor lo rechaza el dominio con `CONDICION_INVALIDA`."""
+
+    proveedor_id: UUID
+    fecha: date
+    ubicacion_id: UUID
+    condicion: str
+    total_factura: str = Field(pattern=_PATRON_DECIMAL)
+    numero_comprobante: str | None = None
+    observacion: str | None = None
+    lineas: list[CompraLineaRequest]
+    medios: list[CompraMedioRequest] = Field(default_factory=list)
+
+
+class DiferenciaDeCostoResponse(BaseModel):
+    """CMP-04, D7: una línea cuyo costo base difiere del costo informado vigente (o no
+    tiene vigente, `costo_base_vigente: null`). Informativa: la compra nunca registra un
+    costo informado."""
+
+    linea: int
+    producto_id: UUID
+    costo_base_compra: str
+    costo_base_vigente: str | None
+
+
+class CompraConfirmarResponse(BaseModel):
+    """Sale de `comando.resultado`, no de una relectura: un reenvío idempotente del mismo
+    `Operation-Id` devuelve exactamente lo mismo (INV-06). Importes como string."""
+
+    compra_id: UUID
+    total_neto: str
+    total_factura: str
+    pago_id: UUID | None
+    diferencias_de_costo: list[DiferenciaDeCostoResponse]
+
+
+class CompraAnularRequest(BaseModel):
+    """`POST /compras/{id}/anulacion`. `devuelve_pago` es obligatorio en una compra de
+    contado y prohibido en una a crédito (D3): lo decide el servicio con
+    `CONDICION_INVALIDA`, que conoce la condición. `organizacion_id` nunca aparece
+    (sale del token)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    motivo_id: UUID
+    devuelve_pago: bool | None = None
+
+
+class CompraAnularResponse(BaseModel):
+    """Sale de `comando.resultado` (INV-06). `observaciones` son los códigos de SYN-07
+    que dejó la anulación (`ANULACION_COMPRA_SIN_RECALCULO`, `STOCK_NEGATIVO`)."""
+
+    compra_id: UUID
+    estado: str
+    pago_anulado: bool
+    observaciones: list[str]
+
+
+class CompraResumenResponse(BaseModel):
+    """Una fila del listado de compras. Importes como string (INV-03)."""
+
+    id: UUID
+    fecha: date
+    proveedor_id: UUID
+    proveedor_nombre: str
+    condicion: str
+    total_neto: str
+    total_factura: str
+    estado: str
+    numero_comprobante: str | None
+
+
+class PaginaCompras(BaseModel):
+    items: list[CompraResumenResponse]
+    cursor_siguiente: str | None
+
+
+class CompraLineaResponse(BaseModel):
+    """Una línea del detalle. `unidades_referencia` permite mostrar la cantidad en cajas
+    + unidades (CAT-08); `None` si el producto no tiene presentación de referencia."""
+
+    orden: int
+    producto_id: UUID
+    producto_codigo: str | None
+    producto_nombre: str | None
+    presentacion_id: UUID
+    presentacion_nombre: str | None
+    unidades_presentacion: int
+    unidades_referencia: int | None
+    nombre_referencia: str | None
+    cantidad: str
+    cantidad_base: int
+    valor_presentacion: str
+    incluye_iva: bool
+    bonificacion: str
+    alicuota_aplicada: str
+    costo_base: str
+    importe_neto: str
+
+
+class CompraMedioResponse(BaseModel):
+    medio_pago_id: UUID
+    medio_nombre: str | None
+    importe: str
+    referencia: str | None
+
+
+class CompraPagoResponse(BaseModel):
+    id: UUID
+    fecha: date
+    importe: str
+    estado: str
+    anulado_en: datetime | None
+    medios: list[CompraMedioResponse]
+
+
+class CompraAnulacionResponse(BaseModel):
+    motivo_id: UUID
+    motivo_nombre: str | None
+    anulada_en: datetime
+    anulada_por_id: UUID
+
+
+class CompraDetalleResponse(CompraResumenResponse):
+    ubicacion_id: UUID
+    observacion: str | None
+    lineas: list[CompraLineaResponse]
+    pago: CompraPagoResponse | None
+    anulacion: CompraAnulacionResponse | None

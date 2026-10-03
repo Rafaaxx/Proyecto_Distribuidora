@@ -21,6 +21,7 @@ const CON_COSTO = {
   producto_nombre: 'Vino A',
   cantidad_base: 31,
   unidades_referencia: 6,
+  nombre_referencia: 'Caja x6',
   costo_promedio: '1050.000000',
 }
 const SIN_REFERENCIA = {
@@ -29,6 +30,7 @@ const SIN_REFERENCIA = {
   producto_nombre: 'Cerveza B',
   cantidad_base: 7,
   unidades_referencia: null,
+  nombre_referencia: null,
   costo_promedio: null,
 }
 
@@ -64,10 +66,10 @@ describe('StockPorUbicacionScreen (tarea 8.3, CAT-08, D3)', () => {
     renderStock('ADM')
 
     const fila = (await screen.findByText('Vino A')).closest('tr') as HTMLElement
-    expect(within(fila).getByText('5 cajas + 1 un.')).toBeInTheDocument()
+    expect(within(fila).getByText('31 unidades (5 Caja x6 + 1 un.)')).toBeInTheDocument()
     expect(within(fila).getByText('$ 1.050,000000')).toBeInTheDocument()
     const otra = screen.getByText('Cerveza B').closest('tr') as HTMLElement
-    expect(within(otra).getByText('7 un.')).toBeInTheDocument()
+    expect(within(otra).getByText('7 unidades')).toBeInTheDocument()
     expect(within(otra).getByText('Sin costo')).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Costo promedio' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Cargar stock inicial' })).toBeInTheDocument()
@@ -85,7 +87,7 @@ describe('StockPorUbicacionScreen (tarea 8.3, CAT-08, D3)', () => {
     renderStock('VEN')
 
     const fila = (await screen.findByText('Vino A')).closest('tr') as HTMLElement
-    expect(within(fila).getByText('5 cajas + 1 un.')).toBeInTheDocument()
+    expect(within(fila).getByText('31 unidades (5 Caja x6 + 1 un.)')).toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: 'Costo promedio' })).not.toBeInTheDocument()
     expect(screen.queryByText(/Sin costo/)).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Cargar stock inicial' })).not.toBeInTheDocument()

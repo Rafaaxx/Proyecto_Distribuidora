@@ -43,6 +43,7 @@ from app.commands.sobre import construir_sobre_online
 from app.core.autenticacion import (
     ContextoAutenticado,
     EntradaComandoOnline,
+    requiere_algun_permiso,
     requiere_comando_online,
     requiere_permiso,
 )
@@ -68,6 +69,7 @@ from app.modules.sync import service as sync_service
 PERMISO_UBICACIONES = "ADMIN_CONFIGURACION"
 PERMISO_STOCK_INICIAL = "IMPORTAR_DATOS"
 PERMISO_LECTURA = "TRANSFERIR_STOCK"
+PERMISO_REGISTRAR_COMPRA = "REGISTRAR_COMPRA"  # D18: el formulario de compra lista ubicaciones
 PERMISO_VER_COSTOS = "VER_COSTOS"
 
 router = APIRouter(prefix="/stock", tags=["stock"])
@@ -252,7 +254,10 @@ def registrar_stock_inicial(
 
 @router.get("/ubicaciones", response_model=PaginaUbicaciones)
 def listar_ubicaciones(
-    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso(PERMISO_LECTURA))],
+    contexto: Annotated[
+        ContextoAutenticado,
+        Depends(requiere_algun_permiso(PERMISO_LECTURA, PERMISO_REGISTRAR_COMPRA)),
+    ],
     sesion: Annotated[Session, Depends(get_session)],
     activo: bool | None = None,
     cursor: str | None = None,

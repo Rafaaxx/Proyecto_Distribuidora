@@ -36,6 +36,7 @@ from app.commands.sobre import construir_sobre_online
 from app.core.autenticacion import (
     ContextoAutenticado,
     EntradaComandoOnline,
+    requiere_algun_permiso,
     requiere_comando_online,
     requiere_permiso,
 )
@@ -72,6 +73,8 @@ router = APIRouter(prefix="/catalogo", tags=["catalogo"])
 
 PERMISO = "GESTIONAR_CATALOGO"
 PERMISO_VER_COSTOS = "VER_COSTOS"
+# D17 (change 11): el formulario de compra lee productos y presentaciones con solo este permiso.
+PERMISO_REGISTRAR_COMPRA = "REGISTRAR_COMPRA"
 
 
 def _resultado_de(comando: sync_service.Comando) -> dict[str, object]:
@@ -429,7 +432,10 @@ def modificar_producto(
 
 @router.get("/productos", response_model=PaginaProductos)
 def listar_productos(
-    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso(PERMISO))],
+    contexto: Annotated[
+        ContextoAutenticado,
+        Depends(requiere_algun_permiso(PERMISO, PERMISO_REGISTRAR_COMPRA)),
+    ],
     sesion: Annotated[Session, Depends(get_session)],
     limite: int = LIMITE_PAGINA_DEFAULT,
     cursor: str | None = None,
@@ -437,6 +443,7 @@ def listar_productos(
     categoria_id: UUID | None = None,
     marca_id: UUID | None = None,
     activo: bool | None = None,
+    proveedor_id: UUID | None = None,
 ) -> PaginaProductos:
     items, cursor_siguiente = catalogo_queries.listar_productos_paginado(
         contexto.organizacion_id,
@@ -447,6 +454,7 @@ def listar_productos(
         categoria_id=categoria_id,
         marca_id=marca_id,
         activo=activo,
+        proveedor_id=proveedor_id,
     )
     return PaginaProductos(
         items=[ProductoResponse.model_validate(item) for item in items],
@@ -457,7 +465,10 @@ def listar_productos(
 @router.get("/productos/{producto_id}", response_model=ProductoDetalleResponse)
 def obtener_producto(
     producto_id: UUID,
-    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso(PERMISO))],
+    contexto: Annotated[
+        ContextoAutenticado,
+        Depends(requiere_algun_permiso(PERMISO, PERMISO_REGISTRAR_COMPRA)),
+    ],
     sesion: Annotated[Session, Depends(get_session)],
 ) -> ProductoDetalleResponse:
     """404 (INV-21/SEG-07) si `producto_id` no existe en

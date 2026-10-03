@@ -86,7 +86,7 @@ describe('StockInicialScreen (tarea 8.4; D1, D4, D5, D6, D14, D15)', () => {
     renderForm()
 
     await elegirProducto(usuario, VINO, /Vino A/)
-    await usuario.type(screen.getByLabelText('Cajas'), '5')
+    await usuario.type(screen.getByLabelText('Caja x6'), '5')
     await usuario.type(screen.getByLabelText('Unidades'), '1')
     await usuario.type(screen.getByLabelText('Costo por unidad base'), '1100.50')
     await usuario.click(screen.getByRole('button', { name: 'Registrar stock inicial' }))
@@ -97,6 +97,30 @@ describe('StockInicialScreen (tarea 8.4; D1, D4, D5, D6, D14, D15)', () => {
       lineas: [{ producto_id: VINO, cantidad_base: 31, costo_unitario: '1100.50' }],
     })
     expect(operationId(0)).toBeTruthy()
+  })
+
+  it('rotula la cantidad en presentaciones con el nombre de la referencia y avisa cuántas unidades tiene', async () => {
+    const usuario = userEvent.setup()
+    renderForm()
+
+    expect(screen.getByLabelText('Cajas')).toBeEnabled() // sin producto todavía
+    await elegirProducto(usuario, VINO, /Vino A/)
+
+    expect(await screen.findByLabelText('Caja x6')).toBeEnabled()
+    expect(screen.queryByLabelText('Cajas')).not.toBeInTheDocument()
+    expect(screen.getByText('Una Caja x6 tiene 6 unidades.')).toBeInTheDocument()
+  })
+
+  it('el mensaje de una cantidad inválida nombra la presentación', async () => {
+    const usuario = userEvent.setup()
+    renderForm()
+
+    await elegirProducto(usuario, VINO, /Vino A/)
+    await usuario.type(await screen.findByLabelText('Caja x6'), '1.5')
+    await usuario.type(screen.getByLabelText('Costo por unidad base'), '10')
+    await usuario.click(screen.getByRole('button', { name: 'Registrar stock inicial' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Línea 1: Caja x6: ingresá un entero mayor o igual a cero.')
   })
 
   it('un producto sin presentación de referencia se carga solo en unidades', async () => {
@@ -165,7 +189,7 @@ describe('StockInicialScreen (tarea 8.4; D1, D4, D5, D6, D14, D15)', () => {
     renderForm()
 
     await elegirProducto(usuario, VINO, /Vino A/)
-    await usuario.type(screen.getByLabelText('Cajas'), '1')
+    await usuario.type(screen.getByLabelText('Caja x6'), '1')
     await usuario.type(screen.getByLabelText('Costo por unidad base'), '1,5')
     await usuario.click(screen.getByRole('button', { name: 'Registrar stock inicial' }))
 
@@ -269,7 +293,7 @@ describe('StockInicialScreen (tarea 8.4; D1, D4, D5, D6, D14, D15)', () => {
     renderForm('ADM')
 
     await elegirProducto(usuario, VINO, /Vino A/)
-    await usuario.type(screen.getByLabelText('Cajas'), '10') // 60 unidades
+    await usuario.type(screen.getByLabelText('Caja x6'), '10') // 60 unidades
     await usuario.type(screen.getByLabelText('Costo por unidad base'), '1100')
 
     // 60 a 1000 (vigente) + 60 a 1100 = 1050 (`01` §6.2).

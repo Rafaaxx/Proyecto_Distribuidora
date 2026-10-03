@@ -214,6 +214,33 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("post", "/api/v1/importaciones/{tipo}"),
         ("get", "/api/v1/importaciones"),
         ("get", "/api/v1/importaciones/plantillas/{tipo}"),
+        # Change 11, grupo 5 (`proveedores/api.py`, tarea 5.3): la escritura dedicada de
+        # `COMPRA_CONFIRMAR`, con su prueba real de aislamiento (login real de dos
+        # organizaciones; el proveedor, la ubicacion y el producto de otra organizacion
+        # responden 404 sin efectos, la presentacion ajena se informa como
+        # `PRESENTACION_INVALIDA` y un `organizacion_id` en el cuerpo no se usa) en
+        # `test_compras_api.py` (`test_inv21_*` y `test_el_cuerpo_no_acepta_organizacion_id`).
+        ("post", "/api/v1/compras"),
+        # Change 11, grupo 9 (`proveedores/api.py`, tarea 9.3): la anulacion dedicada de
+        # `COMPRA_ANULAR`, con su prueba real de aislamiento (login real de dos
+        # organizaciones: anular la compra de otra organizacion responde 404 y la deja
+        # `CONFIRMADA`; un motivo ajeno responde 404; `organizacion_id` en el cuerpo se
+        # rechaza) en `test_compras_api.py`
+        # (`test_inv21_anular_la_compra_de_otra_organizacion_responde_404` y
+        # `test_la_anulacion_no_acepta_campos_ajenos`) y `test_compras_anular.py`.
+        ("post", "/api/v1/compras/{compra_id}/anulacion"),
+        # Change 11, grupo 10 (tarea 10.1, 10.2 y 10.3): las dos lecturas de compras, el
+        # filtro `proveedor_id` del listado de productos y las dos lecturas de
+        # configuracion, cada una con su prueba real de aislamiento en `test_compras_api.py`
+        # (`test_inv21_el_listado_no_devuelve_compras_de_otra_organizacion`,
+        # `test_inv21_el_detalle_de_una_compra_de_otra_organizacion_responde_404`,
+        # `test_inv21_filtrar_por_el_proveedor_de_otra_organizacion_devuelve_lista_vacia`,
+        # `test_medios_de_pago_devuelve_solo_los_activos_de_la_organizacion` y
+        # `test_motivos_devuelve_solo_los_activos_del_ambito_pedido_de_la_organizacion`).
+        ("get", "/api/v1/compras"),
+        ("get", "/api/v1/compras/{compra_id}"),
+        ("get", "/api/v1/configuracion/medios-pago"),
+        ("get", "/api/v1/configuracion/motivos"),
     }
 )
 

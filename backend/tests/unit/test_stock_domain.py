@@ -57,6 +57,8 @@ from app.modules.stock.domain.movimientos import (
     LineaDeStockInicial,
     aplicar_movimiento,
     diferencias_de_stock_total,
+    productos_que_exigen_estar_activos,
+    puede_quedar_negativo,
     saldo_de,
     validar_correccion,
     validar_lineas_de_movimiento,
@@ -611,3 +613,42 @@ def test_los_errores_de_stock_heredan_de_domain_error_con_codigo_estable(clase: 
     assert issubclass(clase, DomainError)
     assert clase.codigo == clase.codigo.upper()  # type: ignore[attr-defined]
     assert clase.status_http in {409, 422}  # type: ignore[attr-defined]
+
+
+# --- reversión de compra (change 11, D9, D10, D11) ----------------------------
+
+
+def test_un_egreso_anulacion_compra_exige_costo_cmp_06() -> None:
+    """CMP-06, D9: el egreso `ANULACION_COMPRA` lleva el costo base de la línea."""
+    linea = _movimiento(-60, "1100", tipo="ANULACION_COMPRA")
+
+    assert validar_lineas_de_movimiento([linea]) == [linea]
+    with pytest.raises(CostoInvalidoError):
+        validar_lineas_de_movimiento([_movimiento(-60, None, tipo="ANULACION_COMPRA")])
+
+
+@pytest.mark.parametrize("tipo", ["AJUSTE", "VENTA", "TRANSFERENCIA_SALIDA"])
+def test_un_egreso_de_otro_tipo_con_costo_sigue_rechazado(tipo: str) -> None:
+    with pytest.raises(CostoInvalidoError):
+        validar_lineas_de_movimiento([_movimiento(-5, "5", tipo=tipo)])
+
+
+def test_solo_anulacion_compra_puede_dejar_negativo_con_permiso_d10() -> None:
+    reversion = _movimiento(-60, "1100", tipo="ANULACION_COMPRA")
+    venta = _movimiento(-60, None, tipo="VENTA")
+
+    assert puede_quedar_negativo(reversion, permitir_negativo=True) is True
+    assert puede_quedar_negativo(reversion, permitir_negativo=False) is False
+    assert puede_quedar_negativo(venta, permitir_negativo=True) is False
+
+
+def test_solo_anulacion_compra_admite_producto_inactivo_d11() -> None:
+    producto_reversion, producto_mixto, producto_compra = uuid4(), uuid4(), uuid4()
+    lineas = [
+        _movimiento(-1, "5", tipo="ANULACION_COMPRA", producto_id=producto_reversion),
+        _movimiento(-1, "5", tipo="ANULACION_COMPRA", producto_id=producto_mixto),
+        _movimiento(-1, None, tipo="VENTA", producto_id=producto_mixto),
+        _movimiento(1, "5", tipo="COMPRA", producto_id=producto_compra),
+    ]
+
+    assert productos_que_exigen_estar_activos(lineas) == {producto_mixto, producto_compra}

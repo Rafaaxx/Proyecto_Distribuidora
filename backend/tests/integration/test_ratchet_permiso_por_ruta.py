@@ -73,6 +73,15 @@ RUTAS_EXENTAS_DE_PERMISO = frozenset(
         # circular (spec `autorizacion-por-permiso`, escenario "La consulta
         # de la propia sesión no exige permiso pero sí sesión").
         ("GET", "/api/v1/yo"),
+        # Change 11, grupo 10 (`configuracion/api.py`, tarea 10.3, `design.md` D14): los
+        # medios de pago y los motivos activos los lee cualquier usuario autenticado de la
+        # organizacion, porque los consumen pantallas de compras, cobranzas y anulaciones,
+        # cada una con su propio permiso de negocio. Exigen sesion valida y habilitada
+        # (`Depends(requiere_sesion)`), no un
+        # permiso (spec `catalogos-configurables`, `test_compras_api.py`:
+        # `test_medios_y_motivos_sin_sesion_responden_401`).
+        ("GET", "/api/v1/configuracion/medios-pago"),
+        ("GET", "/api/v1/configuracion/motivos"),
     }
 )
 

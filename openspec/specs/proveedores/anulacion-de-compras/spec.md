@@ -86,12 +86,12 @@ El egreso de la anulación DEBE aplicarse con la condición de saldo suficiente 
 
 ### Requirement: La anulación de una compra de contado indica si se devuelve el pago
 
-Al anular una compra `CONTADO` DEBE indicarse si el proveedor devuelve el dinero (`devuelve_pago`). Si lo devuelve, el pago de la compra DEBE quedar `ANULADO` con un movimiento `ANULACION_PAGO` que aumenta la cuenta por su importe; si no, el pago se mantiene y la anulación deja saldo a favor de la organización (`design.md` D3). En una compra `CREDITO` el indicador NO DEBE enviarse (`CONDICION_INVALIDA`).
+Al anular una compra `CONTADO` DEBE indicarse si el proveedor devuelve el dinero (`devuelve_pago`). Si lo devuelve, el pago de la compra DEBE quedar `ANULADA` con un movimiento `ANULACION_PAGO` que aumenta la cuenta por su importe; si no, el pago se mantiene y la anulación deja saldo a favor de la organización (`design.md` D3). En una compra `CREDITO` el indicador NO DEBE enviarse (`CONDICION_INVALIDA`).
 
 #### Scenario: Se devuelve el pago
 - **GIVEN** una compra de contado de `"152460.00"` con su pago y saldo previo 0 del proveedor
 - **WHEN** se anula con `devuelve_pago = true`
-- **THEN** la cuenta tiene `ANULACION_COMPRA` `"152460.00"` y `ANULACION_PAGO` `"152460.00"`, el saldo vuelve a `"0.00"` y el pago queda `ANULADO`
+- **THEN** la cuenta tiene `ANULACION_COMPRA` `"152460.00"` y `ANULACION_PAGO` `"152460.00"`, el saldo vuelve a `"0.00"` y el pago queda `ANULADA`
 - **Regla:** CMP-05; CC-03; `design.md` D3
 
 #### Scenario: No se devuelve el pago

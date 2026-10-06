@@ -183,6 +183,37 @@ def test_una_organizacion_nueva_tiene_los_tres_motivos_de_anulacion_de_compra(
     assert all(motivo.ambito == "ANULACION_COMPRA" and motivo.activo for motivo in motivos)
 
 
+def test_una_organizacion_nueva_tiene_los_tres_motivos_de_anulacion_de_pago(
+    db_session: Session,
+) -> None:
+    """Change 12, tarea 2.2 (PAG-03, TR-09, `design.md` D1, aprobados el 2026-10-03): sin
+    un motivo de `ANULACION_PAGO` la organización no podría anular ningún pago a
+    proveedor. La migración `d1e2f3a4b5c6` siembra los mismos nombres en las
+    organizaciones existentes."""
+    organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+    assert organizacion is not None
+
+    motivos = configuracion_service.listar_motivos_por_ambito(
+        organizacion.id, db_session, "ANULACION_PAGO"
+    )
+
+    assert sorted(motivo.nombre for motivo in motivos) == [
+        "Error de carga",
+        "Otro",
+        "Pago rechazado o devuelto",
+    ]
+    assert all(motivo.ambito == "ANULACION_PAGO" and motivo.activo for motivo in motivos)
+    # Los de la compra siguen intactos: son de otro ámbito.
+    assert (
+        len(
+            configuracion_service.listar_motivos_por_ambito(
+                organizacion.id, db_session, "ANULACION_COMPRA"
+            )
+        )
+        == 3
+    )
+
+
 def test_sembrar_dos_veces_no_duplica_los_motivos_de_anulacion_de_compra(
     db_session: Session,
 ) -> None:

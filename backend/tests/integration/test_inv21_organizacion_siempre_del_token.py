@@ -48,6 +48,18 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         # comprueba `test_inv21_aislamiento_endpoints_identidad.py::
         # TestAislamientoDeLaSesion`.
         ("get", "/api/v1/yo"),
+        # Change 12, grupo 7 (tarea 7.1): las cuatro rutas nuevas -- la anulación dedicada
+        # de `PAGO_PROVEEDOR_ANULAR` y las tres lecturas (saldo del proveedor, listado y
+        # detalle de pagos). Su comportamiento real (informar el `organizacion_id` de otra
+        # organización no cambia la respuesta ni toca datos ajenos) lo comprueba
+        # `test_inv21_aislamiento_endpoints_proveedores.py::
+        # TestAislamientoDePagosAProveedores`. Acá se agrega la afirmación estructural:
+        # ninguna declara `organizacion_id` ni como parámetro ni como campo de cuerpo, así
+        # que no hay forma de informarlo por el contrato (TR-08, INV-21).
+        ("post", "/api/v1/pagos-proveedores/{pago_id}/anulacion"),
+        ("get", "/api/v1/pagos-proveedores"),
+        ("get", "/api/v1/pagos-proveedores/{pago_id}"),
+        ("get", "/api/v1/proveedores/{proveedor_id}/saldo"),
     }
 )
 RUTAS_DE_AUTENTICACION = frozenset(
@@ -154,6 +166,50 @@ def test_la_recorrida_de_aislamiento_alcanza_la_consulta_de_la_sesion(
     assert "usuario_id" not in parametros
     # Y tampoco declara cuerpo: no hay nada que informar.
     assert _propiedades_del_cuerpo(operacion, componentes) == set()
+
+
+def test_la_recorrida_de_aislamiento_alcanza_las_rutas_nuevas_de_pagos(
+    database_url: str,
+) -> None:
+    """Change 12, tarea 7.1: la recorrido anterior itera `COBERTURA_DE_AISLAMIENTO` e
+    indexa el esquema real, así que una tupla agregada a una ruta que no exista -- o a una
+    que sí declare `organizacion_id` -- tiene que fallar, no pasar por vacuidad.
+
+    Se afirma contra el esquema REAL, para las cuatro rutas nuevas del change: que están
+    en la lista (si no, la recorrido las omitiría en silencio), que están registradas, y
+    que ni sus parámetros ni su cuerpo declaran `organizacion_id`. En las tres lecturas no
+    hay ningún campo de cuerpo; en la anulación, el cuerpo es solo `motivo_id`.
+
+    Regla: `02` §8, INV-21, TR-08."""
+    os.environ.setdefault("DATABASE_URL", database_url)
+    esquema = _esquema_real()
+    rutas = esquema["paths"]  # type: ignore[index]
+    componentes = esquema.get("components", {})  # type: ignore[assignment]
+
+    nuevas = [
+        ("get", "/api/v1/proveedores/{proveedor_id}/saldo"),
+        ("get", "/api/v1/pagos-proveedores"),
+        ("get", "/api/v1/pagos-proveedores/{pago_id}"),
+        ("post", "/api/v1/pagos-proveedores/{pago_id}/anulacion"),
+    ]
+    for ruta in nuevas:
+        assert ruta in COBERTURA_DE_AISLAMIENTO, (
+            f"La ruta {ruta} tiene que estar en COBERTURA_DE_AISLAMIENTO para que la "
+            "recorrida de esta prueba la recorra (tarea 7.1)."
+        )
+        metodo, path = ruta
+        assert path in rutas and metodo in rutas[path], (  # type: ignore[operator]
+            f"La ruta {ruta} está declarada como cubierta pero no está registrada "
+            "en el esquema OpenAPI."
+        )
+        operacion = rutas[path][metodo]  # type: ignore[index]
+        assert _NOMBRE_PROHIBIDO not in _nombres_de_parametros(operacion)
+        assert _NOMBRE_PROHIBIDO not in _propiedades_del_cuerpo(operacion, componentes)
+
+    # La anulación no admite nada más que el motivo: ni la organización ni el estado
+    # (INV-05/TR-06, la anulación no edita el pago más allá de su estado).
+    anulacion = rutas["/api/v1/pagos-proveedores/{pago_id}/anulacion"]["post"]  # type: ignore[index]
+    assert _propiedades_del_cuerpo(anulacion, componentes) == {"motivo_id"}
 
 
 def test_las_rutas_de_autenticacion_tampoco_declaran_organizacion_id(

@@ -6,7 +6,7 @@
 | Fecha | 2026-10-02 |
 | Referenciado en | `openspec/changes/11-compras-y-deuda-proveedor/design.md` D9 y D10 y `specs/costeo/costo-promedio`, `specs/stock/libro-de-stock`, `specs/proveedores/anulacion-de-compras`; `01-dominio.md` CMP-05 a CMP-07, CST-11 a CST-13, STK-04; `02-arquitectura.md` §7.3 y §7.4; ADR-039 (puntos 3 y 8, que esta decisión enmienda); ADR-015 (orden de bloqueo) |
 
-**Decisiones D9 y D10 (opción A en cada una) aprobadas por el usuario el 2026-10-02. Texto del ADR pendiente de aprobación; estado *Propuesto*. Enmienda el punto 3 de ADR-039 ("ningún camino deja saldo negativo") y resuelve la deuda anotada en sus consecuencias sobre la historia de costo de una `ANULACION_COMPRA`.**
+**Decisiones D9 y D10 (opción A en cada una) aprobadas por el usuario el 2026-10-02. Texto del ADR aprobado por el usuario el 2026-10-03; estado *Vigente*. Enmienda el punto 3 de ADR-039 ("ningún camino deja saldo negativo") y resuelve la deuda anotada en sus consecuencias sobre la historia de costo de una `ANULACION_COMPRA`.**
 
 ## Contexto
 

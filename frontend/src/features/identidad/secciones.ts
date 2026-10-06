@@ -16,7 +16,7 @@ import type { CodigoPermiso } from '../../domain/identidad/permisos'
  *   §19.
  * - `otrosPermisos` (opcional): permisos alternativos; la sección se ofrece con `permiso`
  *   **o** con cualquiera de ellos (Compras: `REGISTRAR_COMPRA` o `ANULAR_COMPRA`, change 11
- *   D14).
+ *   D14; Pagos a proveedores: `REGISTRAR_PAGO_PROVEEDOR` o `ANULAR_PAGO_PROVEEDOR`, change 12 D7).
  * - `ruta` es **absoluta** (`/admin/...`), nunca relativa: la tarea 10.8
  *   del change 05 fijo que un `to` relativo se resolvía contra el
  *   segmento en el que estaba parado quien navega
@@ -40,6 +40,12 @@ export const SECCIONES: readonly SeccionAdmin[] = [
     etiqueta: 'Compras',
     permiso: 'REGISTRAR_COMPRA',
     otrosPermisos: ['ANULAR_COMPRA'],
+  },
+  {
+    ruta: '/admin/pagos-proveedores',
+    etiqueta: 'Pagos a proveedores',
+    permiso: 'REGISTRAR_PAGO_PROVEEDOR',
+    otrosPermisos: ['ANULAR_PAGO_PROVEEDOR'],
   },
   { ruta: '/admin/clientes', etiqueta: 'Clientes', permiso: 'GESTIONAR_CLIENTES' },
   { ruta: '/admin/stock', etiqueta: 'Stock', permiso: 'TRANSFERIR_STOCK' },

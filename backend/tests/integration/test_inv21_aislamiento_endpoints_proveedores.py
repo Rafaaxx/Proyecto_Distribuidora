@@ -15,6 +15,16 @@ organización -- caso que `test_inv21_aislamiento_endpoints_catalogo.py`
 todavía no cubre: sus pruebas de referencia ajena son sobre
 categoría/marca/alícuota, no sobre proveedor).
 
+Change 12, grupo 7 (tarea 7.1) suma al final
+`TestAislamientoDePagosAProveedores`: las cuatro rutas nuevas del change
+(`GET /proveedores/{proveedor_id}/saldo`, `GET /pagos-proveedores`,
+`GET /pagos-proveedores/{pago_id}` y `POST /pagos-proveedores/{pago_id}/anulacion`),
+cada una con sus dos casos -- la propia organización lee o anula lo suyo
+(200) y la misma llamada sobre un recurso de la OTRA organización responde
+404 sin datos ni efectos -- y con el `organizacion_id` informado en el
+cuerpo o en la consulta para demostrar que no cambia nada (INV-21, TR-08:
+la organización sale siempre del token).
+
 Cita INV-21 y SEG-07 en cada escenario cruzado."""
 
 from __future__ import annotations
@@ -26,6 +36,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from cuentas_corrientes_utiles import agregar_configuracion
+from fastapi import Response
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -588,3 +599,329 @@ class TestReferenciaProveedorAjenaEnProductoV2:
 
         assert respuesta.status_code == 404
         assert respuesta.json()["codigo"] == "RECURSO_NO_ENCONTRADO"
+
+
+# --- change 12, grupo 7 (tarea 7.1): aislamiento de las rutas de pagos --------
+
+
+PERMISOS_DE_PAGO = frozenset({"REGISTRAR_PAGO_PROVEEDOR", "ANULAR_PAGO_PROVEEDOR"})
+
+
+def _crear_medio_pago(sesion: Session, organizacion_id: UUID, *, nombre: str) -> UUID:
+    """Medio de pago activo de la organización. No hay endpoint de medios -- es catálogo
+    del change 11; se inserta por SQL como los motivos en
+    `test_pagos_proveedor_api.py::_crear_motivo`."""
+    medio_id = uuid4()
+    sesion.execute(
+        text(
+            "INSERT INTO medio_pago (id, organizacion_id, nombre, requiere_referencia, "
+            "activo, creado_en, actualizado_en) "
+            "VALUES (:id, :org, :nombre, false, true, :m, :m)"
+        ),
+        {"id": medio_id, "org": organizacion_id, "nombre": nombre, "m": MOMENTO},
+    )
+    sesion.flush()
+    return medio_id
+
+
+def _crear_motivo_de_anulacion(sesion: Session, organizacion_id: UUID) -> UUID:
+    """Motivo activo del ámbito `ANULACION_PAGO` (D1) de la organización."""
+    motivo_id = uuid4()
+    sesion.execute(
+        text(
+            "INSERT INTO motivo (id, organizacion_id, nombre, ambito, activo, "
+            "creado_en, actualizado_en) "
+            "VALUES (:id, :org, 'Error de carga', 'ANULACION_PAGO', true, :m, :m)"
+        ),
+        {"id": motivo_id, "org": organizacion_id, "m": MOMENTO},
+    )
+    sesion.flush()
+    return motivo_id
+
+
+def _registrar_pago(
+    cliente: TestClient,
+    headers: dict[str, str],
+    *,
+    proveedor_id: UUID,
+    medio_id: UUID,
+    importe: str = "100000.00",
+    fecha: str = "2026-01-05",
+) -> dict[str, object]:
+    """Registra un pago por HTTP (`POST /pagos-proveedores`) y devuelve el cuerpo de la
+    respuesta. Va por la ruta real, no por el servicio: el aislamiento que se prueba es
+    el de la API."""
+    respuesta = cliente.post(
+        "/api/v1/pagos-proveedores",
+        json={
+            "proveedor_id": str(proveedor_id),
+            "fecha": fecha,
+            "importe": importe,
+            "medios": [{"medio_pago_id": str(medio_id), "importe": importe}],
+        },
+        headers={**headers, "Operation-Id": str(uuid4())},
+    )
+    assert respuesta.status_code == 201, respuesta.text
+    return respuesta.json()  # type: ignore[no-any-return]
+
+
+def _anular(
+    cliente: TestClient,
+    headers: dict[str, str],
+    pago_id: str,
+    *,
+    motivo_id: UUID,
+    extra: dict[str, object] | None = None,
+) -> Response:
+    cuerpo: dict[str, object] = {"motivo_id": str(motivo_id)}
+    if extra:
+        cuerpo.update(extra)
+    return cliente.post(
+        f"/api/v1/pagos-proveedores/{pago_id}/anulacion",
+        json=cuerpo,
+        headers={**headers, "Operation-Id": str(uuid4())},
+    )
+
+
+def _estado_del_pago(sesion: Session, organizacion_id: UUID, pago_id: str) -> str:
+    return str(
+        sesion.execute(
+            text("SELECT estado FROM pago_proveedor WHERE organizacion_id = :o AND id = :p"),
+            {"o": organizacion_id, "p": UUID(pago_id)},
+        ).scalar_one()
+    )
+
+
+def _anulaciones_de(sesion: Session, organizacion_id: UUID) -> int:
+    return int(
+        sesion.execute(
+            text(
+                "SELECT count(*) FROM cuenta_movimiento WHERE organizacion_id = :o "
+                "AND tipo = 'ANULACION_PAGO'"
+            ),
+            {"o": organizacion_id},
+        ).scalar_one()
+    )
+
+
+class TestAislamientoDePagosAProveedores:
+    """Las cuatro rutas del change 12 (INV-21, SEG-07, TR-08): saldo del proveedor,
+    listado y detalle de pagos, y anulación de un pago.
+
+    Cada ruta se prueba en los dos sentidos dentro de la misma prueba: la organización
+    del token lee o anula lo suyo (200) y la misma llamada sobre un recurso de la OTRA
+    organización responde 404 sin revelar el dato ni dejar efectos. Un solo caso no
+    probaría aislamiento: probaría que la ruta existe."""
+
+    def test_el_saldo_propio_llega_y_el_de_un_proveedor_ajeno_responde_404(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """INV-21: `GET /proveedores/{proveedor_id}/saldo` (D8) responde `{"saldo": "0.00"}`
+        para el proveedor propio -- el saldo como string (INV-03), no 403 ni 404 -- y 404
+        para un proveedor de otra organización, sin revelar su saldo."""
+        org_a = _crear_organizacion(sesion, "org-iso-pago-saldo-a")
+        org_b = _crear_organizacion(sesion, "org-iso-pago-saldo-b")
+        proveedor_a = _crear_proveedor(sesion, org_a.id, nombre="Bodega Andina")
+        proveedor_b = _crear_proveedor(sesion, org_b.id, nombre="Bodega Del Sur")
+        _crear_usuario(sesion, org_b.id, permisos=PERMISOS_DE_PAGO, nombre_usuario="pagador_b")
+        sesion.commit()
+        token_b = _login(cliente, "org-iso-pago-saldo-b", "pagador_b")
+        headers = {"Authorization": f"Bearer {token_b}"}
+
+        propio = cliente.get(f"/api/v1/proveedores/{proveedor_b.id}/saldo", headers=headers)
+        ajeno = cliente.get(f"/api/v1/proveedores/{proveedor_a.id}/saldo", headers=headers)
+
+        assert propio.status_code == 200, propio.text
+        assert propio.json() == {"saldo": "0.00"}
+        assert ajeno.status_code == 404
+        assert ajeno.json()["codigo"] == "RECURSO_NO_ENCONTRADO"
+        assert "saldo" not in ajeno.json()
+
+    def test_el_saldo_ignora_el_organizacion_id_de_la_consulta(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """TR-08, INV-21: el saldo se calcula para la organización del token aunque la
+        consulta informe otra. Ni siquiera es un parámetro que la ruta declare, así que
+        informarlo no cambia la respuesta."""
+        org_a = _crear_organizacion(sesion, "org-iso-pago-saldoq-a")
+        org_b = _crear_organizacion(sesion, "org-iso-pago-saldoq-b")
+        proveedor_a = _crear_proveedor(sesion, org_a.id, nombre="Bodega Andina")
+        proveedor_b = _crear_proveedor(sesion, org_b.id, nombre="Bodega Del Sur")
+        medio_b = _crear_medio_pago(sesion, org_b.id, nombre="Efectivo")
+        _crear_usuario(sesion, org_b.id, permisos=PERMISOS_DE_PAGO, nombre_usuario="pagador_b")
+        sesion.commit()
+        token_b = _login(cliente, "org-iso-pago-saldoq-b", "pagador_b")
+        headers = {"Authorization": f"Bearer {token_b}"}
+        _registrar_pago(cliente, headers, proveedor_id=proveedor_b.id, medio_id=medio_b)
+
+        propio = cliente.get(
+            f"/api/v1/proveedores/{proveedor_b.id}/saldo",
+            params={"organizacion_id": str(org_a.id)},
+            headers=headers,
+        )
+        ajeno = cliente.get(
+            f"/api/v1/proveedores/{proveedor_a.id}/saldo",
+            params={"organizacion_id": str(org_a.id)},
+            headers=headers,
+        )
+
+        assert propio.status_code == 200, propio.text
+        assert propio.json() == {"saldo": "-100000.00"}
+        assert ajeno.status_code == 404
+
+    def test_el_listado_devuelve_los_pagos_propios_y_no_los_ajenos(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """INV-21: `GET /pagos-proveedores` (D7) lista solo los pagos de la organización
+        del token, y filtrar por el proveedor de la otra organización devuelve lista vacía
+        (no 404: el proveedor es un parámetro del filtro, no un recurso de la ruta)."""
+        org_a = _crear_organizacion(sesion, "org-iso-pago-lista-a")
+        org_b = _crear_organizacion(sesion, "org-iso-pago-lista-b")
+        proveedor_a = _crear_proveedor(sesion, org_a.id, nombre="Bodega Andina")
+        proveedor_b = _crear_proveedor(sesion, org_b.id, nombre="Bodega Del Sur")
+        medio_a = _crear_medio_pago(sesion, org_a.id, nombre="Efectivo A")
+        medio_b = _crear_medio_pago(sesion, org_b.id, nombre="Efectivo B")
+        _crear_usuario(sesion, org_a.id, permisos=PERMISOS_DE_PAGO, nombre_usuario="pagador_a")
+        _crear_usuario(sesion, org_b.id, permisos=PERMISOS_DE_PAGO, nombre_usuario="pagador_b")
+        sesion.commit()
+        token_a = _login(cliente, "org-iso-pago-lista-a", "pagador_a")
+        token_b = _login(cliente, "org-iso-pago-lista-b", "pagador_b")
+        headers_a = {"Authorization": f"Bearer {token_a}"}
+        headers_b = {"Authorization": f"Bearer {token_b}"}
+        pago_a = _registrar_pago(
+            cliente, headers_a, proveedor_id=proveedor_a.id, medio_id=medio_a, fecha="2026-01-04"
+        )
+        pago_b = _registrar_pago(
+            cliente, headers_b, proveedor_id=proveedor_b.id, medio_id=medio_b, fecha="2026-01-05"
+        )
+
+        listado = cliente.get("/api/v1/pagos-proveedores", headers=headers_b)
+        filtrado_ajeno = cliente.get(
+            "/api/v1/pagos-proveedores",
+            params={"proveedor_id": str(proveedor_a.id)},
+            headers=headers_b,
+        )
+        con_organizacion_ajena = cliente.get(
+            "/api/v1/pagos-proveedores",
+            params={"organizacion_id": str(org_a.id)},
+            headers=headers_b,
+        )
+
+        assert listado.status_code == 200, listado.text
+        assert [item["pago_id"] for item in listado.json()["items"]] == [pago_b["pago_id"]]
+        assert filtrado_ajeno.json()["items"] == []
+        assert [item["pago_id"] for item in con_organizacion_ajena.json()["items"]] == [
+            pago_b["pago_id"]
+        ]
+        assert pago_a["pago_id"] not in [item["pago_id"] for item in listado.json()["items"]]
+
+    def test_el_detalle_propio_llega_y_el_de_un_pago_ajeno_responde_404(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """INV-21: `GET /pagos-proveedores/{pago_id}` (D7) muestra el pago propio con sus
+        medios y, para un pago de otra organización, responde 404 con el mismo cuerpo que
+        un id inexistente -- sin revelar importe, medios ni estado."""
+        org_a = _crear_organizacion(sesion, "org-iso-pago-detalle-a")
+        org_b = _crear_organizacion(sesion, "org-iso-pago-detalle-b")
+        proveedor_a = _crear_proveedor(sesion, org_a.id, nombre="Bodega Andina")
+        proveedor_b = _crear_proveedor(sesion, org_b.id, nombre="Bodega Del Sur")
+        medio_a = _crear_medio_pago(sesion, org_a.id, nombre="Efectivo A")
+        medio_b = _crear_medio_pago(sesion, org_b.id, nombre="Efectivo B")
+        _crear_usuario(sesion, org_a.id, permisos=PERMISOS_DE_PAGO, nombre_usuario="pagador_a")
+        _crear_usuario(sesion, org_b.id, permisos=PERMISOS_DE_PAGO, nombre_usuario="pagador_b")
+        sesion.commit()
+        headers_a = {
+            "Authorization": f"Bearer {_login(cliente, 'org-iso-pago-detalle-a', 'pagador_a')}"
+        }
+        headers_b = {
+            "Authorization": f"Bearer {_login(cliente, 'org-iso-pago-detalle-b', 'pagador_b')}"
+        }
+        pago_a = _registrar_pago(cliente, headers_a, proveedor_id=proveedor_a.id, medio_id=medio_a)
+        pago_b = _registrar_pago(cliente, headers_b, proveedor_id=proveedor_b.id, medio_id=medio_b)
+
+        propio = cliente.get(f"/api/v1/pagos-proveedores/{pago_b['pago_id']}", headers=headers_b)
+        ajeno = cliente.get(f"/api/v1/pagos-proveedores/{pago_a['pago_id']}", headers=headers_b)
+        inexistente = cliente.get(f"/api/v1/pagos-proveedores/{uuid4()}", headers=headers_b)
+
+        assert propio.status_code == 200, propio.text
+        assert propio.json()["proveedor_nombre"] == "Bodega Del Sur"
+        assert propio.json()["importe"] == "100000.00"
+        assert [medio["medio_nombre"] for medio in propio.json()["medios"]] == ["Efectivo B"]
+        assert ajeno.status_code == 404
+        assert ajeno.json()["codigo"] == "RECURSO_NO_ENCONTRADO"
+        # Mismo `status` y mismo `codigo` que un id que no existe en ninguna
+        # organización: el 404 no distingue "ajeno" de "inexistente", así que no
+        # confirma la existencia del pago de la otra (`detail`/`instance`/ECMA lo
+        # repiten con el id, que es lo que el cliente ya envió).
+        assert (ajeno.status_code, ajeno.json()["codigo"], ajeno.json()["type"]) == (
+            inexistente.status_code,
+            inexistente.json()["codigo"],
+            inexistente.json()["type"],
+        )
+
+    def test_la_anulacion_propia_cambia_el_estado_y_la_de_un_pago_ajeno_responde_404(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """INV-21, PAG-03: `POST /pagos-proveedores/{pago_id}/anulacion` anula el pago propio
+        (200, estado `ANULADA`) y responde 404 sobre un pago de otra organización,
+        dejándolo `CONFIRMADA` y sin sumar ningún `ANULACION_PAGO` a su libro."""
+        org_a = _crear_organizacion(sesion, "org-iso-pago-anul-a")
+        org_b = _crear_organizacion(sesion, "org-iso-pago-anul-b")
+        proveedor_a = _crear_proveedor(sesion, org_a.id, nombre="Bodega Andina")
+        proveedor_b = _crear_proveedor(sesion, org_b.id, nombre="Bodega Del Sur")
+        medio_a = _crear_medio_pago(sesion, org_a.id, nombre="Efectivo A")
+        medio_b = _crear_medio_pago(sesion, org_b.id, nombre="Efectivo B")
+        motivo_b = _crear_motivo_de_anulacion(sesion, org_b.id)
+        _crear_usuario(sesion, org_a.id, permisos=PERMISOS_DE_PAGO, nombre_usuario="pagador_a")
+        _crear_usuario(sesion, org_b.id, permisos=PERMISOS_DE_PAGO, nombre_usuario="pagador_b")
+        sesion.commit()
+        headers_a = {
+            "Authorization": f"Bearer {_login(cliente, 'org-iso-pago-anul-a', 'pagador_a')}"
+        }
+        headers_b = {
+            "Authorization": f"Bearer {_login(cliente, 'org-iso-pago-anul-b', 'pagador_b')}"
+        }
+        pago_a = _registrar_pago(cliente, headers_a, proveedor_id=proveedor_a.id, medio_id=medio_a)
+        pago_b = _registrar_pago(cliente, headers_b, proveedor_id=proveedor_b.id, medio_id=medio_b)
+
+        ajeno = _anular(cliente, headers_b, str(pago_a["pago_id"]), motivo_id=motivo_b)
+        propio = _anular(cliente, headers_b, str(pago_b["pago_id"]), motivo_id=motivo_b)
+
+        assert ajeno.status_code == 404
+        assert ajeno.json()["codigo"] == "RECURSO_NO_ENCONTRADO"
+        assert _estado_del_pago(sesion, org_a.id, str(pago_a["pago_id"])) == "CONFIRMADA"
+        assert _anulaciones_de(sesion, org_a.id) == 0
+        assert propio.status_code == 200, propio.text
+        assert propio.json()["estado"] == "ANULADA"
+        assert _estado_del_pago(sesion, org_b.id, str(pago_b["pago_id"])) == "ANULADA"
+        assert _anulaciones_de(sesion, org_b.id) == 1
+
+    def test_la_anulacion_ignora_el_organizacion_id_del_cuerpo(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """TR-08, INV-21: la anulación no toma la organización del cuerpo. Informar la de
+        otra organización (ni el `estado`) no altera el resultado: el `contenido` del
+        comando lo arma la ruta campo por campo y esos campos ni siquiera lo recorren."""
+        org_a = _crear_organizacion(sesion, "org-iso-pago-anulc-a")
+        org_b = _crear_organizacion(sesion, "org-iso-pago-anulc-b")
+        proveedor_b = _crear_proveedor(sesion, org_b.id, nombre="Bodega Del Sur")
+        medio_b = _crear_medio_pago(sesion, org_b.id, nombre="Efectivo B")
+        motivo_b = _crear_motivo_de_anulacion(sesion, org_b.id)
+        _crear_usuario(sesion, org_b.id, permisos=PERMISOS_DE_PAGO, nombre_usuario="pagador_b")
+        sesion.commit()
+        token_b = _login(cliente, "org-iso-pago-anulc-b", "pagador_b")
+        headers_b = {"Authorization": f"Bearer {token_b}"}
+        pago_b = _registrar_pago(cliente, headers_b, proveedor_id=proveedor_b.id, medio_id=medio_b)
+
+        respuesta = _anular(
+            cliente,
+            headers_b,
+            str(pago_b["pago_id"]),
+            motivo_id=motivo_b,
+            extra={"organizacion_id": str(org_a.id), "estado": "CONFIRMADA"},
+        )
+
+        assert respuesta.status_code == 200, respuesta.text
+        assert respuesta.json()["estado"] == "ANULADA"
+        assert _anulaciones_de(sesion, org_a.id) == 0
+        assert _anulaciones_de(sesion, org_b.id) == 1

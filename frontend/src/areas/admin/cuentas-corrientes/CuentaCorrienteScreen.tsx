@@ -17,12 +17,14 @@ import {
   textoDeSaldo,
   type CuentaTipo,
 } from '../../../domain/cuentas-corrientes/presentacion'
+import { rutaDeOperacionDeMovimiento } from '../../../domain/cuentas-corrientes/enlaces'
 import type { CodigoPermiso } from '../../../domain/identidad/permisos'
 import type { MovimientoDeCuenta } from '../../../features/cuentas-corrientes/api'
 import type { FiltrosEstadoDeCuenta } from '../../../features/cuentas-corrientes/claves'
 import { RecursoNoEncontradoCuentasCorrientesError } from '../../../features/cuentas-corrientes/errores'
 import { useEstadoDeCuenta } from '../../../features/cuentas-corrientes/hooks'
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
+import { usePermisos } from '../../../features/identidad/usePermisos'
 import { formatearFechaHoraEnZona } from '../../../lib/fecha'
 
 const SIN_PERMISO_DE_LECTURA = 'No tenés permiso para ver esta cuenta corriente.'
@@ -113,6 +115,16 @@ function EstadoDeCuentaDeEntidad({ cuentaTipo, entidadId }: { cuentaTipo: Cuenta
         titulo="Cuenta corriente"
         acciones={
           <>
+            {cuentaTipo === 'PROVEEDOR' && (
+              <SiTienePermiso permiso="REGISTRAR_PAGO_PROVEEDOR">
+                <Link
+                  to={`/admin/pagos-proveedores/nuevo?proveedor=${entidadId}`}
+                  className="text-sm text-primary/70 hover:text-primary hover:underline"
+                >
+                  Registrar pago
+                </Link>
+              </SiTienePermiso>
+            )}
             {estado.isSuccess && (
               <SiTienePermiso permiso="IMPORTAR_DATOS">
                 <Link
@@ -200,14 +212,30 @@ function ContenidoDelEstado({
   errorAlCargarMas: string | null
   onCargarMas: () => void
 }) {
+  const { tiene } = usePermisos()
   const primera = paginas[0]
   if (!primera) return null
   const zona = primera.zona_horaria
   const movimientos = paginas.flatMap((pagina) => pagina.items)
 
+  // Solo la cuenta de un proveedor enlaza a la operación que originó el movimiento (change 12,
+  // D7): a pagos y compras, y solo a quien tiene permiso de leerlos.
+  const enlazaAOperaciones = cuentaTipo === 'PROVEEDOR'
+  const tipoDelMovimiento = (m: MovimientoDeCuenta) => {
+    const etiqueta = etiquetaDeTipo(m.tipo)
+    const ruta = enlazaAOperaciones ? rutaDeOperacionDeMovimiento(m.tipo, m.origen_id, tiene) : null
+    return ruta === null ? (
+      etiqueta
+    ) : (
+      <Link to={ruta} className="text-primary hover:underline">
+        {etiqueta}
+      </Link>
+    )
+  }
+
   const columnas: ColumnaTabla<MovimientoDeCuenta>[] = [
     { clave: 'fecha', encabezado: 'Fecha', render: (m) => formatearFechaHoraEnZona(m.occurred_at, zona) },
-    { clave: 'tipo', encabezado: 'Tipo', render: (m) => etiquetaDeTipo(m.tipo) },
+    { clave: 'tipo', encabezado: 'Tipo', render: tipoDelMovimiento },
     { clave: 'aumento', encabezado: 'Aumento', render: (m) => columnasDeMovimiento(m).aumento },
     { clave: 'reduccion', encabezado: 'Reducción', render: (m) => columnasDeMovimiento(m).reduccion },
     { clave: 'saldo', encabezado: 'Saldo acumulado', render: (m) => formatearMonto(m.saldo_acumulado) },

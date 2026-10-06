@@ -97,6 +97,7 @@ COLUMNAS: dict[str, dict[str, tuple[str, bool]]] = {
         "estado": ("text", False),
         "origen": ("text", False),
         "compra_id": ("uuid", True),
+        "observacion": ("text", True),
         "anulado_en": ("timestamp with time zone", True),
         "anulado_por_id": ("uuid", True),
         "anulacion_motivo_id": ("uuid", True),
@@ -751,15 +752,29 @@ def test_el_importe_del_pago_y_de_su_medio_deben_ser_positivos(
     )
 
 
-def test_la_anulacion_del_pago_es_coherente_y_su_motivo_es_opcional(db_session: Session) -> None:
-    """D12-A: el motivo del pago lo decide el change 12; anulado exige momento y usuario."""
+def test_la_anulacion_del_pago_es_coherente_y_exige_motivo(db_session: Session) -> None:
+    """D12-A dejó el motivo a decisión del change 12, y el 12 (PAG-03, `design.md` D9
+    punto 3) lo hace obligatorio: `ANULADA` exige momento, usuario **y motivo**, igual que
+    `compra`. Antes este caso insertaba sin motivo y la base lo admitía."""
     entorno = _armar(db_session)
     _insertar(
         db_session,
         "pago_proveedor",
-        _pago(entorno, estado="ANULADA", anulado_en=MOMENTO, anulado_por_id=entorno.usuario_id),
+        _pago(
+            entorno,
+            estado="ANULADA",
+            anulado_en=MOMENTO,
+            anulado_por_id=entorno.usuario_id,
+            anulacion_motivo_id=entorno.motivo_id,
+        ),
     )
 
+    _rechaza(
+        db_session,
+        "pago_proveedor",
+        _pago(entorno, estado="ANULADA", anulado_en=MOMENTO, anulado_por_id=entorno.usuario_id),
+        "ck_pago_proveedor__anulacion_coherente",
+    )
     _rechaza(
         db_session,
         "pago_proveedor",

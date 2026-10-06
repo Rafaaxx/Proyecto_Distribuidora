@@ -66,7 +66,7 @@ export function useMotivos(ambito: string) {
 
 // --- escrituras -------------------------------------------------------------
 
-function useMutacionConOperationId<Variables extends { operationId?: string }, Resultado>(
+export function useMutacionConOperationId<Variables extends { operationId?: string }, Resultado>(
   ejecutar: (variables: Variables, operationId: string) => Promise<Resultado>,
   alAceptar: (resultado: Resultado, variables: Variables) => void,
 ) {

@@ -84,6 +84,22 @@ EXENCIONES_PERMANENTES_DE_AUTH: frozenset[tuple[str, str]] = frozenset(
 )
 
 
+# Escrituras nuevas del change 12 (tarea 7.1). El ratchet central ya las recorre --por eso
+# `test_toda_ruta_de_escritura_pasa_por_el_bus_de_comandos` no necesita una lista de rutas
+# buenas-- pero este registro las nombra para que la afirmación no dependa solo del
+# recorrido dinámico: si alguien sacara la anulación del bus y la dejara fuera de
+# `METODOS_DE_ESCRITURA`, el ratchet central no lo notaría (ya no sería una ruta de
+# escritura) pero esta lista sí.
+ESCRITURAS_QUE_DEBEN_IR_POR_EL_BUS: frozenset[tuple[str, str]] = frozenset(
+    {
+        # Grupo 4: `PAGO_PROVEEDOR_REGISTRAR` (dedicada, `proveedores/api.py`).
+        ("POST", "/api/v1/pagos-proveedores"),
+        # Grupo 5: `PAGO_PROVEEDOR_ANULAR` (dedicada, `proveedores/api.py`).
+        ("POST", "/api/v1/pagos-proveedores/{pago_id}/anulacion"),
+    }
+)
+
+
 def _nombres_referenciados(code: CodeType) -> set[str]:
     """`co_names` de `code`, más los de cada objeto de código anidado en
     `co_consts` (una función declarada dentro de otra, como
@@ -166,6 +182,31 @@ def test_toda_ruta_de_escritura_pasa_por_el_bus_de_comandos(database_url: str) -
         f"{sin_bus}. Toda escritura de negocio debe pasar por "
         "sync_service.procesar_comando/procesar_lote (CLAUDE.md §4), salvo las "
         "tres exentas permanentemente por ser de /auth (change 03, D6)."
+    )
+
+
+def test_las_escrituras_nuevas_estan_registradas_y_pasan_por_el_bus(database_url: str) -> None:
+    """Complementaria de `test_toda_ruta_de_escritura_pasa_por_el_bus_de_comandos` (change
+    12, tarea 7.1): nombra las dos escrituras que el change agrega y confirma, contra la
+    app real, que están registradas y que su función de endpoint referencia
+    `procesar_comando`. El ratchet central ya las cubre por recorrido dinámico; esta
+    prueba evita que la cobertura dependa solo de eso."""
+    app = _app_real(database_url)
+
+    rutas = {
+        (metodo, path): route
+        for path, route in _rutas_con_prefijo(app.routes)
+        for metodo in (route.methods or set())
+    }
+    sin_bus = [
+        ruta
+        for ruta in ESCRITURAS_QUE_DEBEN_IR_POR_EL_BUS
+        if ruta not in rutas or not endpoint_pasa_por_el_bus(rutas[ruta].endpoint)
+    ]
+
+    assert sin_bus == [], (
+        f"Escrituras nuevas que no están registradas o no pasan por el bus: {sin_bus} "
+        "(toda escritura de negocio va por sync_service.procesar_comando, CLAUDE.md §4)."
     )
 
 

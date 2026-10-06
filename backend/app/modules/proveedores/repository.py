@@ -633,14 +633,19 @@ def existe_linea_para_presentacion(
 
 
 @dataclass(frozen=True)
-class DatosDePagoDeCompra:
-    """El pago de una compra de contado por insertar (D2, D12)."""
+class DatosDePago:
+    """El pago a insertar. `origen` es `COMPRA` (el pago de una compra de contado, D2) o
+    `INDEPENDIENTE` (un pago suelto, PAG-02); `compra_id` es `None` en el independiente,
+    que no se imputa a ninguna compra. La observación es opcional (D6) y el pago nace
+    siempre `CONFIRMADA`: no se inserta un pago ya anulado."""
 
     id: UUID
     proveedor_id: UUID
-    compra_id: UUID
     fecha: date
     importe: Decimal
+    origen: str
+    compra_id: UUID | None
+    observacion: str | None
     operation_id: UUID
     usuario_id: UUID
     dispositivo_id: UUID
@@ -655,16 +660,16 @@ class DatosDeMedioDePago:
     referencia: str | None
 
 
-def insertar_pago_de_compra(
+def insertar_pago(
     organizacion_id: UUID,
     sesion: Session,
     *,
-    pago: DatosDePagoDeCompra,
+    pago: DatosDePago,
     medios: list[DatosDeMedioDePago],
 ) -> PagoProveedor:
-    """Inserta el pago `CONFIRMADA` de origen `COMPRA` y sus medios, en la transacción
-    de quien llama (INV-01, INV-08: la suma de los medios la valida el servicio). La
-    compra ya debe estar insertada (FK compuesta)."""
+    """Inserta el pago `CONFIRMADA` de origen `COMPRA` o `INDEPENDIENTE` y sus medios, en la
+    transacción de quien llama (INV-01, INV-08: la suma de los medios la valida el servicio).
+    La compra, si la hay, ya debe estar insertada (FK compuesta)."""
     fila = PagoProveedor(
         id=pago.id,
         organizacion_id=organizacion_id,
@@ -672,8 +677,9 @@ def insertar_pago_de_compra(
         fecha=pago.fecha,
         importe=pago.importe,
         estado="CONFIRMADA",
-        origen="COMPRA",
+        origen=pago.origen,
         compra_id=pago.compra_id,
+        observacion=pago.observacion,
         anulado_en=None,
         anulado_por_id=None,
         anulacion_motivo_id=None,
@@ -741,6 +747,40 @@ def obtener_pago_de_compra(
         .where(
             PagoProveedor.organizacion_id == organizacion_id, PagoProveedor.compra_id == compra_id
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return sesion.scalars(consulta).one_or_none()
+
+
+def obtener_pago(organizacion_id: UUID, pago_id: UUID, sesion: Session) -> PagoProveedor | None:
+    """El pago por id, sin bloquear, o `None` si no existe en la organización (INV-21).
+
+    Es el primer paso de `anular_pago` (`design.md` D10): la anulación necesita saber el
+    `origen` del pago ANTES de decidir qué fila bloquear, y tomar el bloqueo equivocado
+    rompe el orden que evita el interbloqueo con `anular_compra`.
+    """
+    consulta = select(PagoProveedor).where(
+        PagoProveedor.organizacion_id == organizacion_id, PagoProveedor.id == pago_id
+    )
+    return sesion.scalars(consulta).one_or_none()
+
+
+def obtener_pago_para_actualizar(
+    organizacion_id: UUID, pago_id: UUID, sesion: Session
+) -> PagoProveedor | None:
+    """`SELECT ... FOR UPDATE` del pago (`02` §7.3, `design.md` D10): serializa dos
+    anulaciones simultáneas del mismo pago. `populate_existing` para que el segundo en
+    llegar vea el `estado` que dejó el primero y no el de una instancia que la sesión ya
+    tuviera cargada.
+
+    Para un pago de origen `COMPRA` el llamador bloquea antes la fila de la compra (D10),
+    con `obtener_compra_para_actualizar`, y recién después esta: es el mismo orden que
+    usa `anular_compra`, así que ninguna de las dos se queda esperando la otra.
+    """
+    consulta = (
+        select(PagoProveedor)
+        .where(PagoProveedor.organizacion_id == organizacion_id, PagoProveedor.id == pago_id)
         .with_for_update()
         .execution_options(populate_existing=True)
     )
@@ -880,3 +920,87 @@ def obtener_pago_de_compra_sin_bloquear(
         PagoProveedor.organizacion_id == organizacion_id, PagoProveedor.compra_id == compra_id
     )
     return sesion.scalars(consulta).one_or_none()
+
+
+# --- pagos a proveedor: lecturas (change 12, tarea 6.1; PAG-01, `design.md` D11) ----------
+
+
+def listar_pagos_paginado(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    limite: int,
+    cursor: str | None,
+    proveedor_id: UUID | None,
+    estado: str | None,
+    origen: str | None,
+    desde: date | None,
+    hasta: date | None,
+) -> tuple[list[tuple[PagoProveedor, str]], str | None]:
+    """Pagos de la organización de la más reciente a la más vieja, por cursor
+    `(fecha, id)` descendente (índices `ix_pago_proveedor__fecha` y
+    `ix_pago_proveedor__proveedor_fecha`, `design.md` D9 punto 4). Cada fila trae el
+    nombre del proveedor. `desde` y `hasta` son fechas de pago inclusivas. Devuelve
+    `(filas, cursor_siguiente)`.
+
+    Incluye los pagos de origen `COMPRA` (los de contado): el listado es de todos los
+    pagos de la organización, con su `compra_id` para el enlace (D11)."""
+    consulta = (
+        select(PagoProveedor, Proveedor.nombre)
+        .join(
+            Proveedor,
+            (Proveedor.organizacion_id == PagoProveedor.organizacion_id)
+            & (Proveedor.id == PagoProveedor.proveedor_id),
+        )
+        .where(PagoProveedor.organizacion_id == organizacion_id)
+    )
+    if proveedor_id is not None:
+        consulta = consulta.where(PagoProveedor.proveedor_id == proveedor_id)
+    if estado is not None:
+        consulta = consulta.where(PagoProveedor.estado == estado)
+    if origen is not None:
+        consulta = consulta.where(PagoProveedor.origen == origen)
+    if desde is not None:
+        consulta = consulta.where(PagoProveedor.fecha >= desde)
+    if hasta is not None:
+        consulta = consulta.where(PagoProveedor.fecha <= hasta)
+    if cursor is not None:
+        fecha_cursor, id_cursor = decodificar_cursor(cursor)
+        consulta = consulta.where(
+            tuple_(PagoProveedor.fecha, PagoProveedor.id) < (fecha_cursor, id_cursor)
+        )
+    consulta = consulta.order_by(PagoProveedor.fecha.desc(), PagoProveedor.id.desc()).limit(
+        limite + 1
+    )
+
+    filas = [(pago, nombre) for pago, nombre in sesion.execute(consulta).all()]
+    if len(filas) > limite:
+        pagina = filas[:limite]
+        ultima = pagina[-1][0]
+        return pagina, codificar_cursor(ultima.fecha, ultima.id)
+    return filas, None
+
+
+def obtener_pago_para_detalle(
+    organizacion_id: UUID, pago_id: UUID, sesion: Session
+) -> tuple[PagoProveedor, str, str | None] | None:
+    """`(pago, nombre del proveedor, estado de su compra)`, o `None` si el pago no existe
+    en la organización (INV-21). El estado de la compra es `None` para un pago
+    `INDEPENDIENTE`; en el detalle es lo que permite no ofrecer "Anular" mientras la
+    compra sigue vigente (CMP-05, `design.md` D2)."""
+    consulta = (
+        select(PagoProveedor, Proveedor.nombre, Compra.estado)
+        .join(
+            Proveedor,
+            (Proveedor.organizacion_id == PagoProveedor.organizacion_id)
+            & (Proveedor.id == PagoProveedor.proveedor_id),
+        )
+        .outerjoin(
+            Compra,
+            (Compra.organizacion_id == PagoProveedor.organizacion_id)
+            & (Compra.id == PagoProveedor.compra_id),
+        )
+        .where(PagoProveedor.organizacion_id == organizacion_id, PagoProveedor.id == pago_id)
+    )
+    fila = sesion.execute(consulta).one_or_none()
+    return None if fila is None else (fila[0], fila[1], fila[2])

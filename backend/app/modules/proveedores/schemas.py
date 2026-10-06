@@ -26,6 +26,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
+from app.modules.proveedores.domain.pagos import MAXIMO_OBSERVACION
+
 _PATRON_DECIMAL = r"^-?\d+(\.\d+)?$"
 
 # --- proveedor (D7) ----------------------------------------------------------
@@ -85,6 +87,15 @@ class PaginaProveedorOpciones(BaseModel):
 
     items: list[ProveedorOpcionResponse]
     cursor_siguiente: str | None
+
+
+class SaldoProveedorResponse(BaseModel):
+    """`GET /proveedores/{id}/saldo` (change 12, tarea 6.2; `design.md` D8). El saldo actual
+    como string (INV-03), calculado en SQL sobre `saldo_cuenta` y `"0.00"` si la cuenta no
+    tiene movimientos (CC-04). Es el "saldo actual" que muestra el alta de pago y el aviso
+    del saldo resultante."""
+
+    saldo: str
 
 
 # --- costos informados (D12) -------------------------------------------------
@@ -344,3 +355,113 @@ class CompraDetalleResponse(CompraResumenResponse):
     lineas: list[CompraLineaResponse]
     pago: CompraPagoResponse | None
     anulacion: CompraAnulacionResponse | None
+
+
+# --- pagos a proveedor (change 12: PAG-01, PAG-02; `design.md` D2 a D6, D14) --------------
+
+
+class PagoMedioRequest(BaseModel):
+    """Un medio del pago (D6). `importe` como string estricto: un numero JSON ya degradado
+    por `float` se rechaza con 422 (INV-03)."""
+
+    medio_pago_id: UUID
+    importe: str = Field(pattern=_PATRON_DECIMAL)
+    referencia: str | None = None
+
+
+class PagoProveedorRegistrarRequest(BaseModel):
+    """`POST /pagos-proveedores`. `organizacion_id` nunca aparece (sale del token,
+    INV-21/TR-08). `medios` no declara `min_length`: una lista vacia la rechaza el dominio
+    con `MEDIOS_INVALIDOS` y su codigo estable, no un 422 generico de Pydantic (D6)."""
+
+    proveedor_id: UUID
+    fecha: date
+    importe: str = Field(pattern=_PATRON_DECIMAL)
+    medios: list[PagoMedioRequest]
+    observacion: str | None = Field(default=None, max_length=MAXIMO_OBSERVACION)
+
+
+class PagoProveedorRegistrarResponse(BaseModel):
+    """Sale de `comando.resultado`, no de una relectura: un reenvio idempotente del mismo
+    `Operation-Id` devuelve exactamente lo mismo (INV-06). `saldo` es el saldo resultante
+    del proveedor (CC-04), que la pantalla muestra como "saldo despues del pago"."""
+
+    pago_id: UUID
+    estado: str
+    importe: str
+    saldo: str
+
+
+class PagoProveedorAnularRequest(BaseModel):
+    """`POST /pagos-proveedores/{id}/anulacion`. El `pago_id` va en la ruta, no en el
+    cuerpo. `motivo_id` es obligatorio y el servicio exige que sea del ambito
+    `ANULACION_PAGO` (D1). `organizacion_id` nunca aparece (sale del token, INV-21/TR-08).
+    No se acepta `importe` ni `estado`: la anulación no edita el pago más allá de su estado
+    y sus columnas de anulación (INV-05, TR-06).
+
+    Sin `extra="forbid"`, igual que `PagoProveedorRegistrarRequest`: el endpoint arma el
+    `contenido` del comando campo por campo, así que un campo extra del cuerpo se ignora
+    y nunca llega al bus. Quien manda de verdad es
+    `PagoProveedorAnularContenidoV1`, que sí lo prohíbe (`extra="forbid"`)."""
+
+    motivo_id: UUID
+
+
+class PagoProveedorAnularResponse(BaseModel):
+    """Sale de `comando.resultado` (INV-06). `saldo` es el saldo del proveedor DESPUÉS de
+    la anulación (CC-04), que la pantalla muestra junto al rótulo del saldo."""
+
+    pago_id: UUID
+    estado: str
+    saldo: str
+
+
+class PagoResumenResponse(BaseModel):
+    """Una fila del listado de pagos (PAG-01, `design.md` D11). Importes como string
+    (INV-03). `compra_id` es `None` para un pago `INDEPENDIENTE` y el de la compra para uno
+    de origen `COMPRA`: es lo que permite enlazar el pago con su compra."""
+
+    pago_id: UUID
+    fecha: date
+    proveedor_id: UUID
+    proveedor_nombre: str
+    importe: str
+    origen: str
+    estado: str
+    compra_id: UUID | None
+
+
+class PaginaPagos(BaseModel):
+    items: list[PagoResumenResponse]
+    cursor_siguiente: str | None
+
+
+class PagoMedioResponse(BaseModel):
+    """Un medio del pago en el detalle, con su nombre resuelto (PAG-01, INV-03)."""
+
+    medio_pago_id: UUID
+    medio_nombre: str | None
+    importe: str
+    referencia: str | None
+
+
+class PagoAnulacionResponse(BaseModel):
+    """La anulación de un pago (PAG-03): motivo, usuario y momento."""
+
+    motivo_id: UUID
+    motivo_nombre: str | None
+    anulado_en: datetime
+    anulado_por_id: UUID
+    anulado_por_nombre: str
+
+
+class PagoDetalleResponse(PagoResumenResponse):
+    """El detalle del pago (PAG-01, PAG-03). `anulacion` es `None` mientras el pago esté
+    `CONFIRMADA`. `compra_estado` es `None` para un pago `INDEPENDIENTE`; para uno de origen
+    `COMPRA` es el estado de la compra, que es lo que permite no ofrecer "Anular" mientras
+    la compra sigue vigente (CMP-05, `design.md` D2)."""
+
+    observacion: str | None
+    compra_estado: str | None
+    medios: list[PagoMedioResponse]
+    anulacion: PagoAnulacionResponse | None

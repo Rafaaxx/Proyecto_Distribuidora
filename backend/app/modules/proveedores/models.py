@@ -275,9 +275,12 @@ class PagoProveedor(Base):
             name="ck_pago_proveedor__origen_compra",
         ),
         CheckConstraint(
+            # "anulada <=> momento, usuario **y motivo**": la misma regla que
+            # `ck_compra__anulacion_coherente`, con los nombres de columna del pago
+            # (`anulado_en`, `anulado_por_id`) (PAG-03, `design.md` D9 punto 3).
             "(estado = 'ANULADA') = (anulado_en IS NOT NULL) "
-            "AND (anulado_en IS NOT NULL) = (anulado_por_id IS NOT NULL) "
-            "AND (anulacion_motivo_id IS NULL OR anulado_en IS NOT NULL)",
+            "AND (anulado_en IS NOT NULL) = (anulacion_motivo_id IS NOT NULL) "
+            "AND (anulado_en IS NOT NULL) = (anulado_por_id IS NOT NULL)",
             name="ck_pago_proveedor__anulacion_coherente",
         ),
         Index(
@@ -286,6 +289,14 @@ class PagoProveedor(Base):
             "compra_id",
             unique=True,
             postgresql_where=text("compra_id IS NOT NULL"),
+        ),
+        Index("ix_pago_proveedor__fecha", "organizacion_id", text("fecha DESC"), text("id DESC")),
+        Index(
+            "ix_pago_proveedor__proveedor_fecha",
+            "organizacion_id",
+            "proveedor_id",
+            text("fecha DESC"),
+            text("id DESC"),
         ),
     )
 
@@ -297,6 +308,8 @@ class PagoProveedor(Base):
     estado: Mapped[str] = mapped_column(Text, nullable=False)
     origen: Mapped[str] = mapped_column(Text, nullable=False)
     compra_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    observacion: Mapped[str | None] = mapped_column(Text, nullable=True)
+    """D6: opcional e inmutable: no entra en el `GRANT UPDATE` de `app_runtime`."""
     anulado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     anulado_por_id: Mapped[UUID | None] = mapped_column(nullable=True)
     anulacion_motivo_id: Mapped[UUID | None] = mapped_column(nullable=True)

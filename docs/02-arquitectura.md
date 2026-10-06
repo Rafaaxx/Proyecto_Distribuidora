@@ -320,6 +320,8 @@ Las altas y modificaciones de maestros también llevan `operation_id` y pasan po
 
 Un handler puede devolver, además del resultado, observaciones de negocio (SYN-04, SYN-07): el comando queda `ACEPTADO_CON_OBSERVACIONES` y las observaciones se registran con la operación afectada. `COMPRA_ANULAR` lleva `devuelve_pago` (obligatorio en compras de contado, prohibido en las de crédito) y emite `ANULACION_COMPRA_SIN_RECALCULO` y `STOCK_NEGATIVO` (ADR-043, ADR-044). Las lecturas de compras exigen `REGISTRAR_COMPRA` o `ANULAR_COMPRA`; el formulario de compra también lee productos, alícuotas, proveedores y ubicaciones con `REGISTRAR_COMPRA` (ADR-043).
 
+`PAGO_PROVEEDOR_REGISTRAR` lleva proveedor, fecha, importe, de 1 a 20 medios y una observación opcional, y exige `REGISTRAR_PAGO_PROVEEDOR`; `PAGO_PROVEEDOR_ANULAR` lleva el pago y un motivo del ámbito `ANULACION_PAGO`, y exige `ANULAR_PAGO_PROVEEDOR`. Los errores propios son `MEDIOS_INVALIDOS` (422), `PAGO_YA_ANULADO` y `PAGO_DE_COMPRA_VIGENTE` (409). Las lecturas son `GET /pagos-proveedores` (filtros de proveedor, estado, origen y fechas, con cursor), `GET /pagos-proveedores/{id}` (ambos con `REGISTRAR_PAGO_PROVEEDOR` o `ANULAR_PAGO_PROVEEDOR`) y `GET /proveedores/{id}/saldo` (con `GESTIONAR_PROVEEDORES`, `REGISTRAR_PAGO_PROVEEDOR` o `REGISTRAR_COMPRA`); `GET /proveedores/opciones` también se abre, solo en lectura, a `REGISTRAR_PAGO_PROVEEDOR` (ADR-046).
+
 Una importación es un comando por archivo: todo o nada, con savepoints por fila dentro del handler (ADR-040).
 
 ### 6.6 Compatibilidad de versiones
@@ -356,6 +358,8 @@ Los libros son la verdad (INV-12, INV-13). Las tablas de saldo son una materiali
 2. `costo_producto` (por `producto_id` ascendente)
 3. `stock_saldo` (por `producto_id` y `ubicacion_id` ascendentes)
 4. `jornada` (si la operación la valida)
+
+Las filas de la propia operación que el comando corrige o anula se toman **antes** del nivel 1, en este orden: la compra (`FOR UPDATE`) y después su pago (`FOR UPDATE`). `COMPRA_ANULAR` y `PAGO_PROVEEDOR_ANULAR` usan el mismo orden (compra, pago, `saldo_cuenta`), así que anular una compra y anular su pago a la vez no se interbloquean y dejan una sola `ANULACION_PAGO`. `PAGO_PROVEEDOR_REGISTRAR` parte del nivel 1 (`saldo_cuenta` del proveedor) (ADR-043 punto 15, ADR-046).
 
 Un orden único impide deadlocks entre operaciones concurrentes. Los handlers no bloquean filas directamente: usan funciones de los servicios que respetan este orden, y la venta reúne todos los productos antes de pedir bloqueos.
 

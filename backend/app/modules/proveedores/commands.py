@@ -42,7 +42,8 @@ from app.core.errors import PermisoRequeridoError
 from app.modules.identidad import service as identidad_service
 from app.modules.proveedores import service as proveedores_service
 from app.modules.proveedores.domain.lote import CostoDelLote
-from app.modules.proveedores.service import LineaDeCompra, MedioDeCompra
+from app.modules.proveedores.domain.pagos import MAXIMO_OBSERVACION
+from app.modules.proveedores.service import LineaDeCompra, MedioAPagar
 
 ResultadoHandler = tuple[str, dict[str, object] | None, str | None]
 """Misma convención que `sync/service.py::ResultadoHandler` (ver
@@ -273,7 +274,7 @@ def manejar_compra_confirmar(
             for linea in contenido.lineas
         ],
         medios=[
-            MedioDeCompra(
+            MedioAPagar(
                 medio_pago_id=medio.medio_pago_id,
                 importe=Decimal(medio.importe),
                 referencia=medio.referencia,
@@ -385,3 +386,137 @@ registrar_handler("COMPRA_ANULAR", 1, CompraAnularContenidoV1)(
     manejar_compra_anular  # type: ignore[arg-type]
 )
 declarar_tipo("COMPRA_ANULAR", admite_online=True, admite_offline=False)
+
+
+# --- PAGO_PROVEEDOR_REGISTRAR (change 12: PAG-01, PAG-02; D2 a D6, D10; CC-03, CC-04) ----
+
+PERMISO_REGISTRAR_PAGO_PROVEEDOR = "REGISTRAR_PAGO_PROVEEDOR"
+
+
+class MedioDePagoContenidoV1(BaseModel):
+    """Un medio del pago (D6). `importe` viaja como string decimal: un número JSON ya
+    degradado por `float` en el cliente se rechaza (INV-03)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    medio_pago_id: UUID
+    importe: str = Field(pattern=_PATRON_DECIMAL)
+    referencia: str | None = None
+
+
+class PagoProveedorRegistrarContenidoV1(BaseModel):
+    """`extra="forbid"`: `organizacion_id` sale del token (INV-21, TR-08) y el pago nace
+    `CONFIRMADA` de origen `INDEPENDIENTE` (PAG-01, PAG-02). `medios` vacía la rechaza el
+    dominio con `MEDIOS_INVALIDOS` (D6: de 1 a 20)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    proveedor_id: UUID
+    fecha: date
+    importe: str = Field(pattern=_PATRON_DECIMAL)
+    medios: list[MedioDePagoContenidoV1]
+    observacion: str | None = Field(default=None, max_length=MAXIMO_OBSERVACION)
+
+
+def manejar_pago_proveedor_registrar(
+    sobre: SobreComando,
+    contenido: PagoProveedorRegistrarContenidoV1,
+    *,
+    sesion: object,
+    reloj: Clock,
+) -> ResultadoHandler:
+    """Registra un pago a proveedor (D14: `REGISTRAR_PAGO_PROVEEDOR`). El resultado se
+    guarda y se reenvía tal cual ante un doble envío (INV-06): devuelve el id del pago y
+    el saldo resultante del proveedor, ambos como string (INV-03)."""
+    _exigir_permiso(sobre, sesion, PERMISO_REGISTRAR_PAGO_PROVEEDOR)
+    resultado = proveedores_service.registrar_pago(
+        sobre.organizacion_id,
+        sesion,  # type: ignore[arg-type]
+        reloj,
+        proveedor_id=contenido.proveedor_id,
+        fecha=contenido.fecha,
+        importe=Decimal(contenido.importe),
+        medios=[
+            MedioAPagar(
+                medio_pago_id=medio.medio_pago_id,
+                importe=Decimal(medio.importe),
+                referencia=medio.referencia,
+            )
+            for medio in contenido.medios
+        ],
+        observacion=contenido.observacion,
+        operation_id=sobre.operation_id,
+        usuario_id=sobre.usuario_id,
+        dispositivo_id=sobre.dispositivo_id,
+        occurred_at=sobre.occurred_at,
+    )
+    return (
+        "ACEPTADO",
+        {
+            "pago_id": str(resultado.pago.id),
+            "estado": resultado.pago.estado,
+            "importe": str(resultado.pago.importe),
+            "saldo": str(resultado.saldo),
+        },
+        None,
+    )
+
+
+registrar_handler("PAGO_PROVEEDOR_REGISTRAR", 1, PagoProveedorRegistrarContenidoV1)(
+    manejar_pago_proveedor_registrar  # type: ignore[arg-type]
+)
+declarar_tipo("PAGO_PROVEEDOR_REGISTRAR", admite_online=True, admite_offline=False)
+
+
+# --- PAGO_PROVEEDOR_ANULAR (change 12: PAG-03; CC-03, CC-04; `design.md` D1, D2, D5, D10) --
+
+PERMISO_ANULAR_PAGO_PROVEEDOR = "ANULAR_PAGO_PROVEEDOR"
+
+
+class PagoProveedorAnularContenidoV1(BaseModel):
+    """`extra="forbid"`: `organizacion_id` sale del token (INV-21, TR-08). El pago no se
+    edita ni se borra: el comando solo lo deja `ANULADA` con su motivo (TR-06, PAG-03)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pago_id: UUID
+    motivo_id: UUID
+
+
+def manejar_pago_proveedor_anular(
+    sobre: SobreComando,
+    contenido: PagoProveedorAnularContenidoV1,
+    *,
+    sesion: object,
+    reloj: Clock,
+) -> ResultadoHandler:
+    """Anula un pago a proveedor (D14: `ANULAR_PAGO_PROVEEDOR`). El resultado se guarda y
+    se reenvía tal cual ante un doble envío (INV-06): devuelve el id del pago, su estado y
+    el saldo resultante del proveedor, con el importe y el saldo como string (INV-03)."""
+    _exigir_permiso(sobre, sesion, PERMISO_ANULAR_PAGO_PROVEEDOR)
+    resultado = proveedores_service.anular_pago(
+        sobre.organizacion_id,
+        sesion,  # type: ignore[arg-type]
+        reloj,
+        pago_id=contenido.pago_id,
+        motivo_id=contenido.motivo_id,
+        operation_id=sobre.operation_id,
+        usuario_id=sobre.usuario_id,
+        dispositivo_id=sobre.dispositivo_id,
+        occurred_at=sobre.occurred_at,
+    )
+    return (
+        "ACEPTADO",
+        {
+            "pago_id": str(resultado.pago.id),
+            "estado": resultado.pago.estado,
+            "saldo": str(resultado.saldo),
+        },
+        None,
+    )
+
+
+registrar_handler("PAGO_PROVEEDOR_ANULAR", 1, PagoProveedorAnularContenidoV1)(
+    manejar_pago_proveedor_anular  # type: ignore[arg-type]
+)
+declarar_tipo("PAGO_PROVEEDOR_ANULAR", admite_online=True, admite_offline=False)

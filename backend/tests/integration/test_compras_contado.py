@@ -240,7 +240,7 @@ def test_una_falla_despues_del_stock_no_deja_pago_ni_compra_inv_01(
     def _falla(*args: object, **kwargs: object) -> None:
         raise RuntimeError("falla inyectada en el pago")
 
-    monkeypatch.setattr(repository, "insertar_pago_de_compra", _falla)
+    monkeypatch.setattr(repository, "insertar_pago", _falla)
 
     with pytest.raises(RuntimeError, match="falla inyectada"):
         entorno.confirmar_contado((entorno.efectivo_id, "152460.00", None))

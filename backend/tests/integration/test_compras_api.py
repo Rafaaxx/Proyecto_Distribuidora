@@ -1247,6 +1247,40 @@ def test_motivos_devuelve_solo_los_activos_del_ambito_pedido_de_la_organizacion(
     assert respuesta.json()["items"] == [{"id": str(anulacion), "nombre": "Error de carga"}]
 
 
+def test_motivos_de_anulacion_de_pago_devuelve_los_del_ambito_nuevo(
+    cliente: TestClient, sesion: Session
+) -> None:
+    """Task 2.1 (change 12, `design.md` D1): `ANULACION_PAGO` entra en la lista cerrada
+    de `motivo.ambito` (`03` §4, TR-09), así que `PAGO_PROVEEDOR_ANULAR` puede exigir un
+    motivo de ese ámbito (`MOTIVO_INVALIDO`). Mismo criterio que el ámbito de la compra:
+    solo los activos de la organización del token (INV-21), sin los de otro ámbito ni los
+    de otra organización."""
+    entorno = Entorno(sesion, permisos=frozenset())
+    rechazado = entorno.crear_motivo("ANULACION_PAGO", "Pago rechazado o devuelto")
+    error_de_carga = entorno.crear_motivo("ANULACION_PAGO", "Error de carga")
+    entorno.crear_motivo("ANULACION_COMPRA", "Devolución al proveedor")
+    sesion.execute(
+        text(
+            "INSERT INTO motivo (id, organizacion_id, ambito, nombre, activo, creado_en, "
+            "actualizado_en) VALUES (:id, :org, 'ANULACION_PAGO', 'Otro', false, :m, :m)"
+        ),
+        {"id": uuid4(), "org": entorno.org, "m": MOMENTO},
+    )
+    ajena = Entorno(sesion, usuario="otro")
+    ajena.crear_motivo("ANULACION_PAGO", "Ajeno")
+    headers = entorno.entrar(cliente)
+
+    respuesta = cliente.get(URL_MOTIVOS, params={"ambito": "ANULACION_PAGO"}, headers=headers)
+
+    assert respuesta.status_code == 200, respuesta.text
+    # Ordenados por nombre ("Error de carga" < "Pago rechazado o devuelto"): ni el
+    # inactivo, ni el de otro ámbito, ni el de otra organización.
+    assert respuesta.json()["items"] == [
+        {"id": str(error_de_carga), "nombre": "Error de carga"},
+        {"id": str(rechazado), "nombre": "Pago rechazado o devuelto"},
+    ]
+
+
 def test_motivos_con_un_ambito_fuera_de_la_lista_responde_422_ambito_invalido(
     cliente: TestClient, sesion: Session
 ) -> None:

@@ -166,6 +166,15 @@ class MediosNoSumanImporteError(DomainError):
     status_http = 422
 
 
+class MediosInvalidosError(DomainError):
+    """Change 12, `design.md` D6: un pago a proveedor lleva de 1 a 20 medios; fuera de ese
+    rango se rechaza antes de mirar importes (el pago de contado de una compra no tiene
+    este límite, CMP-03)."""
+
+    codigo = "MEDIOS_INVALIDOS"
+    status_http = 422
+
+
 class ReferenciaObligatoriaError(DomainError):
     """Un medio de pago que exige referencia llegó sin ella (`01` §4)."""
 
@@ -207,6 +216,26 @@ class MotivoInvalidoError(DomainError):
 
     codigo = "MOTIVO_INVALIDO"
     status_http = 422
+
+
+# --- Pagos a proveedores (change 12, `design.md` D1, D2, D4, D6) -------------------------
+
+
+class PagoYaAnuladoError(DomainError):
+    """Change 12, PAG-03, TR-06: el pago ya está `ANULADA`, no se anula dos veces. Mismo
+    estado y mismo criterio que `CompraYaAnuladaError`."""
+
+    codigo = "PAGO_YA_ANULADO"
+    status_http = 409
+
+
+class PagoDeCompraVigienteError(DomainError):
+    """Change 12, `design.md` D2 (opción A), CMP-03, CMP-05: el pago de una compra
+    `CONFIRMADA` solo se anula junto con su compra. Una compra de contado vigente siempre
+    tiene su pago vigente."""
+
+    codigo = "PAGO_DE_COMPRA_VIGENTE"
+    status_http = 409
 
 
 class CursorInvalidoError(DomainError):

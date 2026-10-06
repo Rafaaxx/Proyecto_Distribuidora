@@ -25,7 +25,7 @@ from app.modules.proveedores.domain.compras import (
     validar_rango_de_fechas,
 )
 from app.modules.proveedores.domain.errores import RecursoNoEncontradoError
-from app.modules.proveedores.models import Compra
+from app.modules.proveedores.models import Compra, PagoProveedor
 
 
 @dataclass(frozen=True)
@@ -245,5 +245,132 @@ def obtener_detalle_de_compra(
         proveedor_nombre=proveedor_nombre,
         lineas=lineas,
         pago=pago,
+        anulacion=anulacion,
+    )
+
+
+@dataclass(frozen=True)
+class PagoDelListado:
+    pago: PagoProveedor
+    proveedor_nombre: str
+
+
+@dataclass(frozen=True)
+class PaginaDePagos:
+    pagos: list[PagoDelListado]
+    cursor_siguiente: str | None
+
+
+@dataclass(frozen=True)
+class AnulacionDePago:
+    """La anulación de un pago (PAG-03): qué motivo, quién y cuándo. Las columnas se
+    llaman `anulado_*` porque las del pago son las de `pago_proveedor`."""
+
+    motivo_id: UUID
+    motivo_nombre: str | None
+    anulado_en: datetime
+    anulado_por_id: UUID
+
+
+@dataclass(frozen=True)
+class DetalleDePago:
+    pago: PagoProveedor
+    proveedor_nombre: str
+    compra_estado: str | None
+    medios: list[MedioDelDetalle]
+    anulacion: AnulacionDePago | None
+
+
+def listar_pagos(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    proveedor_id: UUID | None = None,
+    estado: str | None = None,
+    origen: str | None = None,
+    desde: date | None = None,
+    hasta: date | None = None,
+    cursor: str | None = None,
+    limite: int | None = None,
+) -> PaginaDePagos:
+    """Pagos de la organización, del más reciente al más viejo, paginados por cursor.
+
+    Filtrable por proveedor, estado, origen y rango de fechas del pago (inclusivo,
+    TR-04): son los mismos filtros que el listado de compras. `desde` posterior a `hasta`
+    es `RANGO_DE_FECHAS_INVALIDO` y un cursor ilegible es `CURSOR_INVALIDO`. Incluye los
+    pagos de origen `COMPRA`, cada uno con su `compra_id` (D11).
+
+    `limite` va de 1 a 200 (la API responde 422 fuera de rango; acá solo se acota por
+    seguridad; `None` es el default) y `estado` y `origen` son de valores cerrados (también
+    los valida la API)."""
+    validar_rango_de_fechas(desde, hasta)
+    limite_pagina = min(
+        max(LIMITE_DEFAULT_DE_PAGINA if limite is None else limite, LIMITE_MINIMO_DE_PAGINA),
+        LIMITE_MAXIMO_DE_PAGINA,
+    )
+    filas, cursor_siguiente = repository.listar_pagos_paginado(
+        organizacion_id,
+        sesion,
+        limite=limite_pagina,
+        cursor=cursor,
+        proveedor_id=proveedor_id,
+        estado=estado,
+        origen=origen,
+        desde=desde,
+        hasta=hasta,
+    )
+    return PaginaDePagos(
+        pagos=[PagoDelListado(pago, nombre) for pago, nombre in filas],
+        cursor_siguiente=cursor_siguiente,
+    )
+
+
+def obtener_detalle_de_pago(organizacion_id: UUID, pago_id: UUID, sesion: Session) -> DetalleDePago:
+    """El pago con sus medios (con nombre), su observación, el estado de su compra si es de
+    origen `COMPRA` y, si está anulado, el motivo, el usuario y el momento (PAG-03). 404 si
+    no existe en la organización (INV-21).
+
+    Los nombres de medio y de motivo se resuelven por el `service.py` de `configuracion`
+    (`CLAUDE.md` §4); los medios del pago son a lo sumo 20 (D6)."""
+    fila = repository.obtener_pago_para_detalle(organizacion_id, pago_id, sesion)
+    if fila is None:
+        raise RecursoNoEncontradoError(f"El pago {pago_id} no existe en esta organización.")
+    pago, proveedor_nombre, compra_estado = fila
+
+    medios: list[MedioDelDetalle] = []
+    for medio in repository.listar_medios_de_pago(organizacion_id, pago.id, sesion):
+        fila_medio = configuracion_service.obtener_medio_pago(
+            organizacion_id, medio.medio_pago_id, sesion
+        )
+        medios.append(
+            MedioDelDetalle(
+                medio_pago_id=medio.medio_pago_id,
+                medio_nombre=None if fila_medio is None else fila_medio.nombre,
+                importe=medio.importe,
+                referencia=medio.referencia,
+            )
+        )
+
+    anulacion: AnulacionDePago | None = None
+    if (
+        pago.estado == "ANULADA"
+        and pago.anulacion_motivo_id is not None
+        and pago.anulado_en is not None
+        and pago.anulado_por_id is not None
+    ):
+        motivo = configuracion_service.obtener_motivo(
+            organizacion_id, pago.anulacion_motivo_id, sesion
+        )
+        anulacion = AnulacionDePago(
+            motivo_id=pago.anulacion_motivo_id,
+            motivo_nombre=None if motivo is None else motivo.nombre,
+            anulado_en=pago.anulado_en,
+            anulado_por_id=pago.anulado_por_id,
+        )
+    return DetalleDePago(
+        pago=pago,
+        proveedor_nombre=proveedor_nombre,
+        compra_estado=compra_estado,
+        medios=medios,
         anulacion=anulacion,
     )

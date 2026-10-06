@@ -251,6 +251,31 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("get", "/api/v1/costos/resumen-regla-iva"),
         ("get", "/api/v1/configuracion/medios-pago"),
         ("get", "/api/v1/configuracion/motivos"),
+        # Change 12, grupo 4 (`proveedores/api.py`, tarea 4.3): la escritura dedicada de
+        # `PAGO_PROVEEDOR_REGISTRAR`, con su prueba real de aislamiento (login real de dos
+        # organizaciones en ambos sentidos: el proveedor y el medio de la otra
+        # organizacion responden 404 sin efectos --con el indice del medio en el Problem
+        # Details-- y un `organizacion_id` en el cuerpo se ignora, nunca llega al comando)
+        # en `test_pagos_proveedor_api.py` (`test_un_proveedor_ajeno_responde_404`,
+        # `test_un_medio_ajeno_responde_404_con_el_medio` y
+        # `test_el_cuerpo_no_acepta_organizacion_id`).
+        ("post", "/api/v1/pagos-proveedores"),
+        # Change 12, grupo 7 (tarea 7.1): las cuatro rutas nuevas -- la anulacion dedicada
+        # de `PAGO_PROVEEDOR_ANULAR` y las tres lecturas (saldo del proveedor, listado y
+        # detalle de pagos) -- con su prueba real de aislamiento en
+        # `test_inv21_aislamiento_endpoints_proveedores.py::
+        # TestAislamientoDePagosAProveedores`: login real de dos organizaciones y, en cada
+        # prueba, los dos sentidos (la propia lee/anula lo suyo con 200, y la misma llamada
+        # sobre un recurso de la otra responde 404 sin datos ni efectos). Ademas las tres
+        # lecturas y la anulacion se exerten con un `organizacion_id` ajeno en la consulta o
+        # en el cuerpo para confirmar que la organizacion sale siempre del token (INV-21,
+        # TR-08). Este ratchet quedo en rojo nombrando las cuatro rutas desde que el grupo 6
+        # las registro hasta que sus pruebas de aislamiento existen (mismo precedente que la
+        # tarea 12.1 del change 02).
+        ("post", "/api/v1/pagos-proveedores/{pago_id}/anulacion"),
+        ("get", "/api/v1/pagos-proveedores"),
+        ("get", "/api/v1/pagos-proveedores/{pago_id}"),
+        ("get", "/api/v1/proveedores/{proveedor_id}/saldo"),
     }
 )
 

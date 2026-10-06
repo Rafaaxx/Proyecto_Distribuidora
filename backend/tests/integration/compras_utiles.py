@@ -43,8 +43,26 @@ MOMENTO = datetime(2026, 5, 10, 12, 0, tzinfo=UTC)
 RELOJ = FixedClock(MOMENTO)
 CONFIRMAR = "COMPRA_CONFIRMAR"
 ANULAR = "COMPRA_ANULAR"
-_HANDLERS = {CONFIRMAR: "manejar_compra_confirmar", ANULAR: "manejar_compra_anular"}
+PAGAR = "PAGO_PROVEEDOR_REGISTRAR"
+ANULAR_PAGO = "PAGO_PROVEEDOR_ANULAR"
+_HANDLERS = {
+    CONFIRMAR: "manejar_compra_confirmar",
+    ANULAR: "manejar_compra_anular",
+    PAGAR: "manejar_pago_proveedor_registrar",
+    ANULAR_PAGO: "manejar_pago_proveedor_anular",
+}
 PERMISOS = frozenset({"REGISTRAR_COMPRA"})
+PERMISOS_DE_PAGO = frozenset({"REGISTRAR_COMPRA", "REGISTRAR_PAGO_PROVEEDOR"})
+"""Lo que necesita quien paga una deuda: registrar la compra que la origina y el pago que
+la reduce (`SEG-06`). La prueba de permisos arma su propio entorno sin ninguno."""
+
+PERMISOS_DE_ANULACION_DE_PAGO = frozenset(
+    {"REGISTRAR_COMPRA", "ANULAR_COMPRA", "REGISTRAR_PAGO_PROVEEDOR", "ANULAR_PAGO_PROVEEDOR"}
+)
+"""Lo que necesita quien anula un pago: la deuda que lo origina (`REGISTRAR_COMPRA` y,
+para el caso D2, `ANULAR_COMPRA` sobre la compra de contado), registrar el pago
+(`REGISTRAR_PAGO_PROVEEDOR`) y `ANULAR_PAGO_PROVEEDOR` (`SEG-06`, PAG-03). La prueba de
+permisos de la anulación arma su propio entorno sin el último."""
 
 
 class Entorno:
@@ -77,6 +95,7 @@ class Entorno:
         self.efectivo_id = self.crear_medio("Efectivo", requiere_referencia=False)
         self.transferencia_id = self.crear_medio("Transferencia", requiere_referencia=True)
         self.motivo_id = self.crear_motivo("ANULACION_COMPRA", "Error de carga")
+        self.motivo_pago_id = self.crear_motivo("ANULACION_PAGO", "Pago rechazado o devuelto")
         sesion.commit()
 
     def fijar_condicion_iva(self, condicion: str) -> None:
@@ -259,6 +278,70 @@ class Entorno:
         contenido.update(cambios)
         return self.enviar(contenido, operation_id=operation_id, tipo=ANULAR)
 
+    # --- pagos a proveedor (change 12, PAG-01 a PAG-03) ---------------------------
+
+    def contenido_pago(self, **cambios: object) -> dict[str, Any]:
+        cuerpo: dict[str, Any] = {
+            "proveedor_id": str(self.proveedor_id),
+            "fecha": "2026-05-10",
+            "importe": "152460.00",
+            "medios": self.pagar(
+                (self.efectivo_id, "100000.00", None), (self.transferencia_id, "52460.00", "0042")
+            ),
+        }
+        cuerpo.update(cambios)
+        return cuerpo
+
+    def pagar_a_proveedor(
+        self, contenido: dict[str, Any] | None = None, *, operation_id: UUID | None = None
+    ) -> Comando:
+        return self.enviar(
+            contenido if contenido is not None else self.contenido_pago(),
+            operation_id=operation_id,
+            tipo=PAGAR,
+        )
+
+    def anular_pago(
+        self,
+        pago_id: UUID,
+        *,
+        operation_id: UUID | None = None,
+        motivo_id: UUID | None = None,
+        **cambios: object,
+    ) -> Comando:
+        """`PAGO_PROVEEDOR_ANULAR` (PAG-03): el motivo por defecto es el del ámbito
+        `ANULACION_PAGO`, que es el único que la anulación de un pago admite (D1)."""
+        contenido: dict[str, Any] = {
+            "pago_id": str(pago_id),
+            "motivo_id": str(motivo_id or self.motivo_pago_id),
+        }
+        contenido.update(cambios)
+        return self.enviar(contenido, operation_id=operation_id, tipo=ANULAR_PAGO)
+
+    def desactivar_proveedor(self) -> None:
+        """Da de baja al proveedor por SQL (sin comando ni auditoría): D5 admite pagar y
+        anular a un proveedor inactivo, así que la regla no mira `activo`."""
+        self.sesion.execute(
+            text("UPDATE proveedor SET activo = false WHERE organizacion_id = :o AND id = :p"),
+            {"o": self.org, "p": self.proveedor_id},
+        )
+        self.sesion.commit()
+
+    def desactivar_motivo(self, motivo_id: UUID) -> None:
+        self.sesion.execute(
+            text("UPDATE motivo SET activo = false WHERE organizacion_id = :o AND id = :m"),
+            {"o": self.org, "m": motivo_id},
+        )
+        self.sesion.commit()
+
+    def deuda(self, total: str = "153720.00") -> Decimal:
+        """Una compra a crédito que deja al proveedor debiendo `total` (PAG-02: el pago
+        reduce el saldo general, sin imputarse a ninguna compra)."""
+        self.enviar(
+            self.contenido(lineas=[self.linea("vino")], total_factura=total), operation_id=uuid4()
+        )
+        return self.saldo_de_cuenta()
+
     # --- lecturas -----------------------------------------------------------------
 
     def pagos(self) -> list[PagoProveedor]:
@@ -267,6 +350,10 @@ class Entorno:
                 select(PagoProveedor).where(PagoProveedor.organizacion_id == self.org)
             ).all()
         )
+
+    def pago(self, pago_id: UUID) -> PagoProveedor:
+        (fila,) = [p for p in self.pagos() if p.id == pago_id]
+        return fila
 
     def medios_de_pago(self) -> list[PagoProveedorMedio]:
         return list(

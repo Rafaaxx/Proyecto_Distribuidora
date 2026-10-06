@@ -339,3 +339,94 @@ describe('CompraFormScreen (tarea 12.1)', () => {
     })
   })
 })
+
+describe('CompraFormScreen: aviso de saldo a nuestro favor (change 12, tarea 9.4, PAG-02)', () => {
+  const AVISO = /este proveedor tiene saldo a nuestro favor de \$ 152\.460,00: cargada a cr[eé]dito, la compra se descuenta de ese saldo/i
+
+  function reglaSaldoDelProveedor(responder: () => { status: number; cuerpo: unknown }) {
+    return { metodo: 'GET', ruta: `/proveedores/${PROVEEDOR_ID}/saldo`, responder }
+  }
+
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+  })
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('al elegir un proveedor con saldo -152460.00 muestra el aviso informativo', async () => {
+    montarApi(apiFetchMock, [reglaSaldoDelProveedor(() => ({ status: 200, cuerpo: { saldo: '-152460.00' } }))])
+    const usuario = userEvent.setup()
+    renderPantalla()
+
+    expect(screen.queryByText(AVISO)).not.toBeInTheDocument()
+    await elegirCabecera(usuario)
+
+    expect(await screen.findByText(AVISO)).toBeInTheDocument()
+    expect(llamadas(apiFetchMock, 'GET', `/proveedores/${PROVEEDOR_ID}/saldo`)).toHaveLength(1)
+  })
+
+  it('el aviso no cambia la condición elegida ni impide confirmar', async () => {
+    montarApi(apiFetchMock, [
+      reglaSaldoDelProveedor(() => ({ status: 200, cuerpo: { saldo: '-152460.00' } })),
+      { metodo: 'POST', ruta: '/compras', responder: () => ({ status: 201, cuerpo: COMPRA_CONFIRMADA }) },
+    ])
+    const usuario = userEvent.setup()
+    renderPantalla()
+    await elegirCabecera(usuario)
+    await screen.findByText(AVISO)
+
+    await usuario.selectOptions(screen.getByLabelText(/^condici[oó]n$/i), 'CONTADO')
+    await usuario.selectOptions(screen.getByLabelText(/^condici[oó]n$/i), 'CREDITO')
+    await cargarCajaX12ConIva(usuario)
+
+    expect(screen.getByLabelText(/^condici[oó]n$/i)).toHaveValue('CREDITO')
+    await waitFor(() => expect(screen.getByRole('button', { name: /confirmar compra/i })).toBeEnabled())
+  })
+
+  it('con deuda (saldo 153720.00) no muestra el aviso', async () => {
+    montarApi(apiFetchMock, [reglaSaldoDelProveedor(() => ({ status: 200, cuerpo: { saldo: '153720.00' } }))])
+    const usuario = userEvent.setup()
+    renderPantalla()
+
+    await elegirCabecera(usuario)
+    await waitFor(() => expect(llamadas(apiFetchMock, 'GET', `/proveedores/${PROVEEDOR_ID}/saldo`)).toHaveLength(1))
+
+    expect(screen.queryByText(/saldo a nuestro favor/i)).not.toBeInTheDocument()
+  })
+
+  it('con saldo cero no muestra el aviso', async () => {
+    montarApi(apiFetchMock, [reglaSaldoDelProveedor(() => ({ status: 200, cuerpo: { saldo: '0.00' } }))])
+    const usuario = userEvent.setup()
+    renderPantalla()
+
+    await elegirCabecera(usuario)
+    await waitFor(() => expect(llamadas(apiFetchMock, 'GET', `/proveedores/${PROVEEDOR_ID}/saldo`)).toHaveLength(1))
+
+    expect(screen.queryByText(/saldo a nuestro favor/i)).not.toBeInTheDocument()
+  })
+
+  it('si la lectura del saldo falla no muestra el aviso y la compra se puede cargar igual', async () => {
+    montarApi(apiFetchMock, [
+      reglaSaldoDelProveedor(() => ({ status: 403, cuerpo: { title: 'Falta permiso', codigo: 'PERMISO_REQUERIDO' } })),
+    ])
+    const usuario = userEvent.setup()
+    renderPantalla()
+
+    await elegirCabecera(usuario)
+    await waitFor(() => expect(llamadas(apiFetchMock, 'GET', `/proveedores/${PROVEEDOR_ID}/saldo`)).toHaveLength(1))
+    await cargarCajaX12ConIva(usuario)
+
+    expect(screen.queryByText(/saldo a nuestro favor/i)).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: /confirmar compra/i })).toBeEnabled())
+  })
+
+  it('sin proveedor elegido no lee ningún saldo', async () => {
+    montarApi(apiFetchMock)
+    renderPantalla()
+
+    await screen.findByRole('option', { name: 'Bodega Sur' })
+
+    expect(apiFetchMock.mock.calls.filter(([ruta]) => String(ruta).endsWith('/saldo'))).toHaveLength(0)
+  })
+})

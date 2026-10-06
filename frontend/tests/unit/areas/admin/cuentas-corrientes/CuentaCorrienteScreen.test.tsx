@@ -312,3 +312,111 @@ describe('CuentaCorrienteScreen: acciones (tarea 7.3, 7.4, D1)', () => {
     )
   })
 })
+
+describe('CuentaCorrienteScreen: pagos y enlaces a la operación del proveedor (change 12, tarea 9.3)', () => {
+  const COMPRA_MOV = movimiento('c1', {
+    tipo: 'COMPRA',
+    sentido: 'AUMENTA',
+    importe: '153720.00',
+    saldo_acumulado: '153720.00',
+    occurred_at: '2026-04-01T15:00:00Z',
+  })
+  const PAGO_MOV = movimiento('p1', {
+    tipo: 'PAGO',
+    sentido: 'REDUCE',
+    importe: '100000.00',
+    saldo_acumulado: '53720.00',
+    occurred_at: '2026-04-02T15:00:00Z',
+  })
+  const ANULACION_PAGO_MOV = movimiento('p2', {
+    tipo: 'ANULACION_PAGO',
+    sentido: 'AUMENTA',
+    importe: '100000.00',
+    saldo_acumulado: '153720.00',
+    occurred_at: '2026-04-03T15:00:00Z',
+  })
+  const ANULACION_COMPRA_MOV = movimiento('c2', {
+    tipo: 'ANULACION_COMPRA',
+    sentido: 'REDUCE',
+    importe: '153720.00',
+    saldo_acumulado: '0.00',
+    occurred_at: '2026-04-04T15:00:00Z',
+  })
+  const TODOS = [COMPRA_MOV, PAGO_MOV, ANULACION_PAGO_MOV, ANULACION_COMPRA_MOV]
+
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+    apiFetchMock.mockResolvedValue(respuesta(200, estado(TODOS, { saldo_actual: '0.00' })))
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('con REGISTRAR_PAGO_PROVEEDOR ofrece "Registrar pago" con el proveedor precargado', async () => {
+    renderCuenta('PROVEEDOR', queryClientConYo('GES'))
+
+    const enlace = await screen.findByRole('link', { name: /registrar pago/i })
+
+    expect(enlace).toHaveAttribute('href', `/admin/pagos-proveedores/nuevo?proveedor=${ENTIDAD_ID}`)
+  })
+
+  it('sin REGISTRAR_PAGO_PROVEEDOR no ofrece "Registrar pago"', async () => {
+    renderCuenta('PROVEEDOR', queryClientConYo('GES', { permisos: ['GESTIONAR_PROVEEDORES'] }))
+
+    await screen.findByRole('table')
+
+    expect(screen.queryByRole('link', { name: /registrar pago/i })).not.toBeInTheDocument()
+  })
+
+  it('la cuenta de un cliente nunca ofrece "Registrar pago"', async () => {
+    renderCuenta('CLIENTE', queryClientConYo('ADM'))
+
+    await screen.findByRole('table')
+
+    expect(screen.queryByRole('link', { name: /registrar pago/i })).not.toBeInTheDocument()
+  })
+
+  it('con permiso de lectura de pagos y de compras cada movimiento enlaza a su operación', async () => {
+    renderCuenta('PROVEEDOR', queryClientConYo('GES'))
+
+    expect(await screen.findByRole('link', { name: 'Compra' })).toHaveAttribute('href', '/admin/compras/c1')
+    expect(screen.getByRole('link', { name: 'Pago' })).toHaveAttribute('href', '/admin/pagos-proveedores/p1')
+    expect(screen.getByRole('link', { name: 'Anulación de pago' })).toHaveAttribute('href', '/admin/pagos-proveedores/p2')
+    expect(screen.getByRole('link', { name: 'Anulación de compra' })).toHaveAttribute('href', '/admin/compras/c2')
+  })
+
+  it('con solo los permisos de anular también enlaza (ANULAR_PAGO_PROVEEDOR y ANULAR_COMPRA)', async () => {
+    renderCuenta('PROVEEDOR', queryClientConYo('GES', { permisos: ['GESTIONAR_PROVEEDORES', 'ANULAR_PAGO_PROVEEDOR', 'ANULAR_COMPRA'] }))
+
+    expect(await screen.findByRole('link', { name: 'Pago' })).toHaveAttribute('href', '/admin/pagos-proveedores/p1')
+    expect(screen.getByRole('link', { name: 'Compra' })).toHaveAttribute('href', '/admin/compras/c1')
+  })
+
+  it('sin permisos de pagos ni de compras ve los tipos sin enlace', async () => {
+    renderCuenta('PROVEEDOR', queryClientConYo('GES', { permisos: ['GESTIONAR_PROVEEDORES'] }))
+
+    const tabla = await screen.findByRole('table')
+
+    expect(within(tabla).getByText('Pago')).toBeInTheDocument()
+    expect(within(tabla).getByText('Compra')).toBeInTheDocument()
+    expect(within(tabla).queryAllByRole('link')).toHaveLength(0)
+  })
+
+  it('el permiso de pagos no habilita el enlace a las compras, ni al revés', async () => {
+    renderCuenta('PROVEEDOR', queryClientConYo('GES', { permisos: ['GESTIONAR_PROVEEDORES', 'REGISTRAR_PAGO_PROVEEDOR'] }))
+
+    await screen.findByRole('link', { name: 'Pago' })
+
+    expect(screen.queryByRole('link', { name: 'Compra' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Anulación de compra' })).not.toBeInTheDocument()
+  })
+
+  it('en la cuenta de un cliente los movimientos no llevan enlace', async () => {
+    renderCuenta('CLIENTE', queryClientConYo('ADM'))
+
+    const tabla = await screen.findByRole('table')
+
+    expect(within(tabla).queryAllByRole('link')).toHaveLength(0)
+  })
+})

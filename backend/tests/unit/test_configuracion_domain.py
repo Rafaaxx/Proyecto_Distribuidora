@@ -24,11 +24,19 @@ from app.modules.configuracion.domain.valores import (
 
 class TestAmbitoMotivo:
     @pytest.mark.parametrize("valor", list(AMBITOS_MOTIVO))
-    def test_acepta_los_siete_ambitos_de_la_lista_cerrada(self, valor: str) -> None:
+    def test_acepta_los_ocho_ambitos_de_la_lista_cerrada(self, valor: str) -> None:
         assert validar_ambito_motivo(valor) == valor
 
-    def test_hay_exactamente_siete_ambitos(self) -> None:
-        assert len(AMBITOS_MOTIVO) == 7
+    def test_hay_exactamente_ocho_ambitos(self) -> None:
+        """Ratchet: la lista cerrada de `motivo.ambito` (`03` §4) no crece sin que la
+        lista cerrada y su `CHECK` en la base cambien los dos (TR-09). El octavo es
+        `ANULACION_PAGO`, el de la anulación de pagos a proveedores (PAG-03,
+        `design.md` D1 del change 12)."""
+        assert len(AMBITOS_MOTIVO) == 8
+
+    def test_el_ambito_de_la_anulacion_de_pago_esta_en_la_lista(self) -> None:
+        """D1: sin esto, `PAGO_PROVEEDOR_ANULAR` no podría exigir un motivo válido."""
+        assert validar_ambito_motivo("ANULACION_PAGO") == "ANULACION_PAGO"
 
     def test_rechaza_un_ambito_fuera_de_la_lista_cerrada(self) -> None:
         with pytest.raises(AmbitoMotivoInvalidoError) as exc_info:

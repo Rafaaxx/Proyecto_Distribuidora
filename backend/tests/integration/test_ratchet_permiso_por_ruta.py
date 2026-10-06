@@ -111,6 +111,33 @@ def _rutas_con_prefijo(routes: list[object], prefijo: str = "") -> list[tuple[st
     return encontradas
 
 
+# Permiso EFECTIVO de cada ruta nueva (change 12, grupos 6 y 7, tareas 6.1 a 6.3 y
+# 7.1), leído del código real de `proveedores/api.py` y de `design.md` D7 y D8. El
+# ratchet de arriba exige que la ruta declare ALGÚN permiso; este declara CUÁL, para que
+# abrir una lectura por error (o quitarle un permiso que la spec exige) ponga el archivo
+# en rojo nombrando la ruta, y no pase por vacuidad como "ya declara alguno".
+#
+# `requiere_algun_permiso` deja el marcador con los códigos unidos por " o "
+# (`core/autenticacion.py`), así que la comparación es por conjunto y no por cadena: el
+# orden en que la ruta los lista no es parte del contrato.
+PERMISOS_ESPERADOS_POR_RUTA: dict[tuple[str, str], frozenset[str]] = {
+    # D7: leer pagos (listado y detalle) alcanza con cualquiera de los dos permisos de pago.
+    ("GET", "/api/v1/pagos-proveedores"): frozenset(
+        {"REGISTRAR_PAGO_PROVEEDOR", "ANULAR_PAGO_PROVEEDOR"}
+    ),
+    ("GET", "/api/v1/pagos-proveedores/{pago_id}"): frozenset(
+        {"REGISTRAR_PAGO_PROVEEDOR", "ANULAR_PAGO_PROVEEDOR"}
+    ),
+    # D8: el saldo lo abre la ficha del proveedor, el alta de pago o el aviso del alta de
+    # compra -- los tres permisos, no el de anular pago (que no llega a pantalla de alta).
+    ("GET", "/api/v1/proveedores/{proveedor_id}/saldo"): frozenset(
+        {"GESTIONAR_PROVEEDORES", "REGISTRAR_PAGO_PROVEEDOR", "REGISTRAR_COMPRA"}
+    ),
+    # D7 y SEG-06: anular es un permiso propio, distinto del de registrar.
+    ("POST", "/api/v1/pagos-proveedores/{pago_id}/anulacion"): frozenset({"ANULAR_PAGO_PROVEEDOR"}),
+}
+
+
 def _dependencias_del_arbol(dependant: object) -> list[object]:
     """Recorre recursivamente el árbol de `Dependant` de una `APIRoute`
     (incluye las sub-dependencias declaradas como parámetros de la función,
@@ -147,6 +174,63 @@ def rutas_de_negocio_sin_permiso(
             if not ruta_declara_permiso(route):
                 sin_permiso.append(clave)
     return sin_permiso
+
+
+def permisos_declarados_de(route: APIRoute) -> frozenset[str]:
+    """Conjunto de códigos que `route` declara a lo largo de su árbol de dependencias
+    (`permiso_requerido`; `core/autenticacion.py` los une con " o " cuando la dependencia
+    es `requiere_algun_permiso`). El conjunto vacío significa que no declara ninguno --
+    la ruta está en `RUTAS_EXENTAS_DE_PERMISO` y el ratchet central la perdona."""
+    declarados: set[str] = set()
+    for dependant in _dependencias_del_arbol(route.dependant):
+        codigo = getattr(getattr(dependant, "call", None), "permiso_requerido", None)
+        if codigo is not None:
+            declarados.update(codigo.split(" o "))
+    return frozenset(declarados)
+
+
+def test_las_rutas_nuevas_de_declaran_el_permiso_que_exige_la_spec(database_url: str) -> None:
+    """Complementario de `test_toda_ruta_de_negocio_declara_el_permiso_que_exige`: el
+    ratchet central exige que exista una dependencia de permiso; este exige que sea LA
+    esperada, comparando contra los `Dependant` de las rutas reales de la app.
+
+    Sin esto, `GET /pagos-proveedores` podría declarar solo `ANULAR_PAGO_PROVEEDOR` (o
+    `GESTIONAR_PROVEEDORES`) y el ratchet central seguiría en verde: la lectura seguiría
+    existiendo, pero para un subconjunto equivocado de usuarios (D7). El marcador se lee
+    del árbol de `Dependant` de la ruta real, no de una constante.
+    """
+    app = crear_app(
+        Settings(
+            _env_file=None,
+            database_url=database_url,
+            jwt_secret="secreto-de-prueba",
+            jwt_kid="1",
+        )
+    )
+    rutas = {
+        (metodo, path): route
+        for path, route in _rutas_con_prefijo(app.routes)
+        for metodo in (route.methods or set())
+    }
+
+    # Recorre la declaración: si una tupla apunta a una ruta inexistente, el ratchet
+    # central no la vería (no está en `app.routes`), y este archivo tiene que notarlo.
+    for ruta in PERMISOS_ESPERADOS_POR_RUTA:
+        assert ruta in rutas, f"Ruta declarada {ruta} no está registrada en la app."
+
+    permisos_reales = {
+        ruta: permisos_declarados_de(rutas[ruta]) for ruta in PERMISOS_ESPERADOS_POR_RUTA
+    }
+
+    distintos = sorted(
+        (ruta, sorted(declarado), sorted(esperado))
+        for ruta, esperado in PERMISOS_ESPERADOS_POR_RUTA.items()
+        if (declarado := permisos_reales[ruta]) != esperado
+    )
+    assert not distintos, (
+        "El permiso declarado no es el que exige la spec (`design.md` D7 y D8), por ruta "
+        f"(declarado, esperado): {distintos}"
+    )
 
 
 def test_toda_ruta_de_negocio_declara_el_permiso_que_exige(database_url: str) -> None:

@@ -845,6 +845,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/proveedores/{proveedor_id}/saldo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Saldo De Proveedor
+         * @description Saldo actual del proveedor (change 12, tarea 6.2; `design.md` D8; CC-04, INV-03).
+         *
+         *     Es la lectura liviana que consume el alta de pago (saldo actual y resultante) y el aviso
+         *     del alta de compra: sale del `service.py` de `cuentas_corrientes` (dirección permitida,
+         *     ADR-043 punto 15), que lo calcula en SQL sobre `saldo_cuenta` y da `"0.00"` si la cuenta
+         *     no tiene movimientos. Un proveedor ajeno o inexistente responde 404 antes de leer el
+         *     saldo (INV-21, SEG-07).
+         */
+        get: operations["obtener_saldo_de_proveedor_api_v1_proveedores__proveedor_id__saldo_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/costos": {
         parameters: {
             query?: never;
@@ -986,6 +1012,93 @@ export interface paths {
          *     o no existe (INV-21).
          */
         get: operations["obtener_compra_api_v1_compras__compra_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pagos-proveedores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Pagos
+         * @description Pagos de la organización del más reciente al más viejo, por cursor (change 12, tarea
+         *     6.1; PAG-01, TR-04, `design.md` D7 y D11): `REGISTRAR_PAGO_PROVEEDOR` o
+         *     `ANULAR_PAGO_PROVEEDOR`. `desde` y `hasta` son fechas de pago inclusivas; un `limite`
+         *     fuera de 1 a 200, un rango invertido (`RANGO_DE_FECHAS_INVALIDO`), un cursor ilegible
+         *     (`CURSOR_INVALIDO`) o un `estado`/`origen` desconocido son 422, no un recorte ni un
+         *     filtro ignorado.
+         *
+         *     Incluye los pagos de origen `COMPRA` con su `compra_id` (D11), así que el listado es
+         *     el de "todos los pagos de la semana" del ejemplo de D11.
+         */
+        get: operations["listar_pagos_api_v1_pagos_proveedores_get"];
+        put?: never;
+        /**
+         * Registrar Pago Proveedor
+         * @description `POST /pagos-proveedores` (change 12, tarea 4.3). El resultado sale de
+         *     `comando.resultado`, no de una relectura: un reenvío idempotente del mismo
+         *     `Operation-Id` devuelve exactamente lo mismo (INV-06). Los importes viajan y vuelven
+         *     como string (INV-03) y los errores de medio traen su índice 0-based en el Problem
+         *     Details (`02` §11, PAG-01).
+         */
+        post: operations["registrar_pago_proveedor_api_v1_pagos_proveedores_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pagos-proveedores/{pago_id}/anulacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anular Pago Proveedor
+         * @description `POST /pagos-proveedores/{id}/anulacion` (change 12, PAG-03, tarea 5.4).
+         *
+         *     El resultado sale de `comando.resultado`, no de una relectura: un reenvío idempotente
+         *     del mismo `Operation-Id` devuelve exactamente lo mismo (INV-06). El saldo es el que
+         *     queda DESPUÉS de la anulación (CC-04) y viaja como string (INV-03).
+         *
+         *     El endpoint no dice si el pago es de una compra vigente (D2), si ya estaba anulado
+         *     (PAG-03) ni si el motivo es de otro ámbito (D1): eso lo decide el servicio con su
+         *     código estable y el Problem Details lotranslate (`02` §11).
+         */
+        post: operations["anular_pago_proveedor_api_v1_pagos_proveedores__pago_id__anulacion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pagos-proveedores/{pago_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Pago
+         * @description Detalle de un pago con sus medios (nombre, importe y referencia), la observación, el
+         *     estado de su compra si es de origen `COMPRA` y, si está anulado, el motivo, el usuario
+         *     y el momento (PAG-01, PAG-03). 404 si es de otra organización o no existe (INV-21),
+         *     igual que un id inexistente.
+         */
+        get: operations["obtener_pago_api_v1_pagos_proveedores__pago_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2367,6 +2480,13 @@ export interface components {
             /** Cursor Siguiente */
             cursor_siguiente: string | null;
         };
+        /** PaginaPagos */
+        PaginaPagos: {
+            /** Items */
+            items: components["schemas"]["PagoResumenResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
         /** PaginaProductos */
         PaginaProductos: {
             /** Items */
@@ -2397,6 +2517,217 @@ export interface components {
             items: components["schemas"]["UbicacionResponse"][];
             /** Cursor Siguiente */
             cursor_siguiente: string | null;
+        };
+        /**
+         * PagoAnulacionResponse
+         * @description La anulación de un pago (PAG-03): motivo, usuario y momento.
+         */
+        PagoAnulacionResponse: {
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+            /** Motivo Nombre */
+            motivo_nombre: string | null;
+            /**
+             * Anulado En
+             * Format: date-time
+             */
+            anulado_en: string;
+            /**
+             * Anulado Por Id
+             * Format: uuid
+             */
+            anulado_por_id: string;
+            /** Anulado Por Nombre */
+            anulado_por_nombre: string;
+        };
+        /**
+         * PagoDetalleResponse
+         * @description El detalle del pago (PAG-01, PAG-03). `anulacion` es `None` mientras el pago esté
+         *     `CONFIRMADA`. `compra_estado` es `None` para un pago `INDEPENDIENTE`; para uno de origen
+         *     `COMPRA` es el estado de la compra, que es lo que permite no ofrecer "Anular" mientras
+         *     la compra sigue vigente (CMP-05, `design.md` D2).
+         */
+        PagoDetalleResponse: {
+            /**
+             * Pago Id
+             * Format: uuid
+             */
+            pago_id: string;
+            /**
+             * Fecha
+             * Format: date
+             */
+            fecha: string;
+            /**
+             * Proveedor Id
+             * Format: uuid
+             */
+            proveedor_id: string;
+            /** Proveedor Nombre */
+            proveedor_nombre: string;
+            /** Importe */
+            importe: string;
+            /** Origen */
+            origen: string;
+            /** Estado */
+            estado: string;
+            /** Compra Id */
+            compra_id: string | null;
+            /** Observacion */
+            observacion: string | null;
+            /** Compra Estado */
+            compra_estado: string | null;
+            /** Medios */
+            medios: components["schemas"]["PagoMedioResponse"][];
+            anulacion: components["schemas"]["PagoAnulacionResponse"] | null;
+        };
+        /**
+         * PagoMedioRequest
+         * @description Un medio del pago (D6). `importe` como string estricto: un numero JSON ya degradado
+         *     por `float` se rechaza con 422 (INV-03).
+         */
+        PagoMedioRequest: {
+            /**
+             * Medio Pago Id
+             * Format: uuid
+             */
+            medio_pago_id: string;
+            /** Importe */
+            importe: string;
+            /** Referencia */
+            referencia?: string | null;
+        };
+        /**
+         * PagoMedioResponse
+         * @description Un medio del pago en el detalle, con su nombre resuelto (PAG-01, INV-03).
+         */
+        PagoMedioResponse: {
+            /**
+             * Medio Pago Id
+             * Format: uuid
+             */
+            medio_pago_id: string;
+            /** Medio Nombre */
+            medio_nombre: string | null;
+            /** Importe */
+            importe: string;
+            /** Referencia */
+            referencia: string | null;
+        };
+        /**
+         * PagoProveedorAnularRequest
+         * @description `POST /pagos-proveedores/{id}/anulacion`. El `pago_id` va en la ruta, no en el
+         *     cuerpo. `motivo_id` es obligatorio y el servicio exige que sea del ambito
+         *     `ANULACION_PAGO` (D1). `organizacion_id` nunca aparece (sale del token, INV-21/TR-08).
+         *     No se acepta `importe` ni `estado`: la anulación no edita el pago más allá de su estado
+         *     y sus columnas de anulación (INV-05, TR-06).
+         *
+         *     Sin `extra="forbid"`, igual que `PagoProveedorRegistrarRequest`: el endpoint arma el
+         *     `contenido` del comando campo por campo, así que un campo extra del cuerpo se ignora
+         *     y nunca llega al bus. Quien manda de verdad es
+         *     `PagoProveedorAnularContenidoV1`, que sí lo prohíbe (`extra="forbid"`).
+         */
+        PagoProveedorAnularRequest: {
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+        };
+        /**
+         * PagoProveedorAnularResponse
+         * @description Sale de `comando.resultado` (INV-06). `saldo` es el saldo del proveedor DESPUÉS de
+         *     la anulación (CC-04), que la pantalla muestra junto al rótulo del saldo.
+         */
+        PagoProveedorAnularResponse: {
+            /**
+             * Pago Id
+             * Format: uuid
+             */
+            pago_id: string;
+            /** Estado */
+            estado: string;
+            /** Saldo */
+            saldo: string;
+        };
+        /**
+         * PagoProveedorRegistrarRequest
+         * @description `POST /pagos-proveedores`. `organizacion_id` nunca aparece (sale del token,
+         *     INV-21/TR-08). `medios` no declara `min_length`: una lista vacia la rechaza el dominio
+         *     con `MEDIOS_INVALIDOS` y su codigo estable, no un 422 generico de Pydantic (D6).
+         */
+        PagoProveedorRegistrarRequest: {
+            /**
+             * Proveedor Id
+             * Format: uuid
+             */
+            proveedor_id: string;
+            /**
+             * Fecha
+             * Format: date
+             */
+            fecha: string;
+            /** Importe */
+            importe: string;
+            /** Medios */
+            medios: components["schemas"]["PagoMedioRequest"][];
+            /** Observacion */
+            observacion?: string | null;
+        };
+        /**
+         * PagoProveedorRegistrarResponse
+         * @description Sale de `comando.resultado`, no de una relectura: un reenvio idempotente del mismo
+         *     `Operation-Id` devuelve exactamente lo mismo (INV-06). `saldo` es el saldo resultante
+         *     del proveedor (CC-04), que la pantalla muestra como "saldo despues del pago".
+         */
+        PagoProveedorRegistrarResponse: {
+            /**
+             * Pago Id
+             * Format: uuid
+             */
+            pago_id: string;
+            /** Estado */
+            estado: string;
+            /** Importe */
+            importe: string;
+            /** Saldo */
+            saldo: string;
+        };
+        /**
+         * PagoResumenResponse
+         * @description Una fila del listado de pagos (PAG-01, `design.md` D11). Importes como string
+         *     (INV-03). `compra_id` es `None` para un pago `INDEPENDIENTE` y el de la compra para uno
+         *     de origen `COMPRA`: es lo que permite enlazar el pago con su compra.
+         */
+        PagoResumenResponse: {
+            /**
+             * Pago Id
+             * Format: uuid
+             */
+            pago_id: string;
+            /**
+             * Fecha
+             * Format: date
+             */
+            fecha: string;
+            /**
+             * Proveedor Id
+             * Format: uuid
+             */
+            proveedor_id: string;
+            /** Proveedor Nombre */
+            proveedor_nombre: string;
+            /** Importe */
+            importe: string;
+            /** Origen */
+            origen: string;
+            /** Estado */
+            estado: string;
+            /** Compra Id */
+            compra_id: string | null;
         };
         /** PresentacionAgregarRequest */
         PresentacionAgregarRequest: {
@@ -2813,6 +3144,17 @@ export interface components {
              * Format: uuid
              */
             movimiento_id: string;
+            /** Saldo */
+            saldo: string;
+        };
+        /**
+         * SaldoProveedorResponse
+         * @description `GET /proveedores/{id}/saldo` (change 12, tarea 6.2; `design.md` D8). El saldo actual
+         *     como string (INV-03), calculado en SQL sobre `saldo_cuenta` y `"0.00"` si la cuenta no
+         *     tiene movimientos (CC-04). Es el "saldo actual" que muestra el alta de pago y el aviso
+         *     del saldo resultante.
+         */
+        SaldoProveedorResponse: {
             /** Saldo */
             saldo: string;
         };
@@ -4728,6 +5070,39 @@ export interface operations {
             };
         };
     };
+    obtener_saldo_de_proveedor_api_v1_proveedores__proveedor_id__saldo_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                proveedor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaldoProveedorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     informar_costos_api_v1_costos_post: {
         parameters: {
             query?: never;
@@ -5001,6 +5376,152 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CompraDetalleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_pagos_api_v1_pagos_proveedores_get: {
+        parameters: {
+            query?: {
+                proveedor_id?: string | null;
+                estado?: ("CONFIRMADA" | "ANULADA") | null;
+                origen?: ("COMPRA" | "INDEPENDIENTE") | null;
+                desde?: string | null;
+                hasta?: string | null;
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaPagos"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registrar_pago_proveedor_api_v1_pagos_proveedores_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PagoProveedorRegistrarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagoProveedorRegistrarResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    anular_pago_proveedor_api_v1_pagos_proveedores__pago_id__anulacion_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                pago_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PagoProveedorAnularRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagoProveedorAnularResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_pago_api_v1_pagos_proveedores__pago_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                pago_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagoDetalleResponse"];
                 };
             };
             /** @description Validation Error */

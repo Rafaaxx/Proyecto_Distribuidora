@@ -200,9 +200,9 @@ El catálogo de `permiso` se sincroniza por migración con `01` §19. Permisos p
 | --- | --- |
 | `alicuota_iva` | `id`, `organizacion_id`, `nombre`, `valor` `numeric(9,6)`, `activo` |
 | `medio_pago` | `id`, `organizacion_id`, `nombre`, `requiere_referencia` `boolean`, `activo` |
-| `motivo` | `id`, `organizacion_id`, `ambito` (`AJUSTE_STOCK`, `ANULACION_VENTA`, `ANULACION_COMPRA`, `ANULACION_COBRANZA`, `DESCUENTO_MANUAL`, `LISTA_ANTERIOR`, `LIBERACION_JORNADA`), `nombre`, `activo` |
+| `motivo` | `id`, `organizacion_id`, `ambito` (`AJUSTE_STOCK`, `ANULACION_VENTA`, `ANULACION_COMPRA`, `ANULACION_COBRANZA`, `ANULACION_PAGO`, `DESCUENTO_MANUAL`, `LISTA_ANTERIOR`, `LIBERACION_JORNADA`), `nombre`, `activo` |
 
-Las organizaciones nuevas nacen con tres motivos del ámbito `ANULACION_COMPRA` ("Error de carga", "Devolución al proveedor" y "Otro"); la migración del change 11 los agrega, de forma idempotente, a las organizaciones existentes que no tengan ninguno. Los medios de pago y los motivos activos se leen por API (`GET /configuracion/medios-pago` y `GET /configuracion/motivos?ambito=`) (ADR-043).
+Las organizaciones nuevas nacen con tres motivos del ámbito `ANULACION_COMPRA` ("Error de carga", "Devolución al proveedor" y "Otro") y tres del ámbito `ANULACION_PAGO` ("Error de carga", "Pago rechazado o devuelto" y "Otro"); la migración del change 11 agrega los primeros y la del change 12 (`d1e2f3a4b5c6`) los segundos, de forma idempotente, a las organizaciones existentes que no tengan ninguno de ese ámbito. Los medios de pago y los motivos activos se leen por API (`GET /configuracion/medios-pago` y `GET /configuracion/motivos?ambito=`) (ADR-043).
 
 ## 5. Catálogo
 
@@ -290,10 +290,12 @@ La presentación de referencia se resuelve por este indicador y no con una clave
 
 | Tabla | Columnas |
 | --- | --- |
-| `pago_proveedor` | `id`, `organizacion_id`, `proveedor_id`, `fecha`, `importe` `numeric(14,2)` `CHECK (> 0)`, `estado` (`CONFIRMADA`, `ANULADA`), `origen` (`COMPRA`, `INDEPENDIENTE`), `compra_id` (nulo si el origen es `INDEPENDIENTE`; único si no es nulo), `anulado_en`, `anulado_por_id`, `anulacion_motivo_id` (nulable: el change 12 decide el motivo de anulación de un pago), columnas de operación |
+| `pago_proveedor` | `id`, `organizacion_id`, `proveedor_id`, `fecha` (la del pago real), `importe` `numeric(14,2)` `CHECK (> 0)`, `estado` (`CONFIRMADA`, `ANULADA`), `origen` (`COMPRA`, `INDEPENDIENTE`), `compra_id` (nulo si el origen es `INDEPENDIENTE`; único si no es nulo), `observacion` `text` (opcional, inmutable; hasta 500 caracteres, aplicado en el esquema de la API y en el contenido del comando, sin `CHECK`), `anulado_en`, `anulado_por_id`, `anulacion_motivo_id` (nulable en la columna; `ck_pago_proveedor__anulacion_coherente` exige "anulada ⇔ momento, usuario y motivo", igual que `compra`), columnas de operación |
 | `pago_proveedor_medio` | `id`, `organizacion_id`, `pago_id`, `medio_pago_id`, `importe`, `referencia` |
 
-INV-08 (suma de medios = importe) se valida en el servicio y se cubre con prueba de propiedad. El change 11 crea estas tablas para el pago de una compra de contado (`origen = COMPRA`, ADR-043); el change 12 agrega el pago independiente sobre las mismas tablas. `app_runtime` tiene `SELECT, INSERT, UPDATE` sobre `compra` y `pago_proveedor` (el `UPDATE` solo alcanza el estado y los campos de anulación), `SELECT, INSERT` sobre `compra_linea` y `pago_proveedor_medio`, y nunca `DELETE` (INV-05).
+Índices de listado: `(organizacion_id, fecha DESC, id DESC)` y `(organizacion_id, proveedor_id, fecha DESC, id DESC)`.
+
+INV-08 (suma de medios = importe) se valida en el servicio y se cubre con prueba de propiedad. El change 11 creó estas tablas para el pago de una compra de contado (`origen = COMPRA`, ADR-043); el change 12 agregó el pago independiente sobre las mismas tablas, con la anulación en columnas del propio pago (no en una tabla aparte como `cobranza_anulacion`, ADR-046). `observacion` queda fuera del `UPDATE` de `app_runtime`. `app_runtime` tiene `SELECT, INSERT, UPDATE` sobre `compra` y `pago_proveedor` (el `UPDATE` solo alcanza el estado y los campos de anulación), `SELECT, INSERT` sobre `compra_linea` y `pago_proveedor_medio`, y nunca `DELETE` (INV-05).
 
 ## 7. Costeo
 

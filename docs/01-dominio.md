@@ -175,9 +175,10 @@ Ejemplo de CST-11:
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| PAG-01 | Un pago registra proveedor, fecha, importe y uno o más medios cuya suma es igual al importe. | 1 |
-| PAG-02 | El pago reduce el saldo general del proveedor. No modifica costos. | 1 |
-| PAG-03 | Un pago confirmado solo se corrige por anulación con permiso y motivo. | 1 |
+| PAG-01 | Un pago registra proveedor, fecha, importe y de 1 a 20 medios activos de la organización cuya suma es igual al importe (INV-08), con la referencia que cada medio exija; el mismo medio puede repetirse. La fecha es la del pago real: no puede ser posterior a hoy y no tiene límite hacia atrás; el movimiento de cuenta usa el momento en que se registra. Admite una observación opcional (guardada recortada) donde se anota, por ejemplo, qué facturas paga. Se puede pagar a un proveedor inactivo (ADR-046). | 1 |
+| PAG-02 | El pago reduce el saldo general del proveedor y no se imputa a ninguna compra. Puede superar la deuda: el saldo queda a nuestro favor y la próxima compra a crédito lo absorbe, sin operación nueva; la pantalla pide confirmación explícita cuando el pago lo deja a nuestro favor. No modifica costos ni stock. Desde el primer pago la cuenta del proveedor ya no admite saldo inicial (CC-08). | 1 |
+| PAG-03 | Un pago confirmado solo se corrige por anulación con permiso y con un motivo del ámbito `ANULACION_PAGO`. La anulación deja el pago `ANULADA` y registra un movimiento `ANULACION_PAGO` que devuelve el saldo (CC-03). El pago de una compra de contado se anula por separado solo si la compra ya está anulada (sin devolución del pago, CMP-05); mientras la compra esté vigente se rechaza. Se puede anular el pago de un proveedor inactivo (ADR-046). | 1 |
+| PAG-04 | Los pagos se registran y se anulan solo con conexión. | 1 |
 
 ## 7. Precios
 
@@ -500,8 +501,8 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 | GESTIONAR_DESCUENTOS | Reglas de descuento | ✓ | | | | |
 | REGISTRAR_COMPRA | Registrar compras | ✓ | ✓ | | | |
 | ANULAR_COMPRA | Anular compras | ✓ | ✓ | | | |
-| REGISTRAR_PAGO_PROVEEDOR | Registrar pagos | ✓ | ✓ | | | |
-| ANULAR_PAGO_PROVEEDOR | Anular pagos | ✓ | ✓ | | | |
+| REGISTRAR_PAGO_PROVEEDOR | Registrar pagos; ver el listado y el detalle de pagos, el saldo del proveedor y elegir proveedor | ✓ | ✓ | | | |
+| ANULAR_PAGO_PROVEEDOR | Anular pagos; ver el listado y el detalle de pagos | ✓ | ✓ | | | |
 | TRANSFERIR_STOCK | Transferencias; ver ubicaciones, stock por ubicación y kardex (sin costos) | ✓ | ✓ | ✓ | ✓ | |
 | AJUSTAR_STOCK | Ajustes | ✓ | ✓ | | | |
 | PERMITIR_STOCK_NEGATIVO | Operar con stock negativo online | ✓ | | | | |
@@ -524,6 +525,8 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 | ANULAR_FACTURA | Anular facturas | ✓ | ✓ | | | |
 
 Roles: ADM = Administrador, GES = Administración, SUP = Supervisor comercial, VEN = Vendedor/Repartidor, CON = Consulta/Dirección. Los roles son plantillas: la organización puede modificar su composición y los topes de descuento. El vendedor ve el saldo y el crédito disponible de sus clientes; no ve costos ni utilidad.
+
+El listado y el detalle de pagos exigen `REGISTRAR_PAGO_PROVEEDOR` o `ANULAR_PAGO_PROVEEDOR`; el saldo de un proveedor se lee con `GESTIONAR_PROVEEDORES`, `REGISTRAR_PAGO_PROVEEDOR` o `REGISTRAR_COMPRA`; la lista de proveedores para elegir también con `REGISTRAR_PAGO_PROVEEDOR`; medios de pago y motivos, con cualquier sesión (ADR-043, ADR-046).
 
 ## 20. Invariantes
 
@@ -564,6 +567,7 @@ Deben cumplirse siempre y estar cubiertos por pruebas automatizadas.
 | Compra | + | Recalcula | — | + (y − si contado) | — | Sí |
 | Anulación de compra | − | Recalcula o mantiene | — | − | — | Sí |
 | Pago a proveedor | — | — | — | − | — | Sí |
+| Anulación de pago | — | — | — | + | — | Sí |
 | Transferencia | − origen / + destino | — | — | — | — | Sí |
 | Ajuste de stock | + / − | — | — | — | — | Sí |
 | Venta | − | — | + total (y − si cobra) | — | Congela | Sí |

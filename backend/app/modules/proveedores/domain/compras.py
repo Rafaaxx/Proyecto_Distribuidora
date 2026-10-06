@@ -39,11 +39,10 @@ from app.modules.proveedores.domain.errores import (
     FechaInvalidaError,
     ImporteInvalidoError,
     LineasInvalidasError,
-    MediosNoSumanImporteError,
     RangoDeFechasInvalidoError,
-    ReferenciaObligatoriaError,
     ValorInvalidoError,
 )
+from app.modules.proveedores.domain.pagos import validar_importe, validar_medios
 
 CONTADO = "CONTADO"
 CREDITO = "CREDITO"
@@ -236,38 +235,35 @@ def calcular_compra(lineas: Sequence[EntradaDeLinea]) -> TotalesDeCompra:
 @dataclass(frozen=True)
 class MedioDeEntrada:
     """Un medio del pago de contado ya resuelto por el servicio: su importe, la
-    referencia informada y si el medio de la organización la exige."""
+    referencia informada y si el medio de la organización la exige.
+
+    Cumple el contrato `pagos.MedioDePago` por forma, así que `validar_medios` lo acepta
+    sin convertirlo (tarea 3.3)."""
 
     importe: Decimal
     referencia: str | None
     requiere_referencia: bool
 
 
-def _validar_importe(valor: Decimal, nombre: str) -> Decimal:
-    if (
-        not valor.is_finite()
-        or valor <= 0
-        or _decimales(valor) > _DECIMALES_DE_IMPORTE
-        or valor > _IMPORTE_MAXIMO
-    ):
-        raise ImporteInvalidoError(
-            f"{nombre} debe ser mayor que cero, con hasta {_DECIMALES_DE_IMPORTE} decimales "
-            f"y no más de {_IMPORTE_MAXIMO}."
-        )
-    return redondear_importe(valor)
-
-
 def validar_total_factura(total_factura: Decimal) -> Decimal:
     """D1: el total de factura es positivo con 2 decimales (`IMPORTE_INVALIDO`);
-    devuelve el importe con exactamente 2 decimales."""
-    return _validar_importe(total_factura, "El total de factura")
+    devuelve el importe con exactamente 2 decimales. La regla es la misma de
+    `pagos.validar_importe` (TR-01): vive una sola vez (tarea 3.3)."""
+    return validar_importe(total_factura, "El total de factura")
 
 
 def validar_pago(condicion: str, total_factura: Decimal, medios: Sequence[MedioDeEntrada]) -> None:
     """D2, CMP-01, CMP-03, INV-08: una compra a crédito no trae medios
     (`CONDICION_INVALIDA`); una de contado trae medios positivos con 2 decimales cuya
     suma es el total de factura (`MEDIOS_NO_SUMAN_IMPORTE`) y, donde el medio la exige,
-    referencia no vacía (`REFERENCIA_OBLIGATORIA`)."""
+    referencia no vacía (`REFERENCIA_OBLIGATORIA`).
+
+    La parte de medios --importes, referencias y suma exacta-- la resuelve
+    `pagos.validar_medios`, la misma función pura que usa el pago a un proveedor
+    (tarea 3.3, INV-08 es una sola regla). El pago de contado no tiene tope de medios
+    (CMP-03 no lo fija) y uno solo ya es inválido por `MEDIOS_NO_SUMAN_IMPORTE`, de ahí
+    `minimo=0, maximo=None`: el contrato y los códigos de esta función no cambian.
+    """
     if condicion not in CONDICIONES:
         raise CondicionInvalidaError(f"La condición {condicion!r} no es CONTADO ni CREDITO.")
 
@@ -276,15 +272,7 @@ def validar_pago(condicion: str, total_factura: Decimal, medios: Sequence[MedioD
             raise CondicionInvalidaError("Una compra a crédito no lleva medios de pago.")
         return
 
-    suma = Decimal("0.00")
-    for medio in medios:
-        suma += _validar_importe(medio.importe, "El importe de cada medio")
-        if medio.requiere_referencia and not (medio.referencia and medio.referencia.strip()):
-            raise ReferenciaObligatoriaError("El medio de pago exige una referencia.")
-    if suma != total_factura:
-        raise MediosNoSumanImporteError(
-            f"Los medios suman {suma} y el total de factura es {total_factura}."
-        )
+    validar_medios(total_factura, medios, minimo=0, maximo=None)
 
 
 def validar_fecha(fecha: date, *, hoy: date) -> None:

@@ -31,6 +31,7 @@ from app.modules.configuracion import service as configuracion_service
 from app.modules.cuentas_corrientes import service as cuentas_corrientes_service
 from app.modules.identidad import service as identidad_service
 from app.modules.proveedores import repository
+from app.modules.proveedores.domain import pagos
 from app.modules.proveedores.domain.compras import (
     CONTADO,
     CostoDeLinea,
@@ -454,8 +455,9 @@ class LineaDeCompra:
 
 
 @dataclass(frozen=True)
-class MedioDeCompra:
-    """Un medio del pago de una compra de contado (D2)."""
+class MedioAPagar:
+    """Un medio de pago (el del pago de contado de una compra, D2, o el de un pago
+    independiente, PAG-01)."""
 
     medio_pago_id: UUID
     importe: Decimal
@@ -474,10 +476,13 @@ class ResultadoDeCompra:
 
 
 _CUENTA_PROVEEDOR = "PROVEEDOR"
+_TIPO_MOVIMIENTO_PAGO = "PAGO"
+"""El tipo del movimiento de cuenta que aplica un pago (CC-04, PAG-02): reduce el saldo
+del proveedor sin imputarse a ninguna compra."""
 
 
 def _resolver_medios(
-    organizacion_id: UUID, sesion: Session, medios: Sequence[MedioDeCompra]
+    organizacion_id: UUID, sesion: Session, medios: Sequence[MedioAPagar]
 ) -> list[MedioDeEntrada]:
     """D2: cada medio existe en la organización (404 si no, INV-21) y está activo
     (`MEDIO_PAGO_INACTIVO`); devuelve la entrada de validación con si el medio exige
@@ -626,7 +631,7 @@ def confirmar_compra(
     numero_comprobante: str | None,
     observacion: str | None,
     lineas: Sequence[LineaDeCompra],
-    medios: Sequence[MedioDeCompra],
+    medios: Sequence[MedioAPagar],
     operation_id: UUID,
     usuario_id: UUID,
     dispositivo_id: UUID,
@@ -794,15 +799,17 @@ def confirmar_compra(
     )
     pago: PagoProveedor | None = None
     if condicion == CONTADO:
-        pago = repository.insertar_pago_de_compra(
+        pago = repository.insertar_pago(
             organizacion_id,
             sesion,
-            pago=repository.DatosDePagoDeCompra(
+            pago=repository.DatosDePago(
                 id=pago_id,
                 proveedor_id=proveedor_id,
-                compra_id=compra_id,
                 fecha=fecha,
                 importe=total,
+                origen=pagos.ORIGEN_COMPRA,
+                compra_id=compra_id,
+                observacion=None,
                 operation_id=operation_id,
                 usuario_id=usuario_id,
                 dispositivo_id=dispositivo_id,
@@ -820,6 +827,249 @@ def confirmar_compra(
         )
     return ResultadoDeCompra(
         compra=compra, lineas=filas, diferencias_de_costo=diferencias, pago=pago
+    )
+
+
+# --- registro de pagos a proveedor (change 12, PAG-01 y PAG-02, D2, D3 a D6, D10) --------
+
+
+@dataclass(frozen=True)
+class ResultadoDePago:
+    """El pago confirmado y el saldo del proveedor después de aplicarlo (CC-04)."""
+
+    pago: PagoProveedor
+    saldo: Decimal
+
+
+def registrar_pago(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    proveedor_id: UUID,
+    fecha: date,
+    importe: Decimal,
+    medios: Sequence[MedioAPagar],
+    observacion: str | None,
+    operation_id: UUID,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+    occurred_at: datetime,
+) -> ResultadoDePago:
+    """`PAGO_PROVEEDOR_REGISTRAR` (`design.md` D2 a D6 y D10; PAG-01, PAG-02, CC-03, CC-04,
+    CC-08, INV-13, INV-21, TR-04, TR-09).
+
+    El pago nace `CONFIRMADA` y de origen `INDEPENDIENTE`: no se imputa a ninguna compra
+    (PAG-02) y por eso no toca stock, costo promedio ni historia de costo (CST-14). Reduce
+    el saldo del proveedor, siempre mayor que la deuda (D3, opción A: el saldo queda
+    a favor de la organización sin movimiento de compensación; lo absorbe la compra
+    siguiente). Se admite pagar a un proveedor inactivo con deuda (D5).
+
+    Orden (D10, el mismo de `anular_compra`): 1) reglas puras; 2) referencias, con el
+    proveedor `FOR SHARE`; 3) saldo bloqueado `FOR UPDATE`; 4) una sola escritura del
+    pago con sus medios y el movimiento `PAGO`. El movimiento usa el `occurred_at` del
+    comando, no la fecha del pago (D4, opción A), y `origen_id` es el id del pago.
+    """
+    # 1) reglas puras, antes de tocar la base (INV-01: si algo falla, no se construyó nada)
+    observacion_a_guardar = pagos.validar_pago_independiente(
+        importe, fecha, observacion, hoy=reloj.now().date()
+    )
+    entradas_de_medio = _resolver_medios(organizacion_id, sesion, medios)
+    pagos.validar_medios(importe, entradas_de_medio)
+
+    # 2) referencias: el proveedor debe existir en la organización (INV-21, 404).
+    #    D5: se admite uno inactivo, así que no se mira `activo`.
+    proveedor = repository.obtener_proveedor_por_id_para_compartir(
+        organizacion_id, proveedor_id, sesion
+    )
+    if proveedor is None:
+        raise RecursoNoEncontradoError(
+            f"El proveedor {proveedor_id} no existe en esta organización."
+        )
+
+    # 3) saldo bloqueado: serializa dos pagos simultáneos al mismo proveedor (D10)
+    cuentas_corrientes_service.bloquear_saldo(
+        organizacion_id, sesion, reloj, cuenta_tipo=_CUENTA_PROVEEDOR, entidad_id=proveedor_id
+    )
+
+    # 4) una sola escritura del pago con sus medios (INV-01, INV-08)
+    pago = repository.insertar_pago(
+        organizacion_id,
+        sesion,
+        pago=repository.DatosDePago(
+            id=nuevo_id(),
+            proveedor_id=proveedor_id,
+            fecha=fecha,
+            importe=importe,
+            origen=pagos.ORIGEN_INDEPENDIENTE,
+            compra_id=None,
+            observacion=observacion_a_guardar,
+            operation_id=operation_id,
+            usuario_id=usuario_id,
+            dispositivo_id=dispositivo_id,
+            occurred_at=occurred_at,
+            registered_at=reloj.now(),
+        ),
+        medios=[
+            repository.DatosDeMedioDePago(
+                medio_pago_id=medio.medio_pago_id,
+                importe=entrada.importe,
+                referencia=medio.referencia,
+            )
+            for medio, entrada in zip(medios, entradas_de_medio, strict=True)
+        ],
+    )
+    cuentas_corrientes_service.registrar_movimiento(
+        organizacion_id,
+        sesion,
+        reloj,
+        cuenta_tipo=_CUENTA_PROVEEDOR,
+        entidad_id=proveedor_id,
+        tipo=_TIPO_MOVIMIENTO_PAGO,
+        sentido="REDUCE",
+        importe=importe,
+        origen_tipo="PAGO",
+        origen_id=pago.id,
+        occurred_at=occurred_at,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        operation_id=operation_id,
+    )
+    return ResultadoDePago(
+        pago=pago,
+        saldo=cuentas_corrientes_service.obtener_saldo(
+            organizacion_id, sesion, cuenta_tipo=_CUENTA_PROVEEDOR, entidad_id=proveedor_id
+        ),
+    )
+
+
+# --- anulación de pagos a proveedor (change 12, PAG-03; `design.md` D1, D2, D5, D10) --------
+
+_AMBITO_ANULACION_PAGO = "ANULACION_PAGO"
+_TIPO_MOVIMIENTO_ANULACION_PAGO = "ANULACION_PAGO"
+
+
+@dataclass(frozen=True)
+class ResultadoDeAnulacionDePago:
+    """El pago anulado y el saldo del proveedor después de la anulación (CC-04): el mismo
+    saldo que tenía antes de registrar el pago, si no hubo movimientos intermedios."""
+
+    pago: PagoProveedor
+    saldo: Decimal
+
+
+def _validar_motivo_de_anulacion_de_pago(
+    organizacion_id: UUID, sesion: Session, motivo_id: UUID
+) -> None:
+    """D1, PAG-03, TR-09: el motivo tiene que existir en la organización (404 si no,
+    INV-21) y ser activo del ámbito `ANULACION_PAGO` (`MOTIVO_INVALIDO` si no)."""
+    motivo = configuracion_service.obtener_motivo(organizacion_id, motivo_id, sesion)
+    if motivo is None:
+        raise RecursoNoEncontradoError(f"El motivo {motivo_id} no existe en esta organización.")
+    if not motivo.activo or motivo.ambito != _AMBITO_ANULACION_PAGO:
+        raise MotivoInvalidoError(
+            f"El motivo {motivo_id} no es un motivo activo de {_AMBITO_ANULACION_PAGO}."
+        )
+
+
+def anular_pago(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    pago_id: UUID,
+    motivo_id: UUID,
+    operation_id: UUID,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+    occurred_at: datetime,
+) -> ResultadoDeAnulacionDePago:
+    """`PAGO_PROVEEDOR_ANULAR` (PAG-03, CC-03, CC-04, CMP-05, INV-01, INV-05;
+    `design.md` D1, D2, D5, D10).
+
+    Anula un pago `CONFIRMADA` en una sola transacción: registra `ANULACION_PAGO`
+    `AUMENTA` por el importe del pago en la cuenta del proveedor (el movimiento inverso
+    del `PAGO`, CC-03) y deja el pago `ANULADA` con motivo, usuario y momento. No borra ni
+    edita el pago más allá de su estado, sus medios ni el movimiento original (INV-05,
+    TR-06, CC-06). El movimiento usa el `occurred_at` del comando (D4).
+
+    D5: se admite aunque el proveedor esté inactivo, así que no se mira `activo`.
+    D2: un pago de una compra `CONFIRMADA` no se anula por separado
+    (`PAGO_DE_COMPRA_VIGENTE`): se anula con la compra.
+
+    Orden de bloqueo (`02` §7.3, D10): el pago se lee SIN bloquear para conocer su
+    `origen`; si es de origen `COMPRA` se bloquea PRIMERO la fila de la compra y después
+    la del pago (el mismo orden que `anular_compra`, así ninguna de las dos anulaciones
+    queda esperando a la otra); recién entonces se revalida el estado con la fila
+    bloqueada, se valida el motivo y por último se bloquea `saldo_cuenta` y se escribe.
+    """
+    pago_leido = repository.obtener_pago(organizacion_id, pago_id, sesion)
+    if pago_leido is None:
+        raise RecursoNoEncontradoError(f"El pago {pago_id} no existe en esta organización.")
+
+    compra = None
+    if pago_leido.origen == pagos.ORIGEN_COMPRA and pago_leido.compra_id is not None:
+        # La compra se bloquea antes que el pago (D10): `anular_compra` ya bloquea esta
+        # misma fila, y tomar los bloqueos en el mismo orden evita el interbloqueo entre
+        # una anulación de compra y una de su pago simultáneas.
+        compra = repository.obtener_compra_para_actualizar(
+            organizacion_id, pago_leido.compra_id, sesion
+        )
+        if compra is None:  # la FK compuesta de `pago_proveedor` lo impide
+            raise RecursoNoEncontradoError(
+                f"La compra {pago_leido.compra_id} no existe en esta organización."
+            )
+
+    pago = repository.obtener_pago_para_actualizar(organizacion_id, pago_id, sesion)
+    assert pago is not None  # la fila existe: recién se leyó sin bloquear.
+    # Con la fila bloqueada se revalida el estado: entre la lectura sin bloqueo y este
+    # punto otra sesión pudo anular el pago o su compra (D10, `02` §7.3).
+    pagos.validar_pago_a_anular(
+        pago.estado,
+        pago.origen,
+        None if compra is None else compra.estado,
+    )
+    _validar_motivo_de_anulacion_de_pago(organizacion_id, sesion, motivo_id)
+
+    # Saldo bloqueado: serializa dos anulaciones simultáneas del mismo proveedor (D10).
+    cuentas_corrientes_service.bloquear_saldo(
+        organizacion_id, sesion, reloj, cuenta_tipo=_CUENTA_PROVEEDOR, entidad_id=pago.proveedor_id
+    )
+    # El pago se marca ANTES que el movimiento a propósito. INV-01 fija la atomicidad en
+    # esa ventana exacta ("falla después de marcar el pago y antes del movimiento de
+    # cuenta"), y solo se puede probar si la marca ocurre primero: con la fila del pago y
+    # `saldo_cuenta` ya bloqueados, ninguna otra transacción puede observar el estado
+    # intermedio, así que el orden de las dos escrituras no cambia el resultado observable
+    # y el fallo se revierte con la transacción entera (la maneja el bus, `02` §5.2).
+    repository.marcar_pago_anulado(
+        organizacion_id,
+        sesion,
+        pago=pago,
+        motivo_id=motivo_id,
+        anulado_en=occurred_at,
+        anulado_por_id=usuario_id,
+    )
+    cuentas_corrientes_service.registrar_movimiento(
+        organizacion_id,
+        sesion,
+        reloj,
+        cuenta_tipo=_CUENTA_PROVEEDOR,
+        entidad_id=pago.proveedor_id,
+        tipo=_TIPO_MOVIMIENTO_ANULACION_PAGO,
+        sentido="AUMENTA",
+        importe=pago.importe,
+        origen_tipo=_TIPO_MOVIMIENTO_ANULACION_PAGO,
+        origen_id=pago.id,
+        occurred_at=occurred_at,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        operation_id=operation_id,
+    )
+    return ResultadoDeAnulacionDePago(
+        pago=pago,
+        saldo=cuentas_corrientes_service.obtener_saldo(
+            organizacion_id, sesion, cuenta_tipo=_CUENTA_PROVEEDOR, entidad_id=pago.proveedor_id
+        ),
     )
 
 

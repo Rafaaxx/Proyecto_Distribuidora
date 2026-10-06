@@ -19,6 +19,7 @@ import {
   type MedioDeFormulario,
   type VistaPreviaDeLinea,
 } from '../../../domain/compras/formularioCompra'
+import { avisoDeSaldoAFavorEnCompra } from '../../../domain/compras/saldoAFavor'
 import { formatearCosto, formatearImporte } from '../../../lib/money'
 import { formatearCantidad, referenciaDePresentaciones, type ReferenciaDePresentacion } from '../../../domain/stock/cantidades'
 import type { CompraConfirmarResultado, MedioPago } from '../../../features/compras/api'
@@ -29,6 +30,7 @@ import { useDetallesDeProductos, useProductosDelProveedor } from '../../../featu
 import { useAlicuotas } from '../../../features/configuracion/useAlicuotas'
 import { useConfiguracionFiscal } from '../../../features/configuracion/useConfiguracionFiscal'
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
+import { useSaldoDelProveedor } from '../../../features/pagos-proveedores/hooks'
 import { useOpcionesDeProveedores } from '../../../features/proveedores/useListados'
 import { useUbicaciones } from '../../../features/stock/hooks'
 import { CompraResultado } from './CompraResultado'
@@ -123,6 +125,9 @@ function CompraFormulario() {
   const mediosPago = useMediosPago()
   const confirmar = useConfirmarCompra()
   const fiscal = useConfiguracionFiscal()
+  // Aviso informativo (change 12, PAG-02): si la lectura falla no hay aviso y la compra se carga igual.
+  const saldoDelProveedor = useSaldoDelProveedor(formulario.proveedorId === '' ? undefined : formulario.proveedorId)
+  const avisoDeSaldoAFavor = avisoDeSaldoAFavorEnCompra(saldoDelProveedor.data)
   const computaCreditoFiscal = fiscal.data?.computa_credito_fiscal ?? null
 
   const listaDeAlicuotas = alicuotas.data?.pages.flatMap((pagina) => pagina.items) ?? []
@@ -229,6 +234,12 @@ function CompraFormulario() {
             <input id="compra-observacion" className={CLASE_CONTROL} {...register('observacion')} />
           </Campo>
         </Card>
+
+        {avisoDeSaldoAFavor && (
+          <p role="status" className="rounded-md border border-border bg-surface-muted px-3 py-2 text-sm text-primary">
+            {avisoDeSaldoAFavor}
+          </p>
+        )}
 
         {lineasField.fields.map((campo, indice) => (
           <LineaDeCompra

@@ -137,7 +137,7 @@ Una fila por organización (`01` §4).
 | `organizacion_id` | `uuid` | PK y FK |
 | `condicion_iva` | `text` | `RESPONSABLE_INSCRIPTO`, `MONOTRIBUTO`, `EXENTO`; `NOT NULL`; la regla derivada es CST-06 (ADR-045) |
 | `modo_impositivo` | `text` | `A`, `B`, `C` |
-| `lista_precio_default_id` | `uuid` | |
+| `lista_precio_default_id` | `uuid` | *`uuid`, nulo hasta que se define; clave foránea compuesta `(organizacion_id, lista_precio_default_id)` a `lista_precio`. Lo escribe `LISTA_PRECIO_PREDETERMINADA_DEFINIR` (solo una lista activa).* |
 | `politica_credito_default` | `text` | `ADVERTIR`, `AUTORIZAR`, `BLOQUEAR` |
 | `tolerancia_offline_tipo` | `text` | `IMPORTE`, `PORCENTAJE` |
 | `tolerancia_offline_valor` | `numeric(14,2)` | |
@@ -318,28 +318,19 @@ Historia del promedio (CST-13), de solo inserción.
 
 `id`, `organizacion_id` (`UNIQUE (organizacion_id, id)`), `producto_id` (FK compuesta a `producto`), `origen_tipo` (`COMPRA`, `ANULACION_COMPRA`, `STOCK_INICIAL`, `ANULACION_VENTA`; `CHECK` de catálogo), `origen_id`, `cantidad` `integer`, `costo_ingreso` `numeric(18,6)`, `stock_anterior` `integer`, `promedio_anterior` `numeric(18,6)` (nulo en el primer ingreso del producto), `stock_nuevo` `integer`, `promedio_nuevo` `numeric(18,6)`, `recalculado` `boolean` (falso cuando se mantuvo el promedio, CMP-06), `operation_id`, `registered_at`. El usuario de aplicación solo tiene `SELECT` e `INSERT` (INV-05).
 
-## 8. Precios
+## 8. Precios (reemplazo de la tabla y de las restricciones)
 
 | Tabla | Columnas | Reglas |
 | --- | --- | --- |
-| `lista_precio` | `id`, `organizacion_id`, `nombre`, `redondeo_multiplo`, `redondeo_direccion`, `activo` | PRC-01, PRC-14 |
-| `regla_margen` | `id`, `organizacion_id`, `lista_id`, `alcance_tipo` (`PRODUCTO`, `MARCA`, `CATEGORIA`, `PROVEEDOR`, `LISTA`), `alcance_id` (nulo si `LISTA`), `tipo` (`MARKUP`, `MARGEN_BRUTO`), `valor` `numeric(9,6)`, `activo` | PRC-12, PRC-13 |
-| `redondeo_categoria` | `id`, `organizacion_id`, `lista_id`, `categoria_id`, `multiplo`, `direccion` | PRC-14 |
-| `lista_version` | `id`, `organizacion_id`, `lista_id`, `numero` `integer`, `estado` (`BORRADOR`, `PUBLICADA`, `ANULADA`), `vigencia_desde` `timestamptz`, `vigencia_hasta` `timestamptz` nulo, `creado_por_id`, `publicado_por_id`, `publicado_en`, `operation_id` | PRC-02 a PRC-06 |
-| `precio_item` | `id`, `organizacion_id`, `version_id`, `producto_id`, `costo_referencia` `numeric(18,6)`, `regla_margen_id`, `tipo_margen`, `valor_margen`, `precio_calculado` `numeric(18,6)`, `precio_final` `numeric(14,2)`, `manual` `boolean` | PRC-16 |
+| `lista_precio` | `id`, `organizacion_id`, `nombre`, `redondeo_multiplo` `numeric(14,2)`, `redondeo_direccion`, `activo`, `creado_en`, `actualizado_en`, `actualizado_por_id` | PRC-01, PRC-14 |
+| `regla_margen` | `id`, `organizacion_id`, `lista_id`, `alcance_tipo`, `alcance_id` (nulo si `LISTA`), `tipo`, `valor` `numeric(9,6)`, `activo`, `creado_en`, `actualizado_en`; columnas generadas `producto_id`, `marca_id`, `categoria_id`, `proveedor_id` | PRC-12, PRC-13 |
+| `redondeo_categoria` | `id`, `organizacion_id`, `lista_id`, `categoria_id`, `multiplo`, `direccion`, `activo` | PRC-14 |
+| `lista_version` | `id`, `organizacion_id`, `lista_id`, `numero`, `estado`, `vigencia_desde` (nulo solo en `BORRADOR`), `vigencia_hasta`, `generado_en`, `version_base_id`, `creado_por_id`, `publicado_por_id`, `publicado_en`, `anulado_por_id`, `anulado_en`, `operation_id` | PRC-02 a PRC-06, PRC-18 |
+| `precio_item` | `id`, `organizacion_id`, `version_id`, `producto_id`, `unidades_referencia` `integer`, `costo_informado_id` (nulo), `costo_referencia`, `regla_margen_id`, `tipo_margen`, `valor_margen`, `precio_calculado` (todos nulos en un precio manual sin costo o regla), `precio_final` `numeric(14,2)`, `manual` | PRC-10, PRC-16 |
 
-Restricciones:
+Restricciones nuevas (además de las existentes): `lista_precio`: `redondeo_multiplo > 0`, catálogo de `redondeo_direccion` y único `(organizacion_id, lower(nombre))`; `regla_margen`: "sin `alcance_id` ⇔ alcance `LISTA`", clave foránea compuesta de cada columna generada (ADR-035) y único parcial por lista y alcance entre las activas; `redondeo_categoria`: único `(organizacion_id, lista_id, categoria_id)`; `lista_version`: `CHECK` de coherencia de publicación y de anulación, único parcial "un borrador por lista", único parcial `(organizacion_id, lista_id, vigencia_desde)` entre las publicadas e índice `(organizacion_id, lista_id, vigencia_desde DESC)`; `precio_item`: `unidades_referencia >= 1`, `precio_final > 0` y clave foránea compuesta de `costo_informado_id`.
 
-```sql
-ALTER TABLE regla_margen ADD CONSTRAINT ck_regla_margen__valor
-    CHECK (valor >= 0 AND (tipo <> 'MARGEN_BRUTO' OR valor < 1));   -- PRC-12
-CREATE UNIQUE INDEX ux_precio_item__version_producto
-    ON precio_item (organizacion_id, version_id, producto_id);      -- PRC-10
-CREATE UNIQUE INDEX ux_lista_version__numero
-    ON lista_version (organizacion_id, lista_id, numero);
-```
-
-`precio_item` guarda un único precio por producto, sobre la presentación de referencia. No existe precio por presentación (PRC-10). La inmutabilidad de una versión publicada (INV-11) se aplica en el servicio.
+Privilegios de `app_runtime`: `SELECT, INSERT, UPDATE` en los maestros; en `lista_version`, `SELECT, INSERT` y `UPDATE` solo de estado, vigencias, publicación, anulación y generación, sin `DELETE`; en `precio_item`, `SELECT, INSERT, UPDATE, DELETE` (el borrador se regenera). La inmutabilidad de una versión publicada (INV-11) se aplica en el servicio, con una única función de escritura de precios y pruebas de integración, concurrencia y propiedades (ADR-047 punto 18).
 
 ## 9. Stock y ruta
 
@@ -423,7 +414,7 @@ Las diferencias generan movimientos `DIFERENCIA_RENDICION` con origen en la rend
 | `nombre`, `razon_social` | `text` | `nombre` NO es único: el mismo nombre puede repetirse en la organización (D1) |
 | `documento_tipo`, `documento_numero` | `text` | CUIT o DNI; opcionales como pareja (si se informa uno, el otro es obligatorio). `documento_numero` se normaliza a solo dígitos. Único por organización como pareja, con índice parcial `WHERE documento_numero IS NOT NULL` (`ux_cliente__documento`, D1). Longitud validada por tipo: CUIT 11 dígitos, DNI 7 u 8 (CLI-05) |
 | `direccion`, `telefono`, `email` | `text` | `direccion` obligatoria |
-| `lista_precio_id` | `uuid` | Columna sin FK hasta que el change 13 cree `lista_precio` y agregue la FK compuesta `(organizacion_id, lista_precio_id)` (D2 del change 07; mismo precedente que `producto.proveedor_id`, ADR-025). No se ofrece en ningún formulario hasta entonces |
+| `lista_precio_id` | `uuid` | Nulo = la lista por defecto de la organización (PRC-20). Clave foránea compuesta `(organizacion_id, lista_precio_id)` a `lista_precio`. Se ofrece en la ficha con las listas activas (ADR-047 punto 12). En `PUT /clientes/{id}` y `CLIENTE_MODIFICAR`, ausente conserva la lista, nulo explícito la quita y un identificador la asigna (ADR-047 punto 29). |
 | `limite_credito` | `numeric(14,2)` | Nulo = sin control (CRE-01) |
 | `politica_credito` | `text` | Nulo = la de la organización (CRE-03) |
 | `tolerancia_offline_tipo`, `tolerancia_offline_valor` | `text`, `numeric(14,2)` | Nulos = los de la organización (CRE-06). Misma escala que `configuracion_organizacion.tolerancia_offline_valor` (ADR-032 del change 07) |
@@ -628,6 +619,10 @@ El débito de IVA en modalidad CLIENTE es un `cuenta_movimiento` de tipo `IVA_FA
 | VTA-06 | `UNIQUE (organizacion_id, numero)` en `venta` |
 | CAT-03 | Índice único parcial en `presentacion` |
 | PRC-10 | `UNIQUE (organizacion_id, version_id, producto_id)` |
+| PRC-13 | Índice único parcial en regla_margen |
+| PRC-18 | Índice único parcial de borrador en lista_version |
+| PRC-02 | Índice único parcial de vigencia desde entre las publicadas |
+| INV-11 | (se garantiza en los servicios) |
 
 El resto (INV-01, INV-07, INV-08, INV-10 a INV-15, INV-17, INV-19 a INV-21) se garantiza en los servicios y se verifica con las pruebas de `02` §15.
 

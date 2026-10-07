@@ -336,6 +336,7 @@ class TestReactivacionDeClienteContraSaldoInicial:
             telefono=None,
             email=None,
             estado_facturacion_default=None,
+            lista_precio_id=None,
             estado="ACTIVO",
             actor_id=escenario.usuario_id,
             verificar_operaciones=lambda: service.cuenta_tiene_movimientos(

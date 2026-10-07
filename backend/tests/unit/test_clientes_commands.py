@@ -168,15 +168,14 @@ def test_crear_admite_los_opcionales_de_la_ficha() -> None:
 
 
 @pytest.mark.parametrize("tipo", ["CLIENTE_CREAR", "CLIENTE_MODIFICAR"])
-def test_ningun_comando_ofrece_la_lista_asignada(tipo: str) -> None:
-    """D2: la columna existe pero la tabla `lista_precio` no se crea hasta el
-    change 13, así que el valor no se puede validar y la mitigación acordada es
-    que "no se ofrece en ningún formulario" hasta que exista la FK compuesta.
-
-    Ofrecerla en el contenido del comando equivaldría a pedirle al usuario un
-    dato que nadie puede confirmar, y `extra="forbid"` lo convertiría en un
-    rechazo confuso en vez de en un campo que sencillamente no existe todavía."""
-    assert "lista_precio_id" not in resolver_handler(tipo, 1).esquema.model_fields
+def test_los_comandos_ofrecen_la_lista_asignada_como_opcional(tipo: str) -> None:
+    """Change 13, D11 punto 1: la tabla `lista_precio` existe y la clave foránea compuesta
+    también, así que la ficha acepta la lista asignada (CLI-01); es opcional porque sin ella
+    el cliente compra con la lista predeterminada de la organización (PRC-20). Reemplaza la
+    mitigación D2 del change 07 ("no se ofrece en ningún formulario")."""
+    campo = resolver_handler(tipo, 1).esquema.model_fields["lista_precio_id"]
+    assert not campo.is_required(), "sin lista asignada es válido"
+    assert campo.default is None
 
 
 def test_crear_no_admite_campos_de_credito() -> None:
@@ -710,3 +709,58 @@ def test_la_auditoria_del_credito_no_se_registra_si_la_escritura_falla(
         )
 
     assert audits == []
+
+
+# --- change 13, ajuste A: PUT conserva la lista si el campo no viene -------
+
+
+def _lista_pasada_por_el_handler(
+    sesion: object, monkeypatch: pytest.MonkeyPatch, contenido: dict[str, Any]
+) -> object:
+    """Corre `CLIENTE_MODIFICAR` y devuelve lo que el handler le pasó al servicio como
+    `lista_precio_id`."""
+    recibido: dict[str, Any] = {}
+
+    def _modificar(*args: Any, **kwargs: Any) -> _Fila:
+        recibido.update(kwargs)
+        return _Fila(kwargs["cliente_id"])
+
+    monkeypatch.setattr(clientes_service, "modificar_cliente", _modificar)
+    handler = resolver_handler("CLIENTE_MODIFICAR", 1).funcion
+    handler(
+        _sobre(tipo="CLIENTE_MODIFICAR"),
+        _validar("CLIENTE_MODIFICAR", contenido),
+        sesion=sesion,
+        reloj=FixedClock(MOMENTO),
+    )
+    return recibido["lista_precio_id"]
+
+
+def test_modificar_sin_el_campo_lista_la_conserva(
+    sesion: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    contenido = _contenido_valido("CLIENTE_MODIFICAR")
+    contenido.pop("lista_precio_id", None)
+
+    lista = _lista_pasada_por_el_handler(sesion, monkeypatch, contenido)
+
+    assert lista is clientes_service.CONSERVAR_LISTA
+
+
+def test_modificar_con_lista_nula_la_quita(sesion: object, monkeypatch: pytest.MonkeyPatch) -> None:
+    contenido = {**_contenido_valido("CLIENTE_MODIFICAR"), "lista_precio_id": None}
+
+    lista = _lista_pasada_por_el_handler(sesion, monkeypatch, contenido)
+
+    assert lista is None
+
+
+def test_modificar_con_un_id_de_lista_la_asigna(
+    sesion: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lista_id = uuid4()
+    contenido = {**_contenido_valido("CLIENTE_MODIFICAR"), "lista_precio_id": str(lista_id)}
+
+    lista = _lista_pasada_por_el_handler(sesion, monkeypatch, contenido)
+
+    assert lista == lista_id

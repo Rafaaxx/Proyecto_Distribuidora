@@ -40,6 +40,7 @@ from app.modules.clientes.domain.errores import (
 )
 from app.modules.clientes.models import Cliente
 from app.modules.identidad import service as identidad_service
+from app.modules.precios import service as precios_service
 
 MOMENTO = datetime(2026, 9, 28, 12, 0, tzinfo=UTC)
 
@@ -93,11 +94,8 @@ def _cliente(**cambios: Any) -> Cliente:
 def _ficha(**cambios: Any) -> dict[str, Any]:
     """Contenido de ficha tal como lo recibe `modificar_cliente`.
 
-    NO incluye `lista_precio_id`: D2 deja la columna sin FK y sin que nada la
-    ofrezca hasta el change 13, así que ni el alta publicada ni la ficha la
-    ofrecen (diseño, mitigación de `lista_precio_id` sin FK; tarea 5.3, "sin
-    selector de lista asignada"). El servicio de alta sí la acepta porque la
-    spec de fichas la nombra como opcional del contenido."""
+    NO incluye `lista_precio_id`: el alta la recibe aparte (opcional) y la modificación la
+    suma en `_ficha_de_modificacion` (change 13, D11)."""
     campos: dict[str, Any] = {
         "nombre": "Kiosco La Esquina",
         "codigo": None,
@@ -112,6 +110,12 @@ def _ficha(**cambios: Any) -> dict[str, Any]:
     }
     campos.update(cambios)
     return campos
+
+
+def _ficha_de_modificacion(**cambios: Any) -> dict[str, Any]:
+    """La ficha de `modificar_cliente`: además de los datos de `_ficha`, la lista asignada,
+    que `PUT` reemplaza (`None` = sin lista asignada, change 13, D11)."""
+    return _ficha(lista_precio_id=None, **cambios)
 
 
 @pytest.fixture
@@ -182,6 +186,14 @@ def test_toda_validacion_del_servicio_viene_de_domain() -> None:
         if not isinstance(nodo, ast.Call):
             continue
         llamada = nodo.func
+        if (
+            isinstance(llamada, ast.Attribute)
+            and isinstance(llamada.value, ast.Name)
+            and llamada.value.id.endswith("_service")
+        ):
+            # Delegar en el `service.py` de OTRO módulo (p. ej. `precios_service.
+            # validar_lista_asignable`, change 13) no reimplementa una validación acá.
+            continue
         nombre = (
             llamada.attr
             if isinstance(llamada, ast.Attribute)
@@ -226,8 +238,15 @@ def test_crear_cliente_normaliza_la_ficha_y_nace_activo_sin_credito(
         creado.update({"organizacion_id": org, **campos})
         return _cliente(**_solo_columnas(campos))
 
+    lista_id = uuid4()
+    validadas: list[tuple[UUID, UUID]] = []
+
+    def _validar_lista(org: UUID, ses: object, *, lista_id: UUID) -> None:
+        validadas.append((org, lista_id))
+
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(clientes_repository, "crear_cliente", _crear)
+    monkeypatch.setattr(precios_service, "validar_lista_asignable", _validar_lista)
     try:
         clientes_service.crear_cliente(
             organizacion_id,
@@ -239,12 +258,15 @@ def test_crear_cliente_normaliza_la_ficha_y_nace_activo_sin_credito(
                 documento_tipo="dni",
                 documento_numero="30-111 222",
             ),
-            lista_precio_id=uuid4(),
+            lista_precio_id=lista_id,
             actor_id=actor_id,
         )
     finally:
         monkeypatch.undo()
 
+    # La lista asignada se valida por `precios` en la organización del token (D11) y se guarda.
+    assert validadas == [(organizacion_id, lista_id)]
+    assert creado["lista_precio_id"] == lista_id
     assert creado["organizacion_id"] == organizacion_id
     assert creado["nombre"] == "Kiosco La Esquina"
     assert creado["codigo"] == "K-01"
@@ -324,7 +346,7 @@ def test_modificar_cliente_de_otra_organizacion_no_existe(sesion: object) -> Non
                 sesion,
                 _reloj(),
                 cliente_id=uuid4(),
-                **_ficha(),
+                **_ficha_de_modificacion(),
                 estado="ACTIVO",
                 actor_id=None,
             )
@@ -355,7 +377,7 @@ def test_modificar_cliente_bloquea_la_fila_antes_de_decidir(sesion: object) -> N
             sesion,
             _reloj(),
             cliente_id=uuid4(),
-            **_ficha(),
+            **_ficha_de_modificacion(),
             estado="SUSPENDIDO",
             actor_id=None,
         )
@@ -383,13 +405,144 @@ def test_modificar_cliente_acepta_la_suspension_y_la_reactivacion(sesion: object
                 sesion,
                 _reloj(),
                 cliente_id=cliente.id,
-                **_ficha(),
+                **_ficha_de_modificacion(),
                 estado=estado,
                 actor_id=None,
             )
         finally:
             monkeypatch.undo()
         assert enviados["estado"] == estado
+
+
+def _modificar_con_lista(
+    sesion: object,
+    cliente: Cliente,
+    *,
+    lista_nueva: UUID | None | object,
+    estado: str,
+) -> tuple[list[UUID], dict[str, Any]]:
+    """Corre `modificar_cliente` con la validación de `precios` espiada: devuelve las listas
+    validadas y lo que se escribió."""
+    validadas: list[UUID] = []
+    enviados, escribir = _grabador(cliente)
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        clientes_repository, "obtener_cliente_por_id_para_actualizar", lambda *a, **k: cliente
+    )
+    monkeypatch.setattr(clientes_repository, "actualizar_cliente", escribir)
+    monkeypatch.setattr(
+        precios_service,
+        "validar_lista_asignable",
+        lambda org, ses, *, lista_id: validadas.append(lista_id),
+    )
+    try:
+        clientes_service.modificar_cliente(
+            cliente.organizacion_id,
+            sesion,  # type: ignore[arg-type]
+            _reloj(),
+            cliente_id=cliente.id,
+            **_ficha(lista_precio_id=lista_nueva),
+            estado=estado,
+            actor_id=None,
+        )
+    finally:
+        monkeypatch.undo()
+    return validadas, enviados
+
+
+def test_modificar_cliente_inactivo_conserva_la_lista_sin_consultar_a_precios(
+    sesion: object,
+) -> None:
+    """Ajuste A: `CONSERVAR_LISTA` deja la lista asignada como estaba; un cliente que sigue
+    `INACTIVO` no la revalida (mismo criterio que mandar la misma lista, D11)."""
+    actual = uuid4()
+    cliente = _cliente(estado="INACTIVO", lista_precio_id=actual)
+
+    validadas, enviados = _modificar_con_lista(
+        sesion, cliente, lista_nueva=clientes_service.CONSERVAR_LISTA, estado="INACTIVO"
+    )
+
+    assert validadas == []
+    assert enviados["lista_precio_id"] == actual
+
+
+def test_modificar_cliente_activo_conserva_la_lista_y_la_revalida(sesion: object) -> None:
+    """Un cliente que queda activo nunca tiene una lista inactiva (D11): conservar la lista
+    la revalida igual que mandarla."""
+    actual = uuid4()
+    cliente = _cliente(estado="ACTIVO", lista_precio_id=actual)
+
+    validadas, enviados = _modificar_con_lista(
+        sesion, cliente, lista_nueva=clientes_service.CONSERVAR_LISTA, estado="ACTIVO"
+    )
+
+    assert validadas == [actual]
+    assert enviados["lista_precio_id"] == actual
+
+
+def test_modificar_cliente_conserva_la_ausencia_de_lista(sesion: object) -> None:
+    cliente = _cliente(estado="ACTIVO", lista_precio_id=None)
+
+    validadas, enviados = _modificar_con_lista(
+        sesion, cliente, lista_nueva=clientes_service.CONSERVAR_LISTA, estado="ACTIVO"
+    )
+
+    assert validadas == []
+    assert enviados["lista_precio_id"] is None
+
+
+def test_modificar_cliente_valida_con_precios_la_lista_nueva_y_la_escribe(sesion: object) -> None:
+    lista_id = uuid4()
+    cliente = _cliente(estado="ACTIVO", lista_precio_id=None)
+
+    validadas, enviados = _modificar_con_lista(
+        sesion, cliente, lista_nueva=lista_id, estado="ACTIVO"
+    )
+
+    assert validadas == [lista_id]
+    assert enviados["lista_precio_id"] == lista_id
+
+
+def test_modificar_cliente_sin_lista_no_consulta_a_precios_y_la_quita(sesion: object) -> None:
+    cliente = _cliente(estado="ACTIVO", lista_precio_id=uuid4())
+
+    validadas, enviados = _modificar_con_lista(sesion, cliente, lista_nueva=None, estado="ACTIVO")
+
+    assert validadas == []
+    assert enviados["lista_precio_id"] is None
+
+
+def test_un_cliente_activo_con_la_misma_lista_se_revalida(sesion: object) -> None:
+    """Un cliente que queda activo nunca tiene una lista inactiva: se revalida aunque no
+    cambie la lista (D11)."""
+    lista_id = uuid4()
+    cliente = _cliente(estado="ACTIVO", lista_precio_id=lista_id)
+
+    validadas, _ = _modificar_con_lista(sesion, cliente, lista_nueva=lista_id, estado="ACTIVO")
+
+    assert validadas == [lista_id]
+
+
+def test_un_cliente_inactivo_que_conserva_su_lista_no_se_revalida(sesion: object) -> None:
+    """Corregir otro dato de un cliente `INACTIVO` no obliga a cambiar una lista que ya tenía."""
+    lista_id = uuid4()
+    cliente = _cliente(estado="INACTIVO", lista_precio_id=lista_id)
+
+    validadas, enviados = _modificar_con_lista(
+        sesion, cliente, lista_nueva=lista_id, estado="INACTIVO"
+    )
+
+    assert validadas == []
+    assert enviados["lista_precio_id"] == lista_id
+
+
+def test_un_cliente_inactivo_con_otra_lista_si_la_valida(sesion: object) -> None:
+    nueva = uuid4()
+    cliente = _cliente(estado="INACTIVO", lista_precio_id=uuid4())
+
+    validadas, _ = _modificar_con_lista(sesion, cliente, lista_nueva=nueva, estado="INACTIVO")
+
+    assert validadas == [nueva]
 
 
 def test_modificar_cliente_rechaza_un_estado_fuera_del_catalogo(sesion: object) -> None:
@@ -405,7 +558,7 @@ def test_modificar_cliente_rechaza_un_estado_fuera_del_catalogo(sesion: object) 
                 sesion,
                 _reloj(),
                 cliente_id=cliente.id,
-                **_ficha(),
+                **_ficha_de_modificacion(),
                 estado="PENDIENTE",
                 actor_id=None,
             )
@@ -428,7 +581,7 @@ def test_desde_inactivo_solo_se_vuelve_a_activo(sesion: object) -> None:
                 sesion,
                 _reloj(),
                 cliente_id=cliente.id,
-                **_ficha(),
+                **_ficha_de_modificacion(),
                 estado="SUSPENDIDO",
                 actor_id=None,
             )
@@ -454,7 +607,7 @@ def test_desde_inactivo_se_vuelve_a_activo_sin_operaciones(sesion: object) -> No
             sesion,
             _reloj(),
             cliente_id=cliente.id,
-            **_ficha(),
+            **_ficha_de_modificacion(),
             estado="ACTIVO",
             actor_id=None,
             tiene_operaciones=False,
@@ -477,7 +630,7 @@ def test_desde_inactivo_con_operaciones_no_vuelve_a_activo(sesion: object) -> No
                 sesion,
                 _reloj(),
                 cliente_id=cliente.id,
-                **_ficha(),
+                **_ficha_de_modificacion(),
                 estado="ACTIVO",
                 actor_id=None,
                 tiene_operaciones=True,
@@ -500,7 +653,7 @@ def test_el_consumidor_final_no_se_inactiva(sesion: object) -> None:
                 sesion,
                 _reloj(),
                 cliente_id=cliente.id,
-                **_ficha(),
+                **_ficha_de_modificacion(),
                 estado="INACTIVO",
                 actor_id=None,
             )
@@ -525,7 +678,7 @@ def test_el_consumidor_final_sigue_la_misma_maquina_de_estados(sesion: object) -
                 sesion,
                 _reloj(),
                 cliente_id=cliente.id,
-                **_ficha(),
+                **_ficha_de_modificacion(),
                 estado=estado,
                 actor_id=None,
             )
@@ -558,7 +711,7 @@ def test_modificar_cliente_no_toca_los_tres_campos_de_credito(sesion: object) ->
             sesion,
             _reloj(),
             cliente_id=cliente.id,
-            **_ficha(),
+            **_ficha_de_modificacion(),
             estado="ACTIVO",
             actor_id=None,
         )
@@ -1138,7 +1291,7 @@ def _modificar_con_verificador(
             sesion,  # type: ignore[arg-type]
             _reloj(),
             cliente_id=cliente.id,
-            **_ficha(),
+            **_ficha_de_modificacion(),
             estado=estado_nuevo,
             actor_id=None,
             verificar_operaciones=_verificar,

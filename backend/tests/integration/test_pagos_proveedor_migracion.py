@@ -563,7 +563,10 @@ def test_el_upgrade_aborta_con_un_mensaje_claro_si_hay_un_pago_anulado_sin_motiv
             )
         reparada = _alembic(database_url, "upgrade", "head")
         assert reparada.returncode == 0, reparada.stderr
-        assert _revision_actual(_engine_de_sesion) == REVISION
+        # `head` ya no es esta revisión (cada change agrega la suya): alcanza con que haya
+        # subido y con que el `CHECK` estricto de este change esté puesto.
+        assert _revision_actual(_engine_de_sesion) != REVISION_ANTERIOR
+        assert "observacion" in _columnas(_engine_de_sesion, "pago_proveedor")
     finally:
         _dejar_en_head(database_url, _engine_de_sesion)
 

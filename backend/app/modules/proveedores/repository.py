@@ -13,7 +13,7 @@ de restricción a un error de dominio con código estable.
 from __future__ import annotations
 
 import base64
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
@@ -381,6 +381,66 @@ def contar_vigentes_por_regla_de_iva(
     ).all()
     por_regla = {bool(computa): int(cantidad) for computa, cantidad in filas}
     return por_regla.get(True, 0), por_regla.get(False, 0)
+
+
+def obtener_vigentes_de_productos(
+    organizacion_id: UUID, producto_ids: Collection[UUID], fecha: date, sesion: Session
+) -> list[CostoInformado]:
+    """CST-03/D4 por lote (change 13, tarea 6.2): el costo vigente a `fecha` de cada producto
+    de `producto_ids` que lo tenga, en UNA consulta `DISTINCT ON (producto_id)` con el mismo
+    orden que `obtener_vigente` (`vigencia_desde DESC, creado_en DESC, id DESC`). Un producto
+    sin costo vigente no aparece."""
+    if not producto_ids:
+        return []
+    consulta = (
+        select(CostoInformado)
+        .distinct(CostoInformado.producto_id)
+        .where(
+            CostoInformado.organizacion_id == organizacion_id,
+            CostoInformado.producto_id.in_(producto_ids),
+            CostoInformado.vigencia_desde <= fecha,
+        )
+        .order_by(
+            CostoInformado.producto_id,
+            CostoInformado.vigencia_desde.desc(),
+            CostoInformado.creado_en.desc(),
+            CostoInformado.id.desc(),
+        )
+    )
+    return list(sesion.scalars(consulta).all())
+
+
+def productos_con_costos_distintos_por_presentacion(
+    organizacion_id: UUID, producto_ids: Collection[UUID], fecha: date, sesion: Session
+) -> set[UUID]:
+    """D2: los productos de `producto_ids` cuyo último costo informado a `fecha` de cada
+    presentación (mismo orden de desempate) difiere por unidad base entre dos presentaciones.
+    Una sola consulta agrupada en la base (`CLAUDE.md` §4)."""
+    if not producto_ids:
+        return set()
+    ultimos = (
+        select(CostoInformado.producto_id, CostoInformado.costo_base)
+        .distinct(CostoInformado.producto_id, CostoInformado.presentacion_id)
+        .where(
+            CostoInformado.organizacion_id == organizacion_id,
+            CostoInformado.producto_id.in_(producto_ids),
+            CostoInformado.vigencia_desde <= fecha,
+        )
+        .order_by(
+            CostoInformado.producto_id,
+            CostoInformado.presentacion_id,
+            CostoInformado.vigencia_desde.desc(),
+            CostoInformado.creado_en.desc(),
+            CostoInformado.id.desc(),
+        )
+        .subquery()
+    )
+    consulta = (
+        select(ultimos.c.producto_id)
+        .group_by(ultimos.c.producto_id)
+        .having(func.count(func.distinct(ultimos.c.costo_base)) > 1)
+    )
+    return set(sesion.scalars(consulta).all())
 
 
 def obtener_ultimo_por_presentacion(
@@ -1004,3 +1064,16 @@ def obtener_pago_para_detalle(
     )
     fila = sesion.execute(consulta).one_or_none()
     return None if fila is None else (fila[0], fila[1], fila[2])
+
+
+def nombres_de_proveedores(
+    organizacion_id: UUID, proveedor_ids: Collection[UUID], sesion: Session
+) -> dict[UUID, str]:
+    """`{id: nombre}` de los proveedores de la organización entre `proveedor_ids`, en una
+    consulta (los de otra organización, o inexistentes, no aparecen)."""
+    if not proveedor_ids:
+        return {}
+    consulta = select(Proveedor.id, Proveedor.nombre).where(
+        Proveedor.organizacion_id == organizacion_id, Proveedor.id.in_(proveedor_ids)
+    )
+    return {fila.id: fila.nombre for fila in sesion.execute(consulta)}

@@ -229,8 +229,8 @@ Reglas:
 ventas ──► precios, descuentos, clientes, stock, costeo, cuentas_corrientes, cobranzas, catalogo
 proveedores ──► catalogo, stock, costeo, cuentas_corrientes, configuracion (compras y pagos de contado, solo por service.py, ADR-043)
 cobranzas ──► cuentas_corrientes
-clientes ──► cuentas_corrientes
-precios ──► catalogo, proveedores (costos informados)
+clientes ──► cuentas_corrientes, precios (lista asignada, solo por service.py, ADR-047)
+precios ──► catalogo, proveedores (costos informados), identidad (configuración y permisos)
 stock ──► catalogo, costeo
 catalogo ──► costeo (solo lectura del costo promedio de un producto, ADR-036)
 facturacion ──► ventas (lectura), cuentas_corrientes, costeo
@@ -239,6 +239,8 @@ importacion ──► catalogo, proveedores, clientes, stock, cuentas_corrientes
 auditoria, configuracion, identidad ◄── todos
 cuentas_corrientes, costeo ──► (sin dependencias de negocio)
 ```
+
+Nota: `precios` no depende de `clientes`: este registra en `precios` un verificador de uso de listas (patrón de ADR-023) y no hay ciclo.
 
 No se permiten ciclos. Si aparece la necesidad de uno, se resuelve moviendo la lógica al módulo que orquesta (normalmente `ventas`) o registrando un ADR.
 
@@ -310,7 +312,10 @@ Errores transitorios de PostgreSQL (serialización `40001`, deadlock `40P01`) se
 | `PAGO_PROVEEDOR_REGISTRAR`, `PAGO_PROVEEDOR_ANULAR` | ✓ | |
 | `STOCK_TRANSFERIR`, `STOCK_AJUSTAR`, `STOCK_INICIAL_REGISTRAR` | ✓ | |
 | `COSTO_INFORMAR` | ✓ | |
-| `LISTA_GENERAR_BORRADOR`, `LISTA_PUBLICAR`, `LISTA_ANULAR_VERSION` | ✓ | |
+| `LISTA_PRECIO_CREAR`, `LISTA_PRECIO_MODIFICAR`, `REGLA_MARGEN_CREAR`, `REGLA_MARGEN_MODIFICAR`, `REDONDEO_CATEGORIA_DEFINIR` (con `GESTIONAR_LISTAS`) | ✓ | |
+| `LISTA_GENERAR_BORRADOR`, `LISTA_BORRADOR_PRECIO_FIJAR` (con `GESTIONAR_LISTAS`) | ✓ | |
+| `LISTA_PUBLICAR`, `LISTA_ANULAR_VERSION` (con `PUBLICAR_LISTAS`) | ✓ | |
+| `LISTA_PRECIO_PREDETERMINADA_DEFINIR` (con `ADMIN_CONFIGURACION`) | ✓ | |
 | `SALDO_INICIAL_REGISTRAR` | ✓ | |
 | `OBSERVACION_RESOLVER` | ✓ | |
 | `IMPORTACION_REGISTRAR` (permiso `IMPORTAR_DATOS`) | ✓ | |
@@ -321,6 +326,8 @@ Las altas y modificaciones de maestros también llevan `operation_id` y pasan po
 Un handler puede devolver, además del resultado, observaciones de negocio (SYN-04, SYN-07): el comando queda `ACEPTADO_CON_OBSERVACIONES` y las observaciones se registran con la operación afectada. `COMPRA_ANULAR` lleva `devuelve_pago` (obligatorio en compras de contado, prohibido en las de crédito) y emite `ANULACION_COMPRA_SIN_RECALCULO` y `STOCK_NEGATIVO` (ADR-043, ADR-044). Las lecturas de compras exigen `REGISTRAR_COMPRA` o `ANULAR_COMPRA`; el formulario de compra también lee productos, alícuotas, proveedores y ubicaciones con `REGISTRAR_COMPRA` (ADR-043).
 
 `PAGO_PROVEEDOR_REGISTRAR` lleva proveedor, fecha, importe, de 1 a 20 medios y una observación opcional, y exige `REGISTRAR_PAGO_PROVEEDOR`; `PAGO_PROVEEDOR_ANULAR` lleva el pago y un motivo del ámbito `ANULACION_PAGO`, y exige `ANULAR_PAGO_PROVEEDOR`. Los errores propios son `MEDIOS_INVALIDOS` (422), `PAGO_YA_ANULADO` y `PAGO_DE_COMPRA_VIGENTE` (409). Las lecturas son `GET /pagos-proveedores` (filtros de proveedor, estado, origen y fechas, con cursor), `GET /pagos-proveedores/{id}` (ambos con `REGISTRAR_PAGO_PROVEEDOR` o `ANULAR_PAGO_PROVEEDOR`) y `GET /proveedores/{id}/saldo` (con `GESTIONAR_PROVEEDORES`, `REGISTRAR_PAGO_PROVEEDOR` o `REGISTRAR_COMPRA`); `GET /proveedores/opciones` también se abre, solo en lectura, a `REGISTRAR_PAGO_PROVEEDOR` (ADR-046).
+
+Los comandos de listas son solo online. Los errores propios son `MARGEN_INVALIDO`, `ALCANCE_INVALIDO`, `REDONDEO_INVALIDO`, `IMPORTE_INVALIDO`, `PRECIO_NO_POSITIVO`, `VIGENCIA_INVALIDA`, `VERSION_SIN_PRECIOS` (422) y `NOMBRE_DUPLICADO`, `REGLA_DUPLICADA`, `LISTA_INACTIVA`, `LISTA_EN_USO`, `VERSION_NO_ES_BORRADOR`, `VERSION_NO_PUBLICADA`, `VERSION_YA_VIGENTE`, `VIGENCIA_DUPLICADA`, `SIN_LISTA_APLICABLE`, `LISTA_SIN_VERSION_VIGENTE` (409). Las lecturas cuelgan de `/api/v1/precios/…` (listas, reglas, borrador, versiones, precios de una versión paginados por cursor, `vigente?momento=` y `lista-predeterminada`); `CLIENTE_CREAR` y `CLIENTE_MODIFICAR` aceptan `lista_precio_id` (ADR-047).
 
 Una importación es un comando por archivo: todo o nada, con savepoints por fila dentro del handler (ADR-040).
 
@@ -362,6 +369,8 @@ Los libros son la verdad (INV-12, INV-13). Las tablas de saldo son una materiali
 Las filas de la propia operación que el comando corrige o anula se toman **antes** del nivel 1, en este orden: la compra (`FOR UPDATE`) y después su pago (`FOR UPDATE`). `COMPRA_ANULAR` y `PAGO_PROVEEDOR_ANULAR` usan el mismo orden (compra, pago, `saldo_cuenta`), así que anular una compra y anular su pago a la vez no se interbloquean y dejan una sola `ANULACION_PAGO`. `PAGO_PROVEEDOR_REGISTRAR` parte del nivel 1 (`saldo_cuenta` del proveedor) (ADR-043 punto 15, ADR-046).
 
 Un orden único impide deadlocks entre operaciones concurrentes. Los handlers no bloquean filas directamente: usan funciones de los servicios que respetan este orden, y la venta reúne todos los productos antes de pedir bloqueos.
+
+La fila de `lista_precio` es el candado de la lista y no entra en el orden de arriba: todo comando que escribe versiones o precios de una lista la toma `FOR UPDATE` primero, revalida el estado de la versión y recién escribe; quien asigna una lista a un cliente la lee `FOR SHARE`, de modo que desactivarla y asignarla no se cruzan. Ningún comando de `precios` toca `saldo_cuenta`, `costo_producto` ni `stock_saldo` (ADR-047 punto 19).
 
 ### 7.4 Stock
 
@@ -426,8 +435,7 @@ Una tarea diaria compara cada tabla de saldo con la suma de su libro. Cualquier 
 
 El dispositivo necesita calcular sin conexión: bruto de línea (PRC-22), descuentos (DSC-05), totales (VTA-04) y evaluación de crédito (CRE-01 a CRE-08). Esa lógica existe en dos implementaciones:
 
-- `backend/app/modules/ventas/domain/calculo.py` (y los módulos de dominio que use)
-- `frontend/src/domain/calculo.ts`
+- `backend/app/modules/precios/domain/bruto_de_linea.py` (PRC-22; el motor completo de venta —descuentos, totales, crédito— vivirá en `ventas/domain/calculo.py` desde el change 18a y consumirá esta función por `precios/service.py`) y `frontend/src/domain/precios/brutoDeLinea.ts`; el resto del motor, en `frontend/src/domain/calculo.ts`.
 
 Para que no diverjan:
 
@@ -435,6 +443,8 @@ Para que no diverjan:
 - **DEBE:** los casos de prueba viven una sola vez en `shared/fixtures/calculo/*.json` y los ejecutan tanto pytest como Vitest.
 - **DEBE:** todo cambio en una regla de cálculo agrega o modifica casos compartidos antes de modificar el código.
 - **DEBE:** CI falla si cualquiera de las dos suites falla.
+
+Los casos de PRC-22 están en `shared/fixtures/calculo/prc-22-bruto-de-linea.json` (`"motor": "prc22"`). El cálculo de costo de referencia, margen y redondeo (PRC-11, PRC-12, PRC-14) corre solo en el servidor y no tiene gemela (ADR-047 punto 11, matiza ADR-016).
 
 Formato de un caso:
 

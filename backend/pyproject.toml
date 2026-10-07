@@ -141,6 +141,19 @@ ignore_imports = [
     "app.modules.importacion.api -> sqlalchemy",
     "app.modules.importacion.api -> app.api_v1.dependencias",
     "app.modules.importacion.api -> app.core.autenticacion",
+    # Change 13 (`design.md` D13, `02` §5.3): `precios` es el octavo modulo de negocio.
+    # Cada grupo agrega las entradas de los archivos que crea (`models.py` en el
+    # grupo 2; `repository.py`, `service.py` y `queries.py` en el 5; `api.py` en el 5):
+    # `import-linter` rechaza una excepcion sin import real.
+    "app.modules.precios.models -> app.core.db",
+    "app.modules.precios.models -> sqlalchemy",
+    "app.modules.precios.repository -> sqlalchemy",
+    "app.modules.precios.service -> sqlalchemy",
+    "app.modules.precios.queries -> sqlalchemy",
+    "app.modules.precios.api -> fastapi",
+    "app.modules.precios.api -> sqlalchemy",
+    "app.modules.precios.api -> app.api_v1.dependencias",
+    "app.modules.precios.api -> app.core.autenticacion",
 ]
 
 # `allow_indirect_imports`: descubrimiento de la tarea 9.6 (change 05, D12).
@@ -201,6 +214,7 @@ source_modules = [
     "app.modules.costeo.domain",
     "app.modules.stock.domain",
     "app.modules.importacion.domain",
+    "app.modules.precios.domain",
 ]
 forbidden_modules = ["app.commands"]
 
@@ -638,3 +652,106 @@ source_modules = [
     "app.modules.sync",
 ]
 forbidden_modules = ["app.modules.importacion"]
+
+# Change 13 (`design.md` D11, `02` SS5.3): `precios` es el octavo modulo de negocio. Su
+# `domain/` es puro (ni infraestructura ni el bus) -- mismo criterio que
+# `importacion-domain-no-infraestructura`.
+[[tool.importlinter.contracts]]
+id = "precios-domain-no-infraestructura"
+name = "precios domain no importa infraestructura ni el bus de comandos"
+type = "forbidden"
+source_modules = ["app.modules.precios.domain"]
+forbidden_modules = ["fastapi", "sqlalchemy", "app.commands"]
+
+# `precios -> catalogo, proveedores, identidad` (`02` SS5.3), solo por su `service.py`:
+# nunca por sus modelos, repositorio, dominio, api ni comandos. Ningun otro modulo de
+# negocio (`stock`, `costeo`, `cuentas_corrientes`, `configuracion`, `importacion` ni
+# `clientes`, que depende de `precios` y no al reves); `sync` solo lo toca la api por
+# `procesar_comando` (la excepcion `precios.api -> sync.service` se declara al crearse
+# `api.py`).
+[[tool.importlinter.contracts]]
+id = "precios-solo-por-service-ajeno"
+name = "precios solo alcanza a catalogo, proveedores e identidad por su service.py"
+type = "forbidden"
+source_modules = ["app.modules.precios"]
+forbidden_modules = [
+    "app.modules.catalogo.models",
+    "app.modules.catalogo.repository",
+    "app.modules.catalogo.domain",
+    "app.modules.catalogo.api",
+    "app.modules.catalogo.commands",
+    "app.modules.proveedores.models",
+    "app.modules.proveedores.repository",
+    "app.modules.proveedores.domain",
+    "app.modules.proveedores.api",
+    "app.modules.proveedores.commands",
+    "app.modules.identidad.models",
+    "app.modules.identidad.repository",
+    "app.modules.identidad.domain",
+    "app.modules.identidad.api",
+    "app.modules.identidad.commands",
+    "app.modules.configuracion",
+    "app.modules.clientes",
+    "app.modules.cuentas_corrientes",
+    "app.modules.costeo",
+    "app.modules.stock",
+    "app.modules.importacion",
+    "app.modules.sync",
+]
+# `precios/api.py` llama a `sync_service.procesar_comando` (grupo 5, tarea 5.4), igual que
+# `stock.api`, `importacion.api`, `proveedores.api` y `clientes.api`.
+ignore_imports = [
+    "app.modules.precios.api -> app.modules.sync.service",
+]
+allow_indirect_imports = "true"
+
+# Los demas modulos alcanzan a `precios` solo por su `service.py`: `clientes` (change 13,
+# grupo 10: lista asignada y verificador de uso) e `importacion` (13b: planilla `PRECIOS`)
+# la usaran asi; nadie importa su modelo, su repositorio, su dominio, su api, sus
+# consultas ni sus comandos.
+[[tool.importlinter.contracts]]
+id = "modulos-hacia-precios-solo-por-service"
+name = "los demas modulos alcanzan a precios solo por su service.py"
+type = "forbidden"
+source_modules = [
+    "app.modules.identidad",
+    "app.modules.configuracion",
+    "app.modules.catalogo",
+    "app.modules.proveedores",
+    "app.modules.clientes",
+    "app.modules.cuentas_corrientes",
+    "app.modules.costeo",
+    "app.modules.stock",
+    "app.modules.importacion",
+    "app.modules.sync",
+]
+forbidden_modules = [
+    "app.modules.precios.models",
+    "app.modules.precios.repository",
+    "app.modules.precios.domain",
+    "app.modules.precios.api",
+    "app.modules.precios.commands",
+    "app.modules.precios.queries",
+]
+allow_indirect_imports = "true"
+
+# `02` SS5.3: `precios -> catalogo, proveedores, identidad` y `clientes -> precios`. Lo
+# contrario formaria un ciclo, asi que ninguno de los modulos que `precios` usa (ni los que
+# no tienen relacion con el) lo importa, ni siquiera por su `service.py`. Solo `clientes` e
+# `importacion` quedan fuera de esta lista.
+[[tool.importlinter.contracts]]
+id = "precios-no-es-alcanzado-por-sus-dependencias"
+name = "las dependencias de precios no lo importan de vuelta"
+type = "forbidden"
+source_modules = [
+    "app.modules.identidad",
+    "app.modules.configuracion",
+    "app.modules.catalogo",
+    "app.modules.proveedores",
+    "app.modules.cuentas_corrientes",
+    "app.modules.costeo",
+    "app.modules.stock",
+    "app.modules.sync",
+]
+forbidden_modules = ["app.modules.precios"]
+allow_indirect_imports = "true"

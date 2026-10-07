@@ -15,6 +15,7 @@ import { DispositivosScreen } from './dispositivos/DispositivosScreen'
 const CatalogoArea = lazy(() => import('./catalogo/CatalogoArea'))
 const ProveedoresArea = lazy(() => import('./proveedores/ProveedoresArea'))
 const ClientesArea = lazy(() => import('./clientes/ClientesArea'))
+const PreciosArea = lazy(() => import('./precios/PreciosArea'))
 const StockArea = lazy(() => import('./stock/StockArea'))
 const ComprasArea = lazy(() => import('./compras/ComprasArea'))
 const PagosArea = lazy(() => import('./pagos-proveedores/PagosArea'))
@@ -127,6 +128,14 @@ export function AdminScreen() {
             element={
               <Suspense fallback={null}>
                 <ClientesArea />
+              </Suspense>
+            }
+          />
+          <Route
+            path="precios/*"
+            element={
+              <Suspense fallback={null}>
+                <PreciosArea />
               </Suspense>
             }
           />

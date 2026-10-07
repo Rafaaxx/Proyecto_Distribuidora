@@ -79,14 +79,14 @@ La columna **Etapa** indica cuándo se implementa la regla. Las reglas marcadas 
 | Modo impositivo | A / B / C (solo A si la condición no es RESPONSABLE_INSCRIPTO) | A | 1 (B y C: 4) |
 | Alícuotas de IVA disponibles | Lista | 21%, 10,5%, 0% | 1 |
 | Modalidad de IVA por defecto al facturar | CLIENTE / ABSORBIDO (solo si la condición es RESPONSABLE_INSCRIPTO; sin definir en otro caso) | No aplica (monotributo) | Facturación |
-| Lista de precios por defecto | Lista | General | 1 |
+| Lista de precios por defecto | Lista | **Sin definir**: no se siembra ninguna lista; un usuario con `ADMIN_CONFIGURACION` la elige entre las activas con `LISTA_PRECIO_PREDETERMINADA_DEFINIR` (ADR-047) | 1 |
 | Política de crédito por defecto | ADVERTIR / AUTORIZAR / BLOQUEAR | AUTORIZAR | 1 |
 | Tolerancia offline de crédito | Importe o porcentaje del límite | A definir al configurar | 1 |
 | Stock negativo online | Bloqueado salvo permiso | Bloqueado | 1 |
 | Descuento manual | Habilitado / deshabilitado | Habilitado | 1 |
 | Motivo obligatorio en descuento manual | Sí / no | A definir | 1 |
 | Motivo obligatorio al usar lista no asignada o versión anterior | Sí / no | Sí | 1 |
-| Redondeo por defecto | Múltiplo y dirección | A definir | 1 |
+| Redondeo por defecto | Múltiplo y dirección | A definir | 1 |*solo precarga el formulario de una lista nueva cuando esté definido; la lista siempre tiene su propio redondeo (PRC-01)* |
 | Venta a consumidor final genérico | Sí / no | A definir | 1 |
 | Estado de facturación inicial por defecto | NO_REQUIERE / PENDIENTE | NO_REQUIERE | 1 |
 | Medios de pago | Lista con indicador de referencia obligatoria | Efectivo, transferencia, cheque, billetera, tarjeta | 1 |
@@ -186,25 +186,27 @@ Ejemplo de CST-11:
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| PRC-01 | Una lista tiene nombre y regla de redondeo. Sus precios viven en versiones. | 1 |
-| PRC-02 | Una versión tiene estado almacenado (BORRADOR, PUBLICADA, ANULADA), vigencia desde y vigencia hasta opcional. | 1 |
-| PRC-03 | La versión vigente de una lista en un momento es la PUBLICADA con mayor vigencia desde que no supere ese momento y cuya vigencia hasta, si existe, sea posterior. Los estados PROGRAMADA, VIGENTE e HISTÓRICA se derivan de las fechas y no se almacenan. | 1 |
-| PRC-04 | Una versión publicada es inmutable. Las correcciones generan una versión nueva. | 1 |
-| PRC-05 | Solo puede anularse una versión publicada cuya vigencia aún no comenzó. | 1 |
-| PRC-06 | Publicar requiere `PUBLICAR_LISTAS` y queda auditado. | 1 |
+| PRC-01 | Una lista tiene nombre (único por organización, sin distinguir mayúsculas) y una regla de redondeo **obligatoria**: múltiplo mayor que cero con hasta dos decimales y dirección. Sus precios viven en versiones. | 1 |
+| PRC-02 | Una versión tiene estado almacenado (BORRADOR, PUBLICADA, ANULADA), vigencia desde y vigencia hasta opcional. **La vigencia se fija al publicar** (un borrador no tiene): la vigencia desde es opcional, por defecto el momento de la publicación, y nunca anterior a él; la vigencia hasta, si existe, es posterior a la desde. Dos versiones publicadas de una lista no tienen la misma vigencia desde. | 1 |
+| PRC-03 | (sin cambio) + *Publicar no modifica la versión anterior: deja de ser vigente porque la nueva tiene mayor vigencia desde. Cuando vence una versión con vigencia hasta, vuelve a regir la anterior.* | 1 |
+| PRC-04 | (sin cambio) + *El cambio de la presentación de referencia de un producto no altera el precio ni las unidades de referencia guardados en una versión publicada.* | 1 |
+| PRC-05 | Solo puede anularse una versión publicada cuya vigencia aún no comenzó (la vigencia desde es posterior al momento de la anulación). **No pide motivo.** Sus precios no se borran ni cambian. | 1 |
+| PRC-06 | (sin cambio) | 1 |
 
 ### 7.2 Cálculo del precio de referencia
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| PRC-10 | Cada versión tiene, por producto, un único precio de referencia sobre la presentación de referencia. Las demás presentaciones se venden a precio proporcional. | 1 |
-| PRC-11 | El costo de referencia es `costo base del costo informado vigente × unidades de la presentación de referencia`. | 1 |
+| PRC-10 | Cada versión tiene, por producto, un único precio de referencia sobre la presentación de referencia, **y guarda las unidades de esa presentación vigentes al calcularlo o fijarlo**. Las demás presentaciones se venden a precio proporcional. | 1 |
+| PRC-11 | El costo de referencia es `costo base del costo informado vigente (CST-03) × unidades de la presentación de referencia`. Si los costos vigentes del producto por presentación difieren por unidad base, el precio lleva la señal "costos distintos por presentación" y la presentación de la que salió el costo. Si el costo se calculó con otra regla de IVA que la actual (CST-06), lleva la señal "costo con otra regla de IVA". | 1 |
 | PRC-12 | El margen puede ser markup (`precio = costo × (1 + m)`) o margen bruto (`precio = costo / (1 − m)`, con `m < 1`). Toda regla de margen indica cuál usa y la interfaz muestra la fórmula aplicada. | 1 |
-| PRC-13 | Las reglas de margen pertenecen a una lista y se resuelven por precedencia, de más específica a más general: producto, marca, categoría, proveedor, lista. | 1 |
-| PRC-14 | El redondeo se define por múltiplo (10, 50, 100, 500…) y dirección (arriba, más cercano, abajo), por lista con sobrescritura opcional por categoría. En "más cercano", el punto medio redondea hacia arriba. | 1 |
-| PRC-15 | En modos A y B el redondeo se aplica al precio neto. En modo C se aplica al precio con IVA incluido. | 1 (C: 4) |
-| PRC-16 | Cada precio de versión guarda costo de referencia usado, regla de margen aplicada, precio calculado sin redondear, precio final y si fue fijado manualmente. | 1 |
-| PRC-17 | Ante nuevos costos informados, el sistema genera una versión BORRADOR que copia la versión vigente y recalcula los productos afectados. Los precios fijados manualmente se conservan y se señalan si su margen resultante es menor que el de la regla aplicable. | 1 |
+| PRC-13 | Las reglas de margen pertenecen a una lista y se resuelven por precedencia, de más específica a más general: producto, marca, categoría, proveedor, lista. **Hay a lo sumo una regla activa por lista y alcance** (misma entidad). Las reglas no se borran: se modifican o se desactivan, y el cambio rige desde el próximo borrador. El valor es una fracción de hasta seis decimales; el margen bruto es menor que 1. | 1 |
+| PRC-14 | El redondeo se define por múltiplo (10, 50, 100, 500…) y dirección (arriba, más cercano, abajo), por lista con sobrescritura opcional por categoría. En "más cercano", el punto medio redondea hacia arriba. | 1 |*La sobrescritura activa de la categoría del producto manda sobre el redondeo de la lista. Si el redondeo deja el precio en cero, el producto no recibe precio.* |
+| PRC-15 | En modos A y B el redondeo se aplica al precio neto. En modo C se aplica al precio con IVA incluido. | 1 (C: 4) |*En modo C la generación del borrador se rechaza hasta la etapa 4.* |
+| PRC-16 | Cada precio de versión guarda las unidades de referencia, el costo informado y el costo de referencia usados, la regla de margen aplicada (tipo y valor), el precio calculado sin redondear, el precio final y si fue fijado manualmente. **Un precio manual guarda lo mismo que pueda calcularse y nulos si el producto no tiene costo o regla: se admite un precio manual sin costo.** | 1 |
+| PRC-17 | Ante nuevos costos informados, **el usuario genera** una versión BORRADOR con `LISTA_GENERAR_BORRADOR`: informar un costo no genera nada. El borrador parte de la versión base (la publicada y no anulada de mayor vigencia desde) y recalcula **todos los productos activos**; los precios manuales se conservan y se señalan si son menores que el calculado sin redondear ("margen menor que el de la regla"). Cada precio indica si es nuevo, cambia o queda igual respecto de la base. | 1 |
+| PRC-18 | Una lista tiene a lo sumo **un borrador**. Generar crea el borrador (con el número siguiente) o lo reemplaza conservando los precios manuales; no se descarta. Publicar no recalcula: la pantalla muestra cuándo se generó. | 1 |
+| PRC-19 | Un producto activo que el borrador no puede calcular queda **sin precio** y se informa con su causa: `SIN_COSTO`, `SIN_REGLA`, `PRECIO_NO_POSITIVO`, `SIN_PRESENTACION_DE_REFERENCIA` o `SIN_CALCULAR` (hoy se calcularía: hay que regenerar). Solo puede fijársele un precio manual si tiene presentación de referencia. | 1 |
 
 Ejemplo (costo base del vino $1.000, caja x6, costo de referencia $6.000, redondeo a múltiplo de 100):
 
@@ -217,10 +219,10 @@ Ejemplo (costo base del vino $1.000, caja x6, costo de referencia $6.000, redond
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| PRC-20 | La lista de una venta es la asignada al cliente o, si no tiene, la lista por defecto de la organización. Se usa la versión vigente al `occurred_at` de la venta. | 1 |
+| PRC-20 | La lista de una venta es la asignada al cliente o, si no tiene, la lista por defecto de la organización; ambas deben estar activas (`LISTA_INACTIVA`, `SIN_LISTA_APLICABLE`). Se usa la versión vigente al `occurred_at` de la venta (`LISTA_SIN_VERSION_VIGENTE` si no hay). La lista por defecto, o la asignada a un cliente no inactivo, no se desactiva (`LISTA_EN_USO`). | 1 |
 | PRC-21 | Usar otra lista o una versión anterior requiere `USAR_LISTA_ANTERIOR` y motivo según configuración. | 1 |
-| PRC-22 | El importe bruto de una línea es `precio de referencia × cantidad base / unidades de referencia`, redondeado a 2 decimales una sola vez. El precio unitario por presentación se muestra redondeado pero nunca se usa para calcular totales. | 1 |
-| PRC-23 | La venta congela, por línea, versión de lista, precio de referencia y unidades de referencia. | 1 |
+| PRC-22 | El importe bruto de una línea es `precio de referencia × cantidad base / unidades de referencia` (**las unidades guardadas en el precio**), redondeado a 2 decimales una sola vez. El precio unitario por presentación se muestra redondeado pero nunca se usa para calcular totales. Las presentaciones que se muestran las entrega `precios` junto con cada precio (activas y de venta, de menos unidades a más; ADR-047 punto 30). Se calcula en `precios/domain` y en `frontend/src/domain/precios`, con casos compartidos. | 1 |
+| PRC-23 | (sin cambio; lo implementa el change 18a) | 1 |
 
 Ejemplos de PRC-22 (caja x6):
 
@@ -480,6 +482,8 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 
 **Cliente.** Un cliente nace `ACTIVO` (change 07, D7). `INACTIVO` admite una sola salida —volver a `ACTIVO`— y solo si el cliente no tiene operaciones (CLI-06, ADR-030); cuando existan ventas, cobranzas o compras, la transición queda fuera de la máquina. El cliente consumidor final nunca pasa a `INACTIVO` (CLI-03, ADR-029).
 
+**Versión de lista.** Una lista tiene a lo sumo un borrador (PRC-18). `PUBLICADA` y `ANULADA` no cambian sus precios (INV-11). Los estados derivados son `PROGRAMADA`, `VIGENTE` e `HISTÓRICA` (en la API, `HISTORICA`). Solo se anula una versión `PROGRAMADA`.
+
 ## 19. Permisos y roles
 
 | Permiso | Alcance | ADM | GES | SUP | VEN | CON |
@@ -495,8 +499,8 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 | VER_COSTOS | Ver costos (incluye el costo promedio de un producto y los costos del kardex y del stock) | ✓ | ✓ | | | |
 | EDITAR_COSTOS | Registrar costos informados | ✓ | ✓ | | | |
 | VER_UTILIDAD | Ver utilidad | ✓ | ✓ | | | ✓ |
-| GESTIONAR_LISTAS | Reglas de margen, redondeo y borradores | ✓ | ✓ | | | |
-| PUBLICAR_LISTAS | Publicar y anular versiones | ✓ | | | | |
+| GESTIONAR_LISTAS | Listas, reglas de margen, redondeo y borradores (generar y fijar precios manuales); **leer listas, reglas, versiones y precios** | ✓ | ✓ | | | |
+| PUBLICAR_LISTAS | Publicar y anular versiones; **leer listas, reglas, versiones y precios** | ✓ | | | | |
 | USAR_LISTA_ANTERIOR | Lista no asignada o versión anterior en venta | ✓ | | ✓ | | |
 | GESTIONAR_DESCUENTOS | Reglas de descuento | ✓ | | | | |
 | REGISTRAR_COMPRA | Registrar compras | ✓ | ✓ | | | |
@@ -527,6 +531,8 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 Roles: ADM = Administrador, GES = Administración, SUP = Supervisor comercial, VEN = Vendedor/Repartidor, CON = Consulta/Dirección. Los roles son plantillas: la organización puede modificar su composición y los topes de descuento. El vendedor ve el saldo y el crédito disponible de sus clientes; no ve costos ni utilidad.
 
 El listado y el detalle de pagos exigen `REGISTRAR_PAGO_PROVEEDOR` o `ANULAR_PAGO_PROVEEDOR`; el saldo de un proveedor se lee con `GESTIONAR_PROVEEDORES`, `REGISTRAR_PAGO_PROVEEDOR` o `REGISTRAR_COMPRA`; la lista de proveedores para elegir también con `REGISTRAR_PAGO_PROVEEDOR`; medios de pago y motivos, con cualquier sesión (ADR-043, ADR-046).
+
+Las lecturas de listas, reglas, versiones y precios las puede hacer quien tenga `GESTIONAR_LISTAS` o `PUBLICAR_LISTAS`. El costo de referencia, el margen y el precio calculado de un precio solo se devuelven con `VER_COSTOS`; las señales siempre. Cada precio trae, sin costos, el nombre y las unidades de las presentaciones activas de venta de su producto, para mostrar el precio por presentación (PRC-22) sin una lectura por producto (ADR-047 punto 30). La lista de listas activas para elegir también se lee con `GESTIONAR_CLIENTES` y `ADMIN_CONFIGURACION`, y la lista predeterminada con `ADMIN_CONFIGURACION`, `GESTIONAR_LISTAS` o `PUBLICAR_LISTAS`. Las lecturas de productos, categorías, marcas y proveedores para elegir el alcance de una regla se abren, solo en lectura, a `GESTIONAR_LISTAS` (ADR-047).
 
 ## 20. Invariantes
 

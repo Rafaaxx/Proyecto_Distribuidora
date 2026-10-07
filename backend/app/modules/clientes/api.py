@@ -117,6 +117,7 @@ def crear_cliente(
         "email": datos.email,
         "codigo": datos.codigo,
         "estado_facturacion_default": datos.estado_facturacion_default,
+        "lista_precio_id": None if datos.lista_precio_id is None else str(datos.lista_precio_id),
     }
     sobre = construir_sobre_online(
         operation_id=entrada.operation_id,
@@ -172,6 +173,11 @@ def modificar_cliente(
         "codigo": datos.codigo,
         "estado_facturacion_default": datos.estado_facturacion_default,
     }
+    if "lista_precio_id" in datos.model_fields_set:
+        # Ausente conserva la lista asignada; nulo explícito la quita (ajuste A, change 13).
+        contenido["lista_precio_id"] = (
+            None if datos.lista_precio_id is None else str(datos.lista_precio_id)
+        )
     sobre = construir_sobre_online(
         operation_id=entrada.operation_id,
         tipo="CLIENTE_MODIFICAR",

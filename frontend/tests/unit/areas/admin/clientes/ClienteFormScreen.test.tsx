@@ -37,6 +37,24 @@ const CLIENTE = {
   actualizado_en: '2026-01-01T00:00:00Z',
 }
 
+/** El alta ofrece el selector de lista de precios (change 13, 13.4): además de la escritura, lee
+ * `GET /precios/listas/opciones`. Responde las opciones y, a cualquier otra ruta, `cuerpo`. */
+function responderAlta(cuerpoDelPost: unknown) {
+  apiFetchMock.mockImplementation((ruta: string) =>
+    Promise.resolve(
+      String(ruta).startsWith('/precios/listas/opciones')
+        ? respuesta(200, { items: [] })
+        : respuesta(201, cuerpoDelPost),
+    ),
+  )
+}
+
+function envios(metodo: string): [string, RequestInit][] {
+  return (apiFetchMock.mock.calls as [string, RequestInit | undefined][])
+    .filter(([, init]) => (init?.method ?? 'GET') === metodo)
+    .map(([ruta, init]) => [ruta, init ?? {}])
+}
+
 const SIN_PERMISO_DE_CLIENTES = 'No tenés permiso para gestionar clientes.'
 
 function renderAlta(queryClient: QueryClient = queryClientConYo('GES')) {
@@ -76,7 +94,7 @@ describe('ClienteFormScreen: alta (tarea 5.3)', () => {
   })
 
   it('da de alta un cliente con un único envío, con Operation-Id', async () => {
-    apiFetchMock.mockResolvedValueOnce(respuesta(201, CLIENTE))
+    responderAlta(CLIENTE)
 
     const usuarioEvento = userEvent.setup()
     renderAlta()
@@ -86,8 +104,8 @@ describe('ClienteFormScreen: alta (tarea 5.3)', () => {
     await usuarioEvento.type(screen.getByLabelText(/^contacto$/i), 'Rocío')
     await usuarioEvento.click(screen.getByRole('button', { name: /crear cliente/i }))
 
-    await waitFor(() => expect(apiFetchMock).toHaveBeenCalledTimes(1))
-    const [ruta, opciones] = apiFetchMock.mock.calls[0] as [string, RequestInit]
+    await waitFor(() => expect(envios('POST')).toHaveLength(1))
+    const [ruta, opciones] = envios('POST')[0] as [string, RequestInit]
     expect(ruta).toBe('/clientes')
     expect(opciones.method).toBe('POST')
     expect((opciones.headers as Record<string, string>)['Operation-Id']).toBeTruthy()
@@ -95,7 +113,7 @@ describe('ClienteFormScreen: alta (tarea 5.3)', () => {
   })
 
   it('el mismo operation_id se reenvía en el reintento (mismo criterio que proveedores)', async () => {
-    apiFetchMock.mockResolvedValueOnce(respuesta(201, CLIENTE))
+    responderAlta(CLIENTE)
 
     const usuarioEvento = userEvent.setup()
     renderAlta()
@@ -105,7 +123,7 @@ describe('ClienteFormScreen: alta (tarea 5.3)', () => {
     await usuarioEvento.type(screen.getByLabelText(/^contacto$/i), 'Rocío')
     await usuarioEvento.click(screen.getByRole('button', { name: /crear cliente/i }))
 
-    await waitFor(() => expect(apiFetchMock).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(envios('POST')).toHaveLength(1))
   })
 
   it('código duplicado informado por el servidor se muestra junto al campo y conserva lo cargado', async () => {
@@ -148,7 +166,7 @@ describe('ClienteFormScreen: navegación después de guardar (grupo 8, tarea 8.2
   })
 
   it('después de crear el cliente vuelve al listado de clientes', async () => {
-    apiFetchMock.mockResolvedValueOnce(respuesta(201, CLIENTE))
+    responderAlta(CLIENTE)
 
     const usuarioEvento = userEvent.setup()
     renderAlta()
@@ -441,7 +459,8 @@ describe('ClienteFormScreen: saldo y cuenta corriente en la ficha (change 08, ta
 
     expect(await screen.findByRole('button', { name: /crear cliente/i })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Cuenta corriente' })).not.toBeInTheDocument()
-    expect(apiFetchMock).not.toHaveBeenCalled()
+    // Lo único que lee el alta es la lista de listas de precios activas (change 13, 13.4).
+    expect(apiFetchMock.mock.calls.map(([ruta]) => String(ruta))).toEqual(['/precios/listas/opciones'])
   })
 })
 

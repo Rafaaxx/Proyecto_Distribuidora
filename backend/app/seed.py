@@ -24,6 +24,7 @@ from decimal import Decimal
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session, sessionmaker
 
+from app import modelos  # noqa: F401 (registra todos los modelos: claves foráneas entre módulos)
 from app.core.clock import Clock, SystemClock
 from app.core.config import Settings
 from app.core.db import crear_engine, crear_session_factory

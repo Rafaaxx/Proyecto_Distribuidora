@@ -308,6 +308,64 @@ def configurar_consumidor_final(
     )
 
 
+def definir_lista_precio_default(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    lista_precio_id: UUID,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> UUID | None:
+    """`LISTA_PRECIO_PREDETERMINADA_DEFINIR` (change 13, D11 punto 2): escribe
+    `configuracion_organizacion.lista_precio_default_id` y devuelve el valor ANTERIOR.
+
+    Existe como setter acá porque la fila es de este módulo (`precios` la alcanza solo por
+    `identidad/service.py`). Que la lista exista en la organización y esté activa lo valida
+    quien llama (`precios`), con el candado de la lista (D14); la clave foránea compuesta de la
+    base es la garantía final. Toma la fila de configuración `FOR UPDATE` para que el `antes`
+    de la auditoría sea el valor anterior real (mismo criterio que `cambiar_condicion_iva`).
+    Escribe UNA auditoría con el valor anterior y el nuevo (AUD-01, `origen='COMANDO'`,
+    `operation_id` del sobre); la fila genérica del comando la deja el bus. No toca ninguna
+    versión de lista ni la lista asignada de ningún cliente. Sin `commit`.
+
+    Una organización sin fila de configuración es un error de datos: se falla en voz alta."""
+    configuracion = repository.obtener_configuracion_bloqueada(
+        organizacion_id, sesion, exclusivo=True
+    )
+    if configuracion is None:
+        raise RuntimeError(
+            f"La organización {organizacion_id} no tiene configuración: no se puede definir "
+            "su lista de precios predeterminada."
+        )
+    anterior = configuracion.lista_precio_default_id
+    momento = reloj.now()
+    repository.actualizar_configuracion(
+        organizacion_id,
+        sesion,
+        momento=momento,
+        actualizado_por_id=actor_id,
+        lista_precio_default_id=lista_precio_id,
+    )
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="LISTA_PRECIO_PREDETERMINADA_DEFINIR",
+        entidad="configuracion_organizacion",
+        entidad_id=organizacion_id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        antes={"lista_precio_default_id": None if anterior is None else str(anterior)},
+        despues={"lista_precio_default_id": str(lista_precio_id)},
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+    return anterior
+
+
 def fecha_de_negocio(organizacion_id: UUID, sesion: Session, reloj: Clock) -> date | None:
     """Deriva la fecha de negocio a partir del momento actual del reloj
     inyectable y la zona horaria de la organización (TR-04). Devuelve `None`

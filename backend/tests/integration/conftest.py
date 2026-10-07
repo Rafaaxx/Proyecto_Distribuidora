@@ -33,6 +33,7 @@ from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session
 from testcontainers.community.postgres import PostgresContainer
 
+from app import modelos  # noqa: F401 (todos los modelos en `Base.metadata`: FK entre módulos)
 from app.core.db import crear_engine, crear_session_factory
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent

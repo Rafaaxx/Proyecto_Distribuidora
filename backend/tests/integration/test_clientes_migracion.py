@@ -144,34 +144,31 @@ def test_las_fk_son_compuestas_con_organizacion_id(_engine_de_sesion: Engine) ->
 
     assert filas == [
         ("fk_cliente__actualizado_por", "organizacion_id,actualizado_por_id"),
+        ("fk_cliente__lista_precio", "organizacion_id,lista_precio_id"),
         ("fk_cliente__organizacion", "organizacion_id"),
     ]
 
 
-def test_lista_precio_id_no_tiene_fk(_engine_de_sesion: Engine) -> None:
-    """D2: la tabla `lista_precio` la crea el change 13; la columna queda sin
-    FK para no adelantarla (mismo criterio que `producto.proveedor_id` antes
-    del 13, ADR-025)."""
-    filas = (
+def test_lista_precio_id_tiene_fk_compuesta_a_lista_precio(_engine_de_sesion: Engine) -> None:
+    """D2 del change 07 saldada por el change 13 (D11, D13 punto 6): la tabla
+    `lista_precio` ya existe y la columna tiene su FK compuesta
+    `(organizacion_id, lista_precio_id)`, como `producto.proveedor_id` (ADR-025)."""
+    definicion = (
         _engine_de_sesion.connect()
         .execute(
             text(
-                """
-            SELECT COUNT(*)
-            FROM information_schema.table_constraints AS tc
-            JOIN information_schema.key_column_usage AS kcu
-              ON kcu.constraint_name = tc.constraint_name
-             AND kcu.table_schema = tc.table_schema
-            WHERE tc.table_schema = 'public' AND tc.table_name = 'cliente'
-              AND tc.constraint_type = 'FOREIGN KEY'
-              AND kcu.column_name = 'lista_precio_id'
-            """
+                "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                "WHERE conrelid = 'public.cliente'::regclass "
+                "AND conname = 'fk_cliente__lista_precio'"
             )
         )
         .scalar_one()
     )
 
-    assert filas == 0
+    assert definicion == (
+        "FOREIGN KEY (organizacion_id, lista_precio_id) "
+        "REFERENCES lista_precio(organizacion_id, id)"
+    )
 
 
 def test_los_indices_unicos_son_parciales_sobre_las_columnas_opcionales(

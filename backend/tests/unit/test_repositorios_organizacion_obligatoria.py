@@ -22,6 +22,7 @@ from app.modules.costeo import repository as costeo_repository
 from app.modules.cuentas_corrientes import repository as cuentas_corrientes_repository
 from app.modules.identidad import repository as identidad_repository
 from app.modules.importacion import repository as importacion_repository
+from app.modules.precios import repository as precios_repository
 from app.modules.proveedores import repository as proveedores_repository
 from app.modules.stock import repository as stock_repository
 
@@ -191,3 +192,14 @@ def test_una_funcion_sin_organizacion_id_primero_es_detectada() -> None:
     ]
 
     assert infractoras == ["metodo_malo"]
+
+
+def test_precios_repository_exige_organizacion_id_primero_en_todo_metodo() -> None:
+    """Change 13, tarea 5.1: `precios` tampoco declara excepciones
+    (`FUNCIONES_SIN_ORGANIZACION_ID` vacío): toda lista, regla, redondeo, versión y precio es
+    de una organización, y ninguna consulta se hace sin filtrarla (INV-21)."""
+    _verificar_organizacion_id_primer_parametro(
+        precios_repository, exentas=precios_repository.FUNCIONES_SIN_ORGANIZACION_ID
+    )
+    assert isinstance(precios_repository.FUNCIONES_SIN_ORGANIZACION_ID, frozenset)
+    assert not precios_repository.FUNCIONES_SIN_ORGANIZACION_ID

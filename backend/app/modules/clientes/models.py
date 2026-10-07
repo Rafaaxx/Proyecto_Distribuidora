@@ -66,6 +66,12 @@ class Cliente(Base):
             ["usuario.organizacion_id", "usuario.id"],
             name="fk_cliente__actualizado_por",
         ),
+        # Change 13 (D11, D13 punto 6): la lista asignada es de la misma organización.
+        ForeignKeyConstraint(
+            ["organizacion_id", "lista_precio_id"],
+            ["lista_precio.organizacion_id", "lista_precio.id"],
+            name="fk_cliente__lista_precio",
+        ),
         UniqueConstraint("organizacion_id", "id", name="ux_cliente__org_id"),
         # Los tres catálogos cerrados y la máquina de estados también están en
         # la base: un valor fuera de ellos no entra ni por un camino que se
@@ -147,7 +153,8 @@ class Cliente(Base):
     contacto: Mapped[str] = mapped_column(Text, nullable=False)
     telefono: Mapped[str | None] = mapped_column(Text, nullable=True)
     email: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Sin FK hasta el change 13 (D2); la escreve la importación del change 10.
+    # FK compuesta a `lista_precio` desde el change 13 (D2 del change 07, D11); la escribe
+    # la importación del change 10 y, desde el 13, el alta y la modificación.
     lista_precio_id: Mapped[UUID | None] = mapped_column(nullable=True)
     limite_credito: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     politica_credito: Mapped[str | None] = mapped_column(Text, nullable=True)

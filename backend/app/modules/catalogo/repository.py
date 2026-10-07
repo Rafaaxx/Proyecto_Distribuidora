@@ -15,7 +15,7 @@ concurrentes terminen en un error de dominio y no en un 500 (tarea 6.2).
 from __future__ import annotations
 
 import base64
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from datetime import datetime
 from uuid import UUID
 
@@ -691,3 +691,106 @@ def buscar_productos_por_codigo(
         .order_by(Producto.codigo, Producto.id)
     )
     return list(sesion.scalars(consulta).all())
+
+
+def nombres_de_productos(
+    organizacion_id: UUID, producto_ids: Collection[UUID], sesion: Session
+) -> dict[UUID, str]:
+    """`{id: nombre}` de los productos de la organización entre `producto_ids`, en una
+    consulta (los de otra organización, o inexistentes, no aparecen)."""
+    if not producto_ids:
+        return {}
+    consulta = select(Producto.id, Producto.nombre).where(
+        Producto.organizacion_id == organizacion_id, Producto.id.in_(producto_ids)
+    )
+    return {fila.id: fila.nombre for fila in sesion.execute(consulta)}
+
+
+def nombres_de_marcas(
+    organizacion_id: UUID, marca_ids: Collection[UUID], sesion: Session
+) -> dict[UUID, str]:
+    if not marca_ids:
+        return {}
+    consulta = select(Marca.id, Marca.nombre).where(
+        Marca.organizacion_id == organizacion_id, Marca.id.in_(marca_ids)
+    )
+    return {fila.id: fila.nombre for fila in sesion.execute(consulta)}
+
+
+def nombres_de_categorias(
+    organizacion_id: UUID, categoria_ids: Collection[UUID], sesion: Session
+) -> dict[UUID, str]:
+    if not categoria_ids:
+        return {}
+    consulta = select(Categoria.id, Categoria.nombre).where(
+        Categoria.organizacion_id == organizacion_id, Categoria.id.in_(categoria_ids)
+    )
+    return {fila.id: fila.nombre for fila in sesion.execute(consulta)}
+
+
+def listar_productos_activos_con_referencia(
+    organizacion_id: UUID, sesion: Session
+) -> list[tuple[UUID, str, UUID, UUID | None, UUID, UUID | None, int | None]]:
+    """Los productos activos de la organización con los datos de su presentación de
+    referencia (CAT-08), en UNA consulta (carga explícita, sin cargas diferidas):
+    `(producto_id, nombre, categoria_id, marca_id, proveedor_id, presentacion_referencia_id,
+    unidades_referencia)`, ordenados por código. Un producto sin presentación de referencia
+    se devuelve igual, con la presentación y las unidades en nulo (LEFT JOIN): sin ella no hay
+    precio por la referencia (PRC-10) y `precios` lo informa como producto sin precio
+    (decisión del 2026-10-06, design D4)."""
+    consulta = (
+        select(
+            Producto.id,
+            Producto.nombre,
+            Producto.categoria_id,
+            Producto.marca_id,
+            Producto.proveedor_id,
+            Presentacion.id,
+            Presentacion.unidades_base,
+        )
+        .outerjoin(
+            Presentacion,
+            (Presentacion.organizacion_id == Producto.organizacion_id)
+            & (Presentacion.producto_id == Producto.id)
+            & (Presentacion.es_referencia.is_(True)),
+        )
+        .where(Producto.organizacion_id == organizacion_id, Producto.activo.is_(True))
+        .order_by(Producto.codigo, Producto.id)
+    )
+    return [
+        (fila[0], fila[1], fila[2], fila[3], fila[4], fila[5], fila[6])
+        for fila in sesion.execute(consulta)
+    ]
+
+
+def nombres_de_presentaciones(
+    organizacion_id: UUID, presentacion_ids: Collection[UUID], sesion: Session
+) -> dict[UUID, str]:
+    """`{id: nombre}` de las presentaciones de la organización entre `presentacion_ids`, en
+    una consulta."""
+    if not presentacion_ids:
+        return {}
+    consulta = select(Presentacion.id, Presentacion.nombre).where(
+        Presentacion.organizacion_id == organizacion_id, Presentacion.id.in_(presentacion_ids)
+    )
+    return {fila.id: fila.nombre for fila in sesion.execute(consulta)}
+
+
+def presentaciones_de_venta_de_productos(
+    organizacion_id: UUID, producto_ids: Collection[UUID], sesion: Session
+) -> list[tuple[UUID, str, int]]:
+    """`(producto_id, nombre, unidades_base)` de las presentaciones activas y de venta de
+    `producto_ids`, en una consulta, de menos unidades a más dentro de cada producto."""
+    if not producto_ids:
+        return []
+    consulta = (
+        select(Presentacion.producto_id, Presentacion.nombre, Presentacion.unidades_base)
+        .where(
+            Presentacion.organizacion_id == organizacion_id,
+            Presentacion.producto_id.in_(producto_ids),
+            Presentacion.activo.is_(True),
+            Presentacion.usar_en_venta.is_(True),
+        )
+        .order_by(Presentacion.producto_id, Presentacion.unidades_base, Presentacion.nombre)
+    )
+    return [(fila[0], fila[1], fila[2]) for fila in sesion.execute(consulta)]

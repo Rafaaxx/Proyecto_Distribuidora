@@ -768,6 +768,312 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/precios/listas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Listas
+         * @description Las listas de la organización con su redondeo, su actividad, su versión vigente (si la
+         *     tiene) y si tienen un borrador. Los múltiplos viajan como string.
+         */
+        get: operations["listar_listas_api_v1_precios_listas_get"];
+        put?: never;
+        /** Crear Lista */
+        post: operations["crear_lista_api_v1_precios_listas_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/precios/listas/{lista_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Lista
+         * @description El detalle de una lista con sus sobrescrituras de redondeo por categoría. 404 para una
+         *     lista de otra organización (INV-21, SEG-07).
+         */
+        get: operations["obtener_lista_api_v1_precios_listas__lista_id__get"];
+        /** Modificar Lista */
+        put: operations["modificar_lista_api_v1_precios_listas__lista_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/precios/listas/{lista_id}/reglas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Reglas
+         * @description Las reglas de una lista con su alcance (tipo, entidad y nombre de la entidad), tipo,
+         *     valor como string y actividad. 404 para una lista de otra organización.
+         */
+        get: operations["listar_reglas_api_v1_precios_listas__lista_id__reglas_get"];
+        put?: never;
+        /** Crear Regla */
+        post: operations["crear_regla_api_v1_precios_listas__lista_id__reglas_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/precios/listas/{lista_id}/reglas/{regla_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Modificar Regla */
+        put: operations["modificar_regla_api_v1_precios_listas__lista_id__reglas__regla_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/precios/listas/{lista_id}/redondeos-categoria/{categoria_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Definir Redondeo De Categoria */
+        put: operations["definir_redondeo_de_categoria_api_v1_precios_listas__lista_id__redondeos_categoria__categoria_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/precios/listas/opciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Opciones De Listas
+         * @description Lectura reducida de las listas activas (identificador y nombre) para los selectores
+         *     de la ficha del cliente y de la configuración (`design.md` D12).
+         */
+        get: operations["listar_opciones_de_listas_api_v1_precios_listas_opciones_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/precios/listas/{lista_id}/borrador": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Borrador
+         * @description El borrador de la lista: sus precios paginados por cursor (con el precio de la versión
+         *     base, la relación con ella y las señales) y, aparte, los productos sin precio con su
+         *     causa. El costo de referencia, el margen y el precio calculado solo viajan con
+         *     `VER_COSTOS` (D12); sin él van en nulo. 404 si la lista es ajena o no tiene borrador.
+         */
+        get: operations["obtener_borrador_api_v1_precios_listas__lista_id__borrador_get"];
+        put?: never;
+        /**
+         * Generar Borrador
+         * @description `LISTA_GENERAR_BORRADOR`: crea el borrador de la lista o regenera el que tiene (un
+         *     solo borrador por lista, D5), conservando los precios manuales. Informa cuántos precios
+         *     tiene y los productos sin precio con su causa.
+         */
+        post: operations["generar_borrador_api_v1_precios_listas__lista_id__borrador_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/precios/{producto_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Fijar Precio Manual
+         * @description `LISTA_BORRADOR_PRECIO_FIJAR`: fija a mano el precio de un producto en el borrador, o
+         *     -con `precio_final` nulo- quita la marca manual y lo vuelve a calcular (D7). `PUT` porque
+         *     fijar de nuevo el mismo producto reemplaza su precio.
+         */
+        put: operations["fijar_precio_manual_api_v1_precios_listas__lista_id__versiones__version_id__precios__producto_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/publicar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publicar Version
+         * @description `LISTA_PUBLICAR`: publica el borrador con su vigencia (PRC-02). Sin `vigencia_desde`
+         *     rige desde el momento de la publicación; nunca puede ser anterior a él (D6). Exige
+         *     `PUBLICAR_LISTAS` (PRC-06).
+         */
+        post: operations["publicar_version_api_v1_precios_listas__lista_id__versiones__version_id__publicar_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/anular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anular Version
+         * @description `LISTA_ANULAR_VERSION`: anula una versión publicada cuya vigencia aún no comenzó
+         *     (PRC-05). Sus precios no se borran ni cambian. Exige `PUBLICAR_LISTAS`.
+         */
+        post: operations["anular_version_api_v1_precios_listas__lista_id__versiones__version_id__anular_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/precios/listas/{lista_id}/versiones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Versiones
+         * @description Las versiones de la lista, de la más nueva a la más antigua, con su estado almacenado
+         *     y derivado (`PROGRAMADA`, `VIGENTE`, `HISTORICA`), sus vigencias y sus autores.
+         */
+        get: operations["listar_versiones_api_v1_precios_listas__lista_id__versiones_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/precios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Precios De Version
+         * @description Los precios de cualquier versión -también histórica o anulada- paginados por cursor.
+         *     Los campos de costo solo viajan con `VER_COSTOS` (D12).
+         */
+        get: operations["listar_precios_de_version_api_v1_precios_listas__lista_id__versiones__version_id__precios_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/precios/listas/{lista_id}/vigente": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Precios Vigentes
+         * @description La versión vigente de la lista a `momento` (ahora si se omite; con zona horaria) y sus
+         *     precios de referencia con las unidades de referencia de cada precio (PRC-20, D1). Con
+         *     `producto_id` repetido solo esos productos, y los que la versión no tiene van en
+         *     `productos_sin_precio`. Sin versión vigente, 409 `LISTA_SIN_VERSION_VIGENTE`.
+         */
+        get: operations["obtener_precios_vigentes_api_v1_precios_listas__lista_id__vigente_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/precios/lista-predeterminada": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Lista Predeterminada
+         * @description La lista predeterminada de la organización, o todo en nulo si no definió una. Se lee
+         *     con `ADMIN_CONFIGURACION`, `GESTIONAR_LISTAS` o `PUBLICAR_LISTAS` (D11).
+         */
+        get: operations["obtener_lista_predeterminada_api_v1_precios_lista_predeterminada_get"];
+        /**
+         * Definir Lista Predeterminada
+         * @description `LISTA_PRECIO_PREDETERMINADA_DEFINIR`: define la lista de precios predeterminada de la
+         *     organización (solo una lista activa, PRC-20). Exige `ADMIN_CONFIGURACION`.
+         */
+        put: operations["definir_lista_predeterminada_api_v1_precios_lista_predeterminada_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/proveedores": {
         parameters: {
             query?: never;
@@ -1257,6 +1563,19 @@ export interface components {
             /** Archivo */
             archivo: string;
         };
+        /**
+         * BorradorResponse
+         * @description El borrador de una lista: sus precios y, aparte, los productos activos sin precio.
+         */
+        BorradorResponse: {
+            version: components["schemas"]["VersionResponse"];
+            /** Precios */
+            precios: components["schemas"]["PrecioDeVersionResponse"][];
+            /** Siguiente Cursor */
+            siguiente_cursor: string | null;
+            /** Productos Sin Precio */
+            productos_sin_precio: components["schemas"]["ProductoSinPrecioResponse"][];
+        };
         /** CategoriaCrearRequest */
         CategoriaCrearRequest: {
             /** Nombre */
@@ -1295,7 +1614,7 @@ export interface components {
          * ClienteCrearRequest
          * @description Cuerpo de `POST /clientes` (D9). Sin `estado` (nace `ACTIVO`, D7) y sin
          *     `es_consumidor_final` (solo lo pone `CLIENTE_CONSUMIDOR_FINAL_CONFIGURAR`,
-         *     CLI-03) ni `lista_precio_id` (D2: sin FK hasta el change 13).
+         *     CLI-03). `lista_precio_id` es la lista asignada, opcional (change 13, D11).
          */
         ClienteCrearRequest: {
             /** Nombre */
@@ -1318,6 +1637,8 @@ export interface components {
             codigo?: string | null;
             /** Estado Facturacion Default */
             estado_facturacion_default?: string | null;
+            /** Lista Precio Id */
+            lista_precio_id?: string | null;
         };
         /**
          * ClienteCreditoModificarRequest
@@ -1345,9 +1666,11 @@ export interface components {
          * ClienteModificarRequest
          * @description Cuerpo de `PUT /clientes/{cliente_id}` (D9). `PUT` reemplaza el estado
          *     completo de la ficha, igual que `ProveedorModificarRequest`: un opcional
-         *     ausente o `null` se guarda como `null`. `estado` es obligatorio porque
+         *     ausente o `null` se guarda como `null` (salvo `lista_precio_id`). `estado` es obligatorio porque
          *     modificar la ficha y cambiar el estado son la misma escritura (D7). Sin
-         *     campos de crédito (D3) ni de consumidor final (CLI-03).
+         *     campos de crédito (D3) ni de consumidor final (CLI-03). `lista_precio_id` es la
+         *     excepción (change 13, D11, ajuste A): ausente conserva la lista asignada, `null`
+         *     explícito la quita y un id la asigna; se distingue con `model_fields_set`.
          */
         ClienteModificarRequest: {
             /** Nombre */
@@ -1372,6 +1695,8 @@ export interface components {
             codigo?: string | null;
             /** Estado Facturacion Default */
             estado_facturacion_default?: string | null;
+            /** Lista Precio Id */
+            lista_precio_id?: string | null;
         };
         /**
          * ClienteResponse
@@ -2043,6 +2368,30 @@ export interface components {
             /** Cursor Siguiente */
             cursor_siguiente: string | null;
         };
+        /**
+         * GeneracionResponse
+         * @description Resultado de `LISTA_GENERAR_BORRADOR`: el borrador, cuántos precios tiene, los productos
+         *     sin precio y cuántos precios llevan las señales de costo (D2, D3).
+         */
+        GeneracionResponse: {
+            /**
+             * Version Id
+             * Format: uuid
+             */
+            version_id: string;
+            /** Numero */
+            numero: number;
+            /** Regenerado */
+            regenerado: boolean;
+            /** Cantidad Precios */
+            cantidad_precios: number;
+            /** Productos Sin Precio */
+            productos_sin_precio: components["schemas"]["ProductoSinPrecioResponse"][];
+            /** Precios Con Otra Regla Iva */
+            precios_con_otra_regla_iva: number;
+            /** Precios Con Costos Distintos */
+            precios_con_costos_distintos: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -2262,15 +2611,160 @@ export interface components {
             /** Saldo */
             saldo: number;
         };
+        /**
+         * ListaCrearRequest
+         * @description Cuerpo de `POST /precios/listas`. La lista nace activa y sin versiones.
+         */
+        ListaCrearRequest: {
+            /** Nombre */
+            nombre: string;
+            /** Redondeo Multiplo */
+            redondeo_multiplo: string;
+            /** Redondeo Direccion */
+            redondeo_direccion: string;
+        };
+        /**
+         * ListaDetalleResponse
+         * @description El detalle de una lista: además de lo de `ListaResponse`, sus sobrescrituras de
+         *     redondeo por categoría.
+         */
+        ListaDetalleResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Redondeo Multiplo */
+            redondeo_multiplo: string;
+            /** Redondeo Direccion */
+            redondeo_direccion: string;
+            /** Activo */
+            activo: boolean;
+            /** Version Vigente */
+            version_vigente: number | null;
+            /** Tiene Borrador */
+            tiene_borrador: boolean;
+            /**
+             * Creado En
+             * Format: date-time
+             */
+            creado_en: string;
+            /**
+             * Actualizado En
+             * Format: date-time
+             */
+            actualizado_en: string;
+            /** Redondeos Categoria */
+            redondeos_categoria: components["schemas"]["RedondeoCategoriaResponse"][];
+        };
         /** ListaMediosPago */
         ListaMediosPago: {
             /** Items */
             items: components["schemas"]["MedioPagoResponse"][];
         };
+        /**
+         * ListaModificarRequest
+         * @description Cuerpo de `PUT /precios/listas/{lista_id}`: reemplaza nombre, redondeo y actividad.
+         */
+        ListaModificarRequest: {
+            /** Nombre */
+            nombre: string;
+            /** Redondeo Multiplo */
+            redondeo_multiplo: string;
+            /** Redondeo Direccion */
+            redondeo_direccion: string;
+            /** Activo */
+            activo: boolean;
+        };
         /** ListaMotivos */
         ListaMotivos: {
             /** Items */
             items: components["schemas"]["MotivoResponse"][];
+        };
+        /**
+         * ListaOpcionResponse
+         * @description Lectura reducida de una lista activa: identificador y nombre (`design.md` D12).
+         */
+        ListaOpcionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+        };
+        /** ListaOpcionesResponse */
+        ListaOpcionesResponse: {
+            /** Items */
+            items: components["schemas"]["ListaOpcionResponse"][];
+        };
+        /**
+         * ListaPredeterminadaDefinirRequest
+         * @description Cuerpo de `PUT /precios/lista-predeterminada`: la lista elegida, que tiene que estar
+         *     activa. `organizacion_id` no se acepta: sale del token (INV-21).
+         */
+        ListaPredeterminadaDefinirRequest: {
+            /**
+             * Lista Id
+             * Format: uuid
+             */
+            lista_id: string;
+        };
+        /**
+         * ListaPredeterminadaResponse
+         * @description La lista predeterminada de la organización (`01` §4), o todo en nulo si no tiene.
+         */
+        ListaPredeterminadaResponse: {
+            /** Lista Id */
+            lista_id: string | null;
+            /** Lista Nombre */
+            lista_nombre: string | null;
+            /** Activa */
+            activa: boolean | null;
+        };
+        /**
+         * ListaResponse
+         * @description Una lista con su versión vigente (número, si la tiene) y si tiene un borrador.
+         *
+         *     `version_vigente` es el número de la versión vigente al momento de la consulta (PRC-03);
+         *     `tiene_borrador` dice si la lista tiene un borrador (D5: a lo sumo uno).
+         */
+        ListaResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Redondeo Multiplo */
+            redondeo_multiplo: string;
+            /** Redondeo Direccion */
+            redondeo_direccion: string;
+            /** Activo */
+            activo: boolean;
+            /** Version Vigente */
+            version_vigente: number | null;
+            /** Tiene Borrador */
+            tiene_borrador: boolean;
+            /**
+             * Creado En
+             * Format: date-time
+             */
+            creado_en: string;
+            /**
+             * Actualizado En
+             * Format: date-time
+             */
+            actualizado_en: string;
+        };
+        /** ListasResponse */
+        ListasResponse: {
+            /** Items */
+            items: components["schemas"]["ListaResponse"][];
         };
         /** LoginRequest */
         LoginRequest: {
@@ -2729,6 +3223,131 @@ export interface components {
             /** Compra Id */
             compra_id: string | null;
         };
+        /**
+         * PrecioDeVersionResponse
+         * @description Un precio de una versión. Los campos de costo (`costo_referencia`, `tipo_margen`,
+         *     `valor_margen`, `precio_calculado`) van en nulo sin `VER_COSTOS` (D12). `relacion` y
+         *     `precio_version_base` comparan con la versión base (PRC-17); `senales` solo en un
+         *     borrador; `presentaciones` son las activas de venta del producto, de menos unidades a más.
+         *     Importes, costos y márgenes viajan como string.
+         */
+        PrecioDeVersionResponse: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Producto Nombre */
+            producto_nombre: string | null;
+            /** Unidades Referencia */
+            unidades_referencia: number;
+            /** Precio Final */
+            precio_final: string;
+            /** Manual */
+            manual: boolean;
+            /** Precio Version Base */
+            precio_version_base: string | null;
+            /** Relacion */
+            relacion: string | null;
+            senales: components["schemas"]["SenalesResponse"] | null;
+            /** Presentaciones */
+            presentaciones: components["schemas"]["PresentacionDeVentaResponse"][];
+            /** Costo Referencia */
+            costo_referencia: string | null;
+            /** Tipo Margen */
+            tipo_margen: string | null;
+            /** Valor Margen */
+            valor_margen: string | null;
+            /** Precio Calculado */
+            precio_calculado: string | null;
+        };
+        /**
+         * PrecioFijadoResponse
+         * @description El precio que quedó en el borrador; `precio_final` es nulo si al quitar la marca manual
+         *     el producto no pudo calcularse y quedó sin precio.
+         */
+        PrecioFijadoResponse: {
+            /**
+             * Version Id
+             * Format: uuid
+             */
+            version_id: string;
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Precio Final */
+            precio_final: string | null;
+            /** Manual */
+            manual: boolean;
+        };
+        /**
+         * PrecioFijarRequest
+         * @description Cuerpo de `PUT /precios/listas/{lista_id}/versiones/{version_id}/precios/{producto_id}`.
+         *
+         *     `precio_final` es obligatorio y puede ser nulo: un importe en string lo fija a mano, `null`
+         *     quita la marca manual y el precio vuelve a calcularse (D7). Un número JSON se rechaza
+         *     (INV-03).
+         */
+        PrecioFijarRequest: {
+            /** Precio Final */
+            precio_final: string | null;
+        };
+        /**
+         * PrecioVigenteResponse
+         * @description El precio de referencia de un producto en la versión vigente (string) y las unidades de
+         *     referencia guardadas en el precio (entero, D1).
+         */
+        PrecioVigenteResponse: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Precio Final */
+            precio_final: string;
+            /** Unidades Referencia */
+            unidades_referencia: number;
+        };
+        /**
+         * PreciosDeVersionResponse
+         * @description Los precios de una versión paginados por cursor (`siguiente_cursor` es nulo en la
+         *     última página).
+         */
+        PreciosDeVersionResponse: {
+            version: components["schemas"]["VersionResponse"];
+            /** Precios */
+            precios: components["schemas"]["PrecioDeVersionResponse"][];
+            /** Siguiente Cursor */
+            siguiente_cursor: string | null;
+        };
+        /**
+         * PreciosVigentesResponse
+         * @description `GET /precios/listas/{id}/vigente`: la versión vigente a un momento y los precios
+         *     pedidos (todos los de la versión si no se pidió ningún producto). `productos_sin_precio`
+         *     son los pedidos que la versión no tiene (PRC-10).
+         */
+        PreciosVigentesResponse: {
+            /**
+             * Version Id
+             * Format: uuid
+             */
+            version_id: string;
+            /** Numero */
+            numero: number;
+            /**
+             * Vigencia Desde
+             * Format: date-time
+             */
+            vigencia_desde: string;
+            /** Vigencia Hasta */
+            vigencia_hasta: string | null;
+            /** Precios */
+            precios: components["schemas"]["PrecioVigenteResponse"][];
+            /** Productos Sin Precio */
+            productos_sin_precio: string[];
+        };
         /** PresentacionAgregarRequest */
         PresentacionAgregarRequest: {
             /** Nombre */
@@ -2739,6 +3358,17 @@ export interface components {
             usar_en_venta: boolean;
             /** Usar En Compra */
             usar_en_compra: boolean;
+        };
+        /**
+         * PresentacionDeVentaResponse
+         * @description Nombre y unidades base de una presentación activa de venta del producto, para mostrar
+         *     el precio por presentación (PRC-22). Sin costos ni precios.
+         */
+        PresentacionDeVentaResponse: {
+            /** Nombre */
+            nombre: string;
+            /** Unidades Base */
+            unidades_base: number;
         };
         /**
          * PresentacionInicialRequest
@@ -2970,6 +3600,23 @@ export interface components {
              */
             actualizado_en: string;
         };
+        /**
+         * ProductoSinPrecioResponse
+         * @description Un producto activo que el borrador no tiene y la causa (`SIN_PRESENTACION_DE_REFERENCIA`,
+         *     `SIN_COSTO`, `SIN_REGLA`, `PRECIO_NO_POSITIVO`, o `SIN_CALCULAR` si hoy podría calcularse y
+         *     hay que regenerar).
+         */
+        ProductoSinPrecioResponse: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Producto Nombre */
+            producto_nombre: string | null;
+            /** Causa */
+            causa: string;
+        };
         /** ProveedorCrearRequest */
         ProveedorCrearRequest: {
             /** Nombre */
@@ -3046,6 +3693,54 @@ export interface components {
              */
             actualizado_en: string;
         };
+        /**
+         * PublicarRequest
+         * @description Cuerpo de `POST /precios/listas/{lista_id}/versiones/{version_id}/publicar`. Las
+         *     vigencias son instantes con zona horaria; sin `vigencia_desde` rige el momento de la
+         *     publicación y nunca puede ser anterior a él (D6).
+         */
+        PublicarRequest: {
+            /** Vigencia Desde */
+            vigencia_desde?: string | null;
+            /** Vigencia Hasta */
+            vigencia_hasta?: string | null;
+        };
+        /**
+         * RedondeoCategoriaDefinirRequest
+         * @description Cuerpo de `PUT /precios/listas/{lista_id}/redondeos-categoria/{categoria_id}`.
+         */
+        RedondeoCategoriaDefinirRequest: {
+            /** Multiplo */
+            multiplo: string;
+            /** Direccion */
+            direccion: string;
+            /**
+             * Activo
+             * @default true
+             */
+            activo: boolean;
+        };
+        /** RedondeoCategoriaResponse */
+        RedondeoCategoriaResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Categoria Id
+             * Format: uuid
+             */
+            categoria_id: string;
+            /** Categoria Nombre */
+            categoria_nombre: string | null;
+            /** Multiplo */
+            multiplo: string;
+            /** Direccion */
+            direccion: string;
+            /** Activo */
+            activo: boolean;
+        };
         /** RefreshRequest */
         RefreshRequest: {
             /**
@@ -3053,6 +3748,78 @@ export interface components {
              * Format: uuid
              */
             dispositivo_id: string;
+        };
+        /**
+         * ReglaCrearRequest
+         * @description Cuerpo de `POST /precios/listas/{lista_id}/reglas`: `valor` es una fracción en string
+         *     (30% = `"0.300000"`); `alcance_id` va solo con un alcance que no es `LISTA`.
+         */
+        ReglaCrearRequest: {
+            /** Tipo */
+            tipo: string;
+            /** Valor */
+            valor: string;
+            /** Alcance Tipo */
+            alcance_tipo: string;
+            /** Alcance Id */
+            alcance_id?: string | null;
+        };
+        /**
+         * ReglaModificarRequest
+         * @description Cuerpo de `PUT /precios/listas/{lista_id}/reglas/{regla_id}`: tipo, valor y actividad;
+         *     el alcance y la lista no cambian.
+         */
+        ReglaModificarRequest: {
+            /** Tipo */
+            tipo: string;
+            /** Valor */
+            valor: string;
+            /** Activo */
+            activo: boolean;
+        };
+        /**
+         * ReglaResponse
+         * @description Una regla con su alcance (tipo, entidad y nombre de la entidad), tipo, valor y
+         *     actividad. `alcance_nombre` es nulo en el alcance `LISTA` (no tiene entidad).
+         */
+        ReglaResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Lista Id
+             * Format: uuid
+             */
+            lista_id: string;
+            /** Alcance Tipo */
+            alcance_tipo: string;
+            /** Alcance Id */
+            alcance_id: string | null;
+            /** Alcance Nombre */
+            alcance_nombre: string | null;
+            /** Tipo */
+            tipo: string;
+            /** Valor */
+            valor: string;
+            /** Activo */
+            activo: boolean;
+            /**
+             * Creado En
+             * Format: date-time
+             */
+            creado_en: string;
+            /**
+             * Actualizado En
+             * Format: date-time
+             */
+            actualizado_en: string;
+        };
+        /** ReglasResponse */
+        ReglasResponse: {
+            /** Items */
+            items: components["schemas"]["ReglaResponse"][];
         };
         /** ResultadoItemLoteResponse */
         ResultadoItemLoteResponse: {
@@ -3165,6 +3932,25 @@ export interface components {
              * @enum {string}
              */
             estado: "ok" | "error";
+        };
+        /**
+         * SenalesResponse
+         * @description Las señales de un precio del borrador (D2, D3, D7) y, si salió de un costo, de qué
+         *     presentación.
+         */
+        SenalesResponse: {
+            /** Sin Costo */
+            sin_costo: boolean;
+            /** Margen Menor */
+            margen_menor: boolean;
+            /** Costo Otra Regla Iva */
+            costo_otra_regla_iva: boolean;
+            /** Costos Distintos Por Presentacion */
+            costos_distintos_por_presentacion: boolean;
+            /** Presentacion Del Costo Id */
+            presentacion_del_costo_id: string | null;
+            /** Presentacion Del Costo Nombre */
+            presentacion_del_costo_nombre: string | null;
         };
         /** StockDeUbicacionResponse */
         StockDeUbicacionResponse: {
@@ -3315,12 +4101,76 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /**
+         * VersionResponse
+         * @description Una versión de lista con su estado almacenado (`BORRADOR`, `PUBLICADA`, `ANULADA`) y,
+         *     si está publicada, el derivado de las fechas (`PROGRAMADA`, `VIGENTE`, `HISTORICA`; PRC-03).
+         *     Los autores van con su nombre.
+         */
+        VersionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Lista Id
+             * Format: uuid
+             */
+            lista_id: string;
+            /** Numero */
+            numero: number;
+            /** Estado */
+            estado: string;
+            /** Estado Derivado */
+            estado_derivado: string | null;
+            /** Vigencia Desde */
+            vigencia_desde: string | null;
+            /** Vigencia Hasta */
+            vigencia_hasta: string | null;
+            /** Version Base Id */
+            version_base_id: string | null;
+            /** Generado En */
+            generado_en: string | null;
+            /**
+             * Creado Por Id
+             * Format: uuid
+             */
+            creado_por_id: string;
+            /** Creado Por Nombre */
+            creado_por_nombre: string | null;
+            /**
+             * Creado En
+             * Format: date-time
+             */
+            creado_en: string;
+            /** Publicado Por Id */
+            publicado_por_id: string | null;
+            /** Publicado Por Nombre */
+            publicado_por_nombre: string | null;
+            /** Publicado En */
+            publicado_en: string | null;
+            /** Anulado Por Id */
+            anulado_por_id: string | null;
+            /** Anulado Por Nombre */
+            anulado_por_nombre: string | null;
+            /** Anulado En */
+            anulado_en: string | null;
+        };
         /** VersionRespuesta */
         VersionRespuesta: {
             /** Version */
             version: string;
             /** App Version Minima */
             app_version_minima?: string | null;
+        };
+        /**
+         * VersionesResponse
+         * @description Las versiones de una lista, de la más nueva a la más antigua.
+         */
+        VersionesResponse: {
+            /** Items */
+            items: components["schemas"]["VersionResponse"][];
         };
         /**
          * YoResponse
@@ -4842,6 +5692,681 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SaldoInicialResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_listas_api_v1_precios_listas_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListasResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_lista_api_v1_precios_listas_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListaCrearRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_lista_api_v1_precios_listas__lista_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                lista_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListaDetalleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    modificar_lista_api_v1_precios_listas__lista_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                lista_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListaModificarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_reglas_api_v1_precios_listas__lista_id__reglas_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                lista_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReglasResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_regla_api_v1_precios_listas__lista_id__reglas_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                lista_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReglaCrearRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReglaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    modificar_regla_api_v1_precios_listas__lista_id__reglas__regla_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                lista_id: string;
+                regla_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReglaModificarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReglaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    definir_redondeo_de_categoria_api_v1_precios_listas__lista_id__redondeos_categoria__categoria_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                lista_id: string;
+                categoria_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RedondeoCategoriaDefinirRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RedondeoCategoriaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_opciones_de_listas_api_v1_precios_listas_opciones_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListaOpcionesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_borrador_api_v1_precios_listas__lista_id__borrador_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                lista_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BorradorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generar_borrador_api_v1_precios_listas__lista_id__borrador_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                lista_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeneracionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fijar_precio_manual_api_v1_precios_listas__lista_id__versiones__version_id__precios__producto_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                lista_id: string;
+                version_id: string;
+                producto_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrecioFijarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrecioFijadoResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publicar_version_api_v1_precios_listas__lista_id__versiones__version_id__publicar_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                lista_id: string;
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    anular_version_api_v1_precios_listas__lista_id__versiones__version_id__anular_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                lista_id: string;
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_versiones_api_v1_precios_listas__lista_id__versiones_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                lista_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_precios_de_version_api_v1_precios_listas__lista_id__versiones__version_id__precios_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                lista_id: string;
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreciosDeVersionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_precios_vigentes_api_v1_precios_listas__lista_id__vigente_get: {
+        parameters: {
+            query?: {
+                momento?: string | null;
+                producto_id?: string[] | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                lista_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreciosVigentesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_lista_predeterminada_api_v1_precios_lista_predeterminada_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListaPredeterminadaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    definir_lista_predeterminada_api_v1_precios_lista_predeterminada_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListaPredeterminadaDefinirRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListaPredeterminadaResponse"];
                 };
             };
             /** @description Validation Error */

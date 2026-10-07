@@ -8,8 +8,9 @@ import { z } from 'zod'
  * servidor (`DOCUMENTO_INVALIDO`, `CODIGO_DUPLICADO`,
  * `LIMITE_CREDITO_INVALIDO`, …).
  *
- * Sin campos de crédito (D3) ni `lista_precio_id` (D2: sin FK hasta el
- * change 13) -- la ficha de alta/edición no los ofrece.
+ * Sin campos de crédito (D3). `lista_precio_id` (change 13, D11) es la lista de precios
+ * asignada: `null` significa la predeterminada de la organización. Que exista y esté activa
+ * (`LISTA_INACTIVA`) lo valida el servidor.
  */
 // `razon_social`/`documento_tipo`/`documento_numero`/`telefono`/`email`/
 // `codigo` llegan de un `<input>` de texto: el componente convierte `''` a
@@ -27,6 +28,7 @@ const camposFichaCliente = {
   email: z.string().nullable(),
   codigo: z.string().nullable(),
   estado_facturacion_default: z.string().nullable(),
+  lista_precio_id: z.string().nullable(),
 }
 
 export const esquemaClienteCrear = z.object(camposFichaCliente)

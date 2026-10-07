@@ -60,7 +60,11 @@ NOMBRES_DE_CHECK = {
     "ck_cliente__estado_facturacion",
 }
 
-NOMBRES_DE_FK = {"fk_cliente__organizacion", "fk_cliente__actualizado_por"}
+NOMBRES_DE_FK = {
+    "fk_cliente__organizacion",
+    "fk_cliente__actualizado_por",
+    "fk_cliente__lista_precio",
+}
 
 NOMBRES_DE_INDICE = {
     "ux_cliente__codigo",
@@ -123,12 +127,23 @@ def test_credito_y_tolerancia_usan_numeric_14_2_y_admiten_nulo() -> None:
         assert columna.nullable is True
 
 
-def test_lista_precio_id_no_tiene_clave_foranea_hasta_el_change_13() -> None:
-    """D2: la columna existe (la declara `03` §10 y PRC-20 la consume) pero sin
-    FK, como `producto.proveedor_id` antes del change 13 (ADR-025)."""
+def test_lista_precio_id_tiene_clave_foranea_compuesta_a_lista_precio() -> None:
+    """D2 del change 07, saldada por el change 13 (D11, D13 punto 6): la columna existe
+    (la declara `03` §10 y PRC-20 la consume) y ahora tiene su FK compuesta
+    `(organizacion_id, lista_precio_id)`, como `producto.proveedor_id` (ADR-025)."""
     columna = _columna("lista_precio_id")
     assert columna.nullable is True
-    assert not columna.foreign_keys
+    restriccion = next(
+        restriccion
+        for restriccion in Cliente.__table__.constraints
+        if isinstance(restriccion, ForeignKeyConstraint)
+        and restriccion.name == "fk_cliente__lista_precio"
+    )
+    assert [c.name for c in restriccion.columns] == ["organizacion_id", "lista_precio_id"]
+    assert [e.target_fullname for e in restriccion.elements] == [
+        "lista_precio.organizacion_id",
+        "lista_precio.id",
+    ]
 
 
 def test_las_fk_son_compuestas_y_usan_organizacion_id() -> None:

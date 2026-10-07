@@ -3157,6 +3157,1484 @@
         }
       }
     },
+    "/api/v1/precios/listas": {
+      "post": {
+        "tags": [
+          "precios"
+        ],
+        "summary": "Crear Lista",
+        "operationId": "crear_lista_api_v1_precios_listas_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListaCrearRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "precios"
+        ],
+        "summary": "Listar Listas",
+        "description": "Las listas de la organización con su redondeo, su actividad, su versión vigente (si la\ntiene) y si tienen un borrador. Los múltiplos viajan como string.",
+        "operationId": "listar_listas_api_v1_precios_listas_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListasResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/precios/listas/{lista_id}": {
+      "put": {
+        "tags": [
+          "precios"
+        ],
+        "summary": "Modificar Lista",
+        "operationId": "modificar_lista_api_v1_precios_listas__lista_id__put",
+        "parameters": [
+          {
+            "name": "lista_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lista Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListaModificarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "precios"
+        ],
+        "summary": "Obtener Lista",
+        "description": "El detalle de una lista con sus sobrescrituras de redondeo por categoría. 404 para una\nlista de otra organización (INV-21, SEG-07).",
+        "operationId": "obtener_lista_api_v1_precios_listas__lista_id__get",
+        "parameters": [
+          {
+            "name": "lista_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lista Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListaDetalleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/precios/listas/{lista_id}/reglas": {
+      "post": {
+        "tags": [
+          "precios"
+        ],
+        "summary": "Crear Regla",
+        "operationId": "crear_regla_api_v1_precios_listas__lista_id__reglas_post",
+        "parameters": [
+          {
+            "name": "lista_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lista Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReglaCrearRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReglaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "precios"
+        ],
+        "summary": "Listar Reglas",
+        "description": "Las reglas de una lista con su alcance (tipo, entidad y nombre de la entidad), tipo,\nvalor como string y actividad. 404 para una lista de otra organización.",
+        "operationId": "listar_reglas_api_v1_precios_listas__lista_id__reglas_get",
+        "parameters": [
+          {
+            "name": "lista_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lista Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReglasResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/precios/listas/{lista_id}/reglas/{regla_id}": {
+      "put": {
+        "tags": [
+          "precios"
+        ],
+        "summary": "Modificar Regla",
+        "operationId": "modificar_regla_api_v1_precios_listas__lista_id__reglas__regla_id__put",
+        "parameters": [
+          {
+            "name": "lista_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lista Id"
+            }
+          },
+          {
+            "name": "regla_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Regla Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReglaModificarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReglaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/precios/listas/{lista_id}/redondeos-categoria/{categoria_id}": {
+      "put": {
+        "tags": [
+          "precios"
+        ],
+        "summary": "Definir Redondeo De Categoria",
+        "operationId": "definir_redondeo_de_categoria_api_v1_precios_listas__lista_id__redondeos_categoria__categoria_id__put",
+        "parameters": [
+          {
+            "name": "lista_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lista Id"
+            }
+          },
+          {
+            "name": "categoria_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Categoria Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RedondeoCategoriaDefinirRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedondeoCategoriaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/precios/listas/opciones": {
+      "get": {
+        "tags": [
+          "precios"
+        ],
+        "summary": "Listar Opciones De Listas",
+        "description": "Lectura reducida de las listas activas (identificador y nombre) para los selectores\nde la ficha del cliente y de la configuración (`design.md` D12).",
+        "operationId": "listar_opciones_de_listas_api_v1_precios_listas_opciones_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListaOpcionesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/precios/listas/{lista_id}/borrador": {
+      "post": {
+        "tags": [
+          "precios"
+        ],
+        "summary": "Generar Borrador",
+        "description": "`LISTA_GENERAR_BORRADOR`: crea el borrador de la lista o regenera el que tiene (un\nsolo borrador por lista, D5), conservando los precios manuales. Informa cuántos precios\ntiene y los productos sin precio con su causa.",
+        "operationId": "generar_borrador_api_v1_precios_listas__lista_id__borrador_post",
+        "parameters": [
+          {
+            "name": "lista_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lista Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeneracionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "precios"
+        ],
+        "summary": "Obtener Borrador",
+        "description": "El borrador de la lista: sus precios paginados por cursor (con el precio de la versión\nbase, la relación con ella y las señales) y, aparte, los productos sin precio con su\ncausa. El costo de referencia, el margen y el precio calculado solo viajan con\n`VER_COSTOS` (D12); sin él van en nulo. 404 si la lista es ajena o no tiene borrador.",
+        "operationId": "obtener_borrador_api_v1_precios_listas__lista_id__borrador_get",
+        "parameters": [
+          {
+            "name": "lista_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lista Id"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BorradorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/precios/{producto_id}": {
+      "put": {
+        "tags": [
+          "precios"
+        ],
+        "summary": "Fijar Precio Manual",
+        "description": "`LISTA_BORRADOR_PRECIO_FIJAR`: fija a mano el precio de un producto en el borrador, o\n-con `precio_final` nulo- quita la marca manual y lo vuelve a calcular (D7). `PUT` porque\nfijar de nuevo el mismo producto reemplaza su precio.",
+        "operationId": "fijar_precio_manual_api_v1_precios_listas__lista_id__versiones__version_id__precios__producto_id__put",
+        "parameters": [
+          {
+            "name": "lista_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lista Id"
+            }
+          },
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Version Id"
+            }
+          },
+          {
+            "name": "producto_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Producto Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrecioFijarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrecioFijadoResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/publicar": {
+      "post": {
+        "tags": [
+          "precios"
+        ],
+        "summary": "Publicar Version",
+        "description": "`LISTA_PUBLICAR`: publica el borrador con su vigencia (PRC-02). Sin `vigencia_desde`\nrige desde el momento de la publicación; nunca puede ser anterior a él (D6). Exige\n`PUBLICAR_LISTAS` (PRC-06).",
+        "operationId": "publicar_version_api_v1_precios_listas__lista_id__versiones__version_id__publicar_post",
+        "parameters": [
+          {
+            "name": "lista_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lista Id"
+            }
+          },
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Version Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/anular": {
+      "post": {
+        "tags": [
+          "precios"
+        ],
+        "summary": "Anular Version",
+        "description": "`LISTA_ANULAR_VERSION`: anula una versión publicada cuya vigencia aún no comenzó\n(PRC-05). Sus precios no se borran ni cambian. Exige `PUBLICAR_LISTAS`.",
+        "operationId": "anular_version_api_v1_precios_listas__lista_id__versiones__version_id__anular_post",
+        "parameters": [
+          {
+            "name": "lista_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lista Id"
+            }
+          },
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Version Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/precios/listas/{lista_id}/versiones": {
+      "get": {
+        "tags": [
+          "precios"
+        ],
+        "summary": "Listar Versiones",
+        "description": "Las versiones de la lista, de la más nueva a la más antigua, con su estado almacenado\ny derivado (`PROGRAMADA`, `VIGENTE`, `HISTORICA`), sus vigencias y sus autores.",
+        "operationId": "listar_versiones_api_v1_precios_listas__lista_id__versiones_get",
+        "parameters": [
+          {
+            "name": "lista_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lista Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/precios": {
+      "get": {
+        "tags": [
+          "precios"
+        ],
+        "summary": "Listar Precios De Version",
+        "description": "Los precios de cualquier versión -también histórica o anulada- paginados por cursor.\nLos campos de costo solo viajan con `VER_COSTOS` (D12).",
+        "operationId": "listar_precios_de_version_api_v1_precios_listas__lista_id__versiones__version_id__precios_get",
+        "parameters": [
+          {
+            "name": "lista_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lista Id"
+            }
+          },
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Version Id"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreciosDeVersionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/precios/listas/{lista_id}/vigente": {
+      "get": {
+        "tags": [
+          "precios"
+        ],
+        "summary": "Obtener Precios Vigentes",
+        "description": "La versión vigente de la lista a `momento` (ahora si se omite; con zona horaria) y sus\nprecios de referencia con las unidades de referencia de cada precio (PRC-20, D1). Con\n`producto_id` repetido solo esos productos, y los que la versión no tiene van en\n`productos_sin_precio`. Sin versión vigente, 409 `LISTA_SIN_VERSION_VIGENTE`.",
+        "operationId": "obtener_precios_vigentes_api_v1_precios_listas__lista_id__vigente_get",
+        "parameters": [
+          {
+            "name": "lista_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lista Id"
+            }
+          },
+          {
+            "name": "momento",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Momento"
+            }
+          },
+          {
+            "name": "producto_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Producto Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreciosVigentesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/precios/lista-predeterminada": {
+      "put": {
+        "tags": [
+          "precios"
+        ],
+        "summary": "Definir Lista Predeterminada",
+        "description": "`LISTA_PRECIO_PREDETERMINADA_DEFINIR`: define la lista de precios predeterminada de la\norganización (solo una lista activa, PRC-20). Exige `ADMIN_CONFIGURACION`.",
+        "operationId": "definir_lista_predeterminada_api_v1_precios_lista_predeterminada_put",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListaPredeterminadaDefinirRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListaPredeterminadaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "precios"
+        ],
+        "summary": "Obtener Lista Predeterminada",
+        "description": "La lista predeterminada de la organización, o todo en nulo si no definió una. Se lee\ncon `ADMIN_CONFIGURACION`, `GESTIONAR_LISTAS` o `PUBLICAR_LISTAS` (D11).",
+        "operationId": "obtener_lista_predeterminada_api_v1_precios_lista_predeterminada_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListaPredeterminadaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/proveedores": {
       "post": {
         "tags": [
@@ -5465,6 +6943,47 @@
         ],
         "title": "Body_importar_api_v1_importaciones__tipo__post"
       },
+      "BorradorResponse": {
+        "properties": {
+          "version": {
+            "$ref": "#/components/schemas/VersionResponse"
+          },
+          "precios": {
+            "items": {
+              "$ref": "#/components/schemas/PrecioDeVersionResponse"
+            },
+            "type": "array",
+            "title": "Precios"
+          },
+          "siguiente_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Siguiente Cursor"
+          },
+          "productos_sin_precio": {
+            "items": {
+              "$ref": "#/components/schemas/ProductoSinPrecioResponse"
+            },
+            "type": "array",
+            "title": "Productos Sin Precio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "precios",
+          "siguiente_cursor",
+          "productos_sin_precio"
+        ],
+        "title": "BorradorResponse",
+        "description": "El borrador de una lista: sus precios y, aparte, los productos activos sin precio."
+      },
       "CategoriaCrearRequest": {
         "properties": {
           "nombre": {
@@ -5622,6 +7141,18 @@
               }
             ],
             "title": "Estado Facturacion Default"
+          },
+          "lista_precio_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lista Precio Id"
           }
         },
         "type": "object",
@@ -5631,7 +7162,7 @@
           "contacto"
         ],
         "title": "ClienteCrearRequest",
-        "description": "Cuerpo de `POST /clientes` (D9). Sin `estado` (nace `ACTIVO`, D7) y sin\n`es_consumidor_final` (solo lo pone `CLIENTE_CONSUMIDOR_FINAL_CONFIGURAR`,\nCLI-03) ni `lista_precio_id` (D2: sin FK hasta el change 13)."
+        "description": "Cuerpo de `POST /clientes` (D9). Sin `estado` (nace `ACTIVO`, D7) y sin\n`es_consumidor_final` (solo lo pone `CLIENTE_CONSUMIDOR_FINAL_CONFIGURAR`,\nCLI-03). `lista_precio_id` es la lista asignada, opcional (change 13, D11)."
       },
       "ClienteCreditoModificarRequest": {
         "properties": {
@@ -5780,6 +7311,18 @@
               }
             ],
             "title": "Estado Facturacion Default"
+          },
+          "lista_precio_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lista Precio Id"
           }
         },
         "type": "object",
@@ -5790,7 +7333,7 @@
           "estado"
         ],
         "title": "ClienteModificarRequest",
-        "description": "Cuerpo de `PUT /clientes/{cliente_id}` (D9). `PUT` reemplaza el estado\ncompleto de la ficha, igual que `ProveedorModificarRequest`: un opcional\nausente o `null` se guarda como `null`. `estado` es obligatorio porque\nmodificar la ficha y cambiar el estado son la misma escritura (D7). Sin\ncampos de crédito (D3) ni de consumidor final (CLI-03)."
+        "description": "Cuerpo de `PUT /clientes/{cliente_id}` (D9). `PUT` reemplaza el estado\ncompleto de la ficha, igual que `ProveedorModificarRequest`: un opcional\nausente o `null` se guarda como `null` (salvo `lista_precio_id`). `estado` es obligatorio porque\nmodificar la ficha y cambiar el estado son la misma escritura (D7). Sin\ncampos de crédito (D3) ni de consumidor final (CLI-03). `lista_precio_id` es la\nexcepción (change 13, D11, ajuste A): ausente conserva la lista asignada, `null`\nexplícito la quita y un id la asigna; se distingue con `model_fields_set`."
       },
       "ClienteResponse": {
         "properties": {
@@ -7263,6 +8806,54 @@
         ],
         "title": "EstadoDeCuentaResponse"
       },
+      "GeneracionResponse": {
+        "properties": {
+          "version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Version Id"
+          },
+          "numero": {
+            "type": "integer",
+            "title": "Numero"
+          },
+          "regenerado": {
+            "type": "boolean",
+            "title": "Regenerado"
+          },
+          "cantidad_precios": {
+            "type": "integer",
+            "title": "Cantidad Precios"
+          },
+          "productos_sin_precio": {
+            "items": {
+              "$ref": "#/components/schemas/ProductoSinPrecioResponse"
+            },
+            "type": "array",
+            "title": "Productos Sin Precio"
+          },
+          "precios_con_otra_regla_iva": {
+            "type": "integer",
+            "title": "Precios Con Otra Regla Iva"
+          },
+          "precios_con_costos_distintos": {
+            "type": "integer",
+            "title": "Precios Con Costos Distintos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version_id",
+          "numero",
+          "regenerado",
+          "cantidad_precios",
+          "productos_sin_precio",
+          "precios_con_otra_regla_iva",
+          "precios_con_costos_distintos"
+        ],
+        "title": "GeneracionResponse",
+        "description": "Resultado de `LISTA_GENERAR_BORRADOR`: el borrador, cuántos precios tiene, los productos\nsin precio y cuántos precios llevan las señales de costo (D2, D3)."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -7732,6 +9323,103 @@
         ],
         "title": "LineaStockInicialResponse"
       },
+      "ListaCrearRequest": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "redondeo_multiplo": {
+            "type": "string",
+            "title": "Redondeo Multiplo"
+          },
+          "redondeo_direccion": {
+            "type": "string",
+            "title": "Redondeo Direccion"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "nombre",
+          "redondeo_multiplo",
+          "redondeo_direccion"
+        ],
+        "title": "ListaCrearRequest",
+        "description": "Cuerpo de `POST /precios/listas`. La lista nace activa y sin versiones."
+      },
+      "ListaDetalleResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "redondeo_multiplo": {
+            "type": "string",
+            "title": "Redondeo Multiplo"
+          },
+          "redondeo_direccion": {
+            "type": "string",
+            "title": "Redondeo Direccion"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          },
+          "version_vigente": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Vigente"
+          },
+          "tiene_borrador": {
+            "type": "boolean",
+            "title": "Tiene Borrador"
+          },
+          "creado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Creado En"
+          },
+          "actualizado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Actualizado En"
+          },
+          "redondeos_categoria": {
+            "items": {
+              "$ref": "#/components/schemas/RedondeoCategoriaResponse"
+            },
+            "type": "array",
+            "title": "Redondeos Categoria"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "redondeo_multiplo",
+          "redondeo_direccion",
+          "activo",
+          "version_vigente",
+          "tiene_borrador",
+          "creado_en",
+          "actualizado_en",
+          "redondeos_categoria"
+        ],
+        "title": "ListaDetalleResponse",
+        "description": "El detalle de una lista: además de lo de `ListaResponse`, sus sobrescrituras de\nredondeo por categoría."
+      },
       "ListaMediosPago": {
         "properties": {
           "items": {
@@ -7748,6 +9436,36 @@
         ],
         "title": "ListaMediosPago"
       },
+      "ListaModificarRequest": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "redondeo_multiplo": {
+            "type": "string",
+            "title": "Redondeo Multiplo"
+          },
+          "redondeo_direccion": {
+            "type": "string",
+            "title": "Redondeo Direccion"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "nombre",
+          "redondeo_multiplo",
+          "redondeo_direccion",
+          "activo"
+        ],
+        "title": "ListaModificarRequest",
+        "description": "Cuerpo de `PUT /precios/listas/{lista_id}`: reemplaza nombre, redondeo y actividad."
+      },
       "ListaMotivos": {
         "properties": {
           "items": {
@@ -7763,6 +9481,184 @@
           "items"
         ],
         "title": "ListaMotivos"
+      },
+      "ListaOpcionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre"
+        ],
+        "title": "ListaOpcionResponse",
+        "description": "Lectura reducida de una lista activa: identificador y nombre (`design.md` D12)."
+      },
+      "ListaOpcionesResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ListaOpcionResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListaOpcionesResponse"
+      },
+      "ListaPredeterminadaDefinirRequest": {
+        "properties": {
+          "lista_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Lista Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "lista_id"
+        ],
+        "title": "ListaPredeterminadaDefinirRequest",
+        "description": "Cuerpo de `PUT /precios/lista-predeterminada`: la lista elegida, que tiene que estar\nactiva. `organizacion_id` no se acepta: sale del token (INV-21)."
+      },
+      "ListaPredeterminadaResponse": {
+        "properties": {
+          "lista_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lista Id"
+          },
+          "lista_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lista Nombre"
+          },
+          "activa": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activa"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lista_id",
+          "lista_nombre",
+          "activa"
+        ],
+        "title": "ListaPredeterminadaResponse",
+        "description": "La lista predeterminada de la organización (`01` §4), o todo en nulo si no tiene."
+      },
+      "ListaResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "redondeo_multiplo": {
+            "type": "string",
+            "title": "Redondeo Multiplo"
+          },
+          "redondeo_direccion": {
+            "type": "string",
+            "title": "Redondeo Direccion"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          },
+          "version_vigente": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Vigente"
+          },
+          "tiene_borrador": {
+            "type": "boolean",
+            "title": "Tiene Borrador"
+          },
+          "creado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Creado En"
+          },
+          "actualizado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Actualizado En"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "redondeo_multiplo",
+          "redondeo_direccion",
+          "activo",
+          "version_vigente",
+          "tiene_borrador",
+          "creado_en",
+          "actualizado_en"
+        ],
+        "title": "ListaResponse",
+        "description": "Una lista con su versión vigente (número, si la tiene) y si tiene un borrador.\n\n`version_vigente` es el número de la versión vigente al momento de la consulta (PRC-03);\n`tiene_borrador` dice si la lista tiene un borrador (D5: a lo sumo uno)."
+      },
+      "ListasResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ListaResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListasResponse"
       },
       "LoginRequest": {
         "properties": {
@@ -8773,6 +10669,313 @@
         "title": "PagoResumenResponse",
         "description": "Una fila del listado de pagos (PAG-01, `design.md` D11). Importes como string\n(INV-03). `compra_id` es `None` para un pago `INDEPENDIENTE` y el de la compra para uno\nde origen `COMPRA`: es lo que permite enlazar el pago con su compra."
       },
+      "PrecioDeVersionResponse": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "producto_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Producto Nombre"
+          },
+          "unidades_referencia": {
+            "type": "integer",
+            "title": "Unidades Referencia"
+          },
+          "precio_final": {
+            "type": "string",
+            "title": "Precio Final"
+          },
+          "manual": {
+            "type": "boolean",
+            "title": "Manual"
+          },
+          "precio_version_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precio Version Base"
+          },
+          "relacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relacion"
+          },
+          "senales": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SenalesResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "presentaciones": {
+            "items": {
+              "$ref": "#/components/schemas/PresentacionDeVentaResponse"
+            },
+            "type": "array",
+            "title": "Presentaciones"
+          },
+          "costo_referencia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Costo Referencia"
+          },
+          "tipo_margen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tipo Margen"
+          },
+          "valor_margen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valor Margen"
+          },
+          "precio_calculado": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precio Calculado"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto_id",
+          "producto_nombre",
+          "unidades_referencia",
+          "precio_final",
+          "manual",
+          "precio_version_base",
+          "relacion",
+          "senales",
+          "presentaciones",
+          "costo_referencia",
+          "tipo_margen",
+          "valor_margen",
+          "precio_calculado"
+        ],
+        "title": "PrecioDeVersionResponse",
+        "description": "Un precio de una versión. Los campos de costo (`costo_referencia`, `tipo_margen`,\n`valor_margen`, `precio_calculado`) van en nulo sin `VER_COSTOS` (D12). `relacion` y\n`precio_version_base` comparan con la versión base (PRC-17); `senales` solo en un\nborrador; `presentaciones` son las activas de venta del producto, de menos unidades a más.\nImportes, costos y márgenes viajan como string."
+      },
+      "PrecioFijadoResponse": {
+        "properties": {
+          "version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Version Id"
+          },
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "precio_final": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precio Final"
+          },
+          "manual": {
+            "type": "boolean",
+            "title": "Manual"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version_id",
+          "producto_id",
+          "precio_final",
+          "manual"
+        ],
+        "title": "PrecioFijadoResponse",
+        "description": "El precio que quedó en el borrador; `precio_final` es nulo si al quitar la marca manual\nel producto no pudo calcularse y quedó sin precio."
+      },
+      "PrecioFijarRequest": {
+        "properties": {
+          "precio_final": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precio Final"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "precio_final"
+        ],
+        "title": "PrecioFijarRequest",
+        "description": "Cuerpo de `PUT /precios/listas/{lista_id}/versiones/{version_id}/precios/{producto_id}`.\n\n`precio_final` es obligatorio y puede ser nulo: un importe en string lo fija a mano, `null`\nquita la marca manual y el precio vuelve a calcularse (D7). Un número JSON se rechaza\n(INV-03)."
+      },
+      "PrecioVigenteResponse": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "precio_final": {
+            "type": "string",
+            "title": "Precio Final"
+          },
+          "unidades_referencia": {
+            "type": "integer",
+            "title": "Unidades Referencia"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto_id",
+          "precio_final",
+          "unidades_referencia"
+        ],
+        "title": "PrecioVigenteResponse",
+        "description": "El precio de referencia de un producto en la versión vigente (string) y las unidades de\nreferencia guardadas en el precio (entero, D1)."
+      },
+      "PreciosDeVersionResponse": {
+        "properties": {
+          "version": {
+            "$ref": "#/components/schemas/VersionResponse"
+          },
+          "precios": {
+            "items": {
+              "$ref": "#/components/schemas/PrecioDeVersionResponse"
+            },
+            "type": "array",
+            "title": "Precios"
+          },
+          "siguiente_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Siguiente Cursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "precios",
+          "siguiente_cursor"
+        ],
+        "title": "PreciosDeVersionResponse",
+        "description": "Los precios de una versión paginados por cursor (`siguiente_cursor` es nulo en la\núltima página)."
+      },
+      "PreciosVigentesResponse": {
+        "properties": {
+          "version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Version Id"
+          },
+          "numero": {
+            "type": "integer",
+            "title": "Numero"
+          },
+          "vigencia_desde": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Vigencia Desde"
+          },
+          "vigencia_hasta": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vigencia Hasta"
+          },
+          "precios": {
+            "items": {
+              "$ref": "#/components/schemas/PrecioVigenteResponse"
+            },
+            "type": "array",
+            "title": "Precios"
+          },
+          "productos_sin_precio": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Productos Sin Precio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version_id",
+          "numero",
+          "vigencia_desde",
+          "vigencia_hasta",
+          "precios",
+          "productos_sin_precio"
+        ],
+        "title": "PreciosVigentesResponse",
+        "description": "`GET /precios/listas/{id}/vigente`: la versión vigente a un momento y los precios\npedidos (todos los de la versión si no se pidió ningún producto). `productos_sin_precio`\nson los pedidos que la versión no tiene (PRC-10)."
+      },
       "PresentacionAgregarRequest": {
         "properties": {
           "nombre": {
@@ -8800,6 +11003,25 @@
           "usar_en_compra"
         ],
         "title": "PresentacionAgregarRequest"
+      },
+      "PresentacionDeVentaResponse": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "unidades_base": {
+            "type": "integer",
+            "title": "Unidades Base"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "unidades_base"
+        ],
+        "title": "PresentacionDeVentaResponse",
+        "description": "Nombre y unidades base de una presentación activa de venta del producto, para mostrar\nel precio por presentación (PRC-22). Sin costos ni precios."
       },
       "PresentacionInicialRequest": {
         "properties": {
@@ -9231,6 +11453,38 @@
         "title": "ProductoResponse",
         "description": "Fila de listado (tarea 9.2): sin presentaciones -- para el detalle\ncompleto (incluidas sus presentaciones) ver `ProductoDetalleResponse`.\n\n`proveedor_id` (change 06, contrato-api.md P1 aprobado 2026-09-24): va\nen el listado, el `PUT` y el detalle -- es una columna propia del\nproducto. `proveedor_nombre`, en cambio, solo va en el detalle\n(`ProductoDetalleResponse`), para no llamar al puerto de ADR-025 una\nvez por fila de una página."
       },
+      "ProductoSinPrecioResponse": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "producto_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Producto Nombre"
+          },
+          "causa": {
+            "type": "string",
+            "title": "Causa"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto_id",
+          "producto_nombre",
+          "causa"
+        ],
+        "title": "ProductoSinPrecioResponse",
+        "description": "Un producto activo que el borrador no tiene y la causa (`SIN_PRESENTACION_DE_REFERENCIA`,\n`SIN_COSTO`, `SIN_REGLA`, `PRECIO_NO_POSITIVO`, o `SIN_CALCULAR` si hoy podría calcularse y\nhay que regenerar)."
+      },
       "ProveedorCrearRequest": {
         "properties": {
           "nombre": {
@@ -9455,6 +11709,110 @@
         ],
         "title": "ProveedorResponse"
       },
+      "PublicarRequest": {
+        "properties": {
+          "vigencia_desde": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vigencia Desde"
+          },
+          "vigencia_hasta": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vigencia Hasta"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PublicarRequest",
+        "description": "Cuerpo de `POST /precios/listas/{lista_id}/versiones/{version_id}/publicar`. Las\nvigencias son instantes con zona horaria; sin `vigencia_desde` rige el momento de la\npublicación y nunca puede ser anterior a él (D6)."
+      },
+      "RedondeoCategoriaDefinirRequest": {
+        "properties": {
+          "multiplo": {
+            "type": "string",
+            "title": "Multiplo"
+          },
+          "direccion": {
+            "type": "string",
+            "title": "Direccion"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "multiplo",
+          "direccion"
+        ],
+        "title": "RedondeoCategoriaDefinirRequest",
+        "description": "Cuerpo de `PUT /precios/listas/{lista_id}/redondeos-categoria/{categoria_id}`."
+      },
+      "RedondeoCategoriaResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "categoria_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Categoria Id"
+          },
+          "categoria_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categoria Nombre"
+          },
+          "multiplo": {
+            "type": "string",
+            "title": "Multiplo"
+          },
+          "direccion": {
+            "type": "string",
+            "title": "Direccion"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "categoria_id",
+          "categoria_nombre",
+          "multiplo",
+          "direccion",
+          "activo"
+        ],
+        "title": "RedondeoCategoriaResponse"
+      },
       "RefreshRequest": {
         "properties": {
           "dispositivo_id": {
@@ -9468,6 +11826,162 @@
           "dispositivo_id"
         ],
         "title": "RefreshRequest"
+      },
+      "ReglaCrearRequest": {
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "valor": {
+            "type": "string",
+            "title": "Valor"
+          },
+          "alcance_tipo": {
+            "type": "string",
+            "title": "Alcance Tipo"
+          },
+          "alcance_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alcance Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tipo",
+          "valor",
+          "alcance_tipo"
+        ],
+        "title": "ReglaCrearRequest",
+        "description": "Cuerpo de `POST /precios/listas/{lista_id}/reglas`: `valor` es una fracción en string\n(30% = `\"0.300000\"`); `alcance_id` va solo con un alcance que no es `LISTA`."
+      },
+      "ReglaModificarRequest": {
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "valor": {
+            "type": "string",
+            "title": "Valor"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tipo",
+          "valor",
+          "activo"
+        ],
+        "title": "ReglaModificarRequest",
+        "description": "Cuerpo de `PUT /precios/listas/{lista_id}/reglas/{regla_id}`: tipo, valor y actividad;\nel alcance y la lista no cambian."
+      },
+      "ReglaResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "lista_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Lista Id"
+          },
+          "alcance_tipo": {
+            "type": "string",
+            "title": "Alcance Tipo"
+          },
+          "alcance_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alcance Id"
+          },
+          "alcance_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alcance Nombre"
+          },
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "valor": {
+            "type": "string",
+            "title": "Valor"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          },
+          "creado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Creado En"
+          },
+          "actualizado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Actualizado En"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "lista_id",
+          "alcance_tipo",
+          "alcance_id",
+          "alcance_nombre",
+          "tipo",
+          "valor",
+          "activo",
+          "creado_en",
+          "actualizado_en"
+        ],
+        "title": "ReglaResponse",
+        "description": "Una regla con su alcance (tipo, entidad y nombre de la entidad), tipo, valor y\nactividad. `alcance_nombre` es nulo en el alcance `LISTA` (no tiene entidad)."
+      },
+      "ReglasResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReglaResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ReglasResponse"
       },
       "ResultadoItemLoteResponse": {
         "properties": {
@@ -9695,6 +12209,60 @@
           "estado"
         ],
         "title": "SaludRespuesta"
+      },
+      "SenalesResponse": {
+        "properties": {
+          "sin_costo": {
+            "type": "boolean",
+            "title": "Sin Costo"
+          },
+          "margen_menor": {
+            "type": "boolean",
+            "title": "Margen Menor"
+          },
+          "costo_otra_regla_iva": {
+            "type": "boolean",
+            "title": "Costo Otra Regla Iva"
+          },
+          "costos_distintos_por_presentacion": {
+            "type": "boolean",
+            "title": "Costos Distintos Por Presentacion"
+          },
+          "presentacion_del_costo_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presentacion Del Costo Id"
+          },
+          "presentacion_del_costo_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presentacion Del Costo Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sin_costo",
+          "margen_menor",
+          "costo_otra_regla_iva",
+          "costos_distintos_por_presentacion",
+          "presentacion_del_costo_id",
+          "presentacion_del_costo_nombre"
+        ],
+        "title": "SenalesResponse",
+        "description": "Las señales de un precio del borrador (D2, D3, D7) y, si salió de un costo, de qué\npresentación."
       },
       "StockDeUbicacionResponse": {
         "properties": {
@@ -10001,6 +12569,201 @@
         ],
         "title": "ValidationError"
       },
+      "VersionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "lista_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Lista Id"
+          },
+          "numero": {
+            "type": "integer",
+            "title": "Numero"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "estado_derivado": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estado Derivado"
+          },
+          "vigencia_desde": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vigencia Desde"
+          },
+          "vigencia_hasta": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vigencia Hasta"
+          },
+          "version_base_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Base Id"
+          },
+          "generado_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generado En"
+          },
+          "creado_por_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Creado Por Id"
+          },
+          "creado_por_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creado Por Nombre"
+          },
+          "creado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Creado En"
+          },
+          "publicado_por_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publicado Por Id"
+          },
+          "publicado_por_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publicado Por Nombre"
+          },
+          "publicado_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publicado En"
+          },
+          "anulado_por_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anulado Por Id"
+          },
+          "anulado_por_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anulado Por Nombre"
+          },
+          "anulado_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anulado En"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "lista_id",
+          "numero",
+          "estado",
+          "estado_derivado",
+          "vigencia_desde",
+          "vigencia_hasta",
+          "version_base_id",
+          "generado_en",
+          "creado_por_id",
+          "creado_por_nombre",
+          "creado_en",
+          "publicado_por_id",
+          "publicado_por_nombre",
+          "publicado_en",
+          "anulado_por_id",
+          "anulado_por_nombre",
+          "anulado_en"
+        ],
+        "title": "VersionResponse",
+        "description": "Una versión de lista con su estado almacenado (`BORRADOR`, `PUBLICADA`, `ANULADA`) y,\nsi está publicada, el derivado de las fechas (`PROGRAMADA`, `VIGENTE`, `HISTORICA`; PRC-03).\nLos autores van con su nombre."
+      },
       "VersionRespuesta": {
         "properties": {
           "version": {
@@ -10024,6 +12787,23 @@
           "version"
         ],
         "title": "VersionRespuesta"
+      },
+      "VersionesResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VersionResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "VersionesResponse",
+        "description": "Las versiones de una lista, de la más nueva a la más antigua."
       },
       "YoResponse": {
         "properties": {

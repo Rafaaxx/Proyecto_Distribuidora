@@ -135,6 +135,62 @@ PERMISOS_ESPERADOS_POR_RUTA: dict[tuple[str, str], frozenset[str]] = {
     ),
     # D7 y SEG-06: anular es un permiso propio, distinto del de registrar.
     ("POST", "/api/v1/pagos-proveedores/{pago_id}/anulacion"): frozenset({"ANULAR_PAGO_PROVEEDOR"}),
+    # Change 13, grupo 5 (tarea 5.4, `design.md` D12): las cinco escrituras de listas, reglas
+    # y redondeos exigen `GESTIONAR_LISTAS`; las lecturas de listas, detalle y reglas,
+    # cualquiera de los dos permisos de listas; las opciones, ademas los de clientes y
+    # configuracion.
+    ("POST", "/api/v1/precios/listas"): frozenset({"GESTIONAR_LISTAS"}),
+    ("PUT", "/api/v1/precios/listas/{lista_id}"): frozenset({"GESTIONAR_LISTAS"}),
+    ("POST", "/api/v1/precios/listas/{lista_id}/reglas"): frozenset({"GESTIONAR_LISTAS"}),
+    ("PUT", "/api/v1/precios/listas/{lista_id}/reglas/{regla_id}"): frozenset({"GESTIONAR_LISTAS"}),
+    ("PUT", "/api/v1/precios/listas/{lista_id}/redondeos-categoria/{categoria_id}"): frozenset(
+        {"GESTIONAR_LISTAS"}
+    ),
+    ("GET", "/api/v1/precios/listas"): frozenset({"GESTIONAR_LISTAS", "PUBLICAR_LISTAS"}),
+    ("GET", "/api/v1/precios/listas/{lista_id}"): frozenset(
+        {"GESTIONAR_LISTAS", "PUBLICAR_LISTAS"}
+    ),
+    ("GET", "/api/v1/precios/listas/{lista_id}/reglas"): frozenset(
+        {"GESTIONAR_LISTAS", "PUBLICAR_LISTAS"}
+    ),
+    ("GET", "/api/v1/precios/listas/opciones"): frozenset(
+        {"GESTIONAR_LISTAS", "PUBLICAR_LISTAS", "GESTIONAR_CLIENTES", "ADMIN_CONFIGURACION"}
+    ),
+    # Change 13, grupo 7 (tarea 7.6): generar el borrador y fijar un precio exigen
+    # `GESTIONAR_LISTAS`; consultar el borrador, cualquiera de los dos permisos de listas.
+    ("POST", "/api/v1/precios/listas/{lista_id}/borrador"): frozenset({"GESTIONAR_LISTAS"}),
+    (
+        "PUT",
+        "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/precios/{producto_id}",
+    ): frozenset({"GESTIONAR_LISTAS"}),
+    ("GET", "/api/v1/precios/listas/{lista_id}/borrador"): frozenset(
+        {"GESTIONAR_LISTAS", "PUBLICAR_LISTAS"}
+    ),
+    # Change 13, grupo 8 (tarea 8.6): publicar y anular exigen `PUBLICAR_LISTAS` (PRC-06);
+    # las lecturas de versiones y de sus precios, cualquiera de los dos permisos de listas.
+    ("POST", "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/publicar"): frozenset(
+        {"PUBLICAR_LISTAS"}
+    ),
+    ("POST", "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/anular"): frozenset(
+        {"PUBLICAR_LISTAS"}
+    ),
+    ("GET", "/api/v1/precios/listas/{lista_id}/versiones"): frozenset(
+        {"GESTIONAR_LISTAS", "PUBLICAR_LISTAS"}
+    ),
+    ("GET", "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/precios"): frozenset(
+        {"GESTIONAR_LISTAS", "PUBLICAR_LISTAS"}
+    ),
+    # Grupo 9 (tarea 9.2, D12): la versión vigente a un momento, cualquiera de los dos permisos.
+    ("GET", "/api/v1/precios/listas/{lista_id}/vigente"): frozenset(
+        {"GESTIONAR_LISTAS", "PUBLICAR_LISTAS"}
+    ),
+    # Grupo 10 (tarea 10.3, D11): definir la lista predeterminada es configuracion de la
+    # organizacion (`ADMIN_CONFIGURACION`, no `GESTIONAR_LISTAS`); leerla, cualquiera de los
+    # tres permisos.
+    ("PUT", "/api/v1/precios/lista-predeterminada"): frozenset({"ADMIN_CONFIGURACION"}),
+    ("GET", "/api/v1/precios/lista-predeterminada"): frozenset(
+        {"ADMIN_CONFIGURACION", "GESTIONAR_LISTAS", "PUBLICAR_LISTAS"}
+    ),
 }
 
 

@@ -112,6 +112,36 @@ def test_inv03_el_catalogo_incluye_la_condicion_de_iva_y_la_regla_congelada_sin_
     assert [c for c, tipo in tipos.items() if tipo.lower() in TIPOS_PROHIBIDOS] == []
 
 
+COLUMNAS_NUMERIC_DE_PRECIOS = {
+    ("lista_precio", "redondeo_multiplo"),
+    ("regla_margen", "valor"),
+    ("redondeo_categoria", "multiplo"),
+    ("precio_item", "costo_referencia"),
+    ("precio_item", "valor_margen"),
+    ("precio_item", "precio_calculado"),
+    ("precio_item", "precio_final"),
+}
+
+
+def test_inv03_el_catalogo_incluye_los_importes_costos_y_porcentajes_de_precios_como_numeric(
+    _engine_de_sesion: Engine,
+) -> None:
+    """Change 13: toda columna de importe, costo o porcentaje de las listas de precios
+    (múltiplos de redondeo, valor de la regla, costo de referencia, margen, precio calculado y
+    final) es `numeric` exacto; las unidades de referencia son `integer` (cantidades base)."""
+    with _engine_de_sesion.connect() as conexion:
+        tipos = {
+            (tabla, columna): tipo
+            for tabla, columna, tipo in conexion.execute(_CONSULTA_CATALOGO).all()
+        }
+
+    assert {columna: tipos.get(columna) for columna in COLUMNAS_NUMERIC_DE_PRECIOS} == {
+        columna: "numeric" for columna in COLUMNAS_NUMERIC_DE_PRECIOS
+    }
+    assert tipos.get(("precio_item", "unidades_referencia")) == "integer"
+    assert [c for c, tipo in tipos.items() if tipo.lower() in TIPOS_PROHIBIDOS] == []
+
+
 @pytest.fixture
 def _tabla_temporal_con_columna_flotante(database_url: str) -> Iterator[Engine]:
     """Crea una tabla temporal con una columna `double precision`, para

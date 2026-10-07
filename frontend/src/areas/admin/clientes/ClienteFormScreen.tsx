@@ -25,6 +25,7 @@ import { esErrorDeRed, useCrearCliente, useModificarCliente } from '../../../fea
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { formatearImporte, parsearImporteDesdeApi } from '../../../lib/money'
 import { SaldoDeCuenta } from '../cuentas-corrientes/SaldoDeCuenta'
+import { SelectorDeListaDePrecios } from './SelectorDeListaDePrecios'
 
 const SIN_PERMISO_DE_CLIENTES = 'No tenés permiso para gestionar clientes.'
 const AVISO_SIN_CONEXION = 'Se necesita conexión para completar esta operación. Probá de nuevo cuando tengas conexión.'
@@ -117,6 +118,7 @@ function ClienteAlta() {
       email: null,
       codigo: null,
       estado_facturacion_default: null,
+      lista_precio_id: null,
     },
   })
 
@@ -210,6 +212,11 @@ function ClienteAlta() {
               {...register('email', { setValueAs: setValueAsTextoOpcional })}
             />
           </Campo>
+          <SelectorDeListaDePrecios
+            registro={register('lista_precio_id', { setValueAs: setValueAsTextoOpcional })}
+            listaAsignadaId={null}
+            error={errors.lista_precio_id?.message}
+          />
 
           {errors.root?.message && <Alert>{errors.root.message}</Alert>}
 
@@ -281,6 +288,7 @@ function ClienteEdicionFormulario({
       email: detalle.email,
       codigo: detalle.codigo,
       estado_facturacion_default: detalle.estado_facturacion_default,
+      lista_precio_id: detalle.lista_precio_id ?? null,
       estado: detalle.estado as (typeof ESTADOS_CLIENTE)[number],
     },
   })
@@ -423,6 +431,12 @@ function ClienteEdicionFormulario({
               {...register('email', { setValueAs: setValueAsTextoOpcional })}
             />
           </Campo>
+
+          <SelectorDeListaDePrecios
+            registro={register('lista_precio_id', { setValueAs: setValueAsTextoOpcional })}
+            listaAsignadaId={detalle.lista_precio_id ?? null}
+            error={errors.lista_precio_id?.message}
+          />
 
           <Campo id="estado" etiqueta="Estado" error={errors.estado?.message}>
             <select id="estado" className="rounded-md border border-border px-2 py-1 text-sm" {...register('estado')}>

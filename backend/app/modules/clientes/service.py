@@ -57,6 +57,14 @@ from app.modules.clientes.domain.ficha import (
 )
 from app.modules.clientes.models import Cliente
 from app.modules.identidad import service as identidad_service
+from app.modules.precios import service as precios_service
+
+
+class _Conservar:
+    """Tipo del marcador `CONSERVAR_LISTA`: "el campo no vino", distinto de `None` (quitar)."""
+
+
+CONSERVAR_LISTA = _Conservar()
 
 # Ficha genérica del cliente "consumidor final" (CLI-03, `design.md` D4).
 # El comando de habilitación no admite campos de ficha, pero `direccion` y
@@ -82,6 +90,20 @@ def _importe_para_auditoria(valor: Decimal | None) -> str | None:
     después, no una cadena vacía.
     """
     return None if valor is None else str(valor)
+
+
+# --- verificador de uso de listas de precios (change 13, D11, patrón de ADR-023) --------
+
+
+def _lista_asignada_a_cliente_no_inactivo(
+    organizacion_id: UUID, lista_id: UUID, sesion: Session
+) -> bool:
+    return repository.lista_asignada_a_cliente_no_inactivo(organizacion_id, lista_id, sesion)
+
+
+precios_service.registrar_verificador_uso_de_lista(
+    "clientes", _lista_asignada_a_cliente_no_inactivo
+)
 
 
 # --- alta (D7: nace `ACTIVO`; D3: sin campos de crédito) -------------------
@@ -116,14 +138,14 @@ def crear_cliente(
     El estado `ACTIVO` se pasa al repositorio porque la columna es `NOT NULL` y
     la interfaz de negocio de la tabla lo exige (`03` §10); acá no es elegible.
 
-    `lista_precio_id` tiene default `None` a propósito (D2): la columna existe
-    sin FK hasta el change 13, y la mitigación acordada es que no se ofrezca en
-    ninguna superficie de entrada, así que el handler de `CLIENTE_CREAR` no lo
-    menciona. Queda en la firma para que el 13 pueda ofrecerlo y para que
-    `configurar_consumidor_final` sea explícito al dejar la lista sin asignar.
+    `lista_precio_id` (opcional, `None` = la predeterminada de la organización, PRC-20) se
+    valida por `precios/service.py` (change 13, D11): 404 si no existe en la organización,
+    `LISTA_INACTIVA` si está inactiva.
     """
     documento = normalizar_documento(documento_tipo, documento_numero)
     estado_facturacion = validar_estado_facturacion_default(estado_facturacion_default)
+    if lista_precio_id is not None:
+        precios_service.validar_lista_asignable(organizacion_id, sesion, lista_id=lista_precio_id)
     return repository.crear_cliente(
         organizacion_id,
         sesion,
@@ -169,6 +191,7 @@ def modificar_cliente(
     telefono: str | None,
     email: str | None,
     estado_facturacion_default: str | None,
+    lista_precio_id: UUID | None | _Conservar,
     estado: str,
     actor_id: UUID | None,
     tiene_operaciones: bool = False,
@@ -194,6 +217,13 @@ def modificar_cliente(
 
     La escritura no incluye los tres campos de crédito (D3): la ficha y el
     crédito son dos comandos con dos permisos distintos.
+
+    `lista_precio_id` reemplaza la lista asignada: un id la asigna, `None` la quita (el
+    cliente vuelve a la predeterminada de la organización, PRC-20) y `CONSERVAR_LISTA` (el
+    campo no vino) la deja como estaba. La lista resultante se valida por `precios/service.py`
+    cuando es distinta de la que ya tenía o cuando el cliente queda activo, de modo que un
+    cliente activo nunca tiene una lista inactiva (D11) sin obligar a cambiar una lista ya
+    asignada para corregir otro dato de un cliente inactivo.
     """
     cliente = repository.obtener_cliente_por_id_para_actualizar(organizacion_id, cliente_id, sesion)
     if cliente is None:
@@ -212,6 +242,13 @@ def modificar_cliente(
         tiene_operaciones=operaciones,
         es_consumidor_final=cliente.es_consumidor_final,
     )
+    lista_resultante = (
+        cliente.lista_precio_id if isinstance(lista_precio_id, _Conservar) else lista_precio_id
+    )
+    if lista_resultante is not None and (
+        lista_resultante != cliente.lista_precio_id or estado_validado != "INACTIVO"
+    ):
+        precios_service.validar_lista_asignable(organizacion_id, sesion, lista_id=lista_resultante)
 
     actualizado = repository.actualizar_cliente(
         organizacion_id,
@@ -227,6 +264,7 @@ def modificar_cliente(
         telefono=telefono,
         email=email,
         estado_facturacion_default=estado_facturacion,
+        lista_precio_id=lista_resultante,
         estado=estado_validado,
         momento=reloj.now(),
         actualizado_por_id=actor_id,

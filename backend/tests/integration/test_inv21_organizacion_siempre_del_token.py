@@ -60,6 +60,28 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("get", "/api/v1/pagos-proveedores"),
         ("get", "/api/v1/pagos-proveedores/{pago_id}"),
         ("get", "/api/v1/proveedores/{proveedor_id}/saldo"),
+        # Change 13, tarea 11.1: las diecinueve rutas de `precios/api.py`. Su comportamiento
+        # real lo comprueba `test_inv21_aislamiento_endpoints_precios.py`; acá la afirmacion
+        # estructural (TR-08, INV-21): ninguna declara `organizacion_id`.
+        ("post", "/api/v1/precios/listas"),
+        ("get", "/api/v1/precios/listas"),
+        ("get", "/api/v1/precios/listas/opciones"),
+        ("get", "/api/v1/precios/listas/{lista_id}"),
+        ("put", "/api/v1/precios/listas/{lista_id}"),
+        ("get", "/api/v1/precios/listas/{lista_id}/reglas"),
+        ("post", "/api/v1/precios/listas/{lista_id}/reglas"),
+        ("put", "/api/v1/precios/listas/{lista_id}/reglas/{regla_id}"),
+        ("put", "/api/v1/precios/listas/{lista_id}/redondeos-categoria/{categoria_id}"),
+        ("post", "/api/v1/precios/listas/{lista_id}/borrador"),
+        ("get", "/api/v1/precios/listas/{lista_id}/borrador"),
+        ("put", "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/precios/{producto_id}"),
+        ("post", "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/publicar"),
+        ("post", "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/anular"),
+        ("get", "/api/v1/precios/listas/{lista_id}/versiones"),
+        ("get", "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/precios"),
+        ("get", "/api/v1/precios/listas/{lista_id}/vigente"),
+        ("put", "/api/v1/precios/lista-predeterminada"),
+        ("get", "/api/v1/precios/lista-predeterminada"),
     }
 )
 RUTAS_DE_AUTENTICACION = frozenset(
@@ -210,6 +232,34 @@ def test_la_recorrida_de_aislamiento_alcanza_las_rutas_nuevas_de_pagos(
     # (INV-05/TR-06, la anulación no edita el pago más allá de su estado).
     anulacion = rutas["/api/v1/pagos-proveedores/{pago_id}/anulacion"]["post"]  # type: ignore[index]
     assert _propiedades_del_cuerpo(anulacion, componentes) == {"motivo_id"}
+
+
+def test_toda_ruta_de_precios_esta_recorrida_y_no_declara_organizacion_id(
+    database_url: str,
+) -> None:
+    """Change 13, tarea 11.1: cada ruta registrada bajo `/api/v1/precios` esta en
+    `COBERTURA_DE_AISLAMIENTO` (la recorrida las alcanza) y ninguna declara `organizacion_id`
+    ni como parametro ni como campo del cuerpo: la organizacion sale siempre del token."""
+    os.environ.setdefault("DATABASE_URL", database_url)
+    esquema = _esquema_real()
+    rutas = esquema["paths"]  # type: ignore[index]
+    componentes = esquema.get("components", {})  # type: ignore[assignment]
+
+    registradas = {
+        (metodo, path)
+        for path, operaciones in rutas.items()  # type: ignore[union-attr]
+        if path.startswith("/api/v1/precios")
+        for metodo in operaciones  # type: ignore[union-attr]
+    }
+    for ruta in registradas:
+        assert ruta in COBERTURA_DE_AISLAMIENTO, (
+            f"La ruta {ruta} de `precios` tiene que estar en COBERTURA_DE_AISLAMIENTO."
+        )
+        metodo, path = ruta
+        operacion = rutas[path][metodo]  # type: ignore[index]
+        assert _NOMBRE_PROHIBIDO not in _nombres_de_parametros(operacion), ruta
+        assert _NOMBRE_PROHIBIDO not in _propiedades_del_cuerpo(operacion, componentes), ruta
+    assert len(registradas) == 19, "las diecinueve rutas de `precios` (change 13)"
 
 
 def test_las_rutas_de_autenticacion_tampoco_declaran_organizacion_id(

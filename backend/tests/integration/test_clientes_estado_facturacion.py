@@ -97,6 +97,7 @@ def test_modificar_con_un_estado_invalido_rechaza_y_conserva_el_guardado(
         "telefono": None,
         "email": None,
         "estado": "ACTIVO",
+        "lista_precio_id": None,
         "actor_id": None,
     }
 

@@ -29,7 +29,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, or_, select, tuple_
+from sqlalchemy import exists, func, or_, select, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -178,6 +178,21 @@ def obtener_consumidor_final(organizacion_id: UUID, sesion: Session) -> Cliente 
     return sesion.scalars(consulta).one_or_none()
 
 
+def lista_asignada_a_cliente_no_inactivo(
+    organizacion_id: UUID, lista_id: UUID, sesion: Session
+) -> bool:
+    """`True` si algún cliente de `organizacion_id` que no está `INACTIVO` tiene asignada
+    `lista_id` (`design.md` D11 punto 3): una sola consulta `EXISTS`."""
+    consulta = select(
+        exists().where(
+            Cliente.organizacion_id == organizacion_id,
+            Cliente.lista_precio_id == lista_id,
+            Cliente.estado != "INACTIVO",
+        )
+    )
+    return bool(sesion.execute(consulta).scalar_one())
+
+
 def actualizar_cliente(
     organizacion_id: UUID,
     sesion: Session,
@@ -193,12 +208,13 @@ def actualizar_cliente(
     telefono: str | None,
     email: str | None,
     estado_facturacion_default: str | None,
+    lista_precio_id: UUID | None,
     estado: str,
     momento: datetime,
     actualizado_por_id: UUID | None = None,
 ) -> Cliente | None:
-    """Escribe la ficha completa y el estado (D3: la ficha nunca toca los tres
-    campos de crédito). Devuelve `None` sin tocar nada si el cliente no existe
+    """Escribe la ficha completa, la lista asignada y el estado (D3: la ficha nunca toca los
+    tres campos de crédito). Devuelve `None` sin tocar nada si el cliente no existe
     en `organizacion_id`."""
     cliente = obtener_cliente_por_id(organizacion_id, cliente_id, sesion)
     if cliente is None:
@@ -215,6 +231,7 @@ def actualizar_cliente(
         cliente.telefono = telefono
         cliente.email = email
         cliente.estado_facturacion_default = estado_facturacion_default
+        cliente.lista_precio_id = lista_precio_id
         cliente.estado = estado
         cliente.actualizado_en = momento
         cliente.actualizado_por_id = actualizado_por_id

@@ -55,6 +55,14 @@ class Organizacion(Base):
 
 class ConfiguracionOrganizacion(Base):
     __tablename__ = "configuracion_organizacion"
+    __table_args__ = (
+        # Change 13 (D11, D13 punto 6): la lista predeterminada es de la misma organización.
+        ForeignKeyConstraint(
+            ["organizacion_id", "lista_precio_default_id"],
+            ["lista_precio.organizacion_id", "lista_precio.id"],
+            name="fk_configuracion_organizacion__lista_precio_default",
+        ),
+    )
 
     organizacion_id: Mapped[UUID] = mapped_column(ForeignKey("organizacion.id"), primary_key=True)
     condicion_iva: Mapped[str] = mapped_column(Text, nullable=False)

@@ -113,6 +113,9 @@ PERMISO_REGISTRAR_COMPRA = "REGISTRAR_COMPRA"
 PERMISO_ANULAR_COMPRA = "ANULAR_COMPRA"
 PERMISO_REGISTRAR_PAGO_PROVEEDOR = "REGISTRAR_PAGO_PROVEEDOR"
 PERMISO_ANULAR_PAGO_PROVEEDOR = "ANULAR_PAGO_PROVEEDOR"
+# D12 (change 13): el selector de alcance de una regla de margen lee las opciones de proveedor
+# con solo este permiso, solo en lectura.
+PERMISO_GESTIONAR_LISTAS = "GESTIONAR_LISTAS"
 
 router_proveedores = APIRouter(prefix="/proveedores", tags=["proveedores"])
 router_costos = APIRouter(prefix="/costos", tags=["proveedores"])
@@ -260,7 +263,10 @@ def listar_opciones_de_proveedores(
         ContextoAutenticado,
         Depends(
             requiere_algun_permiso(
-                PERMISO_OPCIONES, PERMISO_REGISTRAR_COMPRA, PERMISO_REGISTRAR_PAGO_PROVEEDOR
+                PERMISO_OPCIONES,
+                PERMISO_REGISTRAR_COMPRA,
+                PERMISO_REGISTRAR_PAGO_PROVEEDOR,
+                PERMISO_GESTIONAR_LISTAS,
             )
         ),
     ],

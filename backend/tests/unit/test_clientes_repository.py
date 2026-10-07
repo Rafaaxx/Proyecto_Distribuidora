@@ -246,6 +246,7 @@ def test_actualizar_cliente_de_otra_organizacion_no_escribe_nada() -> None:
         telefono=None,
         email=None,
         estado_facturacion_default=None,
+        lista_precio_id=None,
         estado="SUSPENDIDO",
         momento=None,  # type: ignore[arg-type]
         actualizado_por_id=None,
@@ -275,6 +276,7 @@ def test_actualizar_cliente_de_la_misma_organizacion_escribe_ficha_y_estado() ->
         telefono=None,
         email=None,
         estado_facturacion_default=None,
+        lista_precio_id=None,
         estado="SUSPENDIDO",
         momento=None,  # type: ignore[arg-type]
         actualizado_por_id=None,

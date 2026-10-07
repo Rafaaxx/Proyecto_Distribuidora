@@ -96,11 +96,11 @@ class ClienteCrearContenidoV1(ContenidoClienteV1):
     `CLIENTE_CONSUMIDOR_FINAL_CONFIGURAR` (CLI-03), que además es el único que
     puede hacerlo porque escribe la configuración de la organización.
 
-    `lista_precio_id` NO está, aunque la columna exista (D2): la tabla
-    `lista_precio` no se crea hasta el change 13, así que el valor no se puede
-    validar y la mitigación de D2 es que la columna "no se ofrece en ningún
-    formulario" hasta que exista la FK compuesta. Un `uuid` sin destino sería
-    un dato que el usuario escribe y nadie puede confirmar."""
+    `lista_precio_id` (opcional) es la lista de precios asignada (CLI-01): sin ella el
+    cliente compra con la lista predeterminada de la organización (PRC-20). Desde el
+    change 13 existe la tabla `lista_precio` con su clave foránea compuesta, así que se
+    valida por `precios/service.py` (404 si no existe en la organización, `LISTA_INACTIVA`
+    si está inactiva; `design.md` D11); reemplaza la mitigación D2 del change 07."""
 
     nombre: str
     direccion: str
@@ -112,6 +112,7 @@ class ClienteCrearContenidoV1(ContenidoClienteV1):
     email: str | None = None
     codigo: str | None = None
     estado_facturacion_default: str | None = None
+    lista_precio_id: UUID | None = None
 
 
 def manejar_cliente_crear(
@@ -132,6 +133,7 @@ def manejar_cliente_crear(
         email=contenido.email,
         codigo=contenido.codigo,
         estado_facturacion_default=contenido.estado_facturacion_default,
+        lista_precio_id=contenido.lista_precio_id,
         actor_id=sobre.usuario_id,
     )
     return "ACEPTADO", {"cliente_id": str(cliente.id)}, None
@@ -152,7 +154,10 @@ class ClienteModificarContenidoV1(ContenidoClienteV1):
     mismo comando que le corrige la dirección. Lo que NO va aquí es el crédito
     (D3) ni la marca de consumidor final (CLI-03).
 
-    Tampoco `lista_precio_id`, por la misma mitigación de D2 que en el alta."""
+    `lista_precio_id` es la lista asignada (change 13, D11, ajuste A): ausente CONSERVA la
+    lista actual, nulo explícito la QUITA (el cliente vuelve a la predeterminada de la
+    organización, PRC-20) y un id la asigna. El handler distingue ausente de nulo con
+    `model_fields_set`."""
 
     cliente_id: UUID
     nombre: str
@@ -166,6 +171,7 @@ class ClienteModificarContenidoV1(ContenidoClienteV1):
     email: str | None = None
     codigo: str | None = None
     estado_facturacion_default: str | None = None
+    lista_precio_id: UUID | None = None
 
 
 def manejar_cliente_modificar(
@@ -188,6 +194,12 @@ def manejar_cliente_modificar(
         email=contenido.email,
         codigo=contenido.codigo,
         estado_facturacion_default=contenido.estado_facturacion_default,
+        # Ausente = conservar la lista asignada; nulo = quitarla (ajuste A del change 13).
+        lista_precio_id=(
+            contenido.lista_precio_id
+            if "lista_precio_id" in contenido.model_fields_set
+            else clientes_service.CONSERVAR_LISTA
+        ),
         actor_id=sobre.usuario_id,
         # CLI-06 activo (change 08, D8): un cliente tiene operaciones si su
         # cuenta corriente tiene algun movimiento. Se consulta dentro del

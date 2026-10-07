@@ -6,7 +6,14 @@
  */
 
 /** Campos de la ficha de cliente (`ClienteFormScreen.tsx`, tarea 5.3). */
-export type CampoCliente = 'nombre' | 'direccion' | 'contacto' | 'codigo' | 'documento_numero' | 'estado'
+export type CampoCliente =
+  | 'nombre'
+  | 'direccion'
+  | 'contacto'
+  | 'codigo'
+  | 'documento_numero'
+  | 'estado'
+  | 'lista_precio_id'
 
 const MAPA_CODIGO_A_CAMPO_CLIENTE: Record<string, CampoCliente> = {
   NOMBRE_INVALIDO: 'nombre',
@@ -20,6 +27,7 @@ const MAPA_CODIGO_A_CAMPO_CLIENTE: Record<string, CampoCliente> = {
   TRANSICION_ESTADO_INVALIDA: 'estado',
   CLIENTE_CON_OPERACIONES: 'estado',
   CONSUMIDOR_FINAL_NO_INACTIVABLE: 'estado',
+  LISTA_INACTIVA: 'lista_precio_id',
 }
 
 export function campoDeClienteParaCodigo(codigo: string): CampoCliente | null {

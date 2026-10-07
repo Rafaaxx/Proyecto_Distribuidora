@@ -59,8 +59,8 @@ class ClienteResponse(BaseModel):
     telefono: str | None
     email: str | None
     lista_precio_id: UUID | None
-    """Sin FK hasta el change 13 (D2, ADR-025): la columna existe y se
-    devuelve, pero en este change nadie la escribe."""
+    """La lista de precios asignada (CLI-01, change 13, D11); `None` = la predeterminada de
+    la organización (PRC-20)."""
     limite_credito: Decimal | None
     politica_credito: str | None
     tolerancia_offline_tipo: str | None
@@ -90,7 +90,7 @@ class PaginaClientes(BaseModel):
 class ClienteCrearRequest(BaseModel):
     """Cuerpo de `POST /clientes` (D9). Sin `estado` (nace `ACTIVO`, D7) y sin
     `es_consumidor_final` (solo lo pone `CLIENTE_CONSUMIDOR_FINAL_CONFIGURAR`,
-    CLI-03) ni `lista_precio_id` (D2: sin FK hasta el change 13)."""
+    CLI-03). `lista_precio_id` es la lista asignada, opcional (change 13, D11)."""
 
     nombre: str
     direccion: str
@@ -102,14 +102,17 @@ class ClienteCrearRequest(BaseModel):
     email: str | None = None
     codigo: str | None = None
     estado_facturacion_default: str | None = None
+    lista_precio_id: UUID | None = None
 
 
 class ClienteModificarRequest(BaseModel):
     """Cuerpo de `PUT /clientes/{cliente_id}` (D9). `PUT` reemplaza el estado
     completo de la ficha, igual que `ProveedorModificarRequest`: un opcional
-    ausente o `null` se guarda como `null`. `estado` es obligatorio porque
+    ausente o `null` se guarda como `null` (salvo `lista_precio_id`). `estado` es obligatorio porque
     modificar la ficha y cambiar el estado son la misma escritura (D7). Sin
-    campos de crédito (D3) ni de consumidor final (CLI-03)."""
+    campos de crédito (D3) ni de consumidor final (CLI-03). `lista_precio_id` es la
+    excepción (change 13, D11, ajuste A): ausente conserva la lista asignada, `null`
+    explícito la quita y un id la asigna; se distingue con `model_fields_set`."""
 
     nombre: str
     direccion: str
@@ -122,6 +125,7 @@ class ClienteModificarRequest(BaseModel):
     email: str | None = None
     codigo: str | None = None
     estado_facturacion_default: str | None = None
+    lista_precio_id: UUID | None = None
 
 
 class ClienteCreditoModificarRequest(BaseModel):

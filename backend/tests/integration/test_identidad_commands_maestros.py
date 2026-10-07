@@ -23,6 +23,7 @@ desbloqueo permite iniciar sesión de nuevo.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -703,7 +704,10 @@ class TestPinAutorizacionRotar:
         supervisor = self._crear_supervisor(sesion, organizacion.id)
         sesion.commit()
         access_token = _login(cliente, organizacion.slug, "admin1")
-        pin_invalido_por_longitud = "12"
+        # Cinco dígitos (uno menos que el mínimo) y sin los identificadores de la
+        # respuesta al comparar: un PIN de dos dígitos como "12" coincidía cada tanto
+        # con los dígitos de un UUID del cuerpo y la prueba fallaba sin que hubiera fuga.
+        pin_invalido_por_longitud = "90817"
 
         respuesta = cliente.post(
             f"/api/v1/identidad/usuarios/{supervisor.id}/pin",
@@ -712,7 +716,10 @@ class TestPinAutorizacionRotar:
         )
 
         assert respuesta.status_code != 204
-        assert pin_invalido_por_longitud not in respuesta.text
+        texto_sin_identificadores = re.sub(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", "", respuesta.text
+        )
+        assert pin_invalido_por_longitud not in texto_sin_identificadores
         sesion.refresh(supervisor)
         assert supervisor.pin_autorizacion_hash is None
 

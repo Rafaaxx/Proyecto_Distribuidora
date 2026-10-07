@@ -276,6 +276,54 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("get", "/api/v1/pagos-proveedores"),
         ("get", "/api/v1/pagos-proveedores/{pago_id}"),
         ("get", "/api/v1/proveedores/{proveedor_id}/saldo"),
+        # Change 13, grupo 5 (`precios/api.py`, tarea 5.4): las nueve rutas de listas, reglas
+        # de margen y redondeos por categoria -- cinco escrituras dedicadas y cuatro lecturas
+        # (listado, opciones, detalle y reglas) -- con su prueba real de aislamiento en
+        # `test_precios_api.py::test_inv21_cada_organizacion_ve_solo_sus_listas_y_las_ajenas_
+        # responden_404` (login real de dos organizaciones: la lista de otra organizacion
+        # responde 404 en el detalle, las reglas, la modificacion, el alta de regla y el
+        # redondeo, y el listado y las opciones solo traen las propias) y `test_inv21_una_
+        # regla_con_una_entidad_de_otra_organizacion_responde_404` (la referencia ajena EN EL
+        # CONTENIDO, para los cuatro alcances). El cuerpo no acepta `organizacion_id`
+        # (`test_el_cuerpo_no_acepta_la_organizacion`). El grupo 11 agrega las rutas de los
+        # lotes siguientes y el archivo dedicado `test_inv21_aislamiento_endpoints_precios.py`.
+        ("post", "/api/v1/precios/listas"),
+        ("get", "/api/v1/precios/listas"),
+        ("get", "/api/v1/precios/listas/opciones"),
+        ("get", "/api/v1/precios/listas/{lista_id}"),
+        ("put", "/api/v1/precios/listas/{lista_id}"),
+        ("get", "/api/v1/precios/listas/{lista_id}/reglas"),
+        ("post", "/api/v1/precios/listas/{lista_id}/reglas"),
+        ("put", "/api/v1/precios/listas/{lista_id}/reglas/{regla_id}"),
+        ("put", "/api/v1/precios/listas/{lista_id}/redondeos-categoria/{categoria_id}"),
+        # Change 13, grupo 7 (tarea 7.6): generar el borrador, fijar un precio manual y
+        # consultar el borrador. Prueba real de aislamiento en `test_precios_api.py`:
+        # `test_generar_sobre_una_lista_inactiva_responde_409_y_sobre_una_ajena_404`,
+        # `test_inv21_fijar_sobre_la_lista_o_la_version_de_otra_organizacion_responde_404` y
+        # `test_consultar_el_borrador_exige_gestionar_o_publicar_y_no_cruza_organizaciones`.
+        ("post", "/api/v1/precios/listas/{lista_id}/borrador"),
+        ("get", "/api/v1/precios/listas/{lista_id}/borrador"),
+        ("put", "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/precios/{producto_id}"),
+        # Change 13, grupo 8 (tarea 8.6): publicar, anular y consultar versiones y sus precios.
+        # Prueba real de aislamiento en `test_precios_api.py`: `test_publicar_exige_operation_id_
+        # publicar_listas_y_no_cruza_organizaciones`, `test_inv21_anular_la_version_de_otra_
+        # organizacion_responde_404` y `test_las_lecturas_de_versiones_exigen_un_permiso_de_
+        # listas_y_no_cruzan_organizaciones`.
+        ("post", "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/publicar"),
+        ("post", "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/anular"),
+        ("get", "/api/v1/precios/listas/{lista_id}/versiones"),
+        ("get", "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/precios"),
+        # Change 13, grupo 9 (tarea 9.2): la versión vigente de una lista a un momento (PRC-20).
+        # Prueba real de aislamiento en `test_precios_api.py::test_inv21_la_version_vigente_de_
+        # una_lista_de_otra_organizacion_responde_404`.
+        ("get", "/api/v1/precios/listas/{lista_id}/vigente"),
+        # Change 13, grupo 10 (tarea 10.3): definir y leer la lista predeterminada de la
+        # organizacion (`LISTA_PRECIO_PREDETERMINADA_DEFINIR`, PRC-20). Grupo 11 (tarea 11.1):
+        # las diecinueve rutas de `precios` tienen su prueba dedicada de aislamiento en
+        # `test_inv21_aislamiento_endpoints_precios.py` (login real de dos organizaciones; el
+        # recurso de otra organizacion responde 404 sin efectos).
+        ("put", "/api/v1/precios/lista-predeterminada"),
+        ("get", "/api/v1/precios/lista-predeterminada"),
     }
 )
 

@@ -99,6 +99,25 @@ def test_los_parametros_a_definir_al_configurar_quedan_explicitamente_nulos(
     assert configuracion.cliente_consumidor_final_id is None
 
 
+def test_la_siembra_no_crea_listas_de_precios_y_la_predeterminada_queda_sin_definir(
+    db_session: Session,
+) -> None:
+    """Escenario "La organización recién sembrada no tiene lista predeterminada" (change 13,
+    D11): crear "General" exige un redondeo que `01` §4 deja "a definir", así que la lista se
+    crea desde la pantalla y no se siembra."""
+    organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+    assert organizacion is not None
+
+    listas = db_session.execute(
+        text("SELECT count(*) FROM lista_precio WHERE organizacion_id = :o"),
+        {"o": organizacion.id},
+    ).scalar_one()
+    configuracion = identidad_service.obtener_configuracion(organizacion.id, db_session)
+    assert listas == 0
+    assert configuracion is not None
+    assert configuracion.lista_precio_default_id is None
+
+
 def test_sembrar_dos_veces_no_duplica_ni_pisa(db_session: Session) -> None:
     """Escenario 'Sembrar dos veces no duplica ni pisa' (tarea 8.6)."""
     organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)

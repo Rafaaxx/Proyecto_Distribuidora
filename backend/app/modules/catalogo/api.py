@@ -75,6 +75,9 @@ PERMISO = "GESTIONAR_CATALOGO"
 PERMISO_VER_COSTOS = "VER_COSTOS"
 # D17 (change 11): el formulario de compra lee productos y presentaciones con solo este permiso.
 PERMISO_REGISTRAR_COMPRA = "REGISTRAR_COMPRA"
+# D12 (change 13): el selector de alcance de una regla de margen lee productos, categorías y
+# marcas con solo este permiso, solo en lectura.
+PERMISO_GESTIONAR_LISTAS = "GESTIONAR_LISTAS"
 
 
 def _resultado_de(comando: sync_service.Comando) -> dict[str, object]:
@@ -179,7 +182,10 @@ def modificar_categoria(
 
 @router.get("/categorias", response_model=PaginaCategorias)
 def listar_categorias(
-    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso(PERMISO))],
+    contexto: Annotated[
+        ContextoAutenticado,
+        Depends(requiere_algun_permiso(PERMISO, PERMISO_GESTIONAR_LISTAS)),
+    ],
     sesion: Annotated[Session, Depends(get_session)],
     limite: int = LIMITE_PAGINA_DEFAULT,
     cursor: str | None = None,
@@ -291,7 +297,10 @@ def modificar_marca(
 
 @router.get("/marcas", response_model=PaginaMarcas)
 def listar_marcas(
-    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso(PERMISO))],
+    contexto: Annotated[
+        ContextoAutenticado,
+        Depends(requiere_algun_permiso(PERMISO, PERMISO_GESTIONAR_LISTAS)),
+    ],
     sesion: Annotated[Session, Depends(get_session)],
     limite: int = LIMITE_PAGINA_DEFAULT,
     cursor: str | None = None,
@@ -434,7 +443,9 @@ def modificar_producto(
 def listar_productos(
     contexto: Annotated[
         ContextoAutenticado,
-        Depends(requiere_algun_permiso(PERMISO, PERMISO_REGISTRAR_COMPRA)),
+        Depends(
+            requiere_algun_permiso(PERMISO, PERMISO_REGISTRAR_COMPRA, PERMISO_GESTIONAR_LISTAS)
+        ),
     ],
     sesion: Annotated[Session, Depends(get_session)],
     limite: int = LIMITE_PAGINA_DEFAULT,
@@ -467,7 +478,9 @@ def obtener_producto(
     producto_id: UUID,
     contexto: Annotated[
         ContextoAutenticado,
-        Depends(requiere_algun_permiso(PERMISO, PERMISO_REGISTRAR_COMPRA)),
+        Depends(
+            requiere_algun_permiso(PERMISO, PERMISO_REGISTRAR_COMPRA, PERMISO_GESTIONAR_LISTAS)
+        ),
     ],
     sesion: Annotated[Session, Depends(get_session)],
 ) -> ProductoDetalleResponse:

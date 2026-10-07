@@ -842,6 +842,59 @@ class TestModificarCliente:
         assert cuerpo["nombre"] == "Kiosco La Esquina S.A."
         assert cuerpo["estado"] == "SUSPENDIDO"
 
+    def test_put_conserva_la_lista_si_falta_y_la_quita_con_nulo(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """Change 13, ajuste A: en `PUT`, `lista_precio_id` ausente conserva la lista
+        asignada, `null` la quita y un id la asigna."""
+        _, slug = _organizacion_con_permisos(
+            sesion,
+            "org-put-lista",
+            permisos=frozenset({"GESTIONAR_CLIENTES", "GESTIONAR_LISTAS"}),
+        )
+        token = _login(cliente, slug, "admin")
+
+        def _con_op() -> dict[str, str]:
+            return {"Authorization": f"Bearer {token}", "Operation-Id": str(uuid4())}
+
+        lista = cliente.post(
+            "/api/v1/precios/listas",
+            json={
+                "nombre": "Mayorista",
+                "redondeo_multiplo": "100.00",
+                "redondeo_direccion": "ARRIBA",
+            },
+            headers=_con_op(),
+        ).json()
+        creado = cliente.post(
+            "/api/v1/clientes",
+            json={
+                "nombre": "Kiosco",
+                "direccion": "Av. San Martín 1420",
+                "contacto": "Rocío",
+                "lista_precio_id": lista["id"],
+            },
+            headers=_con_op(),
+        ).json()
+        ficha = {
+            "nombre": "Kiosco",
+            "direccion": "Av. San Martín 1420",
+            "contacto": "Rocío",
+            "estado": "ACTIVO",
+        }
+        url = f"/api/v1/clientes/{creado['id']}"
+
+        sin_campo = cliente.put(url, json={**ficha, "nombre": "Kiosco 2"}, headers=_con_op())
+        con_nulo = cliente.put(url, json={**ficha, "lista_precio_id": None}, headers=_con_op())
+        con_id = cliente.put(url, json={**ficha, "lista_precio_id": lista["id"]}, headers=_con_op())
+        otra_vez_sin_campo = cliente.put(url, json=ficha, headers=_con_op())
+
+        assert sin_campo.json()["lista_precio_id"] == lista["id"]
+        assert sin_campo.json()["nombre"] == "Kiosco 2"
+        assert con_nulo.json()["lista_precio_id"] is None
+        assert con_id.json()["lista_precio_id"] == lista["id"]
+        assert otra_vez_sin_campo.json()["lista_precio_id"] == lista["id"]
+
     def test_un_cliente_ajeno_responde_404(self, cliente: TestClient, sesion: Session) -> None:
         organizacion_a = _crear_organizacion(sesion, "org-mod-a")
         ajeno = _crear_cliente(sesion, organizacion_a.id, nombre="Kiosco La Esquina")

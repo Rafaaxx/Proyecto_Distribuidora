@@ -15,7 +15,7 @@ importar este módulo para que los puertos queden registrados."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
@@ -240,6 +240,14 @@ def listar_proveedores(
     )
 
 
+def nombres_de_proveedores(
+    organizacion_id: UUID, proveedor_ids: Collection[UUID], sesion: Session
+) -> dict[UUID, str]:
+    """`{id: nombre}` de los proveedores de la organización, en una consulta: lo que
+    `precios` necesita para mostrar el alcance de una regla (change 13). Solo lectura."""
+    return repository.nombres_de_proveedores(organizacion_id, proveedor_ids, sesion)
+
+
 def buscar_proveedores_por_nombre(
     organizacion_id: UUID, nombre: str, sesion: Session
 ) -> list[Proveedor]:
@@ -413,6 +421,48 @@ def obtener_costo_informado_vigente(
     """CST-03: el costo vigente de un producto para `fecha`, resuelto con
     SQL (D4)."""
     return repository.obtener_vigente(organizacion_id, producto_id, fecha, sesion)
+
+
+@dataclass(frozen=True)
+class CostoVigente:
+    """El costo informado vigente de un producto a una fecha, tal como `precios` lo necesita
+    para armar un precio (change 13, tarea 6.2): cuál es (`costo_informado_id`), de qué
+    presentación salió, su costo por unidad base (CST-03), con qué regla de IVA se registró
+    (CST-06) y si los últimos costos de las presentaciones del producto difieren por unidad
+    base (D2)."""
+
+    producto_id: UUID
+    costo_informado_id: UUID
+    presentacion_id: UUID
+    costo_base: Decimal
+    computa_credito_fiscal: bool
+    costos_distintos_por_presentacion: bool
+
+
+def obtener_costos_informados_vigentes(
+    organizacion_id: UUID, producto_ids: Collection[UUID], fecha: date, sesion: Session
+) -> dict[UUID, CostoVigente]:
+    """El costo informado vigente a `fecha` de cada producto de `producto_ids` que lo tenga,
+    en consultas fijas (dos, sin importar cuántos productos): el mismo resultado que
+    `obtener_costo_informado_vigente` producto por producto, incluido el desempate de CST-03.
+    Un producto sin costo vigente no aparece en el resultado. Solo lectura."""
+    vigentes = repository.obtener_vigentes_de_productos(
+        organizacion_id, producto_ids, fecha, sesion
+    )
+    distintos = repository.productos_con_costos_distintos_por_presentacion(
+        organizacion_id, [costo.producto_id for costo in vigentes], fecha, sesion
+    )
+    return {
+        costo.producto_id: CostoVigente(
+            producto_id=costo.producto_id,
+            costo_informado_id=costo.id,
+            presentacion_id=costo.presentacion_id,
+            costo_base=costo.costo_base,
+            computa_credito_fiscal=costo.computa_credito_fiscal,
+            costos_distintos_por_presentacion=costo.producto_id in distintos,
+        )
+        for costo in vigentes
+    }
 
 
 def listar_historial_costos(

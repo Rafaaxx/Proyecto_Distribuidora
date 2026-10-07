@@ -17,7 +17,7 @@ handlers.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -661,3 +661,93 @@ def obtener_referencia_de_producto(
     producto, para módulos que necesitan sus unidades (visualización CAT-08,
     costeo, precios) sin importar `catalogo.repository` directamente."""
     return repository.obtener_referencia_de_producto(organizacion_id, producto_id, sesion)
+
+
+def nombres_de_productos(
+    organizacion_id: UUID, producto_ids: Collection[UUID], sesion: Session
+) -> dict[UUID, str]:
+    """`{id: nombre}` de los productos de la organización, en una consulta: lo que `precios`
+    necesita para mostrar el alcance de una regla (change 13). Solo lectura."""
+    return repository.nombres_de_productos(organizacion_id, producto_ids, sesion)
+
+
+def nombres_de_marcas(
+    organizacion_id: UUID, marca_ids: Collection[UUID], sesion: Session
+) -> dict[UUID, str]:
+    return repository.nombres_de_marcas(organizacion_id, marca_ids, sesion)
+
+
+def nombres_de_categorias(
+    organizacion_id: UUID, categoria_ids: Collection[UUID], sesion: Session
+) -> dict[UUID, str]:
+    return repository.nombres_de_categorias(organizacion_id, categoria_ids, sesion)
+
+
+@dataclass(frozen=True)
+class ProductoConReferencia:
+    """Un producto activo con lo que `precios` necesita para calcular su precio (change 13,
+    tarea 6.1): su categoría, marca, proveedor y las unidades de su presentación de
+    referencia (D1)."""
+
+    producto_id: UUID
+    nombre: str
+    categoria_id: UUID
+    marca_id: UUID | None
+    proveedor_id: UUID
+    presentacion_referencia_id: UUID | None
+    unidades_referencia: int | None
+
+
+def listar_productos_activos_con_referencia(
+    organizacion_id: UUID, sesion: Session
+) -> list[ProductoConReferencia]:
+    """Los productos activos de la organización con su presentación de referencia, categoría,
+    marca y proveedor, en una sola consulta: evita que `precios` consulte producto por producto
+    al generar un borrador (CAT-05: un producto inactivo no entra). Un producto activo sin
+    presentación de referencia SÍ se devuelve, con `presentacion_referencia_id` y
+    `unidades_referencia` en nulo: `precios` lo informa como producto sin precio (decisión del
+    2026-10-06, design D4). Solo lectura."""
+    return [
+        ProductoConReferencia(
+            producto_id=fila[0],
+            nombre=fila[1],
+            categoria_id=fila[2],
+            marca_id=fila[3],
+            proveedor_id=fila[4],
+            presentacion_referencia_id=fila[5],
+            unidades_referencia=fila[6],
+        )
+        for fila in repository.listar_productos_activos_con_referencia(organizacion_id, sesion)
+    ]
+
+
+def nombres_de_presentaciones(
+    organizacion_id: UUID, presentacion_ids: Collection[UUID], sesion: Session
+) -> dict[UUID, str]:
+    """`{id: nombre}` de las presentaciones de la organización, en una consulta: lo que
+    `precios` necesita para mostrar de qué presentación salió el costo de un precio."""
+    return repository.nombres_de_presentaciones(organizacion_id, presentacion_ids, sesion)
+
+
+@dataclass(frozen=True)
+class PresentacionDeVenta:
+    """Nombre y unidades base de una presentación activa de venta (change 13, ajuste B):
+    lo que `precios` necesita para que se muestre el precio por presentación (PRC-22). No
+    lleva costos ni precios."""
+
+    nombre: str
+    unidades_base: int
+
+
+def presentaciones_de_venta_de_productos(
+    organizacion_id: UUID, producto_ids: Collection[UUID], sesion: Session
+) -> dict[UUID, list[PresentacionDeVenta]]:
+    """`{producto_id: presentaciones}` de las presentaciones activas y de venta de los
+    productos, en una consulta y de menos unidades a más. Un producto sin presentaciones de
+    venta no aparece en el resultado. Solo lectura."""
+    por_producto: dict[UUID, list[PresentacionDeVenta]] = {}
+    for producto_id, nombre, unidades in repository.presentaciones_de_venta_de_productos(
+        organizacion_id, producto_ids, sesion
+    ):
+        por_producto.setdefault(producto_id, []).append(PresentacionDeVenta(nombre, unidades))
+    return por_producto

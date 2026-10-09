@@ -272,6 +272,30 @@
       "sessions": 0,
       "memories": 6,
       "prompts": 0
+    },
+    {
+      "id": "6c3b2062",
+      "created_by": "rafan",
+      "created_at": "2026-10-07T17:26:55Z",
+      "sessions": 0,
+      "memories": 2,
+      "prompts": 0
+    },
+    {
+      "id": "e0fae502",
+      "created_by": "rafan",
+      "created_at": "2026-10-08T01:45:23Z",
+      "sessions": 0,
+      "memories": 4,
+      "prompts": 0
+    },
+    {
+      "id": "8a371fa7",
+      "created_by": "rafan",
+      "created_at": "2026-10-08T18:39:06Z",
+      "sessions": 0,
+      "memories": 5,
+      "prompts": 0
     }
   ]
 }

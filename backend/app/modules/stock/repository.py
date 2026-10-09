@@ -30,10 +30,10 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, literal, select, tuple_, update
+from sqlalchemy import func, literal, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import DataError, IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql import ColumnElement
 
 from app.modules.stock.domain.errores import (
@@ -48,7 +48,15 @@ from app.modules.stock.domain.kardex import (
     decodificar_cursor,
     limite_efectivo,
 )
-from app.modules.stock.models import StockMovimiento, StockSaldo, Ubicacion
+from app.modules.stock.models import (
+    AjusteStock,
+    AjusteStockLinea,
+    StockMovimiento,
+    StockSaldo,
+    Transferencia,
+    TransferenciaLinea,
+    Ubicacion,
+)
 
 # Las FK que garantizan que el producto, la ubicación o el motivo existen en la
 # organización (INV-02): una referencia ajena o inexistente es 404, no un error de
@@ -59,6 +67,9 @@ _FK_A_404 = {
     "fk_stock_saldo__ubicacion": "La ubicación no existe en esta organización.",
     "fk_stock_movimiento__ubicacion": "La ubicación no existe en esta organización.",
     "fk_stock_movimiento__motivo": "El motivo no existe en esta organización.",
+    "fk_transferencia__origen": "La ubicación no existe en esta organización.",
+    "fk_transferencia__destino": "La ubicación no existe en esta organización.",
+    "fk_transferencia_linea__producto": "El producto no existe en esta organización.",
 }
 
 
@@ -244,6 +255,24 @@ def hay_saldos_distintos_de_cero(
     return (sesion.scalar(consulta) or 0) > 0
 
 
+def hay_saldos_del_producto_distintos_de_cero(
+    organizacion_id: UUID, sesion: Session, *, producto_id: UUID
+) -> bool:
+    """¿Alguna fila de `stock_saldo` del producto, en cualquier ubicación de la organización, es
+    distinta de cero? (change 14, D4, D4.2). Un saldo negativo cuenta, y dos saldos que suman cero
+    (+5 y −5) también: se mira cada fila. Las filas se leen `FOR SHARE`, en orden de ubicación,
+    para que un movimiento no las cambie mientras se decide; la cuenta se hace en SQL."""
+    bloqueadas = (
+        select(StockSaldo.cantidad_base.label("cantidad_base"))
+        .where(StockSaldo.organizacion_id == organizacion_id, StockSaldo.producto_id == producto_id)
+        .order_by(StockSaldo.ubicacion_id)
+        .with_for_update(read=True)
+        .subquery()
+    )
+    consulta = select(func.count()).select_from(bloqueadas).where(bloqueadas.c.cantidad_base != 0)
+    return (sesion.scalar(consulta) or 0) > 0
+
+
 # --- fila de saldo: creación perezosa y bloqueo (D10) --------------------------
 
 
@@ -407,6 +436,464 @@ def insertar_movimiento(
     return movimiento
 
 
+# --- transferencias (STK-07, change 14, D8) -------------------------------------
+
+
+def insertar_transferencia(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    transferencia_id: UUID,
+    ubicacion_origen_id: UUID,
+    ubicacion_destino_id: UUID,
+    observacion: str | None,
+    operation_id: UUID,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+    occurred_at: datetime,
+    registered_at: datetime,
+) -> Transferencia:
+    """Inserta la cabecera `CONFIRMADA` ya validada por `domain/` (nace sin anulación)."""
+    transferencia = Transferencia(
+        id=transferencia_id,
+        organizacion_id=organizacion_id,
+        ubicacion_origen_id=ubicacion_origen_id,
+        ubicacion_destino_id=ubicacion_destino_id,
+        observacion=observacion,
+        estado="CONFIRMADA",
+        anulacion_motivo_id=None,
+        anulada_en=None,
+        anulada_por_id=None,
+        operation_id=operation_id,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        occurred_at=occurred_at,
+        registered_at=registered_at,
+    )
+    _con_traduccion(sesion, lambda: sesion.add(transferencia))
+    return transferencia
+
+
+def insertar_transferencia_linea(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    linea_id: UUID,
+    transferencia_id: UUID,
+    orden: int,
+    producto_id: UUID,
+    cantidad_base: int,
+) -> TransferenciaLinea:
+    """Inserta una línea ya validada por `domain/`; `orden` empieza en 1."""
+    linea = TransferenciaLinea(
+        id=linea_id,
+        organizacion_id=organizacion_id,
+        transferencia_id=transferencia_id,
+        orden=orden,
+        producto_id=producto_id,
+        cantidad_base=cantidad_base,
+    )
+    _con_traduccion(sesion, lambda: sesion.add(linea))
+    return linea
+
+
+# --- ajustes (STK-08, change 14, D8) ----------------------------------------------
+
+
+def insertar_ajuste(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    ajuste_id: UUID,
+    ubicacion_id: UUID,
+    motivo_id: UUID,
+    observacion: str | None,
+    operation_id: UUID,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+    occurred_at: datetime,
+    registered_at: datetime,
+) -> AjusteStock:
+    """Inserta la cabecera `CONFIRMADA` ya validada por `domain/` (nace sin anulación)."""
+    ajuste = AjusteStock(
+        id=ajuste_id,
+        organizacion_id=organizacion_id,
+        ubicacion_id=ubicacion_id,
+        motivo_id=motivo_id,
+        observacion=observacion,
+        estado="CONFIRMADA",
+        anulacion_motivo_id=None,
+        anulado_en=None,
+        anulado_por_id=None,
+        operation_id=operation_id,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        occurred_at=occurred_at,
+        registered_at=registered_at,
+    )
+    _con_traduccion(sesion, lambda: sesion.add(ajuste))
+    return ajuste
+
+
+def insertar_ajuste_linea(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    linea_id: UUID,
+    ajuste_id: UUID,
+    orden: int,
+    producto_id: UUID,
+    cantidad_base: int,
+    costo_unitario: Decimal | None,
+) -> AjusteStockLinea:
+    """Inserta una línea ya validada; `costo_unitario` es el del movimiento que generó."""
+    linea = AjusteStockLinea(
+        id=linea_id,
+        organizacion_id=organizacion_id,
+        ajuste_id=ajuste_id,
+        orden=orden,
+        producto_id=producto_id,
+        cantidad_base=cantidad_base,
+        costo_unitario=costo_unitario,
+    )
+    _con_traduccion(sesion, lambda: sesion.add(linea))
+    return linea
+
+
+def lineas_de_ajuste(
+    organizacion_id: UUID, sesion: Session, *, ajuste_id: UUID
+) -> list[AjusteStockLinea]:
+    """Las líneas de un ajuste de la organización, por `orden`."""
+    return list(
+        sesion.scalars(
+            select(AjusteStockLinea)
+            .where(
+                AjusteStockLinea.organizacion_id == organizacion_id,
+                AjusteStockLinea.ajuste_id == ajuste_id,
+            )
+            .order_by(AjusteStockLinea.orden)
+        ).all()
+    )
+
+
+# --- lecturas de transferencias y ajustes (change 14, D7) -----------------------------------
+
+
+def listar_transferencias(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    ubicacion_id: UUID | None,
+    desde: datetime | None,
+    hasta: datetime | None,
+    cursor: str | None,
+    limite: int,
+) -> tuple[list[tuple[Transferencia, str, str, int]], str | None]:
+    """Transferencias de la organización de la más reciente a la más vieja, por cursor
+    `(occurred_at, id)` descendente (índices `ix_transferencia__*`). Cada fila trae el nombre
+    del origen y del destino y la cantidad de líneas, contada en la base. `ubicacion_id`
+    alcanza a la transferencia que la tiene como origen O como destino; `desde` (inclusive) y
+    `hasta` (exclusive) son instantes ya convertidos desde las fechas de negocio. Devuelve
+    `(filas, cursor_siguiente)`."""
+    origen = aliased(Ubicacion)
+    destino = aliased(Ubicacion)
+    cantidad_de_lineas = (
+        select(func.count())
+        .select_from(TransferenciaLinea)
+        .where(
+            TransferenciaLinea.organizacion_id == Transferencia.organizacion_id,
+            TransferenciaLinea.transferencia_id == Transferencia.id,
+        )
+        .correlate(Transferencia)
+        .scalar_subquery()
+    )
+    consulta = (
+        select(Transferencia, origen.nombre, destino.nombre, cantidad_de_lineas)
+        .join(
+            origen,
+            (origen.organizacion_id == Transferencia.organizacion_id)
+            & (origen.id == Transferencia.ubicacion_origen_id),
+        )
+        .join(
+            destino,
+            (destino.organizacion_id == Transferencia.organizacion_id)
+            & (destino.id == Transferencia.ubicacion_destino_id),
+        )
+        .where(Transferencia.organizacion_id == organizacion_id)
+    )
+    if ubicacion_id is not None:
+        consulta = consulta.where(
+            or_(
+                Transferencia.ubicacion_origen_id == ubicacion_id,
+                Transferencia.ubicacion_destino_id == ubicacion_id,
+            )
+        )
+    if desde is not None:
+        consulta = consulta.where(Transferencia.occurred_at >= desde)
+    if hasta is not None:
+        consulta = consulta.where(Transferencia.occurred_at < hasta)
+    if cursor is not None:
+        momento, id_cursor = decodificar_cursor(cursor)
+        consulta = consulta.where(
+            tuple_(Transferencia.occurred_at, Transferencia.id) < (momento, id_cursor)
+        )
+    consulta = consulta.order_by(Transferencia.occurred_at.desc(), Transferencia.id.desc()).limit(
+        limite + 1
+    )
+
+    filas = [
+        (transferencia, nombre_origen, nombre_destino, int(lineas))
+        for transferencia, nombre_origen, nombre_destino, lineas in sesion.execute(consulta).all()
+    ]
+    if len(filas) > limite:
+        pagina = filas[:limite]
+        ultima = pagina[-1][0]
+        return pagina, codificar_cursor(ultima.occurred_at, ultima.id)
+    return filas, None
+
+
+def obtener_transferencia(
+    organizacion_id: UUID, sesion: Session, *, transferencia_id: UUID
+) -> tuple[Transferencia, str, str] | None:
+    """La transferencia con el nombre de su origen y de su destino, sin bloquear, o `None` si
+    no existe en la organización (INV-21)."""
+    origen = aliased(Ubicacion)
+    destino = aliased(Ubicacion)
+    fila = sesion.execute(
+        select(Transferencia, origen.nombre, destino.nombre)
+        .join(
+            origen,
+            (origen.organizacion_id == Transferencia.organizacion_id)
+            & (origen.id == Transferencia.ubicacion_origen_id),
+        )
+        .join(
+            destino,
+            (destino.organizacion_id == Transferencia.organizacion_id)
+            & (destino.id == Transferencia.ubicacion_destino_id),
+        )
+        .where(
+            Transferencia.organizacion_id == organizacion_id, Transferencia.id == transferencia_id
+        )
+    ).one_or_none()
+    return None if fila is None else (fila[0], fila[1], fila[2])
+
+
+def listar_ajustes(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    ubicacion_id: UUID | None,
+    motivo_id: UUID | None,
+    desde: datetime | None,
+    hasta: datetime | None,
+    cursor: str | None,
+    limite: int,
+) -> tuple[list[tuple[AjusteStock, str, int]], str | None]:
+    """Ajustes de la organización de más reciente a más viejo, por cursor `(occurred_at, id)`
+    descendente, con el nombre de la ubicación y la cantidad de líneas. Mismo contrato que
+    `listar_transferencias`; `motivo_id` filtra por el motivo del ajuste (no por el de su
+    anulación)."""
+    cantidad_de_lineas = (
+        select(func.count())
+        .select_from(AjusteStockLinea)
+        .where(
+            AjusteStockLinea.organizacion_id == AjusteStock.organizacion_id,
+            AjusteStockLinea.ajuste_id == AjusteStock.id,
+        )
+        .correlate(AjusteStock)
+        .scalar_subquery()
+    )
+    consulta = (
+        select(AjusteStock, Ubicacion.nombre, cantidad_de_lineas)
+        .join(
+            Ubicacion,
+            (Ubicacion.organizacion_id == AjusteStock.organizacion_id)
+            & (Ubicacion.id == AjusteStock.ubicacion_id),
+        )
+        .where(AjusteStock.organizacion_id == organizacion_id)
+    )
+    if ubicacion_id is not None:
+        consulta = consulta.where(AjusteStock.ubicacion_id == ubicacion_id)
+    if motivo_id is not None:
+        consulta = consulta.where(AjusteStock.motivo_id == motivo_id)
+    if desde is not None:
+        consulta = consulta.where(AjusteStock.occurred_at >= desde)
+    if hasta is not None:
+        consulta = consulta.where(AjusteStock.occurred_at < hasta)
+    if cursor is not None:
+        momento, id_cursor = decodificar_cursor(cursor)
+        consulta = consulta.where(
+            tuple_(AjusteStock.occurred_at, AjusteStock.id) < (momento, id_cursor)
+        )
+    consulta = consulta.order_by(AjusteStock.occurred_at.desc(), AjusteStock.id.desc()).limit(
+        limite + 1
+    )
+
+    filas = [
+        (ajuste, nombre_ubicacion, int(lineas))
+        for ajuste, nombre_ubicacion, lineas in sesion.execute(consulta).all()
+    ]
+    if len(filas) > limite:
+        pagina = filas[:limite]
+        ultima = pagina[-1][0]
+        return pagina, codificar_cursor(ultima.occurred_at, ultima.id)
+    return filas, None
+
+
+def obtener_ajuste(
+    organizacion_id: UUID, sesion: Session, *, ajuste_id: UUID
+) -> tuple[AjusteStock, str] | None:
+    """El ajuste con el nombre de su ubicación, sin bloquear, o `None` si no existe en la
+    organización (INV-21)."""
+    fila = sesion.execute(
+        select(AjusteStock, Ubicacion.nombre)
+        .join(
+            Ubicacion,
+            (Ubicacion.organizacion_id == AjusteStock.organizacion_id)
+            & (Ubicacion.id == AjusteStock.ubicacion_id),
+        )
+        .where(AjusteStock.organizacion_id == organizacion_id, AjusteStock.id == ajuste_id)
+    ).one_or_none()
+    return None if fila is None else (fila[0], fila[1])
+
+
+def estados_de_operaciones(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    transferencias: Collection[UUID],
+    ajustes: Collection[UUID],
+) -> dict[UUID, str]:
+    """Estado (`CONFIRMADA` o `ANULADA`) de las transferencias y de los ajustes pedidos, por
+    id, en una consulta por tabla. Los ids son UUIDv7 únicos, así que un solo diccionario sirve
+    para las dos. Lo usa el kardex para marcar la operación de origen de cada movimiento."""
+    estados: dict[UUID, str] = {}
+    if transferencias:
+        for transferencia_id, estado in sesion.execute(
+            select(Transferencia.id, Transferencia.estado).where(
+                Transferencia.organizacion_id == organizacion_id,
+                Transferencia.id.in_(transferencias),
+            )
+        ).tuples():
+            estados[transferencia_id] = estado
+    if ajustes:
+        for ajuste_id, estado in sesion.execute(
+            select(AjusteStock.id, AjusteStock.estado).where(
+                AjusteStock.organizacion_id == organizacion_id,
+                AjusteStock.id.in_(ajustes),
+            )
+        ).tuples():
+            estados[ajuste_id] = estado
+    return estados
+
+
+# --- anulaciones (TR-06, change 14, D5) ---------------------------------------------
+
+
+def obtener_transferencia_para_actualizar(
+    organizacion_id: UUID, sesion: Session, *, transferencia_id: UUID
+) -> Transferencia | None:
+    """La cabecera de la organización con `SELECT ... FOR UPDATE`, o `None` (INV-21): es lo
+    primero que toma una anulación (`02` §7.3), así dos anulaciones de la misma transferencia
+    se serializan y la segunda ve el estado ya cambiado (`populate_existing`)."""
+    return sesion.scalars(
+        select(Transferencia)
+        .where(
+            Transferencia.organizacion_id == organizacion_id, Transferencia.id == transferencia_id
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).one_or_none()
+
+
+def lineas_de_transferencia(
+    organizacion_id: UUID, sesion: Session, *, transferencia_id: UUID
+) -> list[TransferenciaLinea]:
+    """Las líneas de una transferencia de la organización, por `orden`."""
+    return list(
+        sesion.scalars(
+            select(TransferenciaLinea)
+            .where(
+                TransferenciaLinea.organizacion_id == organizacion_id,
+                TransferenciaLinea.transferencia_id == transferencia_id,
+            )
+            .order_by(TransferenciaLinea.orden)
+        ).all()
+    )
+
+
+def movimientos_de_origen(
+    organizacion_id: UUID, sesion: Session, *, origen_tipo: str, origen_id: UUID
+) -> list[StockMovimiento]:
+    """Los movimientos del libro que originó una operación (por `origen_tipo` y `origen_id`),
+    en el orden en que se escribieron. Solo lee: una anulación arma sus inversos con ellos
+    (D5.2)."""
+    return list(
+        sesion.scalars(
+            select(StockMovimiento)
+            .where(
+                StockMovimiento.organizacion_id == organizacion_id,
+                StockMovimiento.origen_tipo == origen_tipo,
+                StockMovimiento.origen_id == origen_id,
+            )
+            .order_by(StockMovimiento.registered_at, StockMovimiento.id)
+        ).all()
+    )
+
+
+def anular_transferencia(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    transferencia: Transferencia,
+    motivo_id: UUID,
+    usuario_id: UUID,
+    momento: datetime,
+) -> None:
+    """Pasa la cabecera (ya bloqueada) a `ANULADA` con su motivo, usuario y momento: es lo
+    único que `app_runtime` puede actualizar (INV-05, D8). La cabecera tiene que ser de
+    `organizacion_id` (INV-21): si no, es inexistente."""
+    if transferencia.organizacion_id != organizacion_id:
+        raise RecursoNoEncontradoError("La transferencia no existe en esta organización.")
+    transferencia.estado = "ANULADA"
+    transferencia.anulacion_motivo_id = motivo_id
+    transferencia.anulada_por_id = usuario_id
+    transferencia.anulada_en = momento
+    _con_traduccion(sesion, sesion.flush)
+
+
+def obtener_ajuste_para_actualizar(
+    organizacion_id: UUID, sesion: Session, *, ajuste_id: UUID
+) -> AjusteStock | None:
+    """Como `obtener_transferencia_para_actualizar`, para un ajuste."""
+    return sesion.scalars(
+        select(AjusteStock)
+        .where(AjusteStock.organizacion_id == organizacion_id, AjusteStock.id == ajuste_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).one_or_none()
+
+
+def anular_ajuste(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    ajuste: AjusteStock,
+    motivo_id: UUID,
+    usuario_id: UUID,
+    momento: datetime,
+) -> None:
+    """Pasa la cabecera (ya bloqueada) a `ANULADA` con su motivo, usuario y momento. La
+    cabecera tiene que ser de `organizacion_id` (INV-21): si no, es inexistente."""
+    if ajuste.organizacion_id != organizacion_id:
+        raise RecursoNoEncontradoError("El ajuste no existe en esta organización.")
+    ajuste.estado = "ANULADA"
+    ajuste.anulacion_motivo_id = motivo_id
+    ajuste.anulado_por_id = usuario_id
+    ajuste.anulado_en = momento
+    _con_traduccion(sesion, sesion.flush)
+
+
 def existe_movimiento(
     organizacion_id: UUID,
     sesion: Session,
@@ -530,6 +1017,7 @@ def kardex(
             StockMovimiento.costo_unitario,
             StockMovimiento.origen_tipo,
             StockMovimiento.origen_id,
+            StockMovimiento.motivo_id,
             StockMovimiento.occurred_at,
             StockMovimiento.registered_at,
             StockMovimiento.usuario_id,
@@ -563,6 +1051,7 @@ def kardex(
             costo_unitario=fila.costo_unitario,
             origen_tipo=fila.origen_tipo,
             origen_id=fila.origen_id,
+            motivo_id=fila.motivo_id,
             occurred_at=fila.occurred_at,
             registered_at=fila.registered_at,
             usuario_id=fila.usuario_id,

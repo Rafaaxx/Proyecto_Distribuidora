@@ -344,6 +344,7 @@ def obtener_producto_por_id_para_compartir(
         select(Producto)
         .where(Producto.organizacion_id == organizacion_id, Producto.id == producto_id)
         .with_for_update(read=True)
+        .execution_options(populate_existing=True)
     )
     return sesion.scalars(consulta).one_or_none()
 

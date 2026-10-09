@@ -149,3 +149,55 @@ class RangoDeFechasInvalidoError(DomainError):
 
     codigo = "RANGO_DE_FECHAS_INVALIDO"
     status_http = 422
+
+
+# --- Transferencias y ajustes (change 14, `design.md` D3, D6) ----------------------
+
+
+class UbicacionesIgualesError(DomainError):
+    """El origen y el destino de una transferencia son la misma ubicación (STK-07, `03`
+    §9: `CHECK (origen <> destino)`)."""
+
+    codigo = "UBICACIONES_IGUALES"
+    status_http = 422
+
+
+class ObservacionInvalidaError(DomainError):
+    """La observación supera los 500 caracteres (D6)."""
+
+    codigo = "OBSERVACION_INVALIDA"
+    status_http = 422
+
+
+class MotivoInvalidoError(DomainError):
+    """El motivo del ajuste está inactivo o no es del ámbito `AJUSTE_STOCK` (STK-08,
+    TR-09, D6)."""
+
+    codigo = "MOTIVO_INVALIDO"
+    status_http = 422
+
+
+class ProductoSinCostoError(DomainError):
+    """Un ajuste positivo de un producto sin costo promedio (D3): ese stock se carga con
+    stock inicial o con una compra, que sí fijan costo."""
+
+    codigo = "PRODUCTO_SIN_COSTO"
+    status_http = 409
+
+
+# --- Anulación de transferencias y ajustes (change 14, `design.md` D5) --------------------
+
+
+class TransferenciaYaAnuladaError(DomainError):
+    """La transferencia ya está anulada: se anula una sola vez, como `COMPRA_YA_ANULADA`
+    (D5 punto 1)."""
+
+    codigo = "TRANSFERENCIA_YA_ANULADA"
+    status_http = 409
+
+
+class AjusteYaAnuladoError(DomainError):
+    """El ajuste ya está anulado: se anula una sola vez (D5 punto 1)."""
+
+    codigo = "AJUSTE_YA_ANULADO"
+    status_http = 409

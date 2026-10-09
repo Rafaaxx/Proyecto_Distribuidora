@@ -1,5 +1,7 @@
 """Modelos SQLAlchemy de `stock`: `Ubicacion`, `StockSaldo` y `StockMovimiento`
-(`docs/03-modelo-de-datos.md` §9; migración `a8b9c0d1e2f3`).
+(`docs/03-modelo-de-datos.md` §9; migración `a8b9c0d1e2f3`) y, del change 14,
+`Transferencia`, `TransferenciaLinea`, `AjusteStock` y `AjusteStockLinea` (migración
+`f3a4b5c6d7e8`).
 
 Mapean exactamente lo que crea la migración: `test_modelos_coinciden_con_
 migracion.py` corre `alembic revision --autogenerate` y exige que no detecte
@@ -193,3 +195,197 @@ class StockMovimiento(Base):
     dispositivo_id: Mapped[UUID]
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+def _fk(tabla: str, nombre: str, columna: str, destino: str) -> ForeignKeyConstraint:
+    return ForeignKeyConstraint(
+        ["organizacion_id", columna],
+        [f"{destino}.organizacion_id", f"{destino}.id"],
+        name=f"fk_{tabla}__{nombre}",
+    )
+
+
+class Transferencia(Base):
+    """Cabecera de una transferencia entre dos ubicaciones (STK-07, `design.md` D8). Nace
+    `CONFIRMADA`; solo cambia a `ANULADA` (TR-06, D5): `app_runtime` puede actualizar
+    únicamente `estado` y las tres columnas de anulación."""
+
+    __tablename__ = "transferencia"
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_transferencia"),
+        ForeignKeyConstraint(
+            ["organizacion_id"], ["organizacion.id"], name="fk_transferencia__organizacion"
+        ),
+        _fk("transferencia", "origen", "ubicacion_origen_id", "ubicacion"),
+        _fk("transferencia", "destino", "ubicacion_destino_id", "ubicacion"),
+        _fk("transferencia", "usuario", "usuario_id", "usuario"),
+        _fk("transferencia", "dispositivo", "dispositivo_id", "dispositivo"),
+        _fk("transferencia", "anulacion_motivo", "anulacion_motivo_id", "motivo"),
+        _fk("transferencia", "anulada_por", "anulada_por_id", "usuario"),
+        UniqueConstraint("organizacion_id", "id", name="ux_transferencia__org_id"),
+        CheckConstraint(
+            "ubicacion_origen_id <> ubicacion_destino_id",
+            name="ck_transferencia__ubicaciones_distintas",
+        ),
+        CheckConstraint("estado IN ('CONFIRMADA','ANULADA')", name="ck_transferencia__estado"),
+        CheckConstraint(
+            "(estado = 'ANULADA') = (anulada_en IS NOT NULL) "
+            "AND (anulada_en IS NOT NULL) = (anulacion_motivo_id IS NOT NULL) "
+            "AND (anulada_en IS NOT NULL) = (anulada_por_id IS NOT NULL)",
+            name="ck_transferencia__anulacion_coherente",
+        ),
+        Index(
+            "ix_transferencia__fecha", "organizacion_id", text("occurred_at DESC"), text("id DESC")
+        ),
+        Index(
+            "ix_transferencia__origen_fecha",
+            "organizacion_id",
+            "ubicacion_origen_id",
+            text("occurred_at DESC"),
+            text("id DESC"),
+        ),
+        Index(
+            "ix_transferencia__destino_fecha",
+            "organizacion_id",
+            "ubicacion_destino_id",
+            text("occurred_at DESC"),
+            text("id DESC"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(default=nuevo_id)
+    organizacion_id: Mapped[UUID]
+    ubicacion_origen_id: Mapped[UUID]
+    ubicacion_destino_id: Mapped[UUID]
+    observacion: Mapped[str | None] = mapped_column(Text)
+    estado: Mapped[str] = mapped_column(Text)
+    anulacion_motivo_id: Mapped[UUID | None]
+    anulada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    anulada_por_id: Mapped[UUID | None]
+    operation_id: Mapped[UUID]
+    usuario_id: Mapped[UUID]
+    dispositivo_id: Mapped[UUID]
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class TransferenciaLinea(Base):
+    """Línea de una transferencia: un producto y su cantidad en unidad base (INV-04),
+    siempre positiva. De solo inserción."""
+
+    __tablename__ = "transferencia_linea"
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_transferencia_linea"),
+        ForeignKeyConstraint(
+            ["organizacion_id"], ["organizacion.id"], name="fk_transferencia_linea__organizacion"
+        ),
+        _fk("transferencia_linea", "transferencia", "transferencia_id", "transferencia"),
+        _fk("transferencia_linea", "producto", "producto_id", "producto"),
+        UniqueConstraint("organizacion_id", "id", name="ux_transferencia_linea__org_id"),
+        UniqueConstraint(
+            "organizacion_id",
+            "transferencia_id",
+            "orden",
+            name="ux_transferencia_linea__transferencia_orden",
+        ),
+        CheckConstraint("orden >= 1", name="ck_transferencia_linea__orden"),
+        CheckConstraint("cantidad_base > 0", name="ck_transferencia_linea__cantidad_base"),
+        Index("ix_transferencia_linea__producto", "organizacion_id", "producto_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(default=nuevo_id)
+    organizacion_id: Mapped[UUID]
+    transferencia_id: Mapped[UUID]
+    orden: Mapped[int] = mapped_column(Integer)
+    producto_id: Mapped[UUID]
+    cantidad_base: Mapped[int] = mapped_column(Integer)
+
+
+class AjusteStock(Base):
+    """Cabecera de un ajuste de stock en una ubicación, con un motivo (STK-08, `design.md`
+    D8). Mismo ciclo de estado que `Transferencia`."""
+
+    __tablename__ = "ajuste_stock"
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_ajuste_stock"),
+        ForeignKeyConstraint(
+            ["organizacion_id"], ["organizacion.id"], name="fk_ajuste_stock__organizacion"
+        ),
+        _fk("ajuste_stock", "ubicacion", "ubicacion_id", "ubicacion"),
+        _fk("ajuste_stock", "motivo", "motivo_id", "motivo"),
+        _fk("ajuste_stock", "usuario", "usuario_id", "usuario"),
+        _fk("ajuste_stock", "dispositivo", "dispositivo_id", "dispositivo"),
+        _fk("ajuste_stock", "anulacion_motivo", "anulacion_motivo_id", "motivo"),
+        _fk("ajuste_stock", "anulado_por", "anulado_por_id", "usuario"),
+        UniqueConstraint("organizacion_id", "id", name="ux_ajuste_stock__org_id"),
+        CheckConstraint("estado IN ('CONFIRMADA','ANULADA')", name="ck_ajuste_stock__estado"),
+        CheckConstraint(
+            "(estado = 'ANULADA') = (anulado_en IS NOT NULL) "
+            "AND (anulado_en IS NOT NULL) = (anulacion_motivo_id IS NOT NULL) "
+            "AND (anulado_en IS NOT NULL) = (anulado_por_id IS NOT NULL)",
+            name="ck_ajuste_stock__anulacion_coherente",
+        ),
+        Index(
+            "ix_ajuste_stock__fecha", "organizacion_id", text("occurred_at DESC"), text("id DESC")
+        ),
+        Index(
+            "ix_ajuste_stock__ubicacion_fecha",
+            "organizacion_id",
+            "ubicacion_id",
+            text("occurred_at DESC"),
+            text("id DESC"),
+        ),
+        Index(
+            "ix_ajuste_stock__motivo_fecha",
+            "organizacion_id",
+            "motivo_id",
+            text("occurred_at DESC"),
+            text("id DESC"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(default=nuevo_id)
+    organizacion_id: Mapped[UUID]
+    ubicacion_id: Mapped[UUID]
+    motivo_id: Mapped[UUID]
+    observacion: Mapped[str | None] = mapped_column(Text)
+    estado: Mapped[str] = mapped_column(Text)
+    anulacion_motivo_id: Mapped[UUID | None]
+    anulado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    anulado_por_id: Mapped[UUID | None]
+    operation_id: Mapped[UUID]
+    usuario_id: Mapped[UUID]
+    dispositivo_id: Mapped[UUID]
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class AjusteStockLinea(Base):
+    """Línea de un ajuste: `cantidad_base` con signo y distinta de cero (INV-04) y el
+    `costo_unitario` con que se valorizó el movimiento (promedio vigente, nulo si el
+    producto no tenía; `design.md` D3). De solo inserción."""
+
+    __tablename__ = "ajuste_stock_linea"
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_ajuste_stock_linea"),
+        ForeignKeyConstraint(
+            ["organizacion_id"], ["organizacion.id"], name="fk_ajuste_stock_linea__organizacion"
+        ),
+        _fk("ajuste_stock_linea", "ajuste", "ajuste_id", "ajuste_stock"),
+        _fk("ajuste_stock_linea", "producto", "producto_id", "producto"),
+        UniqueConstraint("organizacion_id", "id", name="ux_ajuste_stock_linea__org_id"),
+        UniqueConstraint(
+            "organizacion_id", "ajuste_id", "orden", name="ux_ajuste_stock_linea__ajuste_orden"
+        ),
+        CheckConstraint("orden >= 1", name="ck_ajuste_stock_linea__orden"),
+        CheckConstraint("cantidad_base <> 0", name="ck_ajuste_stock_linea__cantidad_base"),
+        Index("ix_ajuste_stock_linea__producto", "organizacion_id", "producto_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(default=nuevo_id)
+    organizacion_id: Mapped[UUID]
+    ajuste_id: Mapped[UUID]
+    orden: Mapped[int] = mapped_column(Integer)
+    producto_id: Mapped[UUID]
+    cantidad_base: Mapped[int] = mapped_column(Integer)
+    costo_unitario: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))

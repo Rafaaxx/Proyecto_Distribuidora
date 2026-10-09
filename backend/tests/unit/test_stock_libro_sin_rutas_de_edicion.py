@@ -24,6 +24,8 @@ VERBOS_DE_EDICION = {"PUT", "PATCH", "DELETE"}
 FRAGMENTOS_DEL_LIBRO = (
     "/stock/kardex",
     "/stock/iniciales",
+    "/stock/transferencias",
+    "/stock/ajustes",
     "/saldos",
     "movimiento",
     "/productos/{producto_id}/costo",
@@ -99,4 +101,50 @@ def test_la_revision_detecta_una_ruta_de_borrado_sobre_los_libros() -> None:
         ("DELETE", "/api/v1/stock/movimientos/{movimiento_id}"),
         ("PATCH", "/api/v1/stock/kardex"),
         ("PUT", "/api/v1/catalogo/productos/{producto_id}/costo"),
+    ]
+
+
+OPERACIONES_NUEVAS = ("/api/v1/stock/transferencias", "/api/v1/stock/ajustes")
+
+
+def test_la_anulacion_es_la_unica_escritura_sobre_una_transferencia_o_un_ajuste_existente(
+    app_real: FastAPI,
+) -> None:
+    """Change 14, tarea 11.1 (TR-06, INV-05): las transferencias y los ajustes solo se crean
+    (`POST` a la colección) o se anulan (`POST .../anulacion`); ninguna ruta los edita ni los
+    borra, y una lectura es siempre `GET`."""
+    paths = app_real.openapi()["paths"]
+    rutas = {
+        ruta: {verbo.upper() for verbo in operaciones}
+        for ruta, operaciones in paths.items()
+        if ruta.startswith(OPERACIONES_NUEVAS)
+    }
+
+    assert rutas == {
+        "/api/v1/stock/transferencias": {"GET", "POST"},
+        "/api/v1/stock/transferencias/{transferencia_id}": {"GET"},
+        "/api/v1/stock/transferencias/{transferencia_id}/anulacion": {"POST"},
+        "/api/v1/stock/ajustes": {"GET", "POST"},
+        "/api/v1/stock/ajustes/{ajuste_id}": {"GET"},
+        "/api/v1/stock/ajustes/{ajuste_id}/anulacion": {"POST"},
+    }
+    assert rutas_de_edicion_sobre_el_libro(app_real) == []
+
+
+def test_la_revision_detecta_una_ruta_que_edita_una_transferencia_o_un_ajuste() -> None:
+    """Verificación en negativo: el mismo recorrido marca una ruta de edición sobre ellos."""
+    app = FastAPI()
+
+    @app.put("/api/v1/stock/transferencias/{transferencia_id}")
+    def editar_transferencia(transferencia_id: str) -> None: ...
+
+    @app.delete("/api/v1/stock/ajustes/{ajuste_id}")
+    def borrar_ajuste(ajuste_id: str) -> None: ...
+
+    @app.post("/api/v1/stock/ajustes/{ajuste_id}/anulacion")
+    def anular(ajuste_id: str) -> None: ...
+
+    assert rutas_de_edicion_sobre_el_libro(app) == [
+        ("DELETE", "/api/v1/stock/ajustes/{ajuste_id}"),
+        ("PUT", "/api/v1/stock/transferencias/{transferencia_id}"),
     ]

@@ -10,12 +10,27 @@ export interface FiltrosKardex {
   hasta?: string
 }
 
+export interface FiltrosTransferencias {
+  ubicacionId?: string
+  /** Fecha de negocio `aaaa-mm-dd` (TR-04), inclusive. */
+  desde?: string
+  hasta?: string
+}
+
+export interface FiltrosAjustes extends FiltrosTransferencias {
+  motivoId?: string
+}
+
 export const clavesStock = {
   raiz: () => ['stock'] as const,
   ubicaciones: (activo?: boolean) => ['stock', 'ubicaciones', { activo }] as const,
   saldos: (ubicacionId: string) => ['stock', 'saldos', ubicacionId] as const,
   kardex: (productoId: string, ubicacionId: string, filtros: FiltrosKardex = {}) =>
     ['stock', 'kardex', productoId, ubicacionId, filtros] as const,
+  transferencias: (filtros: FiltrosTransferencias = {}) => ['stock', 'transferencias', 'listado', filtros] as const,
+  transferencia: (id: string) => ['stock', 'transferencias', 'detalle', id] as const,
+  ajustes: (filtros: FiltrosAjustes = {}) => ['stock', 'ajustes', 'listado', filtros] as const,
+  ajuste: (id: string) => ['stock', 'ajustes', 'detalle', id] as const,
 }
 
 export const clavesCostoPromedio = {

@@ -51,6 +51,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.commands import catalogo, registro
+from app.commands.auditoria import DatosDeAuditoria as DatosDeAuditoria
 from app.commands.errores import (
     CodigoDeObservacionInvalidoError,
     ComandoInconsistenteError,
@@ -94,6 +95,18 @@ handler existente que sigue devolviendo un 3-tuple no se ve afectado --
 `_procesar_item_de_lote` distingue ambas formas por longitud, igual que ya
 distingue por tipo el resto del contrato de `HandlerFuncion` (que devuelve
 `object` a propósito, `design.md` D3)."""
+
+
+ResultadoHandlerConAuditoria = tuple[
+    str,
+    dict[str, object] | None,
+    str | None,
+    tuple[ObservacionProducida, ...],
+    DatosDeAuditoria,
+]
+"""Extensión de `ResultadoHandlerConObservaciones` con un quinto elemento: el dato opcional
+de auditoría (change 14, tarea 7.1, `design.md` D10.1). Las observaciones van siempre (vacías
+si no hay) y el bus copia `DatosDeAuditoria.motivo_id` a su única fila de auditoría."""
 
 
 def registrar_observacion(
@@ -290,7 +303,10 @@ def procesar_comando(
     *,
     sobre: SobreComando,
     huella: str,
-    ejecutar_handler: Callable[[object], ResultadoHandler | ResultadoHandlerConObservaciones],
+    ejecutar_handler: Callable[
+        [object],
+        ResultadoHandler | ResultadoHandlerConObservaciones | ResultadoHandlerConAuditoria,
+    ],
     verificar_permiso: Callable[[], None] = lambda: None,
     config: ConfiguracionReintentos | None = None,
     dormir: Callable[[float], None] = time.sleep,
@@ -325,13 +341,17 @@ def procesar_comando(
     configuracion = config or ConfiguracionReintentos()
     sesion_protegida = SesionSinCommit(sesion)
     se_ejecuto_el_handler = False
+    datos_de_auditoria: DatosDeAuditoria | None = None
     inicio = time.monotonic()
 
     def _paso_permiso_y_handler() -> ResultadoHandler:
-        nonlocal se_ejecuto_el_handler
+        nonlocal se_ejecuto_el_handler, datos_de_auditoria
         verificar_permiso()
         se_ejecuto_el_handler = True
-        return resolver_observaciones_del_handler(sesion, sobre, ejecutar_handler(sesion_protegida))
+        resultado, datos_de_auditoria = resolver_resultado_del_handler(
+            sesion, sobre, ejecutar_handler(sesion_protegida)
+        )
+        return resultado
 
     # Change 04, grupo 12 (tarea 12.2): contexto de comando propagado a
     # cualquier registro emitido durante esta ejecución -- por CUALQUIER
@@ -353,6 +373,7 @@ def procesar_comando(
     try:
         for intento in range(configuracion.intentos_maximos):
             se_ejecuto_el_handler = False
+            datos_de_auditoria = None
             try:
                 comando = procesar_idempotente(
                     sesion,
@@ -374,6 +395,7 @@ def procesar_comando(
                         dispositivo_id=sobre.dispositivo_id,
                         origen="COMANDO",
                         operation_id=sobre.operation_id,
+                        motivo_id=_motivo_para_la_auditoria(comando, datos_de_auditoria),
                     )
                 sesion.commit()
                 # Tarea 12.3 (`02` §17): duración, resultado y reintentos por
@@ -516,30 +538,59 @@ def poner_en_cuarentena(
     return resultado.registro
 
 
+def _motivo_para_la_auditoria(comando: Comando, datos: DatosDeAuditoria | None) -> UUID | None:
+    """El motivo que el handler pidió copiar, solo si el comando quedó aceptado: un
+    resultado rechazado no deja motivo en la auditoría (SYN-04)."""
+    if datos is None or not comando.estado.startswith("ACEPTADO"):
+        return None
+    return datos.motivo_id
+
+
 def resolver_observaciones_del_handler(
     sesion: Session,
     sobre: SobreComando,
     resultado_bruto: object,
 ) -> ResultadoHandler:
-    """Normaliza lo que devuelve un handler (3-tupla, o 4-tupla con observaciones,
-    tarea 9.5) y registra sus observaciones EN LA MISMA transacción del comando.
+    """Igual que `resolver_resultado_del_handler`, descartando el dato de auditoría.
+    Conserva la firma que usan los llamadores existentes."""
+    resultado, _datos = resolver_resultado_del_handler(sesion, sobre, resultado_bruto)
+    return resultado
+
+
+def resolver_resultado_del_handler(
+    sesion: Session,
+    sobre: SobreComando,
+    resultado_bruto: object,
+) -> tuple[ResultadoHandler, DatosDeAuditoria | None]:
+    """Normaliza lo que devuelve un handler y registra sus observaciones EN LA MISMA
+    transacción del comando. Devuelve el resultado de tres elementos y el dato opcional de
+    auditoría (tarea 7.1, D10.1), que `procesar_comando` copia a su fila de auditoría.
 
     Un handler registrado (`app.commands.registro`) DEBE devolver una tupla
-    `(estado, resultado, error_codigo)` o, si produce observaciones, `(estado,
-    resultado, error_codigo, observaciones)`: convención del bus (`design.md` D3), no
-    impuesta por el tipo de `HandlerFuncion` porque `app.commands` no puede importar
-    `ResultadoHandler` de `app.modules.sync` (contrato `commands-no-modulos`).
+    `(estado, resultado, error_codigo)`; si produce observaciones, `(estado, resultado,
+    error_codigo, observaciones)`; y si además pide copiar datos a la auditoría, `(estado,
+    resultado, error_codigo, observaciones, datos_de_auditoria)`: convención del bus
+    (`design.md` D3, D10.1), no impuesta por el tipo de `HandlerFuncion` porque
+    `app.commands` no puede importar `ResultadoHandler` de `app.modules.sync` (contrato
+    `commands-no-modulos`).
 
     `sesion` es la real (no la envoltura `SesionSinCommit` del handler), ya con la
     reserva de `comando` flusheada por `procesar_idempotente`, así que el comando
     siempre existe. Un ACEPTADO con observaciones pasa a ACEPTADO_CON_OBSERVACIONES;
     un RECHAZADO no deja observaciones (SYN-04). Lo usan el lote de sincronización y
     los endpoints REST que pasan por `procesar_comando` (change 11, `COMPRA_ANULAR`)."""
-    assert isinstance(resultado_bruto, tuple) and len(resultado_bruto) in (3, 4), (
-        "Un handler registrado DEBE devolver (estado, resultado, error_codigo) o "
-        "(estado, resultado, error_codigo, observaciones)."
+    assert isinstance(resultado_bruto, tuple) and len(resultado_bruto) in (3, 4, 5), (
+        "Un handler registrado DEBE devolver (estado, resultado, error_codigo), "
+        "(estado, resultado, error_codigo, observaciones) o "
+        "(estado, resultado, error_codigo, observaciones, datos_de_auditoria)."
     )
-    if len(resultado_bruto) == 4:
+    datos_de_auditoria: DatosDeAuditoria | None = None
+    if len(resultado_bruto) == 5:
+        estado, resultado, error_codigo, observaciones, datos_de_auditoria = resultado_bruto
+        assert isinstance(datos_de_auditoria, DatosDeAuditoria), (
+            "El quinto elemento del resultado de un handler DEBE ser DatosDeAuditoria."
+        )
+    elif len(resultado_bruto) == 4:
         estado, resultado, error_codigo, observaciones = resultado_bruto
     else:
         estado, resultado, error_codigo = resultado_bruto
@@ -559,7 +610,7 @@ def resolver_observaciones_del_handler(
                 organizacion_id=sobre.organizacion_id,
                 observaciones=observaciones,
             )
-    return estado, resultado, error_codigo
+    return (estado, resultado, error_codigo), datos_de_auditoria
 
 
 def _procesar_item_de_lote(
@@ -592,9 +643,12 @@ def _procesar_item_de_lote(
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
     huella = calcular_huella(sobre.contenido)
 
-    def _ejecutar_handler(_sesion_protegida: object) -> ResultadoHandler:
-        resultado_bruto = handler_registrado.funcion(sobre, contenido_validado)
-        return resolver_observaciones_del_handler(sesion, sobre, resultado_bruto)
+    def _ejecutar_handler(
+        _sesion_protegida: object,
+    ) -> ResultadoHandler | ResultadoHandlerConObservaciones | ResultadoHandlerConAuditoria:
+        # Sin resolver acá: `procesar_comando` normaliza el resultado y conserva el dato de
+        # auditoría (D10.1); resolverlo dos veces lo descartaría en este paso.
+        return handler_registrado.funcion(sobre, contenido_validado)  # type: ignore[return-value]
 
     return procesar_comando(
         sesion,

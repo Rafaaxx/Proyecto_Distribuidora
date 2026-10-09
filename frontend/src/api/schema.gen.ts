@@ -1469,6 +1469,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/stock/transferencias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Transferencias
+         * @description Transferencias de la organización, más recientes primero, con su estado (change 14,
+         *     D7). `ubicacion_id` alcanza origen y destino; `desde` y `hasta` son fechas de negocio en la
+         *     zona de la organización. Un `limite` fuera de 1 a 200 es 422. Sin costos.
+         */
+        get: operations["listar_transferencias_api_v1_stock_transferencias_get"];
+        put?: never;
+        /**
+         * Registrar Transferencia
+         * @description `STOCK_TRANSFERIR` (change 14, STK-07): mueve stock entre dos ubicaciones como una
+         *     sola operación atómica. 201 con la transferencia, su estado y los saldos resultantes en
+         *     origen y destino; sin costos. Con `PERMITIR_STOCK_NEGATIVO` una salida que no alcanza se
+         *     acepta y la respuesta lista `STOCK_NEGATIVO` en `observaciones`.
+         */
+        post: operations["registrar_transferencia_api_v1_stock_transferencias_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock/ajustes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Ajustes
+         * @description Ajustes de la organización, más recientes primero, con su estado y su motivo (change 14,
+         *     D7). Mismos filtros y paginación que las transferencias, más `motivo_id`. Sin costos.
+         */
+        get: operations["listar_ajustes_api_v1_stock_ajustes_get"];
+        put?: never;
+        /**
+         * Registrar Ajuste
+         * @description `STOCK_AJUSTAR` (change 14, STK-08): corrige el stock de una ubicación con un motivo
+         *     como una sola operación atómica. 201 con el ajuste, su estado y los saldos resultantes;
+         *     `costo_unitario` de cada línea (string) solo con `VER_COSTOS`. Un ajuste nunca deja
+         *     stock negativo: `STOCK_INSUFICIENTE` (409) aunque el usuario tenga `PERMITIR_STOCK_NEGATIVO`.
+         */
+        post: operations["registrar_ajuste_api_v1_stock_ajustes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock/transferencias/{transferencia_id}/anulacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anular Transferencia
+         * @description `STOCK_TRANSFERENCIA_ANULAR` (change 14, TR-06, D5): anula por completo una transferencia
+         *     confirmada con un motivo del ámbito `ANULACION_TRANSFERENCIA`. 200 con la transferencia
+         *     `ANULADA`, los datos de la anulación y los saldos resultantes; sin costos. Con
+         *     `TRANSFERIR_STOCK` se anula la propia; la de otro usuario exige además
+         *     `ANULAR_TRANSFERENCIA` (403 `PERMISO_REQUERIDO`). Si el destino no alcanza,
+         *     `STOCK_INSUFICIENTE` (409) salvo `PERMITIR_STOCK_NEGATIVO`, que la acepta con
+         *     `STOCK_NEGATIVO` en `observaciones`.
+         */
+        post: operations["anular_transferencia_api_v1_stock_transferencias__transferencia_id__anulacion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock/ajustes/{ajuste_id}/anulacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anular Ajuste
+         * @description `STOCK_AJUSTE_ANULAR` (change 14, TR-06, D5): anula por completo un ajuste confirmado,
+         *     propio o de otro usuario, con un motivo del ámbito `ANULACION_AJUSTE`. 200 con el ajuste
+         *     `ANULADA`, los datos de la anulación y el saldo resultante de cada línea; `costo_unitario`
+         *     (string) solo con `VER_COSTOS`. Si el stock de un ajuste positivo ya salió,
+         *     `STOCK_INSUFICIENTE` (409) salvo `PERMITIR_STOCK_NEGATIVO`, que la acepta con
+         *     `STOCK_NEGATIVO` en `observaciones`.
+         */
+        post: operations["anular_ajuste_api_v1_stock_ajustes__ajuste_id__anulacion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/stock/ubicaciones/{ubicacion_id}/saldos": {
         parameters: {
             query?: never;
@@ -1484,6 +1592,50 @@ export interface paths {
          *     es ajena o inexistente.
          */
         get: operations["obtener_saldos_de_ubicacion_api_v1_stock_ubicaciones__ubicacion_id__saldos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock/transferencias/{transferencia_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Transferencia
+         * @description Detalle de una transferencia con sus líneas (código, nombre y unidades de referencia) y,
+         *     si está anulada, el motivo, el usuario y el momento de la anulación. 404 si es de otra
+         *     organización o no existe.
+         */
+        get: operations["obtener_transferencia_api_v1_stock_transferencias__transferencia_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock/ajustes/{ajuste_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Ajuste
+         * @description Detalle de un ajuste con su motivo, sus líneas y, si está anulado, los datos de la
+         *     anulación. `costo_unitario` de cada línea (string) solo con `VER_COSTOS` (ADR-036). 404 si
+         *     es de otra organización o no existe.
+         */
+        get: operations["obtener_ajuste_api_v1_stock_ajustes__ajuste_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1544,6 +1696,139 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AjusteAnuladoResponse
+         * @description El ajuste ya `ANULADA`: `motivo_id` sigue siendo el del ajuste y `anulacion.motivo_id`
+         *     el de la anulación. Cada línea trae su cantidad ORIGINAL y el saldo que dejó la anulación;
+         *     `observaciones` lista `STOCK_NEGATIVO` si la anulación dejó un saldo bajo cero.
+         */
+        AjusteAnuladoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Estado */
+            estado: string;
+            /**
+             * Ubicacion Id
+             * Format: uuid
+             */
+            ubicacion_id: string;
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+            /** Observacion */
+            observacion: string | null;
+            /** Lineas */
+            lineas: components["schemas"]["LineaAjusteResponse"][];
+            anulacion: components["schemas"]["AnulacionDeAjusteResponse"];
+            /** Observaciones */
+            observaciones: string[];
+        };
+        /**
+         * AjusteAnularRequest
+         * @description Solo el motivo de la anulación (D6): el id del ajuste va en la ruta.
+         */
+        AjusteAnularRequest: {
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+        };
+        /**
+         * AjusteCrearRequest
+         * @description `lineas` sin cota en el esquema: el dominio la valida (1 a 200, `LINEAS_INVALIDAS`).
+         *     Sin `organizacion_id` (sale del token, INV-21) y sin fecha (rige el `occurred_at` del
+         *     sobre, TR-05).
+         */
+        AjusteCrearRequest: {
+            /**
+             * Ubicacion Id
+             * Format: uuid
+             */
+            ubicacion_id: string;
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+            /** Lineas */
+            lineas: components["schemas"]["LineaAjusteRequest"][];
+            /** Observacion */
+            observacion?: string | null;
+        };
+        /** AjusteDelListadoResponse */
+        AjusteDelListadoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Estado */
+            estado: string;
+            /**
+             * Ubicacion Id
+             * Format: uuid
+             */
+            ubicacion_id: string;
+            /** Ubicacion Nombre */
+            ubicacion_nombre: string;
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+            /** Motivo Nombre */
+            motivo_nombre: string | null;
+            /** Observacion */
+            observacion: string | null;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /** Usuario Nombre */
+            usuario_nombre: string | null;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Cantidad De Lineas */
+            cantidad_de_lineas: number;
+        };
+        /**
+         * AjusteResponse
+         * @description Sale de `comando.resultado` (un reenvío idempotente devuelve lo mismo, INV-06); la
+         *     ruta le agrega el costo de cada línea, leído del ajuste, si el usuario tiene `VER_COSTOS`.
+         */
+        AjusteResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Estado */
+            estado: string;
+            /**
+             * Ubicacion Id
+             * Format: uuid
+             */
+            ubicacion_id: string;
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+            /** Observacion */
+            observacion: string | null;
+            /** Lineas */
+            lineas: components["schemas"]["LineaAjusteResponse"][];
+        };
         /** AlicuotaResponse */
         AlicuotaResponse: {
             /**
@@ -1557,6 +1842,42 @@ export interface components {
             valor: string;
             /** Activo */
             activo: boolean;
+        };
+        /** AnulacionDeAjusteResponse */
+        AnulacionDeAjusteResponse: {
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+            /**
+             * Anulado En
+             * Format: date-time
+             */
+            anulado_en: string;
+            /**
+             * Anulado Por Id
+             * Format: uuid
+             */
+            anulado_por_id: string;
+        };
+        /** AnulacionDeTransferenciaResponse */
+        AnulacionDeTransferenciaResponse: {
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+            /**
+             * Anulada En
+             * Format: date-time
+             */
+            anulada_en: string;
+            /**
+             * Anulada Por Id
+             * Format: uuid
+             */
+            anulada_por_id: string;
         };
         /** Body_importar_api_v1_importaciones__tipo__post */
         Body_importar_api_v1_importaciones__tipo__post: {
@@ -2318,6 +2639,142 @@ export interface components {
              */
             rol_id: string;
         };
+        /** DetalleDeAjusteResponse */
+        DetalleDeAjusteResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Estado */
+            estado: string;
+            /**
+             * Ubicacion Id
+             * Format: uuid
+             */
+            ubicacion_id: string;
+            /** Ubicacion Nombre */
+            ubicacion_nombre: string;
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+            /** Motivo Nombre */
+            motivo_nombre: string | null;
+            /** Observacion */
+            observacion: string | null;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /** Usuario Nombre */
+            usuario_nombre: string | null;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * Registered At
+             * Format: date-time
+             */
+            registered_at: string;
+            /** Lineas */
+            lineas: components["schemas"]["LineaDelDetalleDeAjusteResponse"][];
+            anulacion: components["schemas"]["DetalleDeAnulacionDeAjusteResponse"] | null;
+        };
+        /** DetalleDeAnulacionDeAjusteResponse */
+        DetalleDeAnulacionDeAjusteResponse: {
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+            /** Motivo Nombre */
+            motivo_nombre: string | null;
+            /**
+             * Anulado En
+             * Format: date-time
+             */
+            anulado_en: string;
+            /**
+             * Anulado Por Id
+             * Format: uuid
+             */
+            anulado_por_id: string;
+            /** Anulado Por Nombre */
+            anulado_por_nombre: string | null;
+        };
+        /** DetalleDeAnulacionDeTransferenciaResponse */
+        DetalleDeAnulacionDeTransferenciaResponse: {
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+            /** Motivo Nombre */
+            motivo_nombre: string | null;
+            /**
+             * Anulada En
+             * Format: date-time
+             */
+            anulada_en: string;
+            /**
+             * Anulada Por Id
+             * Format: uuid
+             */
+            anulada_por_id: string;
+            /** Anulada Por Nombre */
+            anulada_por_nombre: string | null;
+        };
+        /** DetalleDeTransferenciaResponse */
+        DetalleDeTransferenciaResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Estado */
+            estado: string;
+            /**
+             * Ubicacion Origen Id
+             * Format: uuid
+             */
+            ubicacion_origen_id: string;
+            /** Ubicacion Origen Nombre */
+            ubicacion_origen_nombre: string;
+            /**
+             * Ubicacion Destino Id
+             * Format: uuid
+             */
+            ubicacion_destino_id: string;
+            /** Ubicacion Destino Nombre */
+            ubicacion_destino_nombre: string;
+            /** Observacion */
+            observacion: string | null;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /** Usuario Nombre */
+            usuario_nombre: string | null;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * Registered At
+             * Format: date-time
+             */
+            registered_at: string;
+            /** Lineas */
+            lineas: components["schemas"]["LineaDelDetalleDeTransferenciaResponse"][];
+            anulacion: components["schemas"]["DetalleDeAnulacionDeTransferenciaResponse"] | null;
+        };
         /**
          * DiferenciaDeCostoResponse
          * @description CMP-04, D7: una línea cuyo costo base difiere del costo informado vigente (o no
@@ -2519,6 +2976,38 @@ export interface components {
             /** Cursor Siguiente */
             cursor_siguiente: string | null;
         };
+        /**
+         * LineaAjusteRequest
+         * @description `cantidad_base` es un entero estricto con signo (INV-04); que sea distinta de cero lo
+         *     valida el dominio (`CANTIDAD_INVALIDA`).
+         */
+        LineaAjusteRequest: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Cantidad Base */
+            cantidad_base: number;
+        };
+        /**
+         * LineaAjusteResponse
+         * @description `costo_unitario` solo existe con `VER_COSTOS`: sin el permiso la ruta no lo establece
+         *     y la clave desaparece de la respuesta (`response_model_exclude_unset`, ADR-036).
+         */
+        LineaAjusteResponse: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Cantidad Base */
+            cantidad_base: number;
+            /** Saldo */
+            saldo: number;
+            /** Costo Unitario */
+            costo_unitario?: string | null;
+        };
         /** LineaDeKardexResponse */
         LineaDeKardexResponse: {
             /**
@@ -2559,6 +3048,10 @@ export interface components {
             operation_id: string;
             /** Saldo Acumulado */
             saldo_acumulado: number;
+            /** Motivo Nombre */
+            motivo_nombre?: string | null;
+            /** Estado Origen */
+            estado_origen?: string | null;
             /** Costo Unitario */
             costo_unitario?: string | null;
         };
@@ -2581,6 +3074,55 @@ export interface components {
             nombre_referencia: string | null;
             /** Costo Promedio */
             costo_promedio?: string | null;
+        };
+        /**
+         * LineaDelDetalleDeAjusteResponse
+         * @description `costo_unitario` solo existe con `VER_COSTOS`: sin el permiso la ruta no lo establece y
+         *     la clave desaparece de la respuesta (`response_model_exclude_unset`, ADR-036).
+         */
+        LineaDelDetalleDeAjusteResponse: {
+            /** Orden */
+            orden: number;
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Producto Codigo */
+            producto_codigo: string | null;
+            /** Producto Nombre */
+            producto_nombre: string | null;
+            /** Cantidad Base */
+            cantidad_base: number;
+            /** Unidades Referencia */
+            unidades_referencia: number | null;
+            /** Nombre Referencia */
+            nombre_referencia: string | null;
+            /** Costo Unitario */
+            costo_unitario?: string | null;
+        };
+        /**
+         * LineaDelDetalleDeTransferenciaResponse
+         * @description Sin costo: una transferencia no lo muestra a nadie (ADR-036).
+         */
+        LineaDelDetalleDeTransferenciaResponse: {
+            /** Orden */
+            orden: number;
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Producto Codigo */
+            producto_codigo: string | null;
+            /** Producto Nombre */
+            producto_nombre: string | null;
+            /** Cantidad Base */
+            cantidad_base: number;
+            /** Unidades Referencia */
+            unidades_referencia: number | null;
+            /** Nombre Referencia */
+            nombre_referencia: string | null;
         };
         /** LineaStockInicialRequest */
         LineaStockInicialRequest: {
@@ -2610,6 +3152,34 @@ export interface components {
             cantidad_base: number;
             /** Saldo */
             saldo: number;
+        };
+        /**
+         * LineaTransferenciaRequest
+         * @description `cantidad_base` es un entero estricto (INV-04): `1.5`, `"12"` o `true` son un 422 de
+         *     validación; que sea mayor que cero lo valida el dominio (`CANTIDAD_INVALIDA`).
+         */
+        LineaTransferenciaRequest: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Cantidad Base */
+            cantidad_base: number;
+        };
+        /** LineaTransferenciaResponse */
+        LineaTransferenciaResponse: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Cantidad Base */
+            cantidad_base: number;
+            /** Saldo Origen */
+            saldo_origen: number;
+            /** Saldo Destino */
+            saldo_destino: number;
         };
         /**
          * ListaCrearRequest
@@ -2951,6 +3521,20 @@ export interface components {
         PaginaCostosInformados: {
             /** Items */
             items: components["schemas"]["CostoInformadoResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
+        /** PaginaDeAjustesResponse */
+        PaginaDeAjustesResponse: {
+            /** Items */
+            items: components["schemas"]["AjusteDelListadoResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
+        /** PaginaDeTransferenciasResponse */
+        PaginaDeTransferenciasResponse: {
+            /** Items */
+            items: components["schemas"]["TransferenciaDelListadoResponse"][];
             /** Cursor Siguiente */
             cursor_siguiente: string | null;
         };
@@ -3997,6 +4581,142 @@ export interface components {
              * @constant
              */
             token_type: "bearer";
+        };
+        /**
+         * TransferenciaAnuladaResponse
+         * @description La transferencia ya `ANULADA`, con los datos de la anulación y los saldos que quedaron
+         *     en origen y destino. Sale de `comando.resultado` (INV-06). No lleva costos.
+         */
+        TransferenciaAnuladaResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Estado */
+            estado: string;
+            /**
+             * Ubicacion Origen Id
+             * Format: uuid
+             */
+            ubicacion_origen_id: string;
+            /**
+             * Ubicacion Destino Id
+             * Format: uuid
+             */
+            ubicacion_destino_id: string;
+            /** Observacion */
+            observacion: string | null;
+            /** Lineas */
+            lineas: components["schemas"]["LineaTransferenciaResponse"][];
+            /** Observaciones */
+            observaciones: string[];
+            anulacion: components["schemas"]["AnulacionDeTransferenciaResponse"];
+        };
+        /**
+         * TransferenciaAnularRequest
+         * @description Solo el motivo de la anulación (D6): el id de la transferencia va en la ruta y la
+         *     organización sale del token (INV-21).
+         */
+        TransferenciaAnularRequest: {
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+        };
+        /**
+         * TransferenciaCrearRequest
+         * @description `lineas` sin cota en el esquema: el dominio la valida (1 a 200, `LINEAS_INVALIDAS`,
+         *     D6). Sin `organizacion_id` (sale del token, INV-21) y sin fecha (rige el `occurred_at`
+         *     del sobre, TR-05).
+         */
+        TransferenciaCrearRequest: {
+            /**
+             * Ubicacion Origen Id
+             * Format: uuid
+             */
+            ubicacion_origen_id: string;
+            /**
+             * Ubicacion Destino Id
+             * Format: uuid
+             */
+            ubicacion_destino_id: string;
+            /** Lineas */
+            lineas: components["schemas"]["LineaTransferenciaRequest"][];
+            /** Observacion */
+            observacion?: string | null;
+        };
+        /** TransferenciaDelListadoResponse */
+        TransferenciaDelListadoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Estado */
+            estado: string;
+            /**
+             * Ubicacion Origen Id
+             * Format: uuid
+             */
+            ubicacion_origen_id: string;
+            /** Ubicacion Origen Nombre */
+            ubicacion_origen_nombre: string;
+            /**
+             * Ubicacion Destino Id
+             * Format: uuid
+             */
+            ubicacion_destino_id: string;
+            /** Ubicacion Destino Nombre */
+            ubicacion_destino_nombre: string;
+            /** Observacion */
+            observacion: string | null;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /** Usuario Nombre */
+            usuario_nombre: string | null;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Cantidad De Lineas */
+            cantidad_de_lineas: number;
+        };
+        /**
+         * TransferenciaResponse
+         * @description Sale de `comando.resultado`, no de una relectura: un reenvío idempotente del mismo
+         *     `Operation-Id` devuelve exactamente lo mismo (INV-06). No lleva costos. `observaciones`
+         *     son los códigos de SYN-07 que dejó el comando (`STOCK_NEGATIVO`).
+         */
+        TransferenciaResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Estado */
+            estado: string;
+            /**
+             * Ubicacion Origen Id
+             * Format: uuid
+             */
+            ubicacion_origen_id: string;
+            /**
+             * Ubicacion Destino Id
+             * Format: uuid
+             */
+            ubicacion_destino_id: string;
+            /** Observacion */
+            observacion: string | null;
+            /** Lineas */
+            lineas: components["schemas"]["LineaTransferenciaResponse"][];
+            /** Observaciones */
+            observaciones: string[];
         };
         /** UbicacionCrearRequest */
         UbicacionCrearRequest: {
@@ -7205,6 +7925,229 @@ export interface operations {
             };
         };
     };
+    listar_transferencias_api_v1_stock_transferencias_get: {
+        parameters: {
+            query?: {
+                ubicacion_id?: string | null;
+                desde?: string | null;
+                hasta?: string | null;
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaDeTransferenciasResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registrar_transferencia_api_v1_stock_transferencias_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferenciaCrearRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransferenciaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_ajustes_api_v1_stock_ajustes_get: {
+        parameters: {
+            query?: {
+                ubicacion_id?: string | null;
+                motivo_id?: string | null;
+                desde?: string | null;
+                hasta?: string | null;
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaDeAjustesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registrar_ajuste_api_v1_stock_ajustes_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AjusteCrearRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AjusteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    anular_transferencia_api_v1_stock_transferencias__transferencia_id__anulacion_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                transferencia_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferenciaAnularRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransferenciaAnuladaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    anular_ajuste_api_v1_stock_ajustes__ajuste_id__anulacion_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                ajuste_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AjusteAnularRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AjusteAnuladoResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     obtener_saldos_de_ubicacion_api_v1_stock_ubicaciones__ubicacion_id__saldos_get: {
         parameters: {
             query?: {
@@ -7228,6 +8171,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StockDeUbicacionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_transferencia_api_v1_stock_transferencias__transferencia_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                transferencia_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetalleDeTransferenciaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_ajuste_api_v1_stock_ajustes__ajuste_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                ajuste_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetalleDeAjusteResponse"];
                 };
             };
             /** @description Validation Error */

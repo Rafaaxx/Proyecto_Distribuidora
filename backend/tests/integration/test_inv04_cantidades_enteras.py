@@ -46,6 +46,9 @@ COLUMNAS_QUE_DEBEN_ESTAR = {
     # Change 11 (compras): la cantidad base de la línea es entera (INV-04).
     ("compra_linea", "cantidad_base"),
     ("compra_linea", "unidades_presentacion"),
+    # Change 14 (transferencias y ajustes): cantidades enteras en unidad base (INV-04).
+    ("transferencia_linea", "cantidad_base"),
+    ("ajuste_stock_linea", "cantidad_base"),
 }
 
 # `03` §2.2: la cantidad EN PRESENTACION es `numeric(14,3)` solo en compras (2,5 cajas);

@@ -81,6 +81,19 @@ def test_inv03_el_catalogo_incluye_los_importes_y_costos_de_compras_como_numeric
     assert {tipos.get(columna) for columna in COLUMNAS_NUMERIC_DE_COMPRAS} == {"numeric"}
 
 
+def test_inv03_el_costo_de_la_linea_del_ajuste_es_numeric(_engine_de_sesion: Engine) -> None:
+    """Change 14 (`design.md` D3, D8): `ajuste_stock_linea.costo_unitario` es `numeric`
+    exacto (INV-03), igual que el costo de `stock_movimiento`."""
+    with _engine_de_sesion.connect() as conexion:
+        tipos = {
+            (tabla, columna): tipo
+            for tabla, columna, tipo in conexion.execute(_CONSULTA_CATALOGO).all()
+        }
+
+    assert tipos[("ajuste_stock_linea", "costo_unitario")] == "numeric"
+    assert tipos[("stock_movimiento", "costo_unitario")] == "numeric"
+
+
 COLUMNAS_DE_CONDICION_IVA = {
     ("configuracion_organizacion", "condicion_iva"): "text",
     ("costo_informado", "computa_credito_fiscal"): "boolean",

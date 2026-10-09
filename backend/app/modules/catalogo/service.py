@@ -31,6 +31,7 @@ from app.modules.catalogo.domain.errores import (
     CategoriaConProductosActivosError,
     CategoriaInactivaError,
     MarcaInactivaError,
+    ProductoConStockError,
     ProveedorInactivoError,
     RecursoNoEncontradoError,
 )
@@ -82,6 +83,34 @@ def presentacion_fue_usada(organizacion_id: UUID, presentacion_id: UUID, sesion:
         funcion(organizacion_id, presentacion_id, sesion)
         for funcion in _REGISTRO_VERIFICADORES.values()
     )
+
+
+# --- Change 14, D4.1: puerto del verificador de stock (CAT-05) -----------------
+
+VerificadorDeStock = Callable[[UUID, UUID, Session], bool]
+"""`funcion(organizacion_id, producto_id, sesion) -> bool` (`design.md` D4.1): `True` si el
+producto tiene algún saldo de stock distinto de cero en la organización. Lo registra `stock`
+(que ya importa a `catalogo`); `catalogo` nunca importa `stock` (`02` §5.3)."""
+
+_VERIFICADOR_DE_STOCK: VerificadorDeStock | None = None
+
+
+def registrar_verificador_de_stock(funcion: VerificadorDeStock) -> None:
+    """`stock` lo registra al importar su `service.py`, igual que `proveedores` registra la
+    consulta de proveedor (ADR-025)."""
+    global _VERIFICADOR_DE_STOCK
+    _VERIFICADOR_DE_STOCK = funcion
+
+
+def _producto_tiene_stock(organizacion_id: UUID, producto_id: UUID, sesion: Session) -> bool:
+    """Falla cerrado (D4.1): sin verificador registrado, desactivar un producto es un error de
+    configuración y no una desactivación sin comprobar."""
+    if _VERIFICADOR_DE_STOCK is None:
+        raise RuntimeError(
+            "No hay verificador de stock registrado (D4.1): catalogo falla cerrado al "
+            "desactivar un producto."
+        )
+    return _VERIFICADOR_DE_STOCK(organizacion_id, producto_id, sesion)
 
 
 # --- D9/ADR-025: puerto de consulta de proveedor ----------------------------
@@ -435,7 +464,11 @@ def modificar_producto(
     estado de sus presentaciones"). D9-A: conservar el proveedor actual
     aunque esté inactivo se acepta; cambiar a otro proveedor inactivo se
     rechaza (`PROVEEDOR_INACTIVO`)."""
-    producto = repository.obtener_producto_por_id(organizacion_id, producto_id, sesion)
+    # Change 14, D4.2: el producto se toma FOR UPDATE; todo movimiento de stock lo toma FOR
+    # SHARE, así que la desactivación y un movimiento sobre el mismo producto se serializan.
+    producto = repository.obtener_producto_por_id_para_actualizar(
+        organizacion_id, producto_id, sesion
+    )
     if producto is None:
         raise RecursoNoEncontradoError(f"El producto {producto_id} no existe en esta organización.")
 
@@ -448,6 +481,16 @@ def modificar_producto(
     _resolver_proveedor(
         organizacion_id, proveedor_id, sesion, proveedor_actual_id=producto.proveedor_id
     )
+
+    if (
+        producto.activo
+        and not activo
+        and _producto_tiene_stock(organizacion_id, producto_id, sesion)
+    ):
+        raise ProductoConStockError(
+            "El producto tiene stock: movelo o dalo de baja antes de desactivarlo.",
+            extension={"producto_id": str(producto_id)},
+        )
 
     actualizado = repository.actualizar_producto(
         organizacion_id,

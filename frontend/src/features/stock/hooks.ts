@@ -1,24 +1,48 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 
 import { generarOperationId } from '../../lib/api/operationId'
 import { debeReintentar } from '../../lib/api/reintentoDeRed'
+import { useMotivos } from '../compras/hooks'
 import {
+  anularAjuste,
+  anularTransferencia,
   crearUbicacion,
+  listarAjustes,
+  listarTransferencias,
   modificarUbicacion,
+  obtenerAjuste,
+  obtenerTransferencia,
+  registrarAjuste,
+  registrarTransferencia,
   obtenerCostoPromedio,
   obtenerKardex,
   obtenerSaldos,
   listarUbicaciones,
   registrarStockInicial,
+  type AjusteAnuladoResultado,
+  type AjusteDatos,
+  type AjusteDetalle,
+  type AjusteResultado,
   type CostoPromedio,
+  type LineaDeStock,
   type StockInicialDatos,
   type StockInicialResultado,
+  type TransferenciaAnuladaResultado,
+  type TransferenciaDatos,
+  type TransferenciaDetalle,
+  type TransferenciaResultado,
   type Ubicacion,
   type UbicacionCrearDatos,
   type UbicacionModificarDatos,
 } from './api'
-import { clavesCostoPromedio, clavesStock, type FiltrosKardex } from './claves'
+import {
+  clavesCostoPromedio,
+  clavesStock,
+  type FiltrosAjustes,
+  type FiltrosKardex,
+  type FiltrosTransferencias,
+} from './claves'
 
 /**
  * Lecturas y escrituras de stock (change 09, grupo 8, tarea 8.1). TanStack Query
@@ -75,6 +99,79 @@ export function useCostoPromedio(productoId: string | undefined, habilitado: boo
     queryKey: clavesCostoPromedio.producto(productoId ?? ''),
     queryFn: () => obtenerCostoPromedio(productoId as string),
     enabled: habilitado && productoId !== undefined && productoId !== '',
+  })
+}
+
+/** Ámbitos de motivo de stock (lista cerrada del servidor): ajuste y las dos anulaciones. */
+export type AmbitoDeMotivoDeStock = 'AJUSTE_STOCK' | 'ANULACION_TRANSFERENCIA' | 'ANULACION_AJUSTE'
+
+/** Motivos activos de un ámbito de stock. Comparte la caché de `useMotivos` (`ADR-043`). */
+export function useMotivosDeStock(ambito: AmbitoDeMotivoDeStock) {
+  return useMotivos(ambito)
+}
+
+export interface SaldosCompletos {
+  lineas: LineaDeStock[]
+  /** Falso mientras falten páginas; el selector y los saldos actuales se muestran con todas. */
+  completo: boolean
+  error: unknown
+}
+
+/**
+ * Todos los saldos de una ubicación: sigue pidiendo páginas hasta agotar el cursor. La
+ * transferencia elige sus productos del stock del origen (`design.md` D7) y necesita el saldo
+ * actual de cada uno en origen y destino. Sin ubicación no pide nada.
+ */
+export function useSaldosCompletos(ubicacionId: string | undefined): SaldosCompletos {
+  const consulta = useInfiniteQuery({
+    queryKey: clavesStock.saldos(ubicacionId ?? ''),
+    queryFn: ({ pageParam }: { pageParam: string | undefined }) => obtenerSaldos(ubicacionId as string, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (ultimaPagina) => ultimaPagina.cursor_siguiente ?? undefined,
+    enabled: ubicacionId !== undefined && ubicacionId !== '',
+  })
+  const { hasNextPage, isFetchingNextPage, isError, fetchNextPage } = consulta
+  useEffect(() => {
+    if (hasNextPage && !isFetchingNextPage && !isError) void fetchNextPage()
+  }, [hasNextPage, isFetchingNextPage, isError, fetchNextPage])
+
+  const lineas = consulta.data?.pages.flatMap((pagina) => pagina.items) ?? []
+  return { lineas, completo: consulta.isSuccess && !hasNextPage, error: consulta.error }
+}
+
+// --- transferencias y ajustes -------------------------------------------------
+
+export function useTransferencias(filtros: FiltrosTransferencias) {
+  return useInfiniteQuery({
+    queryKey: clavesStock.transferencias(filtros),
+    queryFn: ({ pageParam }: { pageParam: string | undefined }) => listarTransferencias(filtros, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (ultimaPagina) => ultimaPagina.cursor_siguiente ?? undefined,
+  })
+}
+
+export function useTransferencia(id: string | undefined) {
+  return useQuery<TransferenciaDetalle, Error>({
+    queryKey: clavesStock.transferencia(id ?? ''),
+    queryFn: () => obtenerTransferencia(id as string),
+    enabled: id !== undefined && id !== '',
+  })
+}
+
+export function useAjustes(filtros: FiltrosAjustes) {
+  return useInfiniteQuery({
+    queryKey: clavesStock.ajustes(filtros),
+    queryFn: ({ pageParam }: { pageParam: string | undefined }) => listarAjustes(filtros, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (ultimaPagina) => ultimaPagina.cursor_siguiente ?? undefined,
+  })
+}
+
+export function useAjuste(id: string | undefined) {
+  return useQuery<AjusteDetalle, Error>({
+    queryKey: clavesStock.ajuste(id ?? ''),
+    queryFn: () => obtenerAjuste(id as string),
+    enabled: id !== undefined && id !== '',
   })
 }
 
@@ -143,5 +240,70 @@ export function useRegistrarStockInicial() {
       void queryClient.invalidateQueries({ queryKey: clavesStock.raiz() })
       void queryClient.invalidateQueries({ queryKey: clavesCostoPromedio.raiz() })
     },
+  )
+}
+
+// --- transferencias y ajustes (change 14) -------------------------------------
+
+type VariablesTransferencia = TransferenciaDatos & { operationId?: string }
+type VariablesAjuste = AjusteDatos & { operationId?: string }
+type VariablesAnulacion = { id: string; motivo_id: string; operationId?: string }
+
+/** Una transferencia o un ajuste cambian saldos, kardex, listados, detalles y el stock total del costeo. */
+function useInvalidarStockYCostos() {
+  const queryClient = useQueryClient()
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: clavesStock.raiz() })
+    void queryClient.invalidateQueries({ queryKey: clavesCostoPromedio.raiz() })
+  }
+}
+
+export function useRegistrarTransferencia() {
+  const invalidar = useInvalidarStockYCostos()
+  return useMutacionConOperationId<VariablesTransferencia, TransferenciaResultado>(
+    (variables, operationId) =>
+      registrarTransferencia(
+        {
+          ubicacion_origen_id: variables.ubicacion_origen_id,
+          ubicacion_destino_id: variables.ubicacion_destino_id,
+          lineas: variables.lineas,
+          ...(variables.observacion === undefined ? {} : { observacion: variables.observacion }),
+        },
+        operationId,
+      ),
+    invalidar,
+  )
+}
+
+export function useAnularTransferencia() {
+  const invalidar = useInvalidarStockYCostos()
+  return useMutacionConOperationId<VariablesAnulacion, TransferenciaAnuladaResultado>(
+    (variables, operationId) => anularTransferencia(variables.id, variables.motivo_id, operationId),
+    invalidar,
+  )
+}
+
+export function useRegistrarAjuste() {
+  const invalidar = useInvalidarStockYCostos()
+  return useMutacionConOperationId<VariablesAjuste, AjusteResultado>(
+    (variables, operationId) =>
+      registrarAjuste(
+        {
+          ubicacion_id: variables.ubicacion_id,
+          motivo_id: variables.motivo_id,
+          lineas: variables.lineas,
+          ...(variables.observacion === undefined ? {} : { observacion: variables.observacion }),
+        },
+        operationId,
+      ),
+    invalidar,
+  )
+}
+
+export function useAnularAjuste() {
+  const invalidar = useInvalidarStockYCostos()
+  return useMutacionConOperationId<VariablesAnulacion, AjusteAnuladoResultado>(
+    (variables, operationId) => anularAjuste(variables.id, variables.motivo_id, operationId),
+    invalidar,
   )
 }

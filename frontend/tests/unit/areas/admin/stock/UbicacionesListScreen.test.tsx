@@ -138,3 +138,26 @@ describe('UbicacionesListScreen (tarea 8.2, D2, D3)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('No se pudieron obtener las ubicaciones.')
   })
 })
+
+describe('accesos a Transferencias y Ajustes (change 14, tarea 13.1 y 13.2; D11)', () => {
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+    enrutar(apiFetchMock, [
+      { ruta: '/stock/ubicaciones', responder: () => ({ status: 200, cuerpo: { items: [DEPOSITO], cursor_siguiente: null } }) },
+    ])
+  })
+
+  it('un Administrador ve los dos accesos', async () => {
+    renderLista('ADM')
+
+    expect(await screen.findByRole('link', { name: 'Transferencias' })).toHaveAttribute('href', '/admin/stock/transferencias')
+    expect(screen.getByRole('link', { name: 'Ajustes' })).toHaveAttribute('href', '/admin/stock/ajustes')
+  })
+
+  it('un Vendedor ve Transferencias y no ve Ajustes', async () => {
+    renderLista('VEN')
+
+    expect(await screen.findByRole('link', { name: 'Transferencias' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Ajustes' })).not.toBeInTheDocument()
+  })
+})

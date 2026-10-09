@@ -30,7 +30,7 @@ export const MAXIMO_DE_LINEAS = 200
 
 const ENTERO_TEXTO = /^\d+$/
 
-function parteEntera(texto: string, nombre: string): number | string {
+export function parteEntera(texto: string, nombre: string): number | string {
   const limpio = texto.trim()
   if (limpio === '') return 0
   if (!ENTERO_TEXTO.test(limpio)) return `${nombre}: ingresá un entero mayor o igual a cero.`

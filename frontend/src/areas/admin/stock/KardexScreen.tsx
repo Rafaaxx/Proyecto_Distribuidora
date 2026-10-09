@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { Link, useParams } from 'react-router-dom'
 
 import { Alert } from '../../../components/ui/Alert'
+import { Badge } from '../../../components/ui/Badge'
 import { Boton } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { Campo } from '../../../components/ui/Field'
@@ -12,7 +13,7 @@ import { Tabla, type ColumnaTabla } from '../../../components/ui/Table'
 import { aFiltros, esquemaPeriodo, type DatosPeriodo } from '../../../domain/cuentas-corrientes/periodoSchema'
 import { formatearCantidad, referenciaDeRespuesta } from '../../../domain/stock/cantidades'
 import { formatearCostoDeApi } from '../../../domain/stock/costos'
-import { etiquetaDeTipoDeMovimiento } from '../../../domain/stock/ubicacionSchema'
+import { enlaceDeOperacion, ESTADO_ANULADA, rotuloDeMovimiento } from '../../../domain/stock/operaciones'
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { usePermisos } from '../../../features/identidad/usePermisos'
 import type { Kardex, LineaDeKardex } from '../../../features/stock/api'
@@ -154,7 +155,17 @@ function ContenidoDelKardex({
 
   const columnas: ColumnaTabla<LineaDeKardex>[] = [
     { clave: 'fecha', encabezado: 'Fecha', render: (m) => formatearFechaHoraEnZona(m.occurred_at, zona) },
-    { clave: 'tipo', encabezado: 'Tipo', render: (m) => etiquetaDeTipoDeMovimiento(m.tipo) },
+    {
+      clave: 'tipo',
+      encabezado: 'Tipo',
+      render: (m) => (
+        <span className="flex items-center gap-2">
+          {rotuloDeMovimiento(m.tipo, m.origen_tipo)}
+          {m.estado_origen === ESTADO_ANULADA && <Badge variante="negativo">Anulada</Badge>}
+        </span>
+      ),
+    },
+    { clave: 'motivo', encabezado: 'Motivo', render: (m) => m.motivo_nombre ?? '' },
     { clave: 'cantidad', encabezado: 'Cantidad', render: (m) => formatearCantidad(m.cantidad_base, referencia) },
     ...(verCostos
       ? [
@@ -169,6 +180,18 @@ function ContenidoDelKardex({
       clave: 'saldo',
       encabezado: 'Saldo acumulado',
       render: (m) => formatearCantidad(m.saldo_acumulado, referencia),
+    },
+    {
+      clave: 'operacion',
+      encabezado: 'Operación',
+      render: (m) => {
+        const enlace = enlaceDeOperacion(m.origen_tipo, m.origen_id, permisos)
+        return enlace === null ? null : (
+          <Link to={enlace} className={CLASE_ENLACE}>
+            Ver operación
+          </Link>
+        )
+      },
     },
   ]
 

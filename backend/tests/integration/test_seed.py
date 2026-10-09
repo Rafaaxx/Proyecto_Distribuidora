@@ -233,6 +233,41 @@ def test_una_organizacion_nueva_tiene_los_tres_motivos_de_anulacion_de_pago(
     )
 
 
+@pytest.mark.parametrize("ambito", ["ANULACION_TRANSFERENCIA", "ANULACION_AJUSTE"])
+def test_una_organizacion_nueva_tiene_los_motivos_de_anulacion_de_stock(
+    db_session: Session, ambito: str
+) -> None:
+    """Change 14, tarea 2.2 (TR-09, `design.md` D5.3, aprobada el 2026-10-07): "Error de
+    carga" y "Otro" en cada ámbito; sin ellos la organización no podría anular una
+    transferencia ni un ajuste. La migración `f3a4b5c6d7e8` siembra los mismos nombres en
+    las organizaciones existentes."""
+    organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+    assert organizacion is not None
+
+    motivos = configuracion_service.listar_motivos_por_ambito(organizacion.id, db_session, ambito)
+
+    assert sorted(motivo.nombre for motivo in motivos) == ["Error de carga", "Otro"]
+    assert all(motivo.ambito == ambito and motivo.activo for motivo in motivos)
+
+
+def test_solo_administrador_y_administracion_reciben_anular_transferencia(
+    db_session: Session,
+) -> None:
+    """Change 14, tarea 2.2 (`01` §19, D5 punto 5): la siembra asigna el permiso a las
+    plantillas Administrador y Administración (GES) y a ninguna otra."""
+    organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+    assert organizacion is not None
+
+    con_el_permiso = {
+        rol.nombre
+        for rol in identidad_repository.listar_roles(organizacion.id, db_session)
+        if "ANULAR_TRANSFERENCIA"
+        in identidad_repository.listar_permisos_de_rol(organizacion.id, rol.id, db_session)
+    }
+
+    assert con_el_permiso == {"Administrador", "Administración"}
+
+
 def test_sembrar_dos_veces_no_duplica_los_motivos_de_anulacion_de_compra(
     db_session: Session,
 ) -> None:

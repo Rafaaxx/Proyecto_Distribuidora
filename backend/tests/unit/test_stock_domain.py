@@ -292,6 +292,7 @@ def _movimiento(
     tipo: str = "COMPRA",
     producto_id: object = None,
     ubicacion_id: object = None,
+    origen_tipo: str | None = None,
 ) -> LineaDeMovimiento:
     return LineaDeMovimiento(
         producto_id=producto_id or uuid4(),  # type: ignore[arg-type]
@@ -299,7 +300,7 @@ def _movimiento(
         cantidad_base=cantidad,  # type: ignore[arg-type]
         tipo=tipo,
         costo_unitario=costo,  # type: ignore[arg-type]
-        origen_tipo=tipo,
+        origen_tipo=origen_tipo or tipo,
         origen_id=uuid4(),
     )
 
@@ -352,12 +353,13 @@ def test_solo_los_tres_tipos_de_ingreso_con_costo_pueden_ingresar_stock() -> Non
     assert frozenset({"STOCK_INICIAL", "COMPRA", "ANULACION_VENTA"}) == TIPOS_QUE_INGRESAN_CON_COSTO
 
 
-@pytest.mark.parametrize(
-    "tipo", ["AJUSTE", "TRANSFERENCIA_ENTRADA", "DIFERENCIA_RENDICION", "VENTA", "ANULACION_COMPRA"]
-)
+@pytest.mark.parametrize("tipo", ["DIFERENCIA_RENDICION", "VENTA", "ANULACION_COMPRA"])
 def test_un_ingreso_de_un_tipo_sin_reglas_de_costo_se_rechaza(tipo: str) -> None:
+    """`DIFERENCIA_RENDICION` sigue sin reglas hasta el change 24 (ADR-039, RUT-06)."""
     with pytest.raises(TipoDeMovimientoInvalidoError):
         validar_lineas_de_movimiento([_movimiento(10, "5", tipo=tipo)])
+    with pytest.raises(TipoDeMovimientoInvalidoError):
+        validar_lineas_de_movimiento([_movimiento(10, None, tipo=tipo)])
 
 
 @pytest.mark.parametrize(
@@ -652,3 +654,131 @@ def test_solo_anulacion_compra_admite_producto_inactivo_d11() -> None:
     ]
 
     assert productos_que_exigen_estar_activos(lineas) == {producto_mixto, producto_compra}
+
+
+# --- transferencias y ajustes (change 14, D1, D3, D4, D5.2, D9) ---------------------
+
+
+@pytest.mark.parametrize(
+    ("tipo", "origen"), [("TRANSFERENCIA_ENTRADA", "TRANSFERENCIA"), ("AJUSTE", "AJUSTE_STOCK")]
+)
+def test_un_ingreso_de_transferencia_o_ajuste_se_admite_sin_costo(tipo: str, origen: str) -> None:
+    """CST-12, D9: no recalcula el promedio, así que no lleva costo de entrada."""
+    linea = _movimiento(48, None, tipo=tipo, origen_tipo=origen)
+
+    assert validar_lineas_de_movimiento([linea]) == [linea]
+
+
+@pytest.mark.parametrize(
+    ("tipo", "origen"), [("TRANSFERENCIA_ENTRADA", "TRANSFERENCIA"), ("AJUSTE", "AJUSTE_STOCK")]
+)
+@pytest.mark.parametrize("costo", ["1000.000000", "1"])
+def test_un_ingreso_de_transferencia_o_ajuste_con_costo_es_costo_invalido(
+    tipo: str, origen: str, costo: str
+) -> None:
+    with pytest.raises(CostoInvalidoError):
+        validar_lineas_de_movimiento([_movimiento(48, costo, tipo=tipo, origen_tipo=origen)])
+
+
+def test_un_ingreso_de_rendicion_sigue_siendo_tipo_invalido() -> None:
+    with pytest.raises(TipoDeMovimientoInvalidoError):
+        validar_lineas_de_movimiento([_movimiento(5, None, tipo="DIFERENCIA_RENDICION")])
+
+
+@pytest.mark.parametrize("tipo", ["STOCK_INICIAL", "COMPRA", "ANULACION_VENTA"])
+def test_los_ingresos_que_recalculan_siguen_exigiendo_costo(tipo: str) -> None:
+    with pytest.raises(CostoInvalidoError):
+        validar_lineas_de_movimiento([_movimiento(5, None, tipo=tipo)])
+
+
+@pytest.mark.parametrize(
+    ("cantidad", "tipo", "origen"),
+    [
+        (48, "TRANSFERENCIA_ENTRADA", "ANULACION_TRANSFERENCIA"),
+        (-48, "TRANSFERENCIA_SALIDA", "ANULACION_TRANSFERENCIA"),
+        (6, "AJUSTE", "ANULACION_AJUSTE_STOCK"),
+        (-6, "AJUSTE", "ANULACION_AJUSTE_STOCK"),
+    ],
+)
+@pytest.mark.parametrize("costo", ["1050.000000", None])
+def test_un_inverso_de_anulacion_lleva_el_costo_original_o_nulo(
+    cantidad: int, tipo: str, origen: str, costo: str | None
+) -> None:
+    """D5.2: con origen de anulación la línea lleva el costo del movimiento original (que
+    puede ser nulo) y la puerta lo guarda tal cual."""
+    linea = _movimiento(cantidad, costo, tipo=tipo, origen_tipo=origen)
+
+    assert validar_lineas_de_movimiento([linea]) == [linea]
+
+
+@pytest.mark.parametrize(
+    ("cantidad", "tipo", "origen"),
+    [
+        (-6, "TRANSFERENCIA_SALIDA", "TRANSFERENCIA"),
+        (-6, "AJUSTE", "AJUSTE_STOCK"),
+        (-6, "TRANSFERENCIA_SALIDA", "ANULACION_AJUSTE_STOCK"),  # origen que no le corresponde
+        (6, "AJUSTE", "ANULACION_TRANSFERENCIA"),
+    ],
+)
+def test_con_cualquier_otro_origen_el_costo_sigue_siendo_invalido(
+    cantidad: int, tipo: str, origen: str
+) -> None:
+    with pytest.raises(CostoInvalidoError):
+        validar_lineas_de_movimiento(
+            [_movimiento(cantidad, "1050.000000", tipo=tipo, origen_tipo=origen)]
+        )
+
+
+@pytest.mark.parametrize(
+    ("tipo", "origen", "esperado"),
+    [
+        ("ANULACION_COMPRA", "ANULACION_COMPRA", True),
+        ("TRANSFERENCIA_SALIDA", "TRANSFERENCIA", True),
+        ("TRANSFERENCIA_SALIDA", "ANULACION_TRANSFERENCIA", True),
+        ("AJUSTE", "ANULACION_AJUSTE_STOCK", True),
+        ("AJUSTE", "AJUSTE_STOCK", False),  # D1 = B: un ajuste nunca deja negativo
+        ("STOCK_INICIAL", "STOCK_INICIAL", False),  # STK-10
+        ("VENTA", "VENTA", False),
+    ],
+)
+def test_puede_quedar_negativo_solo_en_los_tipos_y_origenes_previstos(
+    tipo: str, origen: str, esperado: bool
+) -> None:
+    linea = _movimiento(
+        -5, "1" if tipo == "ANULACION_COMPRA" else None, tipo=tipo, origen_tipo=origen
+    )
+
+    assert puede_quedar_negativo(linea, permitir_negativo=True) is esperado
+
+
+@pytest.mark.parametrize(
+    ("tipo", "origen"),
+    [
+        ("ANULACION_COMPRA", "ANULACION_COMPRA"),
+        ("TRANSFERENCIA_SALIDA", "TRANSFERENCIA"),
+        ("AJUSTE", "ANULACION_AJUSTE_STOCK"),
+    ],
+)
+def test_sin_permiso_ningun_egreso_puede_quedar_negativo(tipo: str, origen: str) -> None:
+    linea = _movimiento(
+        -5, "1" if tipo == "ANULACION_COMPRA" else None, tipo=tipo, origen_tipo=origen
+    )
+
+    assert puede_quedar_negativo(linea, permitir_negativo=False) is False
+
+
+def test_los_productos_de_transferencias_y_ajustes_exigen_estar_activos_de_cualquier_signo() -> (
+    None
+):
+    """D4: `productos_que_exigen_estar_activos` no cambia; solo queda afuera el producto
+    cuyas líneas son todas `ANULACION_COMPRA`."""
+    transferido, ajustado_neg, ajustado_pos, solo_anulacion = uuid4(), uuid4(), uuid4(), uuid4()
+    lineas = [
+        _movimiento(-5, None, tipo="TRANSFERENCIA_SALIDA", producto_id=transferido),
+        _movimiento(5, None, tipo="TRANSFERENCIA_ENTRADA", producto_id=transferido),
+        _movimiento(-5, None, tipo="AJUSTE", producto_id=ajustado_neg),
+        _movimiento(5, None, tipo="AJUSTE", producto_id=ajustado_pos),
+        _movimiento(-5, "1", tipo="ANULACION_COMPRA", producto_id=solo_anulacion),
+    ]
+
+    assert productos_que_exigen_estar_activos(lineas) == {transferido, ajustado_neg, ajustado_pos}

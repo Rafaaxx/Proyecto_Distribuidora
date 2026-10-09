@@ -45,6 +45,11 @@ from app.modules.identidad.models import Organizacion, Rol, Usuario
 from app.modules.proveedores import service as proveedores_service
 from app.modules.proveedores.domain.lote import CostoDelLote
 
+# Change 14, tarea 8.1 (D4.1): importar `stock.service` registra en `catalogo_service` el
+# verificador de stock (mismo patron que `app.main`). Sin este import, `catalogo` falla cerrado
+# (`RuntimeError`) apenas se intenta desactivar un producto.
+from app.modules.stock import service as stock_service  # noqa: F401
+
 pytestmark = pytest.mark.usefixtures("_engine_de_sesion")
 
 _MOMENTO = datetime.now(UTC)

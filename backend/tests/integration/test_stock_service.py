@@ -725,9 +725,11 @@ def test_un_movimiento_guarda_motivo_jornada_y_origen(entorno: Entorno) -> None:
 def test_un_ingreso_de_un_tipo_sin_reglas_de_costo_se_rechaza_sin_efectos(
     entorno: Entorno,
 ) -> None:
-    """Un ajuste positivo no recalcula el promedio (CST-12) y todavía no tiene
-    reglas propias: lo define el change 14."""
+    """Un ingreso de rendición todavía no tiene reglas de costo (change 24). El ajuste
+    positivo con costo es `COSTO_INVALIDO` desde el change 14 (CST-12, D9)."""
     with pytest.raises(TipoDeMovimientoInvalidoError):
+        entorno.mover(entorno.linea(5, "10", tipo="DIFERENCIA_RENDICION"))
+    with pytest.raises(CostoInvalidoError):
         entorno.mover(entorno.linea(5, "10", tipo="AJUSTE"))
 
     assert entorno.cantidad_de_filas(StockMovimiento) == 0

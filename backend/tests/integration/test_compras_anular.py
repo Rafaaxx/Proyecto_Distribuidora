@@ -18,6 +18,7 @@ from stock_utiles import desactivar_producto_sql
 
 from app.core.errors import DomainError, PermisoRequeridoError
 from app.modules.costeo.models import CostoProductoMov
+from app.modules.identidad.models import Auditoria
 from app.modules.stock import service as stock_service
 from app.modules.stock.domain.movimientos import LineaDeMovimiento
 
@@ -143,6 +144,13 @@ def test_la_anulacion_deja_una_sola_auditoria(entorno: Entorno) -> None:
     entorno.anular(compra_id, operation_id=operation_id)
 
     assert entorno.auditorias(operation_id) == 1
+    # Deuda nominada (D10): el motivo de la anulación sigue sin copiarse a la auditoría.
+    filas = entorno.sesion.scalars(
+        select(Auditoria).where(
+            Auditoria.organizacion_id == entorno.org, Auditoria.operation_id == operation_id
+        )
+    ).all()
+    assert [(f.motivo_id, f.observacion) for f in filas] == [(None, None)]
 
 
 # --- reversión del promedio (CMP-06) ---------------------------------------------------

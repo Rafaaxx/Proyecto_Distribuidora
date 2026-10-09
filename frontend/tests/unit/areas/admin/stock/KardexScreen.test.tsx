@@ -209,3 +209,92 @@ describe('KardexScreen (tarea 8.3, STK-04, D11)', () => {
     expect(apiFetchMock).not.toHaveBeenCalled()
   })
 })
+
+describe('KardexScreen: motivo, estado y enlace a la operación (change 14, tarea 13.4; D5.1, D7, D11)', () => {
+  const OPERACION = '66666666-6666-4666-8666-666666666666'
+
+  function movimientoDeOperacion(
+    id: string,
+    tipo: string,
+    cantidad: number,
+    acumulado: number,
+    origenTipo: string,
+    extra: Record<string, unknown> = {},
+  ) {
+    return { ...movimiento(id, cantidad, acumulado), tipo, origen_tipo: origenTipo, origen_id: OPERACION, ...extra }
+  }
+
+  function reglasConMovimientos(items: unknown[]) {
+    enrutar(apiFetchMock, [{ ruta: '/stock/kardex', responder: () => ({ status: 200, cuerpo: kardex(items, null) }) }])
+  }
+
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+  })
+
+  it('un ajuste muestra su motivo a todos y enlaza al ajuste solo a quien tiene AJUSTAR_STOCK', async () => {
+    const ajuste = movimientoDeOperacion('a', 'AJUSTE', -6, 114, 'AJUSTE_STOCK', {
+      motivo_nombre: 'Rotura',
+      estado_origen: 'CONFIRMADA',
+    })
+    reglasConMovimientos([ajuste])
+    const administrador = renderKardex('ADM')
+
+    const fila = (await screen.findByText('Rotura')).closest('tr') as HTMLElement
+    expect(within(fila).getByText('Ajuste')).toBeInTheDocument()
+    expect(within(fila).getByRole('link', { name: 'Ver operación' })).toHaveAttribute(
+      'href',
+      `/admin/stock/ajustes/${OPERACION}`,
+    )
+    administrador.unmount()
+
+    apiFetchMock.mockReset()
+    reglasConMovimientos([ajuste])
+    renderKardex('VEN')
+
+    expect(await screen.findByText('Rotura')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Ver operación' })).not.toBeInTheDocument()
+  })
+
+  it('una transferencia anulada: la entrada se marca Anulada, la salida se rotula como anulación y las dos enlazan al mismo detalle', async () => {
+    reglasConMovimientos([
+      movimientoDeOperacion('e', 'TRANSFERENCIA_ENTRADA', 60, 60, 'TRANSFERENCIA', { estado_origen: 'ANULADA' }),
+      movimientoDeOperacion('s', 'TRANSFERENCIA_SALIDA', -60, 0, 'ANULACION_TRANSFERENCIA', { estado_origen: 'ANULADA' }),
+    ])
+    renderKardex('VEN')
+
+    await screen.findByText('Transferencia (entrada)')
+    const filas = screen.getAllByRole('row').slice(1)
+    expect(within(filas[0] as HTMLElement).getByText('Anulada')).toBeInTheDocument()
+    expect(within(filas[1] as HTMLElement).getByText('Anulación de transferencia')).toBeInTheDocument()
+    const enlaces = screen.getAllByRole('link', { name: 'Ver operación' })
+    expect(enlaces).toHaveLength(2)
+    for (const enlace of enlaces) expect(enlace).toHaveAttribute('href', `/admin/stock/transferencias/${OPERACION}`)
+  })
+
+  it('un ajuste anulado: el original se marca Anulada y el inverso se rotula como anulación con su motivo', async () => {
+    reglasConMovimientos([
+      movimientoDeOperacion('a', 'AJUSTE', -6, 114, 'AJUSTE_STOCK', { motivo_nombre: 'Rotura', estado_origen: 'ANULADA' }),
+      movimientoDeOperacion('b', 'AJUSTE', 6, 120, 'ANULACION_AJUSTE_STOCK', {
+        motivo_nombre: 'Error de carga',
+        estado_origen: 'ANULADA',
+      }),
+    ])
+    renderKardex('ADM')
+
+    await screen.findByText('Error de carga')
+    const filas = screen.getAllByRole('row').slice(1)
+    expect(within(filas[0] as HTMLElement).getByText('Anulada')).toBeInTheDocument()
+    expect(within(filas[0] as HTMLElement).getByText('Rotura')).toBeInTheDocument()
+    expect(within(filas[1] as HTMLElement).getByText('Anulación de ajuste')).toBeInTheDocument()
+  })
+
+  it('un movimiento sin operación (stock inicial) no trae motivo, estado ni enlace', async () => {
+    reglasConMovimientos([movimiento('a', 60, 60)])
+    renderKardex('ADM')
+
+    await screen.findByText('Stock inicial')
+    expect(screen.queryByRole('link', { name: 'Ver operación' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Anulada')).not.toBeInTheDocument()
+  })
+})

@@ -622,4 +622,37 @@ describe('ProductoFormScreen — edición (tarea 10.5)', () => {
     expect(screen.getByRole('heading', { name: `${PRODUCTO_DETALLE.codigo} — ${PRODUCTO_DETALLE.nombre}` })).toBeInTheDocument()
     expect(screen.queryByText('Listado de catálogo')).not.toBeInTheDocument()
   })
+
+  // Change 14, tarea 13.4 (`design.md` D4): un producto con stock no se desactiva.
+  it('al desactivar un producto con stock muestra el mensaje de PRODUCTO_CON_STOCK, no navega y conserva lo cargado', async () => {
+    const MENSAJE = 'El producto tiene stock: movelo o dalo de baja antes de desactivarlo.'
+    apiFetchMock.mockImplementation((ruta: string, opciones?: RequestInit) => {
+      if (ruta.startsWith('/proveedores/opciones')) return Promise.resolve(respuesta(200, PAGINA_PROVEEDOR_OPCIONES))
+      if (ruta === `/catalogo/productos/${PRODUCTO_DETALLE.id}` && opciones?.method === 'PUT') {
+        return Promise.resolve(respuesta(409, { title: MENSAJE, codigo: 'PRODUCTO_CON_STOCK' }))
+      }
+      if (ruta.startsWith('/catalogo/categorias')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
+      if (ruta.startsWith('/catalogo/marcas')) return Promise.resolve(respuesta(200, PAGINA_VACIA))
+      if (ruta.startsWith('/configuracion/alicuotas')) return Promise.resolve(respuesta(200, PAGINA_ALICUOTAS))
+      return Promise.resolve(respuesta(200, PRODUCTO_DETALLE))
+    })
+
+    const usuarioEvento = userEvent.setup()
+    renderEdicion()
+
+    await screen.findByText('Pack x24')
+    const nombre = screen.getAllByLabelText(/^nombre$/i)[0] as HTMLInputElement
+    await usuarioEvento.clear(nombre)
+    await usuarioEvento.type(nombre, 'Gaseosa cola light')
+    await usuarioEvento.click(screen.getByLabelText(/^activo$/i))
+    await usuarioEvento.click(screen.getByRole('button', { name: /guardar cambios/i }))
+
+    expect(await screen.findByText(MENSAJE)).toBeInTheDocument()
+    const envio = apiFetchMock.mock.calls.find(([ruta, opciones]) => ruta === `/catalogo/productos/${PRODUCTO_DETALLE.id}` && (opciones as RequestInit | undefined)?.method === 'PUT')
+    expect(JSON.parse(String((envio?.[1] as RequestInit).body))).toMatchObject({ activo: false, nombre: 'Gaseosa cola light' })
+    // Sigue en el formulario con lo que el usuario había cargado.
+    expect(screen.getByRole('heading', { name: `${PRODUCTO_DETALLE.codigo} — ${PRODUCTO_DETALLE.nombre}` })).toBeInTheDocument()
+    expect((screen.getAllByLabelText(/^nombre$/i)[0] as HTMLInputElement).value).toBe('Gaseosa cola light')
+    expect(screen.getByLabelText(/^activo$/i)).not.toBeChecked()
+  })
 })

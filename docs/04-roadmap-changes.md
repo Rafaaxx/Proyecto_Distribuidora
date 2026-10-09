@@ -16,7 +16,7 @@ No reemplaza a las proposals. Cada change se detalla recién cuando le toca, con
 ## 2. Convenciones de change
 
 - **Nombre:** `NN-slug-en-espanol`, con el número indicando el orden previsto. Si un change se inserta después, toma un número con sufijo (`14b-…`) en lugar de renumerar todo.
-- **Tamaño:** entre medio día y tres días de trabajo. Un change más grande se divide.
+- **Tamaño:** entre medio día y tres días de trabajo. Un change más grande se divide. Excepción aceptada por el usuario: el change 14 (`transferencias-y-ajustes`) se implementó en cuatro lotes con revisión entre cada uno, en lugar de dividirse (ADR-048, punto 1).
 - **Contenido:** `proposal.md` (qué y por qué), `tasks.md` (pasos verificables), `design.md` solo si hay una decisión técnica no resuelta en `docs/`, y las specs delta por capacidad.
 - **Trazabilidad:** todo requisito de una spec cita las reglas de `01-dominio.md` que implementa (`VTA-12`, `INV-13`).
 - **Regla de oro:** si al escribir una proposal aparece una decisión que `docs/` no resuelve, se resuelve primero como ADR y después se sigue. El agente no inventa reglas de negocio.
@@ -160,7 +160,7 @@ La tabla indica qué changes deben estar archivados antes de empezar cada uno.
 
 **Deuda nominada por el change 11 (`compras-y-deuda-proveedor`) para el change 12 (`pagos-a-proveedores`):** el 11 ya creó `pago_proveedor` y `pago_proveedor_medio` (`03` §6) con `origen` (`COMPRA`, `INDEPENDIENTE`), `compra_id` y los campos de anulación; el 12 agrega el pago independiente (`PAGO_PROVEEDOR_REGISTRAR`, `origen = INDEPENDIENTE`) y `PAGO_PROVEEDOR_ANULAR` sobre las mismas tablas, sin migrar lo existente. Decisiones que el 12 debe tomar con un ADR: (a) el motivo de anulación de un pago (`anulacion_motivo_id` es nulable y `motivo.ambito` no tiene un ámbito para pagos de proveedor); (b) si un pago de origen `COMPRA` puede anularse por separado de su compra (hoy solo se anula con `COMPRA_ANULAR` y `devuelve_pago = true`); (c) cómo se compensa en pantalla el saldo a favor nuestro que deja una anulación con `devuelve_pago = false` o un pago de más. Los movimientos `PAGO` y `ANULACION_PAGO` de la cuenta del proveedor ya existen (ADR-034 punto 5) y los usa el 11 para el contado. **Saldada por el change 12 (2026-10-06) (ADR-046):** (a) ámbito de motivo `ANULACION_PAGO` con tres motivos sembrados y `CHECK` estricto de anulación; (b) el pago de una compra se anula por separado solo si la compra ya está anulada (`PAGO_DE_COMPRA_VIGENTE` en otro caso); (c) el saldo a nuestro favor se compensa solo por el saldo general, con confirmación explícita en el alta de pago y aviso en el alta de compra.
 
-**Deuda nominada por el change 11 (`compras-y-deuda-proveedor`) para el change 14 (`transferencias-y-ajustes`) y el 18a (`venta-online-core`):** el stock puede quedar negativo por una anulación de compra con `PERMITIR_STOCK_NEGATIVO` (ADR-044, enmienda del punto 3 de ADR-039); el 14 decide cómo se regulariza (ajuste) y el 18a cómo costea y valida una venta sobre un saldo negativo. `registrar_movimientos` solo admite `permitir_negativo` para `ANULACION_COMPRA`.
+**Deuda del change 11 saldada por el change 14 (`transferencias-y-ajustes`, ADR-048):** un saldo negativo se regulariza con cualquier ingreso (compra, transferencia entrante o ajuste positivo), con la acción "Ajustar" del stock por ubicación; los ajustes nunca dejan negativo. `registrar_movimientos` admite `permitir_negativo` para `ANULACION_COMPRA` y `TRANSFERENCIA_SALIDA`, y para el inverso de un ajuste. Queda para el 18a cómo costea y valida una venta sobre un saldo negativo.
 
 **Deuda nominada por el change 05 (`catalogo`) para el change 13 (`listas-de-precios`):** decidir por ADR qué pasa al cambiar la presentación de referencia de un producto con precios publicados — `precio_item` no congela las unidades de referencia, y el cambio altera el significado de `precio_referencia` (PRC-10, PRC-22; `design.md` D5 del change 05-catalogo). El ADR debe optar entre bloquear el cambio de referencia o congelar las unidades en `precio_item`. **Saldada por el change 13 (ADR-047 punto 2):** `precio_item` congela `unidades_referencia`; cambiar la referencia no altera ninguna versión.
 
@@ -196,6 +196,16 @@ La tabla indica qué changes deben estar archivados antes de empezar cada uno.
 **Deuda heredada del change 04 para el change 15 (`jornadas`):** `comando.jornada_id` quedó como columna sin FK porque la tabla `jornada` todavía no existe (`design.md` D8 del change 04-pipeline-comandos). Agregar la FK compuesta (`organizacion_id`, `jornada_id`) hacia `jornada` como parte de este change.
 
 **Deuda nominada por el change 05 (`catalogo`) para el change 17 (`cobranzas`):** resolver la firma de `registro.HandlerFuncion` (hoy sin contexto: la plantilla D7 del change 04 pasa `sesion`/`reloj` como kwargs con `# type: ignore[arg-type]`) para que el despacho por lote (`_procesar_item_de_lote`) reciba `sesion`/`reloj` en forma tipada, antes de declarar `COBRANZA_REGISTRAR`, el primer tipo de comando que admite `OFFLINE` (`design.md` D3 del change 05-catalogo).
+
+**Deuda nominada por el change 14 (`transferencias-y-ajustes`) para el change 15 (`jornadas`):** (1) aplicar STK-09 también a `STOCK_TRANSFERIR`, `STOCK_TRANSFERENCIA_ANULAR` y `STOCK_AJUSTE_ANULAR` con vehículos tomados; hoy se puede transferir a un vehículo sin jornada y anular esa transferencia. (2) La carga del vehículo en la apertura (RUT-02) reutiliza `STOCK_TRANSFERIR`.
+
+**Deuda nominada por el change 14 para el change 24 (`rendicion`):** las diferencias de rendición (RUT-06) y el remanente (RUT-08) se escriben como movimientos `DIFERENCIA_RENDICION` por la única puerta; el motivo y la valorización siguen la regla de CST-12 (ADR-048).
+
+**Deuda nominada por el change 14 para los changes 26 y 28 (reportes y auditoría):** (1) llevar el motivo a la fila de auditoría de `COMPRA_ANULAR` y `PAGO_PROVEEDOR_ANULAR` (hoy `motivo_id` nulo; el bus solo lo copia en tres comandos de stock). (2) Reportes de ajustes y pérdidas por motivo y consulta de auditoría con motivo. (3) Un mecanismo común para los tres puertos de registro de `catalogo` (ADR-023, ADR-025, verificador de stock).
+
+**Deuda nominada por el change 14 para el change 17 (`cobranzas`):** a la deuda ya nominada sobre la firma de `registro.HandlerFuncion` se suma que los handlers de stock tampoco funcionan por el despacho por lote (`_procesar_item_de_lote` no les pasa `sesion` ni `reloj`); hoy no hay efecto porque son solo online.
+
+**Deuda nominada por el change 14 (aceptada por el usuario el 2026-10-08):** el acceso a Ajustes desde el menú de `/admin` es un enlace dentro de la sección Stock (que se ofrece con `TRANSFERIR_STOCK`), así que un rol a medida con `AJUSTAR_STOCK` y sin `TRANSFERIR_STOCK` no llega desde el menú. Se deja así por ahora.
 
 ## 9. Hito 5 — Venta
 

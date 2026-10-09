@@ -196,7 +196,7 @@ def test_con_permiso_y_saldo_suficiente_no_marca_negativo(entorno: Entorno) -> N
     assert (resultado.saldo, resultado.saldo_negativo) == (0, False)
 
 
-@pytest.mark.parametrize("tipo", ["VENTA", "AJUSTE", "TRANSFERENCIA_SALIDA"])
+@pytest.mark.parametrize("tipo", ["VENTA", "AJUSTE"])
 def test_el_permiso_no_alcanza_a_los_egresos_de_otro_tipo(entorno: Entorno, tipo: str) -> None:
     entorno.mover(entorno.ingreso(10, "100"))
 
@@ -204,6 +204,10 @@ def test_el_permiso_no_alcanza_a_los_egresos_de_otro_tipo(entorno: Entorno, tipo
         entorno.mover(entorno.linea(-11, None, tipo), permitir_negativo=True)
 
     assert entorno.saldo() == 10
+
+
+# La salida de transferencia SÍ admite stock negativo con permiso desde el change 14
+# (`design.md` D1); lo prueba `test_stock_movimientos_transferencias_ajustes.py`.
 
 
 # --- maestros inactivos (CAT-05, D11) -----------------------------------------

@@ -36,6 +36,9 @@ describe('rutas de stock en /admin (change 09)', () => {
       { ruta: `/stock/ubicaciones/${ID}/saldos`, responder: () => ({ status: 200, cuerpo: { items: [], cursor_siguiente: null } }) },
       { ruta: '/stock/kardex', responder: () => ({ status: 200, cuerpo: { saldo_anterior: 0, saldo_actual: 0, zona_horaria: 'UTC', producto_codigo: 'C', producto_nombre: 'Vino A', unidades_referencia: null, nombre_referencia: null, items: [], cursor_siguiente: null } }) },
       { ruta: '/catalogo/productos', responder: () => ({ status: 200, cuerpo: { items: [], cursor_siguiente: null } }) },
+      { ruta: '/stock/transferencias', responder: () => ({ status: 200, cuerpo: { items: [], cursor_siguiente: null } }) },
+      { ruta: '/stock/ajustes', responder: () => ({ status: 200, cuerpo: { items: [], cursor_siguiente: null } }) },
+      { ruta: '/configuracion/motivos', responder: () => ({ status: 200, cuerpo: { items: [] } }) },
     ])
   })
   afterEach(() => {
@@ -49,6 +52,10 @@ describe('rutas de stock en /admin (change 09)', () => {
     [`/admin/stock/ubicaciones/${ID}/stock`, 'No hay stock en esta ubicación.'],
     [`/admin/stock/ubicaciones/${ID}/kardex/${PRODUCTO}`, 'No hay movimientos en este período.'],
     [`/admin/stock/ubicaciones/${ID}/stock-inicial`, 'Registrar stock inicial'],
+    ['/admin/stock/transferencias', 'No hay transferencias para mostrar.'],
+    ['/admin/stock/transferencias/nueva', 'Registrar transferencia'],
+    ['/admin/stock/ajustes', 'No hay ajustes para mostrar.'],
+    ['/admin/stock/ajustes/nueva', 'Registrar ajuste'],
   ])('%s se resuelve a su pantalla', async (ruta, texto) => {
     renderEn(ruta)
 

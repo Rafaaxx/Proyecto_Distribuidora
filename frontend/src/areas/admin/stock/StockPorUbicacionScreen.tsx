@@ -1,12 +1,14 @@
 import { Link, useParams } from 'react-router-dom'
 
 import { Alert } from '../../../components/ui/Alert'
+import { Badge } from '../../../components/ui/Badge'
 import { Boton } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { PageHeader } from '../../../components/ui/PageHeader'
 import { Tabla, type ColumnaTabla } from '../../../components/ui/Table'
 import { formatearCantidad, referenciaDeRespuesta } from '../../../domain/stock/cantidades'
 import { formatearCostoDeApi } from '../../../domain/stock/costos'
+import { cantidadParaLlevarACero } from '../../../domain/stock/operaciones'
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { usePermisos } from '../../../features/identidad/usePermisos'
 import type { LineaDeStock } from '../../../features/stock/api'
@@ -64,7 +66,19 @@ function StockDeLaUbicacion({ ubicacionId }: { ubicacionId: string }) {
     {
       clave: 'cantidad',
       encabezado: 'Cantidad',
-      render: (l) => formatearCantidad(l.cantidad_base, referenciaDeRespuesta(l.unidades_referencia, l.nombre_referencia)),
+      render: (l) => {
+        const texto = formatearCantidad(l.cantidad_base, referenciaDeRespuesta(l.unidades_referencia, l.nombre_referencia))
+        if (l.cantidad_base >= 0) return texto
+        // D2: un saldo negativo se marca (STK-05); se regulariza con un ajuste positivo.
+        return (
+          <span className="flex items-center gap-2">
+            <span data-negativo="true" className="font-medium text-danger">
+              {texto}
+            </span>
+            <Badge variante="negativo">Negativo</Badge>
+          </span>
+        )
+      },
     },
     ...(verCostos
       ? [
@@ -78,11 +92,23 @@ function StockDeLaUbicacion({ ubicacionId }: { ubicacionId: string }) {
     {
       clave: 'acciones',
       encabezado: 'Acciones',
-      render: (l) => (
-        <Link to={`/admin/stock/ubicaciones/${ubicacionId}/kardex/${l.producto_id}`} className={CLASE_ENLACE}>
-          Ver kardex
-        </Link>
-      ),
+      render: (l) => {
+        const aLlevarACero = cantidadParaLlevarACero(l.cantidad_base)
+        const ajuste = new URLSearchParams({ ubicacion: ubicacionId, producto: l.producto_id })
+        if (aLlevarACero !== null) ajuste.set('cantidad', String(aLlevarACero))
+        return (
+          <span className="flex items-center gap-3">
+            <Link to={`/admin/stock/ubicaciones/${ubicacionId}/kardex/${l.producto_id}`} className={CLASE_ENLACE}>
+              Ver kardex
+            </Link>
+            <SiTienePermiso permiso="AJUSTAR_STOCK">
+              <Link to={`/admin/stock/ajustes/nueva?${ajuste.toString()}`} className={CLASE_ENLACE}>
+                Ajustar
+              </Link>
+            </SiTienePermiso>
+          </span>
+        )
+      },
     },
   ]
 
@@ -92,6 +118,9 @@ function StockDeLaUbicacion({ ubicacionId }: { ubicacionId: string }) {
         titulo="Stock por ubicación"
         acciones={
           <>
+            <Link to={`/admin/stock/transferencias/nueva?origen=${ubicacionId}`} className={CLASE_ENLACE}>
+              Transferir desde acá
+            </Link>
             <SiTienePermiso permiso="IMPORTAR_DATOS">
               <Link to={`/admin/stock/ubicaciones/${ubicacionId}/stock-inicial`} className={CLASE_ENLACE}>
                 Cargar stock inicial

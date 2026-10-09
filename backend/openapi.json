@@ -6617,6 +6617,601 @@
         }
       }
     },
+    "/api/v1/stock/transferencias": {
+      "post": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Registrar Transferencia",
+        "description": "`STOCK_TRANSFERIR` (change 14, STK-07): mueve stock entre dos ubicaciones como una\nsola operación atómica. 201 con la transferencia, su estado y los saldos resultantes en\norigen y destino; sin costos. Con `PERMITIR_STOCK_NEGATIVO` una salida que no alcanza se\nacepta y la respuesta lista `STOCK_NEGATIVO` en `observaciones`.",
+        "operationId": "registrar_transferencia_api_v1_stock_transferencias_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferenciaCrearRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferenciaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Listar Transferencias",
+        "description": "Transferencias de la organización, más recientes primero, con su estado (change 14,\nD7). `ubicacion_id` alcanza origen y destino; `desde` y `hasta` son fechas de negocio en la\nzona de la organización. Un `limite` fuera de 1 a 200 es 422. Sin costos.",
+        "operationId": "listar_transferencias_api_v1_stock_transferencias_get",
+        "parameters": [
+          {
+            "name": "ubicacion_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ubicacion Id"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Desde"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hasta"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaDeTransferenciasResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stock/ajustes": {
+      "post": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Registrar Ajuste",
+        "description": "`STOCK_AJUSTAR` (change 14, STK-08): corrige el stock de una ubicación con un motivo\ncomo una sola operación atómica. 201 con el ajuste, su estado y los saldos resultantes;\n`costo_unitario` de cada línea (string) solo con `VER_COSTOS`. Un ajuste nunca deja\nstock negativo: `STOCK_INSUFICIENTE` (409) aunque el usuario tenga `PERMITIR_STOCK_NEGATIVO`.",
+        "operationId": "registrar_ajuste_api_v1_stock_ajustes_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AjusteCrearRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AjusteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Listar Ajustes",
+        "description": "Ajustes de la organización, más recientes primero, con su estado y su motivo (change 14,\nD7). Mismos filtros y paginación que las transferencias, más `motivo_id`. Sin costos.",
+        "operationId": "listar_ajustes_api_v1_stock_ajustes_get",
+        "parameters": [
+          {
+            "name": "ubicacion_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ubicacion Id"
+            }
+          },
+          {
+            "name": "motivo_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Motivo Id"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Desde"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hasta"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaDeAjustesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stock/transferencias/{transferencia_id}/anulacion": {
+      "post": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Anular Transferencia",
+        "description": "`STOCK_TRANSFERENCIA_ANULAR` (change 14, TR-06, D5): anula por completo una transferencia\nconfirmada con un motivo del ámbito `ANULACION_TRANSFERENCIA`. 200 con la transferencia\n`ANULADA`, los datos de la anulación y los saldos resultantes; sin costos. Con\n`TRANSFERIR_STOCK` se anula la propia; la de otro usuario exige además\n`ANULAR_TRANSFERENCIA` (403 `PERMISO_REQUERIDO`). Si el destino no alcanza,\n`STOCK_INSUFICIENTE` (409) salvo `PERMITIR_STOCK_NEGATIVO`, que la acepta con\n`STOCK_NEGATIVO` en `observaciones`.",
+        "operationId": "anular_transferencia_api_v1_stock_transferencias__transferencia_id__anulacion_post",
+        "parameters": [
+          {
+            "name": "transferencia_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Transferencia Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferenciaAnularRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferenciaAnuladaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stock/ajustes/{ajuste_id}/anulacion": {
+      "post": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Anular Ajuste",
+        "description": "`STOCK_AJUSTE_ANULAR` (change 14, TR-06, D5): anula por completo un ajuste confirmado,\npropio o de otro usuario, con un motivo del ámbito `ANULACION_AJUSTE`. 200 con el ajuste\n`ANULADA`, los datos de la anulación y el saldo resultante de cada línea; `costo_unitario`\n(string) solo con `VER_COSTOS`. Si el stock de un ajuste positivo ya salió,\n`STOCK_INSUFICIENTE` (409) salvo `PERMITIR_STOCK_NEGATIVO`, que la acepta con\n`STOCK_NEGATIVO` en `observaciones`.",
+        "operationId": "anular_ajuste_api_v1_stock_ajustes__ajuste_id__anulacion_post",
+        "parameters": [
+          {
+            "name": "ajuste_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Ajuste Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AjusteAnularRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AjusteAnuladoResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/stock/ubicaciones/{ubicacion_id}/saldos": {
       "get": {
         "tags": [
@@ -6688,6 +7283,126 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StockDeUbicacionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stock/transferencias/{transferencia_id}": {
+      "get": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Obtener Transferencia",
+        "description": "Detalle de una transferencia con sus líneas (código, nombre y unidades de referencia) y,\nsi está anulada, el motivo, el usuario y el momento de la anulación. 404 si es de otra\norganización o no existe.",
+        "operationId": "obtener_transferencia_api_v1_stock_transferencias__transferencia_id__get",
+        "parameters": [
+          {
+            "name": "transferencia_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Transferencia Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetalleDeTransferenciaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stock/ajustes/{ajuste_id}": {
+      "get": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Obtener Ajuste",
+        "description": "Detalle de un ajuste con su motivo, sus líneas y, si está anulado, los datos de la\nanulación. `costo_unitario` de cada línea (string) solo con `VER_COSTOS` (ADR-036). 404 si\nes de otra organización o no existe.",
+        "operationId": "obtener_ajuste_api_v1_stock_ajustes__ajuste_id__get",
+        "parameters": [
+          {
+            "name": "ajuste_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Ajuste Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetalleDeAjusteResponse"
                 }
               }
             }
@@ -6900,6 +7615,268 @@
   },
   "components": {
     "schemas": {
+      "AjusteAnuladoResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "ubicacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Id"
+          },
+          "motivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Motivo Id"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          },
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/LineaAjusteResponse"
+            },
+            "type": "array",
+            "title": "Lineas"
+          },
+          "anulacion": {
+            "$ref": "#/components/schemas/AnulacionDeAjusteResponse"
+          },
+          "observaciones": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Observaciones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "estado",
+          "ubicacion_id",
+          "motivo_id",
+          "observacion",
+          "lineas",
+          "anulacion",
+          "observaciones"
+        ],
+        "title": "AjusteAnuladoResponse",
+        "description": "El ajuste ya `ANULADA`: `motivo_id` sigue siendo el del ajuste y `anulacion.motivo_id`\nel de la anulación. Cada línea trae su cantidad ORIGINAL y el saldo que dejó la anulación;\n`observaciones` lista `STOCK_NEGATIVO` si la anulación dejó un saldo bajo cero."
+      },
+      "AjusteAnularRequest": {
+        "properties": {
+          "motivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Motivo Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "motivo_id"
+        ],
+        "title": "AjusteAnularRequest",
+        "description": "Solo el motivo de la anulación (D6): el id del ajuste va en la ruta."
+      },
+      "AjusteCrearRequest": {
+        "properties": {
+          "ubicacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Id"
+          },
+          "motivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Motivo Id"
+          },
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/LineaAjusteRequest"
+            },
+            "type": "array",
+            "title": "Lineas"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ubicacion_id",
+          "motivo_id",
+          "lineas"
+        ],
+        "title": "AjusteCrearRequest",
+        "description": "`lineas` sin cota en el esquema: el dominio la valida (1 a 200, `LINEAS_INVALIDAS`).\nSin `organizacion_id` (sale del token, INV-21) y sin fecha (rige el `occurred_at` del\nsobre, TR-05)."
+      },
+      "AjusteDelListadoResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "ubicacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Id"
+          },
+          "ubicacion_nombre": {
+            "type": "string",
+            "title": "Ubicacion Nombre"
+          },
+          "motivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Motivo Id"
+          },
+          "motivo_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Nombre"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "usuario_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usuario Nombre"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "cantidad_de_lineas": {
+            "type": "integer",
+            "title": "Cantidad De Lineas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "estado",
+          "ubicacion_id",
+          "ubicacion_nombre",
+          "motivo_id",
+          "motivo_nombre",
+          "observacion",
+          "usuario_id",
+          "usuario_nombre",
+          "occurred_at",
+          "cantidad_de_lineas"
+        ],
+        "title": "AjusteDelListadoResponse"
+      },
+      "AjusteResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "ubicacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Id"
+          },
+          "motivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Motivo Id"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          },
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/LineaAjusteResponse"
+            },
+            "type": "array",
+            "title": "Lineas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "estado",
+          "ubicacion_id",
+          "motivo_id",
+          "observacion",
+          "lineas"
+        ],
+        "title": "AjusteResponse",
+        "description": "Sale de `comando.resultado` (un reenvío idempotente devuelve lo mismo, INV-06); la\nruta le agrega el costo de cada línea, leído del ajuste, si el usuario tiene `VER_COSTOS`."
+      },
       "AlicuotaResponse": {
         "properties": {
           "id": {
@@ -6928,6 +7905,58 @@
           "activo"
         ],
         "title": "AlicuotaResponse"
+      },
+      "AnulacionDeAjusteResponse": {
+        "properties": {
+          "motivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Motivo Id"
+          },
+          "anulado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Anulado En"
+          },
+          "anulado_por_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Anulado Por Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "motivo_id",
+          "anulado_en",
+          "anulado_por_id"
+        ],
+        "title": "AnulacionDeAjusteResponse"
+      },
+      "AnulacionDeTransferenciaResponse": {
+        "properties": {
+          "motivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Motivo Id"
+          },
+          "anulada_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Anulada En"
+          },
+          "anulada_por_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Anulada Por Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "motivo_id",
+          "anulada_en",
+          "anulada_por_id"
+        ],
+        "title": "AnulacionDeTransferenciaResponse"
       },
       "Body_importar_api_v1_importaciones__tipo__post": {
         "properties": {
@@ -8679,6 +9708,317 @@
         ],
         "title": "CrearUsuarioRequest"
       },
+      "DetalleDeAjusteResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "ubicacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Id"
+          },
+          "ubicacion_nombre": {
+            "type": "string",
+            "title": "Ubicacion Nombre"
+          },
+          "motivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Motivo Id"
+          },
+          "motivo_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Nombre"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "usuario_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usuario Nombre"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Registered At"
+          },
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/LineaDelDetalleDeAjusteResponse"
+            },
+            "type": "array",
+            "title": "Lineas"
+          },
+          "anulacion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DetalleDeAnulacionDeAjusteResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "estado",
+          "ubicacion_id",
+          "ubicacion_nombre",
+          "motivo_id",
+          "motivo_nombre",
+          "observacion",
+          "usuario_id",
+          "usuario_nombre",
+          "occurred_at",
+          "registered_at",
+          "lineas",
+          "anulacion"
+        ],
+        "title": "DetalleDeAjusteResponse"
+      },
+      "DetalleDeAnulacionDeAjusteResponse": {
+        "properties": {
+          "motivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Motivo Id"
+          },
+          "motivo_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Nombre"
+          },
+          "anulado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Anulado En"
+          },
+          "anulado_por_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Anulado Por Id"
+          },
+          "anulado_por_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anulado Por Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "motivo_id",
+          "motivo_nombre",
+          "anulado_en",
+          "anulado_por_id",
+          "anulado_por_nombre"
+        ],
+        "title": "DetalleDeAnulacionDeAjusteResponse"
+      },
+      "DetalleDeAnulacionDeTransferenciaResponse": {
+        "properties": {
+          "motivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Motivo Id"
+          },
+          "motivo_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Nombre"
+          },
+          "anulada_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Anulada En"
+          },
+          "anulada_por_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Anulada Por Id"
+          },
+          "anulada_por_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anulada Por Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "motivo_id",
+          "motivo_nombre",
+          "anulada_en",
+          "anulada_por_id",
+          "anulada_por_nombre"
+        ],
+        "title": "DetalleDeAnulacionDeTransferenciaResponse"
+      },
+      "DetalleDeTransferenciaResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "ubicacion_origen_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Origen Id"
+          },
+          "ubicacion_origen_nombre": {
+            "type": "string",
+            "title": "Ubicacion Origen Nombre"
+          },
+          "ubicacion_destino_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Destino Id"
+          },
+          "ubicacion_destino_nombre": {
+            "type": "string",
+            "title": "Ubicacion Destino Nombre"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "usuario_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usuario Nombre"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Registered At"
+          },
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/LineaDelDetalleDeTransferenciaResponse"
+            },
+            "type": "array",
+            "title": "Lineas"
+          },
+          "anulacion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DetalleDeAnulacionDeTransferenciaResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "estado",
+          "ubicacion_origen_id",
+          "ubicacion_origen_nombre",
+          "ubicacion_destino_id",
+          "ubicacion_destino_nombre",
+          "observacion",
+          "usuario_id",
+          "usuario_nombre",
+          "occurred_at",
+          "registered_at",
+          "lineas",
+          "anulacion"
+        ],
+        "title": "DetalleDeTransferenciaResponse"
+      },
       "DiferenciaDeCostoResponse": {
         "properties": {
           "linea": {
@@ -9117,6 +10457,63 @@
         ],
         "title": "KardexResponse"
       },
+      "LineaAjusteRequest": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "cantidad_base": {
+            "type": "integer",
+            "title": "Cantidad Base"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "producto_id",
+          "cantidad_base"
+        ],
+        "title": "LineaAjusteRequest",
+        "description": "`cantidad_base` es un entero estricto con signo (INV-04); que sea distinta de cero lo\nvalida el dominio (`CANTIDAD_INVALIDA`)."
+      },
+      "LineaAjusteResponse": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "cantidad_base": {
+            "type": "integer",
+            "title": "Cantidad Base"
+          },
+          "saldo": {
+            "type": "integer",
+            "title": "Saldo"
+          },
+          "costo_unitario": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Costo Unitario"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto_id",
+          "cantidad_base",
+          "saldo"
+        ],
+        "title": "LineaAjusteResponse",
+        "description": "`costo_unitario` solo existe con `VER_COSTOS`: sin el permiso la ruta no lo establece\ny la clave desaparece de la respuesta (`response_model_exclude_unset`, ADR-036)."
+      },
       "LineaDeKardexResponse": {
         "properties": {
           "id": {
@@ -9164,6 +10561,28 @@
           "saldo_acumulado": {
             "type": "integer",
             "title": "Saldo Acumulado"
+          },
+          "motivo_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Nombre"
+          },
+          "estado_origen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estado Origen"
           },
           "costo_unitario": {
             "anyOf": [
@@ -9256,6 +10675,163 @@
         ],
         "title": "LineaDeStockResponse"
       },
+      "LineaDelDetalleDeAjusteResponse": {
+        "properties": {
+          "orden": {
+            "type": "integer",
+            "title": "Orden"
+          },
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "producto_codigo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Producto Codigo"
+          },
+          "producto_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Producto Nombre"
+          },
+          "cantidad_base": {
+            "type": "integer",
+            "title": "Cantidad Base"
+          },
+          "unidades_referencia": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unidades Referencia"
+          },
+          "nombre_referencia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nombre Referencia"
+          },
+          "costo_unitario": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Costo Unitario"
+          }
+        },
+        "type": "object",
+        "required": [
+          "orden",
+          "producto_id",
+          "producto_codigo",
+          "producto_nombre",
+          "cantidad_base",
+          "unidades_referencia",
+          "nombre_referencia"
+        ],
+        "title": "LineaDelDetalleDeAjusteResponse",
+        "description": "`costo_unitario` solo existe con `VER_COSTOS`: sin el permiso la ruta no lo establece y\nla clave desaparece de la respuesta (`response_model_exclude_unset`, ADR-036)."
+      },
+      "LineaDelDetalleDeTransferenciaResponse": {
+        "properties": {
+          "orden": {
+            "type": "integer",
+            "title": "Orden"
+          },
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "producto_codigo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Producto Codigo"
+          },
+          "producto_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Producto Nombre"
+          },
+          "cantidad_base": {
+            "type": "integer",
+            "title": "Cantidad Base"
+          },
+          "unidades_referencia": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unidades Referencia"
+          },
+          "nombre_referencia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nombre Referencia"
+          }
+        },
+        "type": "object",
+        "required": [
+          "orden",
+          "producto_id",
+          "producto_codigo",
+          "producto_nombre",
+          "cantidad_base",
+          "unidades_referencia",
+          "nombre_referencia"
+        ],
+        "title": "LineaDelDetalleDeTransferenciaResponse",
+        "description": "Sin costo: una transferencia no lo muestra a nadie (ADR-036)."
+      },
       "LineaStockInicialRequest": {
         "properties": {
           "producto_id": {
@@ -9322,6 +10898,56 @@
           "saldo"
         ],
         "title": "LineaStockInicialResponse"
+      },
+      "LineaTransferenciaRequest": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "cantidad_base": {
+            "type": "integer",
+            "title": "Cantidad Base"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "producto_id",
+          "cantidad_base"
+        ],
+        "title": "LineaTransferenciaRequest",
+        "description": "`cantidad_base` es un entero estricto (INV-04): `1.5`, `\"12\"` o `true` son un 422 de\nvalidación; que sea mayor que cero lo valida el dominio (`CANTIDAD_INVALIDA`)."
+      },
+      "LineaTransferenciaResponse": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "cantidad_base": {
+            "type": "integer",
+            "title": "Cantidad Base"
+          },
+          "saldo_origen": {
+            "type": "integer",
+            "title": "Saldo Origen"
+          },
+          "saldo_destino": {
+            "type": "integer",
+            "title": "Saldo Destino"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto_id",
+          "cantidad_base",
+          "saldo_origen",
+          "saldo_destino"
+        ],
+        "title": "LineaTransferenciaResponse"
       },
       "ListaCrearRequest": {
         "properties": {
@@ -10065,6 +11691,62 @@
           "cursor_siguiente"
         ],
         "title": "PaginaCostosInformados"
+      },
+      "PaginaDeAjustesResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AjusteDelListadoResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "cursor_siguiente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Siguiente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "cursor_siguiente"
+        ],
+        "title": "PaginaDeAjustesResponse"
+      },
+      "PaginaDeTransferenciasResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TransferenciaDelListadoResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "cursor_siguiente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Siguiente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "cursor_siguiente"
+        ],
+        "title": "PaginaDeTransferenciasResponse"
       },
       "PaginaImportaciones": {
         "properties": {
@@ -12357,6 +14039,269 @@
           "access_token"
         ],
         "title": "TokenResponse"
+      },
+      "TransferenciaAnuladaResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "ubicacion_origen_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Origen Id"
+          },
+          "ubicacion_destino_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Destino Id"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          },
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/LineaTransferenciaResponse"
+            },
+            "type": "array",
+            "title": "Lineas"
+          },
+          "observaciones": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Observaciones"
+          },
+          "anulacion": {
+            "$ref": "#/components/schemas/AnulacionDeTransferenciaResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "estado",
+          "ubicacion_origen_id",
+          "ubicacion_destino_id",
+          "observacion",
+          "lineas",
+          "observaciones",
+          "anulacion"
+        ],
+        "title": "TransferenciaAnuladaResponse",
+        "description": "La transferencia ya `ANULADA`, con los datos de la anulación y los saldos que quedaron\nen origen y destino. Sale de `comando.resultado` (INV-06). No lleva costos."
+      },
+      "TransferenciaAnularRequest": {
+        "properties": {
+          "motivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Motivo Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "motivo_id"
+        ],
+        "title": "TransferenciaAnularRequest",
+        "description": "Solo el motivo de la anulación (D6): el id de la transferencia va en la ruta y la\norganización sale del token (INV-21)."
+      },
+      "TransferenciaCrearRequest": {
+        "properties": {
+          "ubicacion_origen_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Origen Id"
+          },
+          "ubicacion_destino_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Destino Id"
+          },
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/LineaTransferenciaRequest"
+            },
+            "type": "array",
+            "title": "Lineas"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ubicacion_origen_id",
+          "ubicacion_destino_id",
+          "lineas"
+        ],
+        "title": "TransferenciaCrearRequest",
+        "description": "`lineas` sin cota en el esquema: el dominio la valida (1 a 200, `LINEAS_INVALIDAS`,\nD6). Sin `organizacion_id` (sale del token, INV-21) y sin fecha (rige el `occurred_at`\ndel sobre, TR-05)."
+      },
+      "TransferenciaDelListadoResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "ubicacion_origen_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Origen Id"
+          },
+          "ubicacion_origen_nombre": {
+            "type": "string",
+            "title": "Ubicacion Origen Nombre"
+          },
+          "ubicacion_destino_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Destino Id"
+          },
+          "ubicacion_destino_nombre": {
+            "type": "string",
+            "title": "Ubicacion Destino Nombre"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "usuario_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usuario Nombre"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "cantidad_de_lineas": {
+            "type": "integer",
+            "title": "Cantidad De Lineas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "estado",
+          "ubicacion_origen_id",
+          "ubicacion_origen_nombre",
+          "ubicacion_destino_id",
+          "ubicacion_destino_nombre",
+          "observacion",
+          "usuario_id",
+          "usuario_nombre",
+          "occurred_at",
+          "cantidad_de_lineas"
+        ],
+        "title": "TransferenciaDelListadoResponse"
+      },
+      "TransferenciaResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "ubicacion_origen_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Origen Id"
+          },
+          "ubicacion_destino_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Destino Id"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          },
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/LineaTransferenciaResponse"
+            },
+            "type": "array",
+            "title": "Lineas"
+          },
+          "observaciones": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Observaciones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "estado",
+          "ubicacion_origen_id",
+          "ubicacion_destino_id",
+          "observacion",
+          "lineas",
+          "observaciones"
+        ],
+        "title": "TransferenciaResponse",
+        "description": "Sale de `comando.resultado`, no de una relectura: un reenvío idempotente del mismo\n`Operation-Id` devuelve exactamente lo mismo (INV-06). No lleva costos. `observaciones`\nson los códigos de SYN-07 que dejó el comando (`STOCK_NEGATIVO`)."
       },
       "UbicacionCrearRequest": {
         "properties": {

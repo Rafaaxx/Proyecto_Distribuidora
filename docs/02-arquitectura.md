@@ -231,7 +231,7 @@ proveedores ──► catalogo, stock, costeo, cuentas_corrientes, configuracion
 cobranzas ──► cuentas_corrientes
 clientes ──► cuentas_corrientes, precios (lista asignada, solo por service.py, ADR-047)
 precios ──► catalogo, proveedores (costos informados), identidad (configuración y permisos)
-stock ──► catalogo, costeo
+stock ──► catalogo, costeo, configuracion (motivos, solo por service.py, ADR-048)
 catalogo ──► costeo (solo lectura del costo promedio de un producto, ADR-036)
 facturacion ──► ventas (lectura), cuentas_corrientes, costeo
 sync ──► todos los módulos con comandos
@@ -241,6 +241,8 @@ cuentas_corrientes, costeo ──► (sin dependencias de negocio)
 ```
 
 Nota: `precios` no depende de `clientes`: este registra en `precios` un verificador de uso de listas (patrón de ADR-023) y no hay ciclo.
+
+Nota: `catalogo` no depende de `stock`: este registra en `catalogo` un verificador de stock (`registrar_verificador_de_stock`, patrón de ADR-023 y ADR-025, que falla cerrado) para que un producto con stock no se desactive, y no hay ciclo. El contrato de import-linter `stock-solo-por-service-ajeno` permite a `stock` alcanzar `configuracion` solo por su `service.py`, y `catalogo-solo-por-service-ajeno` prohíbe a `catalogo` importar `stock` (ADR-048).
 
 No se permiten ciclos. Si aparece la necesidad de uno, se resuelve moviendo la lógica al módulo que orquesta (normalmente `ventas`) o registrando un ADR.
 
@@ -311,6 +313,7 @@ Errores transitorios de PostgreSQL (serialización `40001`, deadlock `40P01`) se
 | `COMPRA_CONFIRMAR`, `COMPRA_ANULAR` | ✓ | |
 | `PAGO_PROVEEDOR_REGISTRAR`, `PAGO_PROVEEDOR_ANULAR` | ✓ | |
 | `STOCK_TRANSFERIR`, `STOCK_AJUSTAR`, `STOCK_INICIAL_REGISTRAR` | ✓ | |
+| `STOCK_TRANSFERENCIA_ANULAR`, `STOCK_AJUSTE_ANULAR` | ✓ | |
 | `COSTO_INFORMAR` | ✓ | |
 | `LISTA_PRECIO_CREAR`, `LISTA_PRECIO_MODIFICAR`, `REGLA_MARGEN_CREAR`, `REGLA_MARGEN_MODIFICAR`, `REDONDEO_CATEGORIA_DEFINIR` (con `GESTIONAR_LISTAS`) | ✓ | |
 | `LISTA_GENERAR_BORRADOR`, `LISTA_BORRADOR_PRECIO_FIJAR` (con `GESTIONAR_LISTAS`) | ✓ | |
@@ -326,6 +329,8 @@ Las altas y modificaciones de maestros también llevan `operation_id` y pasan po
 Un handler puede devolver, además del resultado, observaciones de negocio (SYN-04, SYN-07): el comando queda `ACEPTADO_CON_OBSERVACIONES` y las observaciones se registran con la operación afectada. `COMPRA_ANULAR` lleva `devuelve_pago` (obligatorio en compras de contado, prohibido en las de crédito) y emite `ANULACION_COMPRA_SIN_RECALCULO` y `STOCK_NEGATIVO` (ADR-043, ADR-044). Las lecturas de compras exigen `REGISTRAR_COMPRA` o `ANULAR_COMPRA`; el formulario de compra también lee productos, alícuotas, proveedores y ubicaciones con `REGISTRAR_COMPRA` (ADR-043).
 
 `PAGO_PROVEEDOR_REGISTRAR` lleva proveedor, fecha, importe, de 1 a 20 medios y una observación opcional, y exige `REGISTRAR_PAGO_PROVEEDOR`; `PAGO_PROVEEDOR_ANULAR` lleva el pago y un motivo del ámbito `ANULACION_PAGO`, y exige `ANULAR_PAGO_PROVEEDOR`. Los errores propios son `MEDIOS_INVALIDOS` (422), `PAGO_YA_ANULADO` y `PAGO_DE_COMPRA_VIGENTE` (409). Las lecturas son `GET /pagos-proveedores` (filtros de proveedor, estado, origen y fechas, con cursor), `GET /pagos-proveedores/{id}` (ambos con `REGISTRAR_PAGO_PROVEEDOR` o `ANULAR_PAGO_PROVEEDOR`) y `GET /proveedores/{id}/saldo` (con `GESTIONAR_PROVEEDORES`, `REGISTRAR_PAGO_PROVEEDOR` o `REGISTRAR_COMPRA`); `GET /proveedores/opciones` también se abre, solo en lectura, a `REGISTRAR_PAGO_PROVEEDOR` (ADR-046).
+
+`STOCK_TRANSFERIR` lleva origen, destino distinto y de 1 a 200 líneas de producto y cantidad base positiva, y exige `TRANSFERIR_STOCK`; `STOCK_AJUSTAR` lleva una ubicación, un motivo del ámbito `AJUSTE_STOCK` y de 1 a 200 líneas con cantidad con signo, y exige `AJUSTAR_STOCK`; ambos admiten una observación de hasta 500 caracteres. `STOCK_TRANSFERENCIA_ANULAR` y `STOCK_AJUSTE_ANULAR` llevan la operación (en la ruta) y un motivo de los ámbitos `ANULACION_TRANSFERENCIA` y `ANULACION_AJUSTE`; anulan todas las líneas, una sola vez, con movimientos inversos al costo original; la primera exige `TRANSFERIR_STOCK` y, si la transferencia es de otro usuario, además `ANULAR_TRANSFERENCIA`, y la segunda `AJUSTAR_STOCK`. Emiten `STOCK_NEGATIVO` cuando el usuario con `PERMITIR_STOCK_NEGATIVO` deja un saldo bajo cero. Los errores propios son `UBICACIONES_IGUALES`, `OBSERVACION_INVALIDA` y `MOTIVO_INVALIDO` (422) y `PRODUCTO_SIN_COSTO`, `PRODUCTO_CON_STOCK`, `TRANSFERENCIA_YA_ANULADA` y `AJUSTE_YA_ANULADO` (409). Las lecturas son `GET /stock/transferencias` y `/{id}` (con `TRANSFERIR_STOCK`) y `GET /stock/ajustes` y `/{id}` (con `AJUSTAR_STOCK`, costos con `VER_COSTOS`), con cursor y límite; el kardex agrega el motivo, la operación de origen y su estado. Los cuatro comandos son solo online. El bus copia el motivo a su fila de auditoría únicamente en `STOCK_AJUSTAR`, `STOCK_TRANSFERENCIA_ANULAR` y `STOCK_AJUSTE_ANULAR` (ADR-022, ADR-048).
 
 Los comandos de listas son solo online. Los errores propios son `MARGEN_INVALIDO`, `ALCANCE_INVALIDO`, `REDONDEO_INVALIDO`, `IMPORTE_INVALIDO`, `PRECIO_NO_POSITIVO`, `VIGENCIA_INVALIDA`, `VERSION_SIN_PRECIOS` (422) y `NOMBRE_DUPLICADO`, `REGLA_DUPLICADA`, `LISTA_INACTIVA`, `LISTA_EN_USO`, `VERSION_NO_ES_BORRADOR`, `VERSION_NO_PUBLICADA`, `VERSION_YA_VIGENTE`, `VIGENCIA_DUPLICADA`, `SIN_LISTA_APLICABLE`, `LISTA_SIN_VERSION_VIGENTE` (409). Las lecturas cuelgan de `/api/v1/precios/…` (listas, reglas, borrador, versiones, precios de una versión paginados por cursor, `vigente?momento=` y `lista-predeterminada`); `CLIENTE_CREAR` y `CLIENTE_MODIFICAR` aceptan `lista_precio_id` (ADR-047).
 
@@ -362,11 +367,12 @@ Los libros son la verdad (INV-12, INV-13). Las tablas de saldo son una materiali
 **DEBE:** toda transacción que bloquee varias filas lo hace en este orden, y dentro de cada nivel ordenando por clave:
 
 1. `saldo_cuenta` (cliente o proveedor de la operación)
-2. `costo_producto` (por `producto_id` ascendente)
-3. `stock_saldo` (por `producto_id` y `ubicacion_id` ascendentes)
-4. `jornada` (si la operación la valida)
+2. `producto` (`FOR SHARE`, por `producto_id` ascendente; todo movimiento de stock lo toma, y la desactivación de un producto lo toma `FOR UPDATE`)
+3. `costo_producto` (por `producto_id` ascendente)
+4. `stock_saldo` (por `producto_id` y `ubicacion_id` ascendentes)
+5. `jornada` (si la operación la valida)
 
-Las filas de la propia operación que el comando corrige o anula se toman **antes** del nivel 1, en este orden: la compra (`FOR UPDATE`) y después su pago (`FOR UPDATE`). `COMPRA_ANULAR` y `PAGO_PROVEEDOR_ANULAR` usan el mismo orden (compra, pago, `saldo_cuenta`), así que anular una compra y anular su pago a la vez no se interbloquean y dejan una sola `ANULACION_PAGO`. `PAGO_PROVEEDOR_REGISTRAR` parte del nivel 1 (`saldo_cuenta` del proveedor) (ADR-043 punto 15, ADR-046).
+Las filas de la propia operación que el comando corrige o anula se toman **antes** del nivel 1, en este orden: la compra (`FOR UPDATE`) y después su pago (`FOR UPDATE`); o la transferencia o el ajuste (`FOR UPDATE`), que se anula una sola vez. `COMPRA_ANULAR` y `PAGO_PROVEEDOR_ANULAR` usan el mismo orden (compra, pago, `saldo_cuenta`), así que anular una compra y anular su pago a la vez no se interbloquean y dejan una sola `ANULACION_PAGO`. `PAGO_PROVEEDOR_REGISTRAR` parte del nivel 1 (`saldo_cuenta` del proveedor) (ADR-043 punto 15, ADR-046). Las ubicaciones se toman `FOR SHARE` al comienzo del movimiento, como hasta ahora (ADR-038). Con el producto como nivel previo a `costo_producto`, un movimiento y la desactivación del mismo producto se esperan: o el movimiento ve el producto inactivo, o la desactivación ve el saldo (`PRODUCTO_CON_STOCK`) (ADR-048).
 
 Un orden único impide deadlocks entre operaciones concurrentes. Los handlers no bloquean filas directamente: usan funciones de los servicios que respetan este orden, y la venta reúne todos los productos antes de pedir bloqueos.
 
@@ -374,8 +380,8 @@ La fila de `lista_precio` es el candado de la lista y no entra en el orden de ar
 
 ### 7.4 Stock
 
-- Todo movimiento de un producto bloquea su fila de `costo_producto` y la de `stock_saldo`. Esto serializa las operaciones concurrentes por producto; con el volumen esperado no es un cuello de botella.
-- **ONLINE:** `UPDATE stock_saldo SET cantidad = cantidad - :q WHERE … AND cantidad >= :q`. Si no afecta filas y el usuario no tiene `PERMITIR_STOCK_NEGATIVO`, se rechaza (STK-05).
+- Todo movimiento de un producto bloquea su fila de `costo_producto` y la de `stock_saldo`, y toma el producto `FOR SHARE` antes de ambas. Esto serializa las operaciones concurrentes por producto; con el volumen esperado no es un cuello de botella.
+- **ONLINE:** `UPDATE stock_saldo SET cantidad = cantidad - :q WHERE … AND cantidad >= :q`. Si no afecta filas y el usuario no tiene `PERMITIR_STOCK_NEGATIVO`, se rechaza (STK-05). Con el permiso se admite solo para la salida de una transferencia, la anulación de una compra, la de una transferencia y la de un ajuste; **nunca** para un ajuste ni para la corrección de un stock inicial, que se rechazan con `STOCK_INSUFICIENTE` tenga o no el permiso (ADR-044 punto 4 enmendado por ADR-048).
 - **OFFLINE:** se descuenta sin condición y, si el resultado es negativo, se agrega la observación STOCK_NEGATIVO (STK-06).
 - Una ubicación con toma se valida contra la jornada abierta dentro de la misma transacción (STK-09).
 

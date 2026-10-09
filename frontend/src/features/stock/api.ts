@@ -1,6 +1,6 @@
 import type { components } from '../../api/schema.gen'
 import { apiFetch } from '../../lib/api/httpClient'
-import type { FiltrosKardex } from './claves'
+import type { FiltrosAjustes, FiltrosKardex, FiltrosTransferencias } from './claves'
 import { errorDesdeRespuesta } from './errores'
 
 /**
@@ -27,6 +27,20 @@ export type LineaDeKardex = components['schemas']['LineaDeKardexResponse']
 export type StockInicialDatos = components['schemas']['StockInicialRegistrarRequest']
 export type StockInicialResultado = components['schemas']['StockInicialResponse']
 export type CostoPromedio = components['schemas']['CostoPromedioResponse']
+export type TransferenciaDatos = components['schemas']['TransferenciaCrearRequest']
+export type TransferenciaResultado = components['schemas']['TransferenciaResponse']
+export type TransferenciaAnuladaResultado = components['schemas']['TransferenciaAnuladaResponse']
+export type TransferenciaDelListado = components['schemas']['TransferenciaDelListadoResponse']
+export type PaginaTransferencias = components['schemas']['PaginaDeTransferenciasResponse']
+export type TransferenciaDetalle = components['schemas']['DetalleDeTransferenciaResponse']
+export type LineaDeTransferencia = components['schemas']['LineaDelDetalleDeTransferenciaResponse']
+export type AjusteDatos = components['schemas']['AjusteCrearRequest']
+export type AjusteResultado = components['schemas']['AjusteResponse']
+export type AjusteAnuladoResultado = components['schemas']['AjusteAnuladoResponse']
+export type AjusteDelListado = components['schemas']['AjusteDelListadoResponse']
+export type PaginaAjustes = components['schemas']['PaginaDeAjustesResponse']
+export type AjusteDetalle = components['schemas']['DetalleDeAjusteResponse']
+export type LineaDeAjuste = components['schemas']['LineaDelDetalleDeAjusteResponse']
 
 /** Tamaño de página por defecto (ADR-034 punto 6). */
 export const LIMITE_POR_DEFECTO = 50
@@ -127,5 +141,93 @@ export async function obtenerKardex(
 
 export async function obtenerCostoPromedio(productoId: string): Promise<CostoPromedio> {
   const respuesta = await apiFetch(`/catalogo/productos/${productoId}/costo`)
+  return leerJsonOLanzar(respuesta)
+}
+
+// --- transferencias y ajustes (change 14) -----------------------------------
+
+function parametrosDeListado(
+  filtros: FiltrosTransferencias & { motivoId?: string },
+  cursor: string | undefined,
+  limite: number,
+): URLSearchParams {
+  const params = new URLSearchParams()
+  params.set('limite', String(limite))
+  if (cursor) params.set('cursor', cursor)
+  if (filtros.ubicacionId) params.set('ubicacion_id', filtros.ubicacionId)
+  if (filtros.motivoId) params.set('motivo_id', filtros.motivoId)
+  if (filtros.desde) params.set('desde', filtros.desde)
+  if (filtros.hasta) params.set('hasta', filtros.hasta)
+  return params
+}
+
+export async function listarTransferencias(
+  filtros: FiltrosTransferencias = {},
+  cursor?: string,
+  limite: number = LIMITE_POR_DEFECTO,
+): Promise<PaginaTransferencias> {
+  const respuesta = await apiFetch(`/stock/transferencias?${parametrosDeListado(filtros, cursor, limite).toString()}`)
+  return leerJsonOLanzar(respuesta)
+}
+
+export async function obtenerTransferencia(id: string): Promise<TransferenciaDetalle> {
+  const respuesta = await apiFetch(`/stock/transferencias/${id}`)
+  return leerJsonOLanzar(respuesta)
+}
+
+export async function registrarTransferencia(
+  datos: TransferenciaDatos,
+  operationId: string,
+): Promise<TransferenciaResultado> {
+  const respuesta = await apiFetch('/stock/transferencias', {
+    method: 'POST',
+    headers: conOperationId(operationId),
+    body: JSON.stringify(datos),
+  })
+  return leerJsonOLanzar(respuesta)
+}
+
+export async function anularTransferencia(
+  id: string,
+  motivoId: string,
+  operationId: string,
+): Promise<TransferenciaAnuladaResultado> {
+  const respuesta = await apiFetch(`/stock/transferencias/${id}/anulacion`, {
+    method: 'POST',
+    headers: conOperationId(operationId),
+    body: JSON.stringify({ motivo_id: motivoId }),
+  })
+  return leerJsonOLanzar(respuesta)
+}
+
+export async function listarAjustes(
+  filtros: FiltrosAjustes = {},
+  cursor?: string,
+  limite: number = LIMITE_POR_DEFECTO,
+): Promise<PaginaAjustes> {
+  const respuesta = await apiFetch(`/stock/ajustes?${parametrosDeListado(filtros, cursor, limite).toString()}`)
+  return leerJsonOLanzar(respuesta)
+}
+
+export async function obtenerAjuste(id: string): Promise<AjusteDetalle> {
+  const respuesta = await apiFetch(`/stock/ajustes/${id}`)
+  return leerJsonOLanzar(respuesta)
+}
+
+export async function registrarAjuste(datos: AjusteDatos, operationId: string): Promise<AjusteResultado> {
+  const respuesta = await apiFetch('/stock/ajustes', {
+    method: 'POST',
+    headers: conOperationId(operationId),
+    body: JSON.stringify(datos),
+  })
+  return leerJsonOLanzar(respuesta)
+}
+
+export async function anularAjuste(id: string, motivoId: string, operationId: string): Promise<AjusteAnuladoResultado> {
+  const respuesta = await apiFetch(`/stock/ajustes/${id}/anulacion`, {
+    method: 'POST',
+    headers: conOperationId(operationId),
+    body: JSON.stringify({ motivo_id: motivoId }),
+  })
   return leerJsonOLanzar(respuesta)
 }

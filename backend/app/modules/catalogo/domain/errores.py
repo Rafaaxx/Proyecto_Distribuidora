@@ -140,3 +140,12 @@ class ProveedorInactivoError(DomainError):
 
     codigo = "PROVEEDOR_INACTIVO"
     status_http = 422
+
+
+class ProductoConStockError(DomainError):
+    """Change 14, `design.md` D4 (CAT-05, ADR-038 punto 5): un producto con algún saldo de stock
+    distinto de cero en la organización no se desactiva. El stock se mueve o se da de baja antes
+    de desactivarlo (transferencia, ajuste)."""
+
+    codigo = "PRODUCTO_CON_STOCK"
+    status_http = 409

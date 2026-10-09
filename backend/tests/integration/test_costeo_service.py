@@ -501,6 +501,100 @@ def test_obtener_promedios_devuelve_los_de_varios_productos(entorno: Entorno) ->
     }
 
 
+# --- aplicar_ingreso_sin_recalculo (change 14: CST-12, CST-13, INV-15) ---------------
+
+
+def test_un_ingreso_sin_recalculo_sube_el_stock_deja_el_promedio_y_no_escribe_historia(
+    entorno: Entorno,
+) -> None:
+    """Escenario "Ingreso sin costo con promedio": 114 + 2 = 116 al mismo promedio."""
+    entorno.ingresar(120, "1050")
+    entorno.egresar(6)
+    historia_antes = len(entorno.historia())
+
+    promedio = service.aplicar_ingreso_sin_recalculo(
+        entorno.org, entorno.sesion, RELOJ, producto_id=entorno.producto_id, cantidad=2
+    )
+
+    assert promedio == Decimal("1050.000000")
+    fila = entorno.costo()
+    assert (fila.costo_promedio, fila.stock_total) == (Decimal("1050.000000"), 116)
+    assert len(entorno.historia()) == historia_antes  # CST-13: el promedio no cambió
+
+
+def test_un_ingreso_sin_recalculo_sobre_stock_total_negativo_no_cambia_el_promedio(
+    entorno: Entorno,
+) -> None:
+    """Escenario "Ingreso sin costo sobre stock total negativo": −12 + 12 = 0."""
+    entorno.ingresar(60, "1050")
+    entorno.egresar(72)
+    assert entorno.costo().stock_total == -12
+
+    promedio = service.aplicar_ingreso_sin_recalculo(
+        entorno.org, entorno.sesion, RELOJ, producto_id=entorno.producto_id, cantidad=12
+    )
+
+    assert promedio == Decimal("1050.000000")
+    fila = entorno.costo()
+    assert (fila.costo_promedio, fila.stock_total) == (Decimal("1050.000000"), 0)
+
+
+def test_un_ingreso_sin_recalculo_de_un_producto_sin_promedio_devuelve_none(
+    entorno: Entorno,
+) -> None:
+    """D3, D10: no se inventa un promedio; el stock total sube igual."""
+    promedio = service.aplicar_ingreso_sin_recalculo(
+        entorno.org, entorno.sesion, RELOJ, producto_id=entorno.producto_id, cantidad=24
+    )
+
+    assert promedio is None
+    fila = entorno.costo()
+    assert (fila.costo_promedio, fila.stock_total) == (None, 24)
+    assert entorno.historia() == []
+
+
+def test_un_egreso_y_un_ingreso_sin_recalculo_dejan_el_stock_total_igual(
+    entorno: Entorno,
+) -> None:
+    """Escenario "Una transferencia deja el stock total igual" (INV-15, CST-12)."""
+    entorno.ingresar(120, "1050")
+
+    entorno.egresar(48)
+    service.aplicar_ingreso_sin_recalculo(
+        entorno.org, entorno.sesion, RELOJ, producto_id=entorno.producto_id, cantidad=48
+    )
+
+    fila = entorno.costo()
+    assert (fila.costo_promedio, fila.stock_total) == (Decimal("1050.000000"), 120)
+    assert len(entorno.historia()) == 1
+
+
+@pytest.mark.parametrize("cantidad", [0, -1])
+def test_un_ingreso_sin_recalculo_exige_cantidad_positiva(entorno: Entorno, cantidad: int) -> None:
+    entorno.ingresar(10, "500")
+
+    with pytest.raises(CantidadInvalidaError):
+        service.aplicar_ingreso_sin_recalculo(
+            entorno.org, entorno.sesion, RELOJ, producto_id=entorno.producto_id, cantidad=cantidad
+        )
+
+    assert entorno.costo().stock_total == 10
+
+
+def test_un_ingreso_sin_recalculo_de_un_producto_ajeno_es_404_sin_efectos(
+    entorno: Entorno,
+) -> None:
+    """INV-21: el producto de otra organización responde como inexistente."""
+    ajeno = Entorno(entorno.sesion)
+
+    with pytest.raises(RecursoNoEncontradoError):
+        service.aplicar_ingreso_sin_recalculo(
+            entorno.org, entorno.sesion, RELOJ, producto_id=ajeno.producto_id, cantidad=1
+        )
+
+    assert service.obtener_costo(ajeno.org, entorno.sesion, ajeno.producto_id) is None
+
+
 # --- sin commit (`CLAUDE.md` §4) ---------------------------------------------
 
 

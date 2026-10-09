@@ -1371,7 +1371,8 @@ def test_el_upgrade_aborta_con_un_mensaje_claro_si_un_cliente_apunta_a_una_lista
             )
         reparada = _alembic(database_url, "upgrade", "head")
         assert reparada.returncode == 0, reparada.stderr
-        assert _revision_actual(_engine_de_sesion) == REVISION
+        # `head` ya no es esta revisión (cada change agrega la suya): alcanza con que subió.
+        assert _revision_actual(_engine_de_sesion) != REVISION_ANTERIOR
     finally:
         _dejar_en_head(database_url, _engine_de_sesion)
 
@@ -1455,7 +1456,8 @@ def test_el_ciclo_upgrade_downgrade_upgrade_con_datos_sembrados(
 
         subida = _alembic(database_url, "upgrade", "head")
         assert subida.returncode == 0, subida.stderr
-        assert _revision_actual(_engine_de_sesion) == REVISION
+        # `head` ya no es esta revisión (cada change agrega la suya): alcanza con que subió.
+        assert _revision_actual(_engine_de_sesion) != REVISION_ANTERIOR
         assert [_cantidad_de_filas(_engine_de_sesion, t) for t in TABLAS] == [0] * 5
         assert _columnas(_engine_de_sesion, "lista_version") == COLUMNAS["lista_version"]
     finally:

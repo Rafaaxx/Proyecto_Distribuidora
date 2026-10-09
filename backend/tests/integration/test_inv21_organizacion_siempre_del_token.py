@@ -60,6 +60,18 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("get", "/api/v1/pagos-proveedores"),
         ("get", "/api/v1/pagos-proveedores/{pago_id}"),
         ("get", "/api/v1/proveedores/{proveedor_id}/saldo"),
+        # Change 14, tarea 11.1: las altas, las anulaciones y las lecturas de transferencias y
+        # ajustes de `stock/api.py`. Su comportamiento real lo comprueba
+        # `test_inv21_aislamiento_endpoints_stock.py`; acá la afirmación estructural: ninguna
+        # declara `organizacion_id` (ni parámetro ni campo de cuerpo).
+        ("post", "/api/v1/stock/transferencias"),
+        ("get", "/api/v1/stock/transferencias"),
+        ("get", "/api/v1/stock/transferencias/{transferencia_id}"),
+        ("post", "/api/v1/stock/transferencias/{transferencia_id}/anulacion"),
+        ("post", "/api/v1/stock/ajustes"),
+        ("get", "/api/v1/stock/ajustes"),
+        ("get", "/api/v1/stock/ajustes/{ajuste_id}"),
+        ("post", "/api/v1/stock/ajustes/{ajuste_id}/anulacion"),
         # Change 13, tarea 11.1: las diecinueve rutas de `precios/api.py`. Su comportamiento
         # real lo comprueba `test_inv21_aislamiento_endpoints_precios.py`; acá la afirmacion
         # estructural (TR-08, INV-21): ninguna declara `organizacion_id`.
@@ -260,6 +272,41 @@ def test_toda_ruta_de_precios_esta_recorrida_y_no_declara_organizacion_id(
         assert _NOMBRE_PROHIBIDO not in _nombres_de_parametros(operacion), ruta
         assert _NOMBRE_PROHIBIDO not in _propiedades_del_cuerpo(operacion, componentes), ruta
     assert len(registradas) == 19, "las diecinueve rutas de `precios` (change 13)"
+
+
+def test_toda_ruta_de_transferencias_y_ajustes_esta_recorrida_y_no_declara_organizacion_id(
+    database_url: str,
+) -> None:
+    """Change 14, tarea 11.1: las ocho rutas de transferencias y ajustes estan en
+    `COBERTURA_DE_AISLAMIENTO`, ninguna declara `organizacion_id` y las dos anulaciones solo
+    reciben `motivo_id` en el cuerpo (el id de la operacion va en la ruta)."""
+    os.environ.setdefault("DATABASE_URL", database_url)
+    esquema = _esquema_real()
+    rutas = esquema["paths"]  # type: ignore[index]
+    componentes = esquema.get("components", {})  # type: ignore[assignment]
+
+    registradas = {
+        (metodo, path)
+        for path, operaciones in rutas.items()  # type: ignore[union-attr]
+        if path.startswith(("/api/v1/stock/transferencias", "/api/v1/stock/ajustes"))
+        for metodo in operaciones  # type: ignore[union-attr]
+    }
+    for ruta in registradas:
+        assert ruta in COBERTURA_DE_AISLAMIENTO, (
+            f"La ruta {ruta} de transferencias o ajustes tiene que estar en "
+            "COBERTURA_DE_AISLAMIENTO."
+        )
+        metodo, path = ruta
+        operacion = rutas[path][metodo]  # type: ignore[index]
+        assert _NOMBRE_PROHIBIDO not in _nombres_de_parametros(operacion), ruta
+        assert _NOMBRE_PROHIBIDO not in _propiedades_del_cuerpo(operacion, componentes), ruta
+    assert len(registradas) == 8, "las ocho rutas de transferencias y ajustes (change 14)"
+    for path in (
+        "/api/v1/stock/transferencias/{transferencia_id}/anulacion",
+        "/api/v1/stock/ajustes/{ajuste_id}/anulacion",
+    ):
+        anulacion = rutas[path]["post"]  # type: ignore[index]
+        assert _propiedades_del_cuerpo(anulacion, componentes) == {"motivo_id"}
 
 
 def test_las_rutas_de_autenticacion_tampoco_declaran_organizacion_id(

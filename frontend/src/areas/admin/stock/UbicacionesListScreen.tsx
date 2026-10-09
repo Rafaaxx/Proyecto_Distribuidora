@@ -95,14 +95,26 @@ function UbicacionesListado() {
       <PageHeader
         titulo="Stock"
         acciones={
-          <SiTienePermiso permiso="ADMIN_CONFIGURACION">
-            <Link
-              to="/admin/stock/ubicaciones/nueva"
-              className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-            >
-              Nueva ubicación
-            </Link>
-          </SiTienePermiso>
+          <>
+            <SiTienePermiso permiso="TRANSFERIR_STOCK">
+              <Link to="/admin/stock/transferencias" className={CLASE_ENLACE}>
+                Transferencias
+              </Link>
+            </SiTienePermiso>
+            <SiTienePermiso permiso="AJUSTAR_STOCK">
+              <Link to="/admin/stock/ajustes" className={CLASE_ENLACE}>
+                Ajustes
+              </Link>
+            </SiTienePermiso>
+            <SiTienePermiso permiso="ADMIN_CONFIGURACION">
+              <Link
+                to="/admin/stock/ubicaciones/nueva"
+                className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+              >
+                Nueva ubicación
+              </Link>
+            </SiTienePermiso>
+          </>
         }
       />
 

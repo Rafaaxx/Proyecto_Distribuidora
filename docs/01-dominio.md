@@ -101,7 +101,7 @@ La columna **Etapa** indica cuándo se implementa la regla. Las reglas marcadas 
 | CAT-02 | Un producto tiene una o más presentaciones. Cada presentación indica unidades base (entero ≥ 1), si se usa en venta y si se usa en compra. El nombre de cada presentación no puede quedar vacío ni de solo espacios tras recortar (`NOMBRE_INVALIDO`, 422); el texto válido se guarda recortado. | 1 |
 | CAT-03 | Cada producto tiene exactamente una presentación de referencia, que debe usarse en venta. | 1 |
 | CAT-04 | Las unidades de una presentación ya usada en alguna operación no pueden modificarse. Para cambiar el contenido se crea una presentación nueva y se desactiva la anterior. | 1 |
-| CAT-05 | Un producto o presentación usado en operaciones no se elimina: se desactiva. Los inactivos no se ofrecen en nuevas operaciones. | 1 |
+| CAT-05 | Un producto o presentación usado en operaciones no se elimina: se desactiva. Los inactivos no se ofrecen en nuevas operaciones. Un producto con stock distinto de cero en alguna ubicación de la organización (también negativo) no se desactiva (`PRODUCTO_CON_STOCK`); se vacía primero. Reactivar no tiene esa condición (ADR-048). | 1 |
 | CAT-06 | En la etapa 1 cada producto tiene un único proveedor. El modelo admite proveedores adicionales. | 1 (varios: 4) |
 | CAT-07 | La venta de unidades sueltas requiere una presentación de venta de 1 unidad base. | 1 |
 
@@ -143,7 +143,7 @@ Ejemplos de CST-02:
 | --- | --- | --- |
 | CST-10 | Cada producto tiene un costo promedio por organización, único para todas las ubicaciones. | 1 |
 | CST-11 | Un ingreso con costo (compra, stock inicial, anulación de venta) recalcula el promedio: si el stock total previo es mayor que cero, `(stock × promedio + cantidad × costo) / (stock + cantidad)`; si es cero o negativo, el promedio pasa a ser el costo del ingreso. | 1 |
-| CST-12 | Las transferencias, los ajustes y las rendiciones no modifican el promedio. Los egresos por ajuste, y los de corrección de un stock inicial (STK-10), se valorizan al promedio vigente. | 1 |
+| CST-12 | Las transferencias, los ajustes y las rendiciones no modifican el promedio ni dejan historia de costo. Todo movimiento de transferencia o de ajuste, de ingreso o de egreso, y los egresos de corrección de un stock inicial (STK-10), se valorizan al promedio vigente. Un ajuste positivo de un producto sin promedio se rechaza (`PRODUCTO_SIN_COSTO`). Los movimientos inversos de la anulación de una transferencia o de un ajuste repiten el costo del movimiento original, no el promedio del momento (ADR-048). | 1 |
 | CST-13 | Cada cambio del promedio se registra con valor anterior, valor nuevo, operación origen y momento, de forma que el promedio en cualquier momento pueda reconstruirse. | 1 |
 | CST-14 | El cálculo del costo de venta está encapsulado en un único servicio de costeo. Ninguna otra parte del sistema calcula costos de venta. | 1 |
 | CST-15 | La estrategia FIFO podrá habilitarse desde una fecha de corte sin modificar costos congelados anteriores. | 4 |
@@ -240,12 +240,12 @@ Ejemplos de PRC-22 (caja x6):
 | --- | --- | --- |
 | STK-01 | El stock se lleva por producto y ubicación, en unidades base enteras. | 1 |
 | STK-02 | Una ubicación tiene nombre, tipo (depósito, vehículo, otro), estado e indicador de si requiere toma para operar. Los vehículos requieren toma. | 1 |
-| STK-03 | Todo cambio de stock es un movimiento con producto, ubicación, cantidad con signo, tipo y operación origen. Tipos: STOCK_INICIAL, COMPRA, ANULACION_COMPRA, VENTA, ANULACION_VENTA, TRANSFERENCIA_SALIDA, TRANSFERENCIA_ENTRADA, AJUSTE, DIFERENCIA_RENDICION. | 1 (DEVOLUCION, RECUENTO: 2) |
+| STK-03 | Todo cambio de stock es un movimiento con producto, ubicación, cantidad con signo, tipo y operación origen. Tipos: STOCK_INICIAL, COMPRA, ANULACION_COMPRA, VENTA, ANULACION_VENTA, TRANSFERENCIA_SALIDA, TRANSFERENCIA_ENTRADA, AJUSTE, DIFERENCIA_RENDICION. Los movimientos inversos de la anulación de una transferencia o de un ajuste reutilizan los tipos `TRANSFERENCIA_SALIDA`, `TRANSFERENCIA_ENTRADA` y `AJUSTE` con signo contrario, y se distinguen por su operación origen (`ANULACION_TRANSFERENCIA`, `ANULACION_AJUSTE_STOCK`). | 1 (DEVOLUCION, RECUENTO: 2) |
 | STK-04 | El stock de un producto en una ubicación es la suma de sus movimientos. | 1 |
-| STK-05 | Con conexión, una operación que deje stock negativo se rechaza salvo que el usuario tenga `PERMITIR_STOCK_NEGATIVO`; en ese caso se acepta con observación. | 1 |
+| STK-05 | Con conexión, una operación que deje stock negativo se rechaza salvo que el usuario tenga `PERMITIR_STOCK_NEGATIVO`; en ese caso se acepta con observación. Excepción: los ajustes y las correcciones de stock inicial (STK-10) nunca dejan stock negativo, tenga o no el usuario el permiso (`STOCK_INSUFICIENTE`). La salida de una transferencia y las anulaciones (de compra, de transferencia y de ajuste) sí pueden, con el permiso (ADR-048). | 1 |
 | STK-06 | Sin conexión, una venta que deje stock negativo se acepta al sincronizar con observación STOCK_NEGATIVO. | 1 |
-| STK-07 | Una transferencia genera, en la misma transacción, una salida en origen y una entrada en destino por la misma cantidad. No modifica costos. | 1 |
-| STK-08 | Un ajuste requiere `AJUSTAR_STOCK` y un motivo del catálogo de la organización. | 1 |
+| STK-07 | Una transferencia genera, en la misma transacción, una salida en origen y una entrada en destino por la misma cantidad, para de 1 a 200 productos distintos, con origen y destino distintos. No modifica el promedio ni el stock total del producto (INV-15); ambos movimientos se valorizan al promedio vigente. No se edita ni se borra: se corrige por anulación total con motivo (TR-06). Con conexión solamente. | 1 |
+| STK-08 | Un ajuste requiere `AJUSTAR_STOCK` y un motivo activo del ámbito `AJUSTE_STOCK` de la organización, uno por ajuste. Lleva de 1 a 200 líneas con cantidad con signo distinta de cero (se admiten signos mezclados) sobre una sola ubicación, y una observación opcional. Un ajuste positivo de un producto sin costo promedio se rechaza (`PRODUCTO_SIN_COSTO`). No se edita ni se borra: se corrige por anulación total con motivo del ámbito `ANULACION_AJUSTE`, una sola vez. Con conexión solamente. | 1 |
 | STK-09 | Mientras una ubicación está tomada, solo la jornada que la tomó puede generar movimientos sobre ella, salvo la rendición y usuarios con `LIBERAR_UBICACION`, con auditoría. | 1 |
 | STK-10 | Un producto admite varios `STOCK_INICIAL`, cada uno con su cantidad con signo distinta de cero. Uno positivo es un ingreso con costo (CST-11); uno negativo es una corrección: egresa al promedio vigente sin recalcularlo y no puede dejar negativo el saldo de la ubicación (`STOCK_INSUFICIENTE`, sin excepción por `PERMITIR_STOCK_NEGATIVO`). Se admiten solo mientras el producto no tenga en la organización movimientos de otro tipo (`PRODUCTO_CON_OPERACIONES`). Un costo mal cargado se corrige llevando el stock total a cero y recargando. | 1 |
 
@@ -416,7 +416,7 @@ Ejemplo de DSC-03 con regla "cajas equivalentes ≥ 20 → 5%": 19 cajas + 5 uni
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| AUD-01 | Se auditan: inicio de sesión, cambios de usuarios, roles, permisos y dispositivos; costos informados; publicación y anulación de versiones de lista; uso de lista no asignada o versión anterior; descuentos manuales y autorizaciones; autorizaciones de crédito; ventas, compras, cobranzas y pagos anulados; ajustes de stock; diferencias de rendición; liberación forzada de ubicaciones; cambios de límite y política de crédito; cambios de configuración; resolución de observaciones; comandos rechazados o en cuarentena. | 1 |
+| AUD-01 | Se auditan: inicio de sesión, cambios de usuarios, roles, permisos y dispositivos; costos informados; publicación y anulación de versiones de lista; uso de lista no asignada o versión anterior; descuentos manuales y autorizaciones; autorizaciones de crédito; ventas, compras, cobranzas y pagos anulados; transferencias y ajustes de stock y sus anulaciones (la fila de `STOCK_AJUSTAR`, `STOCK_TRANSFERENCIA_ANULAR` y `STOCK_AJUSTE_ANULAR` lleva el motivo, AUD-02); diferencias de rendición; liberación forzada de ubicaciones; cambios de límite y política de crédito; cambios de configuración; resolución de observaciones; comandos rechazados o en cuarentena. | 1 |
 | AUD-02 | Cada registro guarda usuario, dispositivo, acción, entidad, identificador, valor anterior y nuevo cuando aplica, motivo, autorizador, `occurred_at`, `registered_at` y `operation_id`. | 1 |
 | AUD-03 | La auditoría es de solo agregado: no se modifica ni se elimina. | 1 |
 
@@ -470,6 +470,8 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 | Venta | Sincronización (en dispositivo) | LOCAL_PENDIENTE → ENVIANDO → ACEPTADA \| ACEPTADA_CON_OBSERVACIONES \| RECHAZADA | 1 |
 | Compra | Operativa | CONFIRMADA → ANULADA | 1 |
 | Cobranza / Pago | Operativa | CONFIRMADA → ANULADA | 1 |
+| Transferencia | Operativa | CONFIRMADA → ANULADA | 1 |
+| Ajuste de stock | Operativa | CONFIRMADA → ANULADA | 1 |
 | Versión de lista | Almacenada | BORRADOR → PUBLICADA → ANULADA (solo antes de su vigencia) | 1 |
 | Versión de lista | Derivada | PROGRAMADA / VIGENTE / HISTÓRICA | 1 |
 | Regla de descuento | Almacenada | BORRADOR → ACTIVA ↔ PAUSADA | 1 |
@@ -507,8 +509,9 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 | ANULAR_COMPRA | Anular compras | ✓ | ✓ | | | |
 | REGISTRAR_PAGO_PROVEEDOR | Registrar pagos; ver el listado y el detalle de pagos, el saldo del proveedor y elegir proveedor | ✓ | ✓ | | | |
 | ANULAR_PAGO_PROVEEDOR | Anular pagos; ver el listado y el detalle de pagos | ✓ | ✓ | | | |
-| TRANSFERIR_STOCK | Transferencias; ver ubicaciones, stock por ubicación y kardex (sin costos) | ✓ | ✓ | ✓ | ✓ | |
-| AJUSTAR_STOCK | Ajustes | ✓ | ✓ | | | |
+| TRANSFERIR_STOCK | Transferencias; anular las propias; ver el listado y el detalle de transferencias, ubicaciones, stock por ubicación y kardex (sin costos) | ✓ | ✓ | ✓ | ✓ | |
+| ANULAR_TRANSFERENCIA | Anular transferencias de otros usuarios (exige además `TRANSFERIR_STOCK`) | ✓ | ✓ | | | |
+| AJUSTAR_STOCK | Ajustes; anularlos (propios o ajenos); ver el listado y el detalle de ajustes | ✓ | ✓ | | | |
 | PERMITIR_STOCK_NEGATIVO | Operar con stock negativo online | ✓ | | | | |
 | ABRIR_JORNADA | Abrir jornada y tomar ubicación | ✓ | | ✓ | ✓ | |
 | RENDIR_JORNADA | Rendir y cerrar jornada | ✓ | ✓ | ✓ | | |
@@ -533,6 +536,8 @@ Roles: ADM = Administrador, GES = Administración, SUP = Supervisor comercial, V
 El listado y el detalle de pagos exigen `REGISTRAR_PAGO_PROVEEDOR` o `ANULAR_PAGO_PROVEEDOR`; el saldo de un proveedor se lee con `GESTIONAR_PROVEEDORES`, `REGISTRAR_PAGO_PROVEEDOR` o `REGISTRAR_COMPRA`; la lista de proveedores para elegir también con `REGISTRAR_PAGO_PROVEEDOR`; medios de pago y motivos, con cualquier sesión (ADR-043, ADR-046).
 
 Las lecturas de listas, reglas, versiones y precios las puede hacer quien tenga `GESTIONAR_LISTAS` o `PUBLICAR_LISTAS`. El costo de referencia, el margen y el precio calculado de un precio solo se devuelven con `VER_COSTOS`; las señales siempre. Cada precio trae, sin costos, el nombre y las unidades de las presentaciones activas de venta de su producto, para mostrar el precio por presentación (PRC-22) sin una lectura por producto (ADR-047 punto 30). La lista de listas activas para elegir también se lee con `GESTIONAR_CLIENTES` y `ADMIN_CONFIGURACION`, y la lista predeterminada con `ADMIN_CONFIGURACION`, `GESTIONAR_LISTAS` o `PUBLICAR_LISTAS`. Las lecturas de productos, categorías, marcas y proveedores para elegir el alcance de una regla se abren, solo en lectura, a `GESTIONAR_LISTAS` (ADR-047).
+
+El listado y el detalle de transferencias se leen con `TRANSFERIR_STOCK`; los de ajustes, con `AJUSTAR_STOCK`, y sus costos solo con `VER_COSTOS`. `ANULAR_TRANSFERENCIA` solo agrega el alcance sobre las transferencias de otros usuarios y no abre ninguna lectura; sin ese permiso, anular la transferencia de otro responde 403. Quien tiene `PERMITIR_STOCK_NEGATIVO` puede, además, dejar stock negativo con la salida de una transferencia y con la anulación de una transferencia o de un ajuste (ADR-048).
 
 ## 20. Invariantes
 
@@ -574,8 +579,10 @@ Deben cumplirse siempre y estar cubiertos por pruebas automatizadas.
 | Anulación de compra | − | Recalcula o mantiene | — | − | — | Sí |
 | Pago a proveedor | — | — | — | − | — | Sí |
 | Anulación de pago | — | — | — | + | — | Sí |
-| Transferencia | − origen / + destino | — | — | — | — | Sí |
-| Ajuste de stock | + / − | — | — | — | — | Sí |
+| Transferencia | − origen / + destino | No cambia (valoriza al promedio vigente) | — | — | — | Sí |
+| Anulación de transferencia | + origen / − destino | No cambia (costo original) | — | — | — | Sí |
+| Ajuste de stock | + / − | No cambia (valoriza al promedio vigente) | — | — | — | Sí |
+| Anulación de ajuste | − / + (inverso) | No cambia (costo original) | — | — | — | Sí |
 | Venta | − | — | + total (y − si cobra) | — | Congela | Sí |
 | Anulación de venta | + | Recalcula | − total | — | Excluye | Sí |
 | Cobranza | — | — | − | — | — | Sí |

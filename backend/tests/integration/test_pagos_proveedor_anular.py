@@ -32,13 +32,14 @@ from compras_utiles import (
     RELOJ,
     Entorno,
 )
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.core.errors import PermisoRequeridoError
 from app.modules.cuentas_corrientes import service as cuentas_service
+from app.modules.identidad.models import Auditoria
 from app.modules.proveedores import repository as proveedores_repository
 from app.modules.proveedores.domain.errores import (
     MotivoInvalidoError,
@@ -336,6 +337,13 @@ def test_la_anulacion_deja_una_sola_auditoria(entorno: Entorno) -> None:
     entorno.anular_pago(pago_id, operation_id=operation_id)
 
     assert entorno.auditorias(operation_id) == 1
+    # Deuda nominada (D10): el motivo de la anulación sigue sin copiarse a la auditoría.
+    filas = entorno.sesion.scalars(
+        select(Auditoria).where(
+            Auditoria.organizacion_id == entorno.org, Auditoria.operation_id == operation_id
+        )
+    ).all()
+    assert [(f.motivo_id, f.observacion) for f in filas] == [(None, None)]
 
 
 def test_el_contenido_no_puede_traer_la_organizacion(entorno: Entorno) -> None:

@@ -41,6 +41,10 @@ _TABLA_DOCUMENTO: tuple[tuple[str, bool, bool, bool, bool, bool], ...] = (
     ("REGISTRAR_PAGO_PROVEEDOR", True, True, False, False, False),
     ("ANULAR_PAGO_PROVEEDOR", True, True, False, False, False),
     ("TRANSFERIR_STOCK", True, True, True, True, False),
+    # Change 14 (`design.md` D5 punto 5, `01` §19): ADM y GES. Es la fila que fija QUE
+    # roles reciben el permiso; la lista vive en `permisos.py` (ADMINISTRACION) y la
+    # migracion `f3a4b5c6d7e8` la deriva de `PLANTILLAS_DE_ROL`.
+    ("ANULAR_TRANSFERENCIA", True, True, False, False, False),
     ("AJUSTAR_STOCK", True, True, False, False, False),
     ("PERMITIR_STOCK_NEGATIVO", True, False, False, False, False),
     ("ABRIR_JORNADA", True, False, True, True, False),
@@ -71,14 +75,14 @@ _ROLES_EN_ORDEN = (
 )
 
 
-def test_la_tabla_transcripta_tiene_39_filas() -> None:
-    assert len(_TABLA_DOCUMENTO) == 39
+def test_la_tabla_transcripta_tiene_40_filas() -> None:
+    assert len(_TABLA_DOCUMENTO) == 40
 
 
-def test_el_catalogo_tiene_exactamente_39_permisos_sin_duplicados() -> None:
+def test_el_catalogo_tiene_exactamente_40_permisos_sin_duplicados() -> None:
     codigos = [permiso.codigo for permiso in PERMISOS_DEL_CATALOGO]
-    assert len(codigos) == 39
-    assert len(set(codigos)) == 39
+    assert len(codigos) == 40
+    assert len(set(codigos)) == 40
 
 
 def test_el_catalogo_coincide_con_los_codigos_de_la_tabla_transcripta() -> None:
@@ -89,7 +93,7 @@ def test_el_catalogo_coincide_con_los_codigos_de_la_tabla_transcripta() -> None:
 
 def test_cada_celda_de_cada_plantilla_coincide_con_la_tabla_del_documento() -> None:
     """Escenario "Las cinco plantillas de rol quedan disponibles al crear la
-    organización": recorre las 39 * 5 celdas, una por una."""
+    organización": recorre las 40 * 5 celdas, una por una."""
     errores = []
     for codigo, *marcas in _TABLA_DOCUMENTO:
         for rol, marcado in zip(_ROLES_EN_ORDEN, marcas, strict=True):
@@ -100,7 +104,7 @@ def test_cada_celda_de_cada_plantilla_coincide_con_la_tabla_del_documento() -> N
     assert errores == [], errores
 
 
-def test_el_administrador_tiene_los_39_permisos() -> None:
+def test_el_administrador_tiene_los_40_permisos() -> None:
     assert PLANTILLAS_DE_ROL[ADMINISTRADOR] == {fila[0] for fila in _TABLA_DOCUMENTO}
 
 

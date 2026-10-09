@@ -165,6 +165,50 @@ class Entorno:
             occurred_at=occurred_at,
         )
 
+    def agregar_usuario(self, permisos: frozenset[str], nombre_usuario: str) -> UUID:
+        """Otro usuario de la misma organización, con su propio rol (change 14: una anulación
+        ajena necesita un segundo usuario). Entra con `entrar_como`."""
+        rol = identidad_repository.crear_rol(
+            self.org,
+            self.sesion,
+            rol_id=nuevo_id(),
+            nombre=f"Rol de {nombre_usuario}",
+            tope_descuento=Decimal("0"),
+            activo=True,
+            momento=MOMENTO,
+        )
+        for codigo in permisos:
+            identidad_repository.asignar_permiso_a_rol(
+                self.org, self.sesion, rol_id=rol.id, permiso_codigo=codigo
+            )
+        return identidad_repository.crear_usuario(
+            self.org,
+            self.sesion,
+            usuario_id=nuevo_id(),
+            usuario=nombre_usuario,
+            nombre=nombre_usuario,
+            email=None,
+            password_hash=hashear_password(PASSWORD),
+            rol_id=rol.id,
+            estado="ACTIVO",
+            momento=MOMENTO,
+        ).id
+
+    def entrar_como(self, cliente_http: TestClient, nombre_usuario: str) -> dict[str, str]:
+        self.sesion.commit()
+        respuesta = cliente_http.post(
+            "/api/v1/auth/login",
+            json={
+                "organizacion_slug": self.slug,
+                "usuario": nombre_usuario,
+                "contrasena": PASSWORD,
+                "dispositivo_id": str(uuid4()),
+                "nombre_dispositivo": "PC",
+            },
+        )
+        assert respuesta.status_code == 200
+        return {"Authorization": f"Bearer {respuesta.json()['access_token']}"}
+
     def confirmar_y_entrar(self, cliente_http: TestClient) -> dict[str, str]:
         self.sesion.commit()
         respuesta = cliente_http.post(

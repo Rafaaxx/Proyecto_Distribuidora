@@ -22,7 +22,8 @@ class Permiso:
     modulo: str
 
 
-# Los 39 permisos de `01` §19, en el mismo orden que la tabla del documento.
+# Los 40 permisos de `01` §19 (los 39 originales más `ANULAR_TRANSFERENCIA`, change 14), en el
+# mismo orden que la tabla del documento.
 PERMISOS_DEL_CATALOGO: tuple[Permiso, ...] = (
     Permiso("ADMIN_USUARIOS", "Usuarios, roles y permisos", "identidad"),
     Permiso("ADMIN_CONFIGURACION", "Configuración de la organización", "identidad"),
@@ -44,6 +45,7 @@ PERMISOS_DEL_CATALOGO: tuple[Permiso, ...] = (
     Permiso("REGISTRAR_PAGO_PROVEEDOR", "Registrar pagos", "proveedores"),
     Permiso("ANULAR_PAGO_PROVEEDOR", "Anular pagos", "proveedores"),
     Permiso("TRANSFERIR_STOCK", "Transferencias", "stock"),
+    Permiso("ANULAR_TRANSFERENCIA", "Anular transferencias de otros usuarios", "stock"),
     Permiso("AJUSTAR_STOCK", "Ajustes", "stock"),
     Permiso("PERMITIR_STOCK_NEGATIVO", "Operar con stock negativo online", "stock"),
     Permiso("ABRIR_JORNADA", "Abrir jornada y tomar ubicación", "stock"),
@@ -74,7 +76,7 @@ CONSULTA_DIRECCION = "Consulta/Dirección"
 
 # Composición de cada plantilla: el subconjunto de códigos de
 # `PERMISOS_DEL_CATALOGO` que le confiere `01` §19. El Administrador tiene
-# los 39 (todas las columnas de la tabla marcan ADM).
+# los 40 (todas las columnas de la tabla marcan ADM).
 _TODOS_LOS_CODIGOS = frozenset(permiso.codigo for permiso in PERMISOS_DEL_CATALOGO)
 
 PLANTILLAS_DE_ROL: dict[str, frozenset[str]] = {
@@ -94,6 +96,10 @@ PLANTILLAS_DE_ROL: dict[str, frozenset[str]] = {
             "REGISTRAR_PAGO_PROVEEDOR",
             "ANULAR_PAGO_PROVEEDOR",
             "TRANSFERIR_STOCK",
+            # Change 14, D5 punto 5: unico lugar que decide que plantillas (ademas del
+            # Administrador, que tiene todos) reciben `ANULAR_TRANSFERENCIA`; la
+            # migracion `f3a4b5c6d7e8` y la siembra lo derivan de aca.
+            "ANULAR_TRANSFERENCIA",
             "AJUSTAR_STOCK",
             "RENDIR_JORNADA",
             "ANULAR_VENTA",

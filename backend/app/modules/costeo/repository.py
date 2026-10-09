@@ -194,6 +194,30 @@ def aplicar_egreso_al_costo(
     return _con_traduccion(sesion, lambda: sesion.execute(sentencia).scalar_one())
 
 
+def sumar_al_stock_total(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    producto_id: UUID,
+    cantidad: int,
+    momento: datetime,
+) -> int:
+    """`UPDATE costo_producto SET stock_total = stock_total + :cantidad ... RETURNING
+    stock_total`. NO toca el promedio (CST-12): el ingreso sin costo de una transferencia,
+    un ajuste o un inverso de anulación. Devuelve el stock total nuevo."""
+    sentencia = (
+        update(CostoProducto)
+        .where(
+            CostoProducto.organizacion_id == organizacion_id,
+            CostoProducto.producto_id == producto_id,
+        )
+        .values(stock_total=CostoProducto.stock_total + cantidad, actualizado_en=momento)
+        .returning(CostoProducto.stock_total)
+        .execution_options(synchronize_session=False)
+    )
+    return _con_traduccion(sesion, lambda: sesion.execute(sentencia).scalar_one())
+
+
 # --- historia del promedio (CST-13) -------------------------------------------
 
 

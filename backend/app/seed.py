@@ -79,6 +79,12 @@ MOTIVOS_ANULACION_PAGO_INICIALES = (
 alguno de estos motivos la organización no podría anular un pago a proveedor
 (`PAGO_PROVEEDOR_ANULAR` exige `anulacion_motivo_id`)."""
 
+MOTIVOS_ANULACION_TRANSFERENCIA_INICIALES = ("Error de carga", "Otro")
+MOTIVOS_ANULACION_AJUSTE_INICIALES = ("Error de carga", "Otro")
+"""Change 14 (TR-06, `design.md` D5.3, aprobados el 2026-10-07). La migración
+`f3a4b5c6d7e8` siembra los mismos nombres en las organizaciones existentes. Sin alguno de
+estos motivos la organización no podría anular una transferencia ni un ajuste."""
+
 
 class BaseSinMigrarError(RuntimeError):
     """La siembra corrió contra una base sin las migraciones de este change
@@ -180,6 +186,16 @@ def sembrar(sesion: Session, reloj: Clock, *, password_administrador: str) -> Or
     for nombre in MOTIVOS_ANULACION_PAGO_INICIALES:
         configuracion_service.crear_motivo(
             organizacion.id, sesion, reloj, ambito="ANULACION_PAGO", nombre=nombre
+        )
+
+    for nombre in MOTIVOS_ANULACION_TRANSFERENCIA_INICIALES:
+        configuracion_service.crear_motivo(
+            organizacion.id, sesion, reloj, ambito="ANULACION_TRANSFERENCIA", nombre=nombre
+        )
+
+    for nombre in MOTIVOS_ANULACION_AJUSTE_INICIALES:
+        configuracion_service.crear_motivo(
+            organizacion.id, sesion, reloj, ambito="ANULACION_AJUSTE", nombre=nombre
         )
 
     roles = identidad_service.crear_plantillas_de_rol_iniciales(organizacion.id, sesion, reloj)

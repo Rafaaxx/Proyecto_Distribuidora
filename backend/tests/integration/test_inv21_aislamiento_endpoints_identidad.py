@@ -390,7 +390,7 @@ class TestAislamientoDeLaSesion:
         self, cliente: TestClient, sesion: Session
     ) -> None:
         """Escenario "Dos organizaciones, cada usuario ve solo lo suyo": la
-        organización A con un Administrador (los 39 permisos de `01` §19) y
+        organización A con un Administrador (los 40 permisos de `01` §19) y
         la B con un Vendedor/Repartidor. Los dos inician sesión por la ruta de
         login real, y la prueba verifica primero que cada token devuelve lo
         suyo."""

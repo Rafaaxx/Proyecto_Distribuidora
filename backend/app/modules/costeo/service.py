@@ -40,6 +40,7 @@ from app.modules.costeo import repository
 from app.modules.costeo.domain.costo_promedio import (
     calcular_egreso,
     calcular_ingreso,
+    calcular_ingreso_sin_recalculo,
     calcular_reversion,
     validar_costo,
     validar_origen_de_costo,
@@ -53,6 +54,7 @@ __all__ = [
     "ResultadoDeReversionAplicada",
     "aplicar_egreso",
     "aplicar_ingreso",
+    "aplicar_ingreso_sin_recalculo",
     "bloquear_costos",
     "obtener_costo",
     "obtener_promedio",
@@ -191,6 +193,33 @@ def aplicar_ingreso(
         stock_nuevo=resultado.stock_nuevo,
         promedio_nuevo=resultado.promedio_nuevo,
     )
+
+
+def aplicar_ingreso_sin_recalculo(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    producto_id: UUID,
+    cantidad: int,
+) -> Decimal | None:
+    """Ingreso sin costo (CST-12, `design.md` D3, D9): la entrada de una transferencia, un
+    ajuste positivo o el ingreso inverso de una anulación. Suma `cantidad` a `stock_total`
+    con la fila bloqueada, NO cambia el promedio, NO deja historia en `costo_producto_mov`
+    (CST-13) y devuelve el promedio vigente con el que se valoriza el movimiento, o `None`
+    si el producto todavía no tiene. Valida ANTES de escribir."""
+    previo = _bloquear(organizacion_id, sesion, reloj, producto_id)
+    resultado = calcular_ingreso_sin_recalculo(
+        stock_previo=previo.stock_total, promedio_previo=previo.costo_promedio, cantidad=cantidad
+    )
+    repository.sumar_al_stock_total(
+        organizacion_id,
+        sesion,
+        producto_id=producto_id,
+        cantidad=cantidad,
+        momento=reloj.now(),
+    )
+    return resultado.promedio
 
 
 def revertir_ingreso(

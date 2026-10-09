@@ -201,6 +201,18 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("put", "/api/v1/stock/ubicaciones/{ubicacion_id}"),
         ("get", "/api/v1/stock/ubicaciones/{ubicacion_id}/saldos"),
         ("post", "/api/v1/stock/iniciales"),
+        # Change 14 (tareas 5.3, 6.3, 9.6, 10.1, 10.2 y 11.1): las altas, las anulaciones y las
+        # lecturas de transferencias y ajustes, cada una con su prueba real de aislamiento (login
+        # real de dos organizaciones; lo ajeno responde 404 sin rastro; un `organizacion_id` en
+        # el cuerpo se rechaza) en `test_inv21_aislamiento_endpoints_stock.py`.
+        ("post", "/api/v1/stock/transferencias"),
+        ("get", "/api/v1/stock/transferencias"),
+        ("get", "/api/v1/stock/transferencias/{transferencia_id}"),
+        ("post", "/api/v1/stock/transferencias/{transferencia_id}/anulacion"),
+        ("post", "/api/v1/stock/ajustes"),
+        ("get", "/api/v1/stock/ajustes"),
+        ("get", "/api/v1/stock/ajustes/{ajuste_id}"),
+        ("post", "/api/v1/stock/ajustes/{ajuste_id}/anulacion"),
         ("get", "/api/v1/stock/kardex"),
         ("get", "/api/v1/catalogo/productos/{producto_id}/costo"),
         # Change 10, grupo 4 (`importacion/api.py`, tarea 4.3): la escritura dedicada de

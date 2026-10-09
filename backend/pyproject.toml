@@ -125,6 +125,7 @@ ignore_imports = [
     "app.modules.stock.models -> sqlalchemy",
     "app.modules.stock.repository -> sqlalchemy",
     "app.modules.stock.service -> sqlalchemy",
+    "app.modules.stock.queries -> sqlalchemy",
     "app.modules.stock.api -> fastapi",
     "app.modules.stock.api -> sqlalchemy",
     "app.modules.stock.api -> app.api_v1.dependencias",
@@ -303,8 +304,13 @@ forbidden_modules = [
     # Change 09 (enmienda a D3, 2026-09-30): `catalogo -> costeo.service` esta
     # permitido (la ruta del costo promedio vive con su entidad, ADR-035 punto 5),
     # pero `catalogo` no importa `stock`: `stock -> catalogo` ya existe y un ciclo
-    # seria un error.
+    # seria un error. Change 14 (D4.1, tarea 8.2): `catalogo` consulta el stock solo por el
+    # puerto `registrar_verificador_de_stock` que `stock` registra; y a `costeo` solo lo
+    # alcanza por su `service.py` (nunca por sus modelos, repositorio ni dominio).
     "app.modules.stock",
+    "app.modules.costeo.models",
+    "app.modules.costeo.repository",
+    "app.modules.costeo.domain",
 ]
 ignore_imports = [
     "app.modules.catalogo.api -> app.modules.sync.service",
@@ -510,7 +516,7 @@ allow_indirect_imports = "true"
 # (y el `api -> sync.service` de `stock`) se agregan al crearse esos archivos.
 [[tool.importlinter.contracts]]
 id = "stock-solo-por-service-ajeno"
-name = "stock solo alcanza a catalogo, costeo e identidad por su service.py"
+name = "stock solo alcanza a catalogo, configuracion, costeo e identidad por su service.py"
 type = "forbidden"
 source_modules = ["app.modules.stock"]
 forbidden_modules = [
@@ -518,7 +524,12 @@ forbidden_modules = [
     "app.modules.identidad.repository",
     "app.modules.identidad.api",
     "app.modules.identidad.domain",
-    "app.modules.configuracion",
+    "app.modules.configuracion.models",
+    "app.modules.configuracion.repository",
+    "app.modules.configuracion.api",
+    "app.modules.configuracion.domain",
+    "app.modules.configuracion.commands",
+    "app.modules.configuracion.queries",
     "app.modules.proveedores",
     "app.modules.clientes",
     "app.modules.cuentas_corrientes",

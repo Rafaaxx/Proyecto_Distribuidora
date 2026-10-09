@@ -170,4 +170,62 @@ describe('StockPorUbicacionScreen (tarea 8.3, CAT-08, D3)', () => {
     expect(await screen.findByText('No tenés permiso para ver el stock.')).toBeInTheDocument()
     expect(apiFetchMock).not.toHaveBeenCalled()
   })
+
+  describe('acciones de transferencia y ajuste (change 14, tarea 13.4; D2, D11)', () => {
+    const NEGATIVO = { ...CON_COSTO, cantidad_base: -12 }
+
+    function reglasDeSaldos(items: unknown[]) {
+      enrutar(apiFetchMock, [
+        {
+          ruta: `/stock/ubicaciones/${UBICACION}/saldos`,
+          responder: () => ({ status: 200, cuerpo: { items, cursor_siguiente: null } }),
+        },
+      ])
+    }
+
+    it('un Administrador ve "Transferir desde acá" y "Ajustar" en cada fila', async () => {
+      reglasDeSaldos([CON_COSTO, SIN_REFERENCIA])
+      renderStock('ADM')
+
+      await screen.findByText('Vino A')
+      expect(screen.getByRole('link', { name: 'Transferir desde acá' })).toHaveAttribute(
+        'href',
+        `/admin/stock/transferencias/nueva?origen=${UBICACION}`,
+      )
+      const fila = screen.getByText('Vino A').closest('tr') as HTMLElement
+      expect(within(fila).getByRole('link', { name: 'Ajustar' })).toHaveAttribute(
+        'href',
+        `/admin/stock/ajustes/nueva?ubicacion=${UBICACION}&producto=${PRODUCTO_A}`,
+      )
+      const otra = screen.getByText('Cerveza B').closest('tr') as HTMLElement
+      expect(within(otra).getByRole('link', { name: 'Ajustar' })).toHaveAttribute(
+        'href',
+        `/admin/stock/ajustes/nueva?ubicacion=${UBICACION}&producto=${PRODUCTO_B}`,
+      )
+    })
+
+    it('un Vendedor ve "Transferir desde acá" y no ve "Ajustar"', async () => {
+      reglasDeSaldos([CON_COSTO])
+      renderStock('VEN')
+
+      await screen.findByText('Vino A')
+      expect(screen.getByRole('link', { name: 'Transferir desde acá' })).toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'Ajustar' })).not.toBeInTheDocument()
+    })
+
+    it('un saldo negativo se marca y "Ajustar" lleva la cantidad que lo lleva a cero', async () => {
+      reglasDeSaldos([NEGATIVO, SIN_REFERENCIA])
+      renderStock('ADM')
+
+      const fila = (await screen.findByText('Vino A')).closest('tr') as HTMLElement
+      expect(within(fila).getByText('Negativo')).toBeInTheDocument()
+      expect(within(fila).getByText('-12 unidades (-2 Caja x6)')).toHaveAttribute('data-negativo', 'true')
+      expect(within(fila).getByRole('link', { name: 'Ajustar' })).toHaveAttribute(
+        'href',
+        `/admin/stock/ajustes/nueva?ubicacion=${UBICACION}&producto=${PRODUCTO_A}&cantidad=12`,
+      )
+      const otra = screen.getByText('Cerveza B').closest('tr') as HTMLElement
+      expect(within(otra).queryByText('Negativo')).not.toBeInTheDocument()
+    })
+  })
 })

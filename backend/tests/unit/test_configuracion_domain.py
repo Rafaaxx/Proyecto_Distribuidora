@@ -24,19 +24,25 @@ from app.modules.configuracion.domain.valores import (
 
 class TestAmbitoMotivo:
     @pytest.mark.parametrize("valor", list(AMBITOS_MOTIVO))
-    def test_acepta_los_ocho_ambitos_de_la_lista_cerrada(self, valor: str) -> None:
+    def test_acepta_los_diez_ambitos_de_la_lista_cerrada(self, valor: str) -> None:
         assert validar_ambito_motivo(valor) == valor
 
-    def test_hay_exactamente_ocho_ambitos(self) -> None:
+    def test_hay_exactamente_diez_ambitos(self) -> None:
         """Ratchet: la lista cerrada de `motivo.ambito` (`03` §4) no crece sin que la
         lista cerrada y su `CHECK` en la base cambien los dos (TR-09). El octavo es
-        `ANULACION_PAGO`, el de la anulación de pagos a proveedores (PAG-03,
-        `design.md` D1 del change 12)."""
-        assert len(AMBITOS_MOTIVO) == 8
+        `ANULACION_PAGO` (PAG-03, change 12); el noveno y el décimo son
+        `ANULACION_TRANSFERENCIA` y `ANULACION_AJUSTE` (`design.md` D5 del change 14)."""
+        assert len(AMBITOS_MOTIVO) == 10
 
     def test_el_ambito_de_la_anulacion_de_pago_esta_en_la_lista(self) -> None:
         """D1: sin esto, `PAGO_PROVEEDOR_ANULAR` no podría exigir un motivo válido."""
         assert validar_ambito_motivo("ANULACION_PAGO") == "ANULACION_PAGO"
+
+    @pytest.mark.parametrize("ambito", ["ANULACION_TRANSFERENCIA", "ANULACION_AJUSTE"])
+    def test_los_ambitos_de_anulacion_de_stock_estan_en_la_lista(self, ambito: str) -> None:
+        """Change 14, D5: sin esto, las anulaciones de transferencias y ajustes no podrían
+        exigir un motivo válido; "AJUSTE_STOCK" no sirve para un error de carga."""
+        assert validar_ambito_motivo(ambito) == ambito
 
     def test_rechaza_un_ambito_fuera_de_la_lista_cerrada(self) -> None:
         with pytest.raises(AmbitoMotivoInvalidoError) as exc_info:

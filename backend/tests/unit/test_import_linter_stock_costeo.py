@@ -106,12 +106,13 @@ def test_costeo_no_depende_de_ningun_modulo_de_negocio_declarado_y_en_verde() ->
 
 
 def test_stock_alcanza_a_catalogo_y_costeo_solo_por_service_declarado_y_en_verde() -> None:
-    """`02` §5.3: `stock -> catalogo, costeo`."""
+    """`02` §5.3: `stock -> catalogo, costeo`; change 14 (tarea 6.1, `design.md` D6): también
+    `configuracion`, solo por su `service.py`, para resolver el motivo del ajuste."""
     contrato = _contratos_por_id()[ID_STOCK_AJENO]
 
     assert contrato["source_modules"] == ["app.modules.stock"]
     prohibidos = set(contrato["forbidden_modules"])
-    for modulo in ("catalogo", "costeo"):
+    for modulo in ("catalogo", "costeo", "configuracion"):
         for interno in ("models", "repository", "domain"):
             assert f"app.modules.{modulo}.{interno}" in prohibidos, f"stock importa {modulo}"
         assert f"app.modules.{modulo}.service" not in prohibidos
@@ -120,7 +121,6 @@ def test_stock_alcanza_a_catalogo_y_costeo_solo_por_service_declarado_y_en_verde
         "app.modules.proveedores",
         "app.modules.clientes",
         "app.modules.cuentas_corrientes",
-        "app.modules.configuracion",
         "app.modules.identidad.models",
         "app.modules.identidad.repository",
     } <= prohibidos

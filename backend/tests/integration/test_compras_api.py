@@ -1281,6 +1281,26 @@ def test_motivos_de_anulacion_de_pago_devuelve_los_del_ambito_nuevo(
     ]
 
 
+@pytest.mark.parametrize("ambito", ["ANULACION_TRANSFERENCIA", "ANULACION_AJUSTE"])
+def test_motivos_de_anulacion_de_stock_responden_a_cualquier_sesion(
+    cliente: TestClient, sesion: Session, ambito: str
+) -> None:
+    """Change 14, tarea 2.2 (`design.md` D5): los ámbitos nuevos entran en la lista cerrada
+    y `GET /configuracion/motivos` los sirve a cualquier usuario autenticado (sin permiso),
+    solo los activos de la organización del token (INV-21)."""
+    entorno = Entorno(sesion, permisos=frozenset())
+    error_de_carga = entorno.crear_motivo(ambito, "Error de carga")
+    entorno.crear_motivo("ANULACION_COMPRA", "Devolución al proveedor")
+    ajena = Entorno(sesion, usuario="otro")
+    ajena.crear_motivo(ambito, "Ajeno")
+    headers = entorno.entrar(cliente)
+
+    respuesta = cliente.get(URL_MOTIVOS, params={"ambito": ambito}, headers=headers)
+
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["items"] == [{"id": str(error_de_carga), "nombre": "Error de carga"}]
+
+
 def test_motivos_con_un_ambito_fuera_de_la_lista_responde_422_ambito_invalido(
     cliente: TestClient, sesion: Session
 ) -> None:

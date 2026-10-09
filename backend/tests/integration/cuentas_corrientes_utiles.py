@@ -12,6 +12,7 @@ explícita (`from cuentas_corrientes_utiles import ...`, mismo mecanismo que
 
 from __future__ import annotations
 
+import itertools
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -26,6 +27,12 @@ from app.modules.identidad.models import ConfiguracionOrganizacion, Organizacion
 from app.modules.proveedores import repository as proveedores_repository
 
 MOMENTO = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+# Prefijo de dispositivo de dos caracteres hexadecimales, UNICO por proceso (hasta 256): con
+# `uuid4().hex[:2]` dos dispositivos de una misma organizacion chocaban en
+# `ux_dispositivo__org_prefijo` una de cada 256 veces (falla intermitente).
+_PREFIJOS = itertools.cycle(range(256))
 
 
 def crear_organizacion(sesion: Session, *, con_configuracion: bool = True) -> Organizacion:
@@ -117,7 +124,7 @@ def crear_usuario_y_dispositivo(
         sesion,
         dispositivo_id=nuevo_id(),
         nombre="Dispositivo de prueba",
-        prefijo=f"C{uuid4().hex[:2]}",
+        prefijo=f"C{next(_PREFIJOS):02x}",
         ultimo_correlativo=0,
         estado="ACTIVO",
         momento=MOMENTO,

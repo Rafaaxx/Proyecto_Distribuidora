@@ -1,5 +1,5 @@
 """Reglas puras del libro de stock (STK-01, STK-03, STK-04, STK-05, INV-04,
-INV-12, `design.md` D4, D5, D8, D13).
+INV-12, `design.md` D4, D5, D8, D13; change 14: D1, D3, D4, D5.2, D9).
 
 `saldo_de` y `aplicar_movimiento` son la definición contra la que se prueba
 INV-12; el saldo real se calcula con SQL sobre el libro y se materializa en
@@ -51,12 +51,31 @@ TIPOS_DE_MOVIMIENTO = frozenset(
 """Los nueve tipos de la etapa 1 de STK-03 (DEVOLUCION y RECUENTO son de la
 etapa 2). Solo `STOCK_INICIAL` tiene comando en este change (D13)."""
 
+TRANSFERENCIA_SALIDA = "TRANSFERENCIA_SALIDA"
+TRANSFERENCIA_ENTRADA = "TRANSFERENCIA_ENTRADA"
+AJUSTE = "AJUSTE"
+
+ORIGEN_TRANSFERENCIA = "TRANSFERENCIA"
+ORIGEN_AJUSTE = "AJUSTE_STOCK"
+ORIGEN_ANULACION_TRANSFERENCIA = "ANULACION_TRANSFERENCIA"
+ORIGEN_ANULACION_AJUSTE = "ANULACION_AJUSTE_STOCK"
+
 TIPOS_QUE_INGRESAN_CON_COSTO = frozenset({STOCK_INICIAL, "COMPRA", "ANULACION_VENTA"})
 """Los tipos cuyo ingreso con costo recalcula el promedio (CST-11: compra, stock
-inicial y anulación de venta). Un ingreso de otro tipo (ajuste, transferencia,
-rendición) todavía no tiene reglas de costo: lo definen los changes 14, 15 y 24
-(CST-12) y hoy se rechaza. `ANULACION_COMPRA` es un egreso (lo define el change 11,
+inicial y anulación de venta). `ANULACION_COMPRA` es un egreso (lo define el change 11,
 CMP-06)."""
+
+TIPOS_QUE_INGRESAN_SIN_COSTO = frozenset({TRANSFERENCIA_ENTRADA, AJUSTE})
+"""Change 14, D9 (CST-12): un ingreso de transferencia o de ajuste no recalcula el promedio
+y se valoriza al promedio vigente, así que no lleva costo de entrada. Un ingreso de otro
+tipo (rendición, venta) sigue sin reglas de costo y se rechaza: lo define el change 24."""
+
+ORIGENES_DE_ANULACION: dict[str, frozenset[str]] = {
+    ORIGEN_ANULACION_TRANSFERENCIA: frozenset({TRANSFERENCIA_SALIDA, TRANSFERENCIA_ENTRADA}),
+    ORIGEN_ANULACION_AJUSTE: frozenset({AJUSTE}),
+}
+"""D5.1, D5.2: los inversos de una anulación reutilizan los tipos de STK-03 y cambian el
+origen. Cada origen de anulación admite solo los tipos que le corresponden."""
 
 MINIMO_DE_LINEAS = 1
 MAXIMO_DE_LINEAS = 200
@@ -129,31 +148,59 @@ def _validar_costo_segun_signo(
         )
 
 
+def lleva_el_costo_original(linea: LineaDeMovimiento) -> bool:
+    """D5.2: una línea de transferencia o de ajuste con origen de anulación lleva el
+    `costo_unitario` del movimiento que revierte (puede ser nulo) y la puerta lo guarda
+    tal cual, sin valorizarlo al promedio vigente."""
+    return linea.tipo in ORIGENES_DE_ANULACION.get(linea.origen_tipo, frozenset())
+
+
 def validar_lineas_de_movimiento(
     lineas: Sequence[LineaDeMovimiento],
 ) -> list[LineaDeMovimiento]:
     """Al menos una línea; cada una con un tipo del catálogo (STK-03), cantidad
     entera distinta de cero y costo según el signo. El mismo par producto-ubicación
     puede repetirse (a diferencia del stock inicial, D5). Devuelve las líneas en el
-    mismo orden."""
+    mismo orden.
+
+    Change 14: un ingreso `TRANSFERENCIA_ENTRADA` o `AJUSTE` no lleva costo (con costo es
+    `COSTO_INVALIDO`, D9) salvo que sea el inverso de una anulación (D5.2); un ingreso
+    `DIFERENCIA_RENDICION` sigue siendo `TIPO_MOVIMIENTO_INVALIDO`."""
     if not lineas:
         raise LineasInvalidasError("El movimiento necesita al menos una línea.")
     for linea in lineas:
         validar_tipo_de_movimiento(linea.tipo)
         cantidad = _validar_cantidad(linea.cantidad_base)
-        _validar_costo_segun_signo(cantidad, linea.costo_unitario, linea.tipo)
-        if cantidad > 0 and linea.tipo not in TIPOS_QUE_INGRESAN_CON_COSTO:
+        if cantidad > 0 and not (
+            linea.tipo in TIPOS_QUE_INGRESAN_CON_COSTO or linea.tipo in TIPOS_QUE_INGRESAN_SIN_COSTO
+        ):
             raise TipoDeMovimientoInvalidoError(
                 f"Un ingreso de tipo {linea.tipo} todavía no tiene reglas de costo."
             )
+        if lleva_el_costo_original(linea):
+            continue
+        if cantidad > 0 and linea.tipo in TIPOS_QUE_INGRESAN_SIN_COSTO:
+            if linea.costo_unitario is not None:
+                raise CostoInvalidoError(
+                    "Un ingreso de transferencia o de ajuste no lleva costo: se valoriza "
+                    "al promedio vigente."
+                )
+            continue
+        _validar_costo_segun_signo(cantidad, linea.costo_unitario, linea.tipo)
     return list(lineas)
 
 
 def puede_quedar_negativo(linea: LineaDeMovimiento, *, permitir_negativo: bool) -> bool:
-    """CMP-07, D10: solo el egreso `ANULACION_COMPRA` y solo con permiso puede
-    dejar el saldo negativo; cualquier otro egreso sigue exigiendo saldo
-    suficiente (STK-05)."""
-    return permitir_negativo and linea.tipo == ANULACION_COMPRA
+    """Con `PERMITIR_STOCK_NEGATIVO` pueden dejar el saldo negativo: el egreso
+    `ANULACION_COMPRA` (CMP-07, D10), la salida de una transferencia (change 14, D1) --
+    también la inversa de una anulación -- y el inverso de la anulación de un ajuste
+    (D5 punto 6). Un `AJUSTE` que no es ese inverso NUNCA lo deja (D1 = B), tampoco con
+    permiso; cualquier otro egreso exige saldo suficiente (STK-05, STK-10)."""
+    if not permitir_negativo:
+        return False
+    return linea.tipo in {ANULACION_COMPRA, TRANSFERENCIA_SALIDA} or (
+        linea.tipo == AJUSTE and linea.origen_tipo == ORIGEN_ANULACION_AJUSTE
+    )
 
 
 def productos_que_exigen_estar_activos(lineas: Iterable[LineaDeMovimiento]) -> set[UUID]:

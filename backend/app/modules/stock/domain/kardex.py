@@ -27,7 +27,8 @@ LIMITE_MAXIMO = 200
 class LineaDeKardex:
     """Un movimiento del kardex con su saldo acumulado real (el de la historia
     completa del producto en la ubicación, no el de la página, D11).
-    `costo_unitario` es `None` en un movimiento sin costo."""
+    `costo_unitario` es `None` en un movimiento sin costo. `motivo_id` lo llena el repositorio;
+    `motivo_nombre` y `estado_origen` los completa el servicio (change 14)."""
 
     id: UUID
     tipo: str
@@ -40,6 +41,13 @@ class LineaDeKardex:
     usuario_id: UUID
     operation_id: UUID
     saldo_acumulado: int
+    motivo_id: UUID | None = None
+    motivo_nombre: str | None = None
+    """Solo en un movimiento `AJUSTE` (STK-08, change 14, D7): el motivo del ajuste, o el de su
+    anulación en el inverso."""
+    estado_origen: str | None = None
+    """Solo en un movimiento con origen `TRANSFERENCIA` o `AJUSTE_STOCK`: el estado de esa
+    operación (`CONFIRMADA` o `ANULADA`)."""
 
 
 @dataclass(frozen=True)

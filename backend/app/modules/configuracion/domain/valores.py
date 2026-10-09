@@ -17,12 +17,16 @@ AMBITOS_MOTIVO = (
     "ANULACION_COMPRA",
     "ANULACION_COBRANZA",
     "ANULACION_PAGO",
+    "ANULACION_TRANSFERENCIA",
+    "ANULACION_AJUSTE",
     "DESCUENTO_MANUAL",
     "LISTA_ANTERIOR",
     "LIBERACION_JORNADA",
 )
 """Lista cerrada de `motivo.ambito` (`03` §4, TR-09). `ANULACION_PAGO` es el de la
-anulación de pagos a proveedores (PAG-03, `design.md` D1 del change 12)."""
+anulación de pagos a proveedores (PAG-03, `design.md` D1 del change 12);
+`ANULACION_TRANSFERENCIA` y `ANULACION_AJUSTE` son los de la anulación de transferencias y
+ajustes de stock (TR-06, `design.md` D5 del change 14)."""
 
 _EXPONENTE_MAXIMO_ALICUOTA = Decimal("0.000001")
 

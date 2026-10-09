@@ -311,7 +311,7 @@ def test_downgrade_y_upgrade_corren_limpios_con_datos_representativos(
     finally:
         engine.dispose()
 
-    assert cantidad_permisos == 39
+    assert cantidad_permisos == 40
     assert cantidad_organizaciones == 0
 
     # Deja la base en `head`, compartida con el resto de la sesión de pytest.

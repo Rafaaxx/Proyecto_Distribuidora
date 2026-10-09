@@ -67,6 +67,16 @@ class ResultadoDeEgreso:
 
 
 @dataclass(frozen=True)
+class ResultadoDeIngresoSinRecalculo:
+    """Stock total después de un ingreso sin costo y el promedio vigente, que NO cambió y
+    con el que se valoriza el movimiento. `promedio` es `None` mientras el producto no
+    tuvo ingresos con costo (`design.md` D10)."""
+
+    promedio: Decimal | None
+    stock_nuevo: int
+
+
+@dataclass(frozen=True)
 class ResultadoDeReversion:
     """Promedio y stock total del producto después de revertir un ingreso.
     `recalculado` es `False` cuando el promedio se mantiene (CMP-06)."""
@@ -192,6 +202,19 @@ def calcular_egreso(
         costo_valorizacion=promedio_previo,
         stock_nuevo=stock_nuevo,
     )
+
+
+def calcular_ingreso_sin_recalculo(
+    *, stock_previo: int, promedio_previo: Decimal | None, cantidad: int
+) -> ResultadoDeIngresoSinRecalculo:
+    """CST-12: un ingreso sin costo (entrada de transferencia, ajuste positivo, inverso de
+    una anulación) sube el stock total y deja el promedio como está; el movimiento se
+    valoriza al promedio vigente, o queda sin valorizar si no hay (`design.md` D3, D9).
+    `cantidad` es la magnitud (`> 0`). A diferencia de `calcular_ingreso`, no mira el
+    stock previo para decidir un promedio: puede ser cero o negativo."""
+    cantidad_validada = _validar_cantidad(cantidad)
+    stock_nuevo = _validar_stock(stock_previo + cantidad_validada)
+    return ResultadoDeIngresoSinRecalculo(promedio=promedio_previo, stock_nuevo=stock_nuevo)
 
 
 def calcular_reversion(

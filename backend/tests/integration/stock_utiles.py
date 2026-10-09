@@ -118,17 +118,26 @@ def crear_ubicacion_sql(
     return ubicacion_id
 
 
-def crear_motivo_sql(sesion: Session, organizacion_id: UUID) -> UUID:
+def crear_motivo_sql(
+    sesion: Session,
+    organizacion_id: UUID,
+    *,
+    ambito: str = "AJUSTE_STOCK",
+    activo: bool = True,
+    nombre: str | None = None,
+) -> UUID:
     motivo_id = uuid4()
     sesion.execute(
         text(
             "INSERT INTO motivo (id, organizacion_id, ambito, nombre, activo, creado_en, "
-            "actualizado_en) VALUES (:id, :org, 'AJUSTE_STOCK', :nombre, true, :m, :m)"
+            "actualizado_en) VALUES (:id, :org, :ambito, :nombre, :activo, :m, :m)"
         ),
         {
             "id": motivo_id,
             "org": organizacion_id,
-            "nombre": f"Motivo {uuid4().hex[:6]}",
+            "ambito": ambito,
+            "nombre": nombre or f"Motivo {uuid4().hex[:6]}",
+            "activo": activo,
             "m": MOMENTO,
         },
     )

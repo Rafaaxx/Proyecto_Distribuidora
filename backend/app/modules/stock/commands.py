@@ -31,7 +31,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, StrictInt
 
-from app.commands.auditoria import DatosDeAuditoria
+from app.commands.auditoria import (
+    DatosDeAuditoria,
+    constancia_de_ubicacion_tomada,
+    observacion_de_ubicacion_tomada,
+)
 from app.commands.catalogo import declarar_tipo
 from app.commands.observaciones import ObservacionProducida
 from app.commands.registro import registrar_handler
@@ -66,6 +70,7 @@ PERMISO_STOCK_INICIAL = "IMPORTAR_DATOS"
 PERMISO_TRANSFERIR = "TRANSFERIR_STOCK"
 PERMISO_AJUSTAR = "AJUSTAR_STOCK"
 PERMISO_PERMITIR_STOCK_NEGATIVO = "PERMITIR_STOCK_NEGATIVO"
+PERMISO_LIBERAR_UBICACION = "LIBERAR_UBICACION"
 
 
 def _exigir_permiso(sobre: SobreComando, sesion: object, codigo_permiso: str) -> None:
@@ -188,8 +193,10 @@ def manejar_stock_inicial_registrar(
     *,
     sesion: object,
     reloj: Clock,
-) -> ResultadoHandler:
-    _exigir_permiso(sobre, sesion, PERMISO_STOCK_INICIAL)
+) -> ResultadoHandlerConAuditoria:
+    permisos = _permisos_del_usuario(sobre, sesion)
+    if PERMISO_STOCK_INICIAL not in permisos:
+        raise PermisoRequeridoError(f"Falta el permiso {PERMISO_STOCK_INICIAL}.")
     resultados = stock_service.registrar_stock_inicial(
         sobre.organizacion_id,
         sesion,  # type: ignore[arg-type]
@@ -207,6 +214,7 @@ def manejar_stock_inicial_registrar(
         dispositivo_id=sobre.dispositivo_id,
         operation_id=sobre.operation_id,
         occurred_at=sobre.occurred_at,
+        puede_operar_ubicacion_tomada=PERMISO_LIBERAR_UBICACION in permisos,
     )
     return (
         "ACEPTADO",
@@ -223,6 +231,8 @@ def manejar_stock_inicial_registrar(
             ],
         },
         None,
+        (),
+        constancia_de_ubicacion_tomada(r.jornada_tomada_id for r in resultados),
     )
 
 
@@ -274,7 +284,7 @@ def manejar_stock_transferir(
     *,
     sesion: object,
     reloj: Clock,
-) -> ResultadoHandlerConObservaciones:
+) -> ResultadoHandlerConAuditoria:
     """Transfiere stock entre dos ubicaciones (permiso `TRANSFERIR_STOCK`). Con
     `PERMITIR_STOCK_NEGATIVO` una salida que no alcanza se aplica y el comando queda
     `ACEPTADO_CON_OBSERVACIONES` con un `STOCK_NEGATIVO` por cada producto y ubicación
@@ -299,6 +309,7 @@ def manejar_stock_transferir(
         operation_id=sobre.operation_id,
         occurred_at=sobre.occurred_at,
         permitir_negativo=PERMISO_PERMITIR_STOCK_NEGATIVO in permisos,
+        puede_operar_ubicacion_tomada=PERMISO_LIBERAR_UBICACION in permisos,
     )
     transferencia = resultado.transferencia
     observaciones = tuple(
@@ -335,6 +346,7 @@ def manejar_stock_transferir(
         },
         None,
         observaciones,
+        constancia_de_ubicacion_tomada(resultado.jornadas_tomadas),
     )
 
 
@@ -383,7 +395,9 @@ def manejar_stock_ajustar(
 
     Devuelve además el dato de auditoría con el `motivo_id` del ajuste, que el bus copia a su
     única fila de auditoría (AUD-01, AUD-02, D10): es el único handler que lo hace."""
-    _exigir_permiso(sobre, sesion, PERMISO_AJUSTAR)
+    permisos = _permisos_del_usuario(sobre, sesion)
+    if PERMISO_AJUSTAR not in permisos:
+        raise PermisoRequeridoError(f"Falta el permiso {PERMISO_AJUSTAR}.")
     resultado = stock_service.ajustar(
         sobre.organizacion_id,
         sesion,  # type: ignore[arg-type]
@@ -399,6 +413,7 @@ def manejar_stock_ajustar(
         dispositivo_id=sobre.dispositivo_id,
         operation_id=sobre.operation_id,
         occurred_at=sobre.occurred_at,
+        puede_operar_ubicacion_tomada=PERMISO_LIBERAR_UBICACION in permisos,
     )
     ajuste = resultado.ajuste
     return (
@@ -420,7 +435,10 @@ def manejar_stock_ajustar(
         },
         None,
         (),
-        DatosDeAuditoria(motivo_id=ajuste.motivo_id),
+        DatosDeAuditoria(
+            motivo_id=ajuste.motivo_id,
+            observacion=observacion_de_ubicacion_tomada(resultado.jornadas_tomadas),
+        ),
     )
 
 
@@ -471,6 +489,7 @@ def manejar_stock_transferencia_anular(
         usuario_id=sobre.usuario_id,
         dispositivo_id=sobre.dispositivo_id,
         occurred_at=sobre.occurred_at,
+        puede_operar_ubicacion_tomada=PERMISO_LIBERAR_UBICACION in permisos,
     )
     transferencia = resultado.transferencia
     observaciones = tuple(
@@ -515,7 +534,10 @@ def manejar_stock_transferencia_anular(
         },
         None,
         observaciones,
-        DatosDeAuditoria(motivo_id=contenido.motivo_id),
+        DatosDeAuditoria(
+            motivo_id=contenido.motivo_id,
+            observacion=observacion_de_ubicacion_tomada(resultado.jornadas_tomadas),
+        ),
     )
 
 
@@ -563,6 +585,7 @@ def manejar_stock_ajuste_anular(
         usuario_id=sobre.usuario_id,
         dispositivo_id=sobre.dispositivo_id,
         occurred_at=sobre.occurred_at,
+        puede_operar_ubicacion_tomada=PERMISO_LIBERAR_UBICACION in permisos,
     )
     ajuste = resultado.ajuste
     observaciones = tuple(
@@ -606,7 +629,10 @@ def manejar_stock_ajuste_anular(
         },
         None,
         observaciones,
-        DatosDeAuditoria(motivo_id=contenido.motivo_id),
+        DatosDeAuditoria(
+            motivo_id=contenido.motivo_id,
+            observacion=observacion_de_ubicacion_tomada(resultado.jornadas_tomadas),
+        ),
     )
 
 

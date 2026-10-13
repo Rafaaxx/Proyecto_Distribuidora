@@ -5,7 +5,14 @@ import { generarOperationId } from '../../lib/api/operationId'
 import { debeReintentar } from '../../lib/api/reintentoDeRed'
 import { useMotivos } from '../compras/hooks'
 import {
+  abrirJornada,
   anularAjuste,
+  cerrarJornada,
+  liberarJornada,
+  listarJornadas,
+  obtenerJornada,
+  obtenerJornadaActual,
+  rendirJornada,
   anularTransferencia,
   crearUbicacion,
   listarAjustes,
@@ -25,6 +32,8 @@ import {
   type AjusteDetalle,
   type AjusteResultado,
   type CostoPromedio,
+  type Jornada,
+  type JornadaDetalle,
   type LineaDeStock,
   type StockInicialDatos,
   type StockInicialResultado,
@@ -40,6 +49,7 @@ import {
   clavesCostoPromedio,
   clavesStock,
   type FiltrosAjustes,
+  type FiltrosJornadas,
   type FiltrosKardex,
   type FiltrosTransferencias,
 } from './claves'
@@ -102,8 +112,12 @@ export function useCostoPromedio(productoId: string | undefined, habilitado: boo
   })
 }
 
-/** Ámbitos de motivo de stock (lista cerrada del servidor): ajuste y las dos anulaciones. */
-export type AmbitoDeMotivoDeStock = 'AJUSTE_STOCK' | 'ANULACION_TRANSFERENCIA' | 'ANULACION_AJUSTE'
+/** Ámbitos de motivo de stock (lista cerrada del servidor): ajuste, las dos anulaciones y la liberación de jornada. */
+export type AmbitoDeMotivoDeStock =
+  | 'AJUSTE_STOCK'
+  | 'ANULACION_TRANSFERENCIA'
+  | 'ANULACION_AJUSTE'
+  | 'LIBERACION_JORNADA'
 
 /** Motivos activos de un ámbito de stock. Comparte la caché de `useMotivos` (`ADR-043`). */
 export function useMotivosDeStock(ambito: AmbitoDeMotivoDeStock) {
@@ -304,6 +318,78 @@ export function useAnularAjuste() {
   const invalidar = useInvalidarStockYCostos()
   return useMutacionConOperationId<VariablesAnulacion, AjusteAnuladoResultado>(
     (variables, operationId) => anularAjuste(variables.id, variables.motivo_id, operationId),
+    invalidar,
+  )
+}
+
+// --- jornadas (change 15) -----------------------------------------------------
+
+export function useJornadas(filtros: FiltrosJornadas) {
+  return useInfiniteQuery({
+    queryKey: clavesStock.jornadas(filtros),
+    queryFn: ({ pageParam }: { pageParam: string | undefined }) => listarJornadas(filtros, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (ultimaPagina) => ultimaPagina.cursor_siguiente ?? undefined,
+  })
+}
+
+export function useJornada(id: string | undefined) {
+  return useQuery<JornadaDetalle, Error>({
+    queryKey: clavesStock.jornada(id ?? ''),
+    queryFn: () => obtenerJornada(id as string),
+    enabled: id !== undefined && id !== '',
+  })
+}
+
+/** La jornada no cerrada del token (`null` si no tiene). `habilitado` en falso (sin `ABRIR_JORNADA`) no consulta. */
+export function useJornadaActual(habilitado: boolean) {
+  return useQuery<JornadaDetalle | null, Error>({
+    queryKey: clavesStock.jornadaActual(),
+    queryFn: obtenerJornadaActual,
+    enabled: habilitado,
+  })
+}
+
+type VariablesAbrirJornada = { ubicacion_id: string; operationId?: string }
+type VariablesTransicion = { id: string; operationId?: string }
+type VariablesLiberar = { id: string; motivo_id: string; observacion?: string; operationId?: string }
+
+/** Una jornada que cambia mueve jornadas, marcas de ubicación tomada y saldos: todo cuelga de `['stock']`. */
+function useInvalidarStock() {
+  const queryClient = useQueryClient()
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: clavesStock.raiz() })
+  }
+}
+
+export function useAbrirJornada() {
+  const invalidar = useInvalidarStock()
+  return useMutacionConOperationId<VariablesAbrirJornada, Jornada>(
+    (variables, operationId) => abrirJornada(variables.ubicacion_id, operationId),
+    invalidar,
+  )
+}
+
+export function useRendirJornada() {
+  const invalidar = useInvalidarStock()
+  return useMutacionConOperationId<VariablesTransicion, Jornada>(
+    (variables, operationId) => rendirJornada(variables.id, operationId),
+    invalidar,
+  )
+}
+
+export function useCerrarJornada() {
+  const invalidar = useInvalidarStock()
+  return useMutacionConOperationId<VariablesTransicion, Jornada>(
+    (variables, operationId) => cerrarJornada(variables.id, operationId),
+    invalidar,
+  )
+}
+
+export function useLiberarJornada() {
+  const invalidar = useInvalidarStock()
+  return useMutacionConOperationId<VariablesLiberar, Jornada>(
+    (variables, operationId) => liberarJornada(variables.id, variables.motivo_id, variables.observacion, operationId),
     invalidar,
   )
 }

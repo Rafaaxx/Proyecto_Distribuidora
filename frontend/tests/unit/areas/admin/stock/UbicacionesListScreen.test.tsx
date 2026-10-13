@@ -70,6 +70,45 @@ describe('UbicacionesListScreen (tarea 8.2, D2, D3)', () => {
     expect(screen.getAllByRole('link', { name: 'Ver stock' })).toHaveLength(2)
   })
 
+  it('marca la ubicación tomada con quién y desde cuándo, y deja sin marca a las demás (STK-09, RUT-01)', async () => {
+    const tomada = {
+      ...CAMION,
+      activo: true,
+      jornada: { id: 'j1', usuario_id: 'u1', usuario_nombre: 'Juan', abierta_en: '2026-04-10T11:00:00Z', estado: 'ABIERTA' },
+    }
+    apiFetchMock.mockReset()
+    enrutar(apiFetchMock, [
+      { ruta: '/stock/ubicaciones', responder: () => ({ status: 200, cuerpo: { items: [DEPOSITO, tomada], cursor_siguiente: null } }) },
+    ])
+    renderLista('VEN')
+
+    const fila = (await screen.findByText('Camión 1')).closest('tr') as HTMLElement
+    expect(within(fila).getByText(/^Tomada por Juan desde \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/)).toBeInTheDocument()
+    const deposito = screen.getByText('Depósito central').closest('tr') as HTMLElement
+    expect(within(deposito).queryByText(/Tomada por/)).not.toBeInTheDocument()
+  })
+
+  it('una toma sin nombre de usuario se marca igual', async () => {
+    const tomada = {
+      ...CAMION,
+      jornada: { id: 'j1', usuario_id: 'u1', usuario_nombre: null, abierta_en: '2026-04-10T11:00:00Z', estado: 'EN_RENDICION' },
+    }
+    apiFetchMock.mockReset()
+    enrutar(apiFetchMock, [
+      { ruta: '/stock/ubicaciones', responder: () => ({ status: 200, cuerpo: { items: [tomada], cursor_siguiente: null } }) },
+    ])
+    renderLista('VEN')
+
+    expect(await screen.findByText(/^Tomada por un usuario desde /)).toBeInTheDocument()
+  })
+
+  it('el listado ofrece "Jornadas" y "Abrir jornada" según permiso', async () => {
+    renderLista('VEN')
+
+    expect(await screen.findByRole('link', { name: 'Jornadas' })).toHaveAttribute('href', '/admin/stock/jornadas')
+    expect(screen.getByRole('link', { name: 'Abrir jornada' })).toHaveAttribute('href', '/admin/stock/jornadas/abrir')
+  })
+
   it('un Vendedor ve las ubicaciones y el stock, pero no puede crear ni editar', async () => {
     renderLista('VEN')
 

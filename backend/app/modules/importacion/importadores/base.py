@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 from uuid import UUID
@@ -42,6 +42,13 @@ class ContextoDeImportacion:
     dispositivo_id: UUID
     operation_id: UUID
     occurred_at: datetime
+    puede_operar_ubicacion_tomada: bool = False
+    """STK-09 (change 15): si el usuario tiene `LIBERAR_UBICACION`; las filas de stock inicial
+    sobre una ubicación tomada solo entran con él. Falla cerrado."""
+    jornadas_tomadas: list[UUID] = field(default_factory=list)
+    """Las jornadas de las ubicaciones tomadas sobre las que entró alguna fila por esa
+    excepción; el importador las agrega y el handler las usa para la constancia de auditoría
+    (D8)."""
 
 
 Importador = Callable[[ContextoDeImportacion, Sequence[FilaPlanilla]], list[ErrorDeFila]]

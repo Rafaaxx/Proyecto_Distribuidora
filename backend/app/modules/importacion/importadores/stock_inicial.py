@@ -96,7 +96,7 @@ def importar_stock_inicial(
     ):
 
         def registrar(r: _FilaResuelta = resuelta) -> None:
-            stock_service.registrar_stock_inicial(
+            resultados = stock_service.registrar_stock_inicial(
                 org,
                 sesion,  # type: ignore[arg-type]
                 contexto.reloj,
@@ -112,7 +112,11 @@ def importar_stock_inicial(
                 dispositivo_id=contexto.dispositivo_id,
                 operation_id=contexto.operation_id,
                 occurred_at=contexto.occurred_at,
+                puede_operar_ubicacion_tomada=contexto.puede_operar_ubicacion_tomada,
             )
+            for resultado in resultados:
+                if resultado.jornada_tomada_id is not None:
+                    contexto.jornadas_tomadas.append(resultado.jornada_tomada_id)
 
         fallo = ejecutar_en_savepoint(TIPO, sesion, registrar, fila=resuelta.fila)
         if fallo is not None:

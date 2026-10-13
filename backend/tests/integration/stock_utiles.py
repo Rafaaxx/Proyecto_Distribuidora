@@ -234,3 +234,50 @@ def desactivar_producto_sql(sesion: Session, organizacion_id: UUID, producto_id:
         text("UPDATE producto SET activo = false WHERE organizacion_id = :o AND id = :p"),
         {"o": organizacion_id, "p": producto_id},
     )
+
+
+def crear_jornada_sql(
+    sesion: Session,
+    organizacion_id: UUID,
+    *,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+    ubicacion_id: UUID,
+    estado: str = "ABIERTA",
+    **cambios: object,
+) -> UUID:
+    """`INSERT` directo en `jornada` (change 15) con los datos coherentes con `estado`.
+    `usuario_id` también hace de quien rindió, cerró o liberó; `cambios` pisa cualquier
+    columna. Una `LIBERADA` crea su motivo de `LIBERACION_JORNADA` si no se pasa
+    `motivo_liberacion_id`."""
+    jornada_id = uuid4()
+    valores: dict[str, object] = {
+        "id": jornada_id,
+        "organizacion_id": organizacion_id,
+        "usuario_id": usuario_id,
+        "dispositivo_id": dispositivo_id,
+        "ubicacion_id": ubicacion_id,
+        "estado": estado,
+        "operation_id": uuid4(),
+        "occurred_at": MOMENTO,
+        "registered_at": MOMENTO,
+        "creado_en": MOMENTO,
+        "abierta_en": MOMENTO,
+    }
+    if estado in {"EN_RENDICION", "CERRADA"}:
+        valores.update(rendida_en=MOMENTO, rendida_por_id=usuario_id)
+    if estado == "CERRADA":
+        valores.update(cerrada_en=MOMENTO, cerrada_por_id=usuario_id)
+    if estado == "LIBERADA":
+        valores.update(
+            liberada_en=MOMENTO,
+            liberada_por_id=usuario_id,
+            motivo_liberacion_id=crear_motivo_sql(
+                sesion, organizacion_id, ambito="LIBERACION_JORNADA"
+            ),
+        )
+    valores.update(cambios)
+    columnas = ", ".join(valores)
+    marcadores = ", ".join(f":{columna}" for columna in valores)
+    sesion.execute(text(f"INSERT INTO jornada ({columnas}) VALUES ({marcadores})"), valores)
+    return jornada_id

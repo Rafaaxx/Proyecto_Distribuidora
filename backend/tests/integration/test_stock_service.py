@@ -16,6 +16,7 @@ from cuentas_corrientes_utiles import crear_organizacion, crear_usuario_y_dispos
 from sqlalchemy import Engine, func, select, text
 from sqlalchemy.orm import Session
 from stock_utiles import (
+    crear_jornada_sql,
     crear_motivo_sql,
     crear_presentacion_referencia_sql,
     crear_presentacion_sql,
@@ -47,6 +48,7 @@ from app.modules.stock.domain.errores import (
     TipoDeUbicacionInvalidoError,
     UbicacionConStockError,
     UbicacionInactivaError,
+    UbicacionTomadaError,
     VehiculoRequiereTomaError,
 )
 from app.modules.stock.domain.movimientos import LineaDeMovimiento, LineaDeStockInicial
@@ -709,10 +711,25 @@ def test_el_egreso_no_se_toma_del_saldo_de_otra_ubicacion(entorno: Entorno) -> N
 
 
 def test_un_movimiento_guarda_motivo_jornada_y_origen(entorno: Entorno) -> None:
-    entorno.mover(entorno.linea(10, "10"))
+    """Change 15 (STK-09): el movimiento queda con la jornada de la ubicación tomada cuando es
+    de esa jornada (mismo usuario y dispositivo); el sobre no la elige."""
+    entorno.mover(entorno.linea(10, "10", ubicacion_id=entorno.vehiculo_id))
     motivo_id = crear_motivo_sql(entorno.sesion, entorno.org)
-    jornada_id = uuid4()
-    linea = entorno.linea(-5, None, tipo="AJUSTE", motivo_id=motivo_id, jornada_id=jornada_id)
+    jornada_id = crear_jornada_sql(
+        entorno.sesion,
+        entorno.org,
+        usuario_id=entorno.usuario_id,
+        dispositivo_id=entorno.dispositivo_id,
+        ubicacion_id=entorno.vehiculo_id,
+    )
+    linea = entorno.linea(
+        -5,
+        None,
+        tipo="AJUSTE",
+        motivo_id=motivo_id,
+        jornada_id=jornada_id,
+        ubicacion_id=entorno.vehiculo_id,
+    )
 
     (resultado,) = entorno.mover(linea)
 
@@ -1111,3 +1128,86 @@ def test_stock_y_kardex_nombran_la_referencia_de_cada_producto(entorno: Entorno)
     assert por_producto[botellas].unidades_referencia == 1
     assert por_producto[cerveza].nombre_referencia is None
     assert _kardex(entorno, producto_id=botellas).nombre_referencia == "Botella"
+
+
+# --- una ubicación tomada no se desactiva ni cambia de tipo o de toma (change 15, D14) ----------
+
+
+def _tomar(entorno: Entorno, ubicacion_id: UUID, estado: str = "ABIERTA") -> None:
+    crear_jornada_sql(
+        entorno.sesion,
+        entorno.org,
+        usuario_id=entorno.usuario_id,
+        dispositivo_id=entorno.dispositivo_id,
+        ubicacion_id=ubicacion_id,
+        estado=estado,
+    )
+    entorno.sesion.commit()  # el rechazo hace rollback y la prueba relee el estado
+
+
+def test_stk02_rut01_desactivar_un_vehiculo_tomado_y_sin_stock_se_rechaza(
+    entorno: Entorno,
+) -> None:
+    """Escenario "Desactivar un vehículo tomado y sin stock": `UBICACION_TOMADA` y la ubicación
+    sigue activa."""
+    _tomar(entorno, entorno.vehiculo_id)
+
+    with pytest.raises(UbicacionTomadaError) as error:
+        _modificar(entorno, entorno.vehiculo_id, activo=False)
+
+    assert (error.value.codigo, error.value.status_http) == ("UBICACION_TOMADA", 409)
+    entorno.sesion.rollback()
+    actual = service.obtener_ubicacion(entorno.org, entorno.sesion, entorno.vehiculo_id)
+    assert actual is not None and actual.activo
+
+
+@pytest.mark.parametrize("estado", ["ABIERTA", "EN_RENDICION"])
+def test_inv16_cambiar_el_tipo_o_la_toma_de_una_ubicacion_tomada_se_rechaza(
+    entorno: Entorno, estado: str
+) -> None:
+    """Escenario "Quitar la toma a una ubicación tomada": una ubicación `OTRO` con toma."""
+    otra = crear_ubicacion_sql(
+        entorno.sesion, entorno.org, nombre="Puesto", tipo="OTRO", requiere_toma=True
+    )
+    _tomar(entorno, otra, estado)
+
+    with pytest.raises(UbicacionTomadaError):
+        _modificar(entorno, otra, requiere_toma=False)
+    with pytest.raises(UbicacionTomadaError):
+        _modificar(entorno, otra, tipo="DEPOSITO")
+
+    entorno.sesion.rollback()
+    actual = service.obtener_ubicacion(entorno.org, entorno.sesion, otra)
+    assert actual is not None and (actual.tipo, actual.requiere_toma) == ("OTRO", True)
+
+
+def test_renombrar_una_ubicacion_tomada_se_acepta_y_la_jornada_sigue(entorno: Entorno) -> None:
+    """Escenario "Renombrar una ubicación tomada"."""
+    _tomar(entorno, entorno.vehiculo_id)
+
+    ubicacion = _modificar(entorno, entorno.vehiculo_id, nombre="Camión 1 (Kangoo)")
+
+    assert ubicacion.nombre == "Camión 1 (Kangoo)"
+    assert ubicacion.activo
+
+
+@pytest.mark.parametrize("estado", ["CERRADA", "LIBERADA"])
+def test_desactivar_despues_del_cierre_o_la_liberacion_se_acepta(
+    entorno: Entorno, estado: str
+) -> None:
+    """Escenario "Desactivar después del cierre" (RUT-08, RUT-09)."""
+    _tomar(entorno, entorno.vehiculo_id, estado)
+
+    ubicacion = _modificar(entorno, entorno.vehiculo_id, activo=False)
+
+    assert not ubicacion.activo
+
+
+def test_una_ubicacion_libre_con_stock_sigue_rechazando_con_ubicacion_con_stock(
+    entorno: Entorno,
+) -> None:
+    """`UBICACION_CON_STOCK` sigue igual: sin jornada no cerrada, la regla es la del stock."""
+    entorno.inicial((entorno.producto_id, 6, "1"), ubicacion_id=entorno.vehiculo_id)
+
+    with pytest.raises(UbicacionConStockError):
+        _modificar(entorno, entorno.vehiculo_id, activo=False)

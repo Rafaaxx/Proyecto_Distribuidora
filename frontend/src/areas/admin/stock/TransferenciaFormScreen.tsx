@@ -51,7 +51,8 @@ interface ErrorDeEnvio {
 /**
  * Alta de una transferencia entre ubicaciones (change 14, tarea 13.1; spec
  * `administracion-de-stock`; STK-07, TR-07, `design.md` D7, D11). Ruta
- * `/admin/stock/transferencias/nueva`, con `?origen=` desde "Transferir desde acá". Los productos
+ * `/admin/stock/transferencias/nueva`, con `?origen=` desde "Transferir desde acá" y `?destino=` desde
+ * "Cargar vehículo" de una jornada (change 15, RUT-02). Los productos
  * se eligen **solo** del stock del origen (D7), con cajas + unidades; cada línea muestra el saldo
  * actual y el resultante en origen y destino y marca un resultado negativo. El `operation_id` es
  * nuevo por contenido y se reutiliza en el reintento. Es `ONLINE` puro: no se encola nada.
@@ -108,10 +109,11 @@ function Formulario({ ubicaciones }: { ubicaciones: Ubicacion[] }) {
   const [enviando, setEnviando] = useState(false)
 
   const origenInicial = parametros.get('origen') ?? ''
+  const destinoInicial = parametros.get('destino') ?? ''
   const { register, handleSubmit, control } = useForm<DatosDelFormulario>({
     defaultValues: {
       origenId: ubicaciones.some((u) => u.id === origenInicial) ? origenInicial : '',
-      destinoId: '',
+      destinoId: ubicaciones.some((u) => u.id === destinoInicial) ? destinoInicial : '',
       observacion: '',
       lineas: [{ ...LINEA_VACIA }],
     },

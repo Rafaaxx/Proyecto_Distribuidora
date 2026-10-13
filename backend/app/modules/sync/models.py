@@ -6,8 +6,8 @@ prueba `tests/integration/test_modelos_coinciden_con_migracion.py` corre
 `alembic revision --autogenerate` y exige que no detecte ninguna diferencia
 entre estos modelos y el esquema real.
 
-`comando.jornada_id` no tiene FK todavía (deuda del change 15, ver docstring
-de la migración). El resto del módulo (`api.py`, `schemas.py`,
+`comando.jornada_id` tiene FK compuesta a `jornada` desde el change 15 (migración
+`a4b5c6d7e8f9`, `design.md` D11). El resto del módulo (`api.py`, `schemas.py`,
 `repository.py`, `service.py`) llega en el grupo 8: acá solo se declara la
 forma de las tablas para que el esquema y los modelos no diverjan.
 """
@@ -69,6 +69,11 @@ class Comando(Base):
             ["dispositivo.organizacion_id", "dispositivo.id"],
             name="fk_comando__dispositivo",
         ),
+        ForeignKeyConstraint(
+            ["organizacion_id", "jornada_id"],
+            ["jornada.organizacion_id", "jornada.id"],
+            name="fk_comando__jornada",
+        ),
         UniqueConstraint("organizacion_id", "id", name="ux_comando__org_id"),
         UniqueConstraint("organizacion_id", "operation_id", name="ux_comando__org_operation_id"),
         CheckConstraint("modo IN ('ONLINE', 'OFFLINE')", name="ck_comando__modo"),
@@ -92,8 +97,8 @@ class Comando(Base):
     modo: Mapped[str] = mapped_column(Text, nullable=False)
     usuario_id: Mapped[UUID] = mapped_column()
     dispositivo_id: Mapped[UUID] = mapped_column()
-    # Sin FK todavia: `jornada` no existe hasta el change 15 (ver docstring
-    # de la migracion; tarea 15.1 anota esta deuda para ese change).
+    # FK compuesta `(organizacion_id, jornada_id)` a `jornada` desde el change 15
+    # (`design.md` D11); el bus valida antes que la jornada exista (D12).
     jornada_id: Mapped[UUID | None] = mapped_column(nullable=True)
     secuencia: Mapped[int] = mapped_column(Integer, nullable=False)
     huella: Mapped[str] = mapped_column(Text, nullable=False)

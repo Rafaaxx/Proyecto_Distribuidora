@@ -188,3 +188,43 @@ def test_inv03_detecta_una_columna_double_precision_introducida_por_error(
     infractoras = _columnas_de_punto_flotante(_tabla_temporal_con_columna_flotante)
 
     assert ("inv03_negativo_prueba", "importe_mal_tipado", "double precision") in infractoras
+
+
+COLUMNAS_DE_JORNADA = {
+    "id": "uuid",
+    "organizacion_id": "uuid",
+    "usuario_id": "uuid",
+    "dispositivo_id": "uuid",
+    "ubicacion_id": "uuid",
+    "estado": "text",
+    "operation_id": "uuid",
+    "occurred_at": "timestamp with time zone",
+    "registered_at": "timestamp with time zone",
+    "creado_en": "timestamp with time zone",
+    "abierta_en": "timestamp with time zone",
+    "rendida_en": "timestamp with time zone",
+    "rendida_por_id": "uuid",
+    "cerrada_en": "timestamp with time zone",
+    "cerrada_por_id": "uuid",
+    "liberada_en": "timestamp with time zone",
+    "liberada_por_id": "uuid",
+    "motivo_liberacion_id": "uuid",
+    "observacion_liberacion": "text",
+}
+
+
+def test_inv03_el_catalogo_incluye_la_jornada_sin_punto_flotante(
+    _engine_de_sesion: Engine,
+) -> None:
+    """Change 15, tarea 1.6: la jornada no tiene importes ni costos; sus columnas existen
+    con el tipo esperado (identificadores `uuid`, momentos `timestamptz`) y ninguna es de
+    punto flotante ni `money`."""
+    with _engine_de_sesion.connect() as conexion:
+        tipos = {
+            columna: tipo
+            for tabla, columna, tipo in conexion.execute(_CONSULTA_CATALOGO).all()
+            if tabla == "jornada"
+        }
+
+    assert tipos == COLUMNAS_DE_JORNADA
+    assert not {tipo.lower() for tipo in tipos.values()} & set(TIPOS_PROHIBIDOS)

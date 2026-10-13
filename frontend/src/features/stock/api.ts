@@ -1,6 +1,6 @@
 import type { components } from '../../api/schema.gen'
 import { apiFetch } from '../../lib/api/httpClient'
-import type { FiltrosAjustes, FiltrosKardex, FiltrosTransferencias } from './claves'
+import type { FiltrosAjustes, FiltrosJornadas, FiltrosKardex, FiltrosTransferencias } from './claves'
 import { errorDesdeRespuesta } from './errores'
 
 /**
@@ -41,6 +41,11 @@ export type AjusteDelListado = components['schemas']['AjusteDelListadoResponse']
 export type PaginaAjustes = components['schemas']['PaginaDeAjustesResponse']
 export type AjusteDetalle = components['schemas']['DetalleDeAjusteResponse']
 export type LineaDeAjuste = components['schemas']['LineaDelDetalleDeAjusteResponse']
+export type Jornada = components['schemas']['JornadaResponse']
+export type JornadaDelListado = components['schemas']['JornadaDelListadoResponse']
+export type PaginaJornadas = components['schemas']['PaginaDeJornadasResponse']
+export type JornadaDetalle = components['schemas']['DetalleDeJornadaResponse']
+export type TomaDeUbicacion = components['schemas']['TomaDeUbicacionResponse']
 
 /** Tamaño de página por defecto (ADR-034 punto 6). */
 export const LIMITE_POR_DEFECTO = 50
@@ -228,6 +233,78 @@ export async function anularAjuste(id: string, motivoId: string, operationId: st
     method: 'POST',
     headers: conOperationId(operationId),
     body: JSON.stringify({ motivo_id: motivoId }),
+  })
+  return leerJsonOLanzar(respuesta)
+}
+
+// --- jornadas (change 15) ----------------------------------------------------
+
+export async function listarJornadas(
+  filtros: FiltrosJornadas = {},
+  cursor?: string,
+  limite: number = LIMITE_POR_DEFECTO,
+): Promise<PaginaJornadas> {
+  const params = new URLSearchParams()
+  params.set('limite', String(limite))
+  if (cursor) params.set('cursor', cursor)
+  if (filtros.ubicacionId) params.set('ubicacion_id', filtros.ubicacionId)
+  if (filtros.usuarioId) params.set('usuario_id', filtros.usuarioId)
+  if (filtros.estado) params.set('estado', filtros.estado)
+  if (filtros.desde) params.set('desde', filtros.desde)
+  if (filtros.hasta) params.set('hasta', filtros.hasta)
+  const respuesta = await apiFetch(`/stock/jornadas?${params.toString()}`)
+  return leerJsonOLanzar(respuesta)
+}
+
+export async function obtenerJornada(id: string): Promise<JornadaDetalle> {
+  const respuesta = await apiFetch(`/stock/jornadas/${id}`)
+  return leerJsonOLanzar(respuesta)
+}
+
+/** La jornada no cerrada del usuario y el dispositivo del token; el 404 es "no tiene" (`null`). */
+export async function obtenerJornadaActual(): Promise<JornadaDetalle | null> {
+  const respuesta = await apiFetch('/stock/jornadas/actual')
+  if (respuesta.status === 404) return null
+  return leerJsonOLanzar(respuesta)
+}
+
+export async function abrirJornada(ubicacionId: string, operationId: string): Promise<Jornada> {
+  const respuesta = await apiFetch('/stock/jornadas', {
+    method: 'POST',
+    headers: conOperationId(operationId),
+    body: JSON.stringify({ ubicacion_id: ubicacionId }),
+  })
+  return leerJsonOLanzar(respuesta)
+}
+
+export async function rendirJornada(id: string, operationId: string): Promise<Jornada> {
+  const respuesta = await apiFetch(`/stock/jornadas/${id}/rendicion`, {
+    method: 'POST',
+    headers: conOperationId(operationId),
+    body: JSON.stringify({}),
+  })
+  return leerJsonOLanzar(respuesta)
+}
+
+export async function cerrarJornada(id: string, operationId: string): Promise<Jornada> {
+  const respuesta = await apiFetch(`/stock/jornadas/${id}/cierre`, {
+    method: 'POST',
+    headers: conOperationId(operationId),
+    body: JSON.stringify({}),
+  })
+  return leerJsonOLanzar(respuesta)
+}
+
+export async function liberarJornada(
+  id: string,
+  motivoId: string,
+  observacion: string | undefined,
+  operationId: string,
+): Promise<Jornada> {
+  const respuesta = await apiFetch(`/stock/jornadas/${id}/liberacion`, {
+    method: 'POST',
+    headers: conOperationId(operationId),
+    body: JSON.stringify({ motivo_id: motivoId, ...(observacion ? { observacion } : {}) }),
   })
   return leerJsonOLanzar(respuesta)
 }

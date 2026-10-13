@@ -8,8 +8,9 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
+from stock_utiles import crear_jornada_sql, crear_ubicacion_sql
 
 from app.core.clock import FixedClock
 from app.core.ids import nuevo_id
@@ -18,6 +19,7 @@ from app.modules.identidad import repository
 from app.modules.identidad import service as identidad_service
 from app.modules.identidad.domain.usuarios import RefreshTokenInvalidoError
 from app.modules.identidad.models import Auditoria, Organizacion, SesionRefresh
+from app.modules.stock import service as stock_service
 
 MOMENTO = datetime(2026, 1, 1, tzinfo=UTC)
 JWT_SECRETO = "secreto-de-prueba"
@@ -585,3 +587,261 @@ class TestRenovacionDeUsuarioORolInactivo:
             .all()
         )
         assert len(auditoria_reuso) == 0, "no es un reuso de rotación: no debe auditarse como tal"
+
+
+ACCION_EXCEPCION = "RENOVAR_SESION_CON_JORNADA_PENDIENTE"
+
+
+def _renovar(db_session: Session, reloj, token, dispositivo_id):
+    return identidad_service.renovar_sesion(
+        db_session,
+        reloj,
+        refresh_token_claro=token,
+        dispositivo_id=dispositivo_id,
+        jwt_secreto=JWT_SECRETO,
+        jwt_kid=JWT_KID,
+    )
+
+
+def _jornada(db_session: Session, organizacion_id, usuario_id, dispositivo_id, estado="ABIERTA"):
+    ubicacion = crear_ubicacion_sql(
+        db_session, organizacion_id, requiere_toma=True, tipo="VEHICULO"
+    )
+    return crear_jornada_sql(
+        db_session,
+        organizacion_id,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        ubicacion_id=ubicacion,
+        estado=estado,
+    )
+
+
+def _sesiones_revocadas(db_session: Session, organizacion_id, usuario_id) -> int:
+    return db_session.execute(
+        select(func.count())
+        .select_from(SesionRefresh)
+        .where(
+            SesionRefresh.organizacion_id == organizacion_id,
+            SesionRefresh.usuario_id == usuario_id,
+            SesionRefresh.revocado_en.is_not(None),
+        )
+    ).scalar_one()
+
+
+def _auditorias(db_session: Session, organizacion_id, accion: str) -> list[Auditoria]:
+    return list(
+        db_session.execute(
+            select(Auditoria).where(
+                Auditoria.organizacion_id == organizacion_id, Auditoria.accion == accion
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+class TestRenovacionDeInactivoConJornadaPendiente:
+    """Change 15, tarea 12.2 (`design.md` D18; ADR-028 D9.3-B): la excepción de la renovación
+    para el usuario o rol inactivo que tiene una jornada `ABIERTA` o `EN_RENDICION` en ese
+    dispositivo. Spec delta `identidad/autenticacion-y-sesion`."""
+
+    @pytest.mark.parametrize("estado", ["ABIERTA", "EN_RENDICION"])
+    def test_inactivo_con_jornada_no_cerrada_renueva_rota_y_audita(
+        self, db_session: Session, estado: str
+    ) -> None:
+        reloj = FixedClock(MOMENTO)
+        organizacion = _crear_organizacion(db_session)
+        usuario = _crear_usuario_activo(db_session, organizacion.id)
+        dispositivo_id = nuevo_id()
+        t1 = _login(db_session, reloj, organizacion, usuario, dispositivo_id)
+        _jornada(db_session, organizacion.id, usuario.id, dispositivo_id, estado)
+        usuario.estado = "INACTIVO"
+        db_session.flush()
+
+        t2 = _renovar(db_session, reloj, t1.refresh_token, dispositivo_id)
+
+        assert t2.refresh_token != t1.refresh_token
+        assert t2.access_token
+        assert _sesiones_revocadas(db_session, organizacion.id, usuario.id) == 0
+        anterior = repository.obtener_sesion_refresh_por_token_hash_global(
+            derivar_hash_refresh_token(t1.refresh_token), db_session
+        )
+        assert anterior is not None and anterior.usado_en == MOMENTO
+        auditoria = _auditorias(db_session, organizacion.id, ACCION_EXCEPCION)
+        assert len(auditoria) == 1
+        assert auditoria[0].usuario_id == usuario.id
+        assert auditoria[0].dispositivo_id == dispositivo_id
+        assert auditoria[0].origen == "SISTEMA"
+        assert _auditorias(db_session, organizacion.id, "REVOCAR_SESIONES_REFRESH_USUARIO") == []
+
+    def test_cada_renovacion_por_la_excepcion_deja_su_fila_de_auditoria(
+        self, db_session: Session
+    ) -> None:
+        reloj = FixedClock(MOMENTO)
+        organizacion = _crear_organizacion(db_session)
+        usuario = _crear_usuario_activo(db_session, organizacion.id)
+        dispositivo_id = nuevo_id()
+        t1 = _login(db_session, reloj, organizacion, usuario, dispositivo_id)
+        _jornada(db_session, organizacion.id, usuario.id, dispositivo_id)
+        usuario.estado = "INACTIVO"
+        db_session.flush()
+
+        t2 = _renovar(db_session, reloj, t1.refresh_token, dispositivo_id)
+        _renovar(db_session, reloj, t2.refresh_token, dispositivo_id)
+
+        assert len(_auditorias(db_session, organizacion.id, ACCION_EXCEPCION)) == 2
+
+    def test_rol_inactivo_con_jornada_abierta_tambien_renueva(self, db_session: Session) -> None:
+        reloj = FixedClock(MOMENTO)
+        organizacion = _crear_organizacion(db_session)
+        usuario = _crear_usuario_activo(db_session, organizacion.id)
+        dispositivo_id = nuevo_id()
+        t1 = _login(db_session, reloj, organizacion, usuario, dispositivo_id)
+        _jornada(db_session, organizacion.id, usuario.id, dispositivo_id)
+        rol = repository.obtener_rol_por_id(organizacion.id, usuario.rol_id, db_session)
+        assert rol is not None
+        rol.activo = False
+        db_session.flush()
+
+        t2 = _renovar(db_session, reloj, t1.refresh_token, dispositivo_id)
+
+        assert t2.refresh_token != t1.refresh_token
+        assert _sesiones_revocadas(db_session, organizacion.id, usuario.id) == 0
+        assert len(_auditorias(db_session, organizacion.id, ACCION_EXCEPCION)) == 1
+
+    @pytest.mark.parametrize("estado", ["CERRADA", "LIBERADA"])
+    def test_con_la_jornada_terminada_se_rechaza_y_se_revoca_como_hoy(
+        self, db_session: Session, estado: str
+    ) -> None:
+        reloj = FixedClock(MOMENTO)
+        organizacion = _crear_organizacion(db_session)
+        usuario = _crear_usuario_activo(db_session, organizacion.id)
+        dispositivo_id = nuevo_id()
+        t1 = _login(db_session, reloj, organizacion, usuario, dispositivo_id)
+        _jornada(db_session, organizacion.id, usuario.id, dispositivo_id, estado)
+        usuario.estado = "INACTIVO"
+        db_session.flush()
+
+        with pytest.raises(RefreshTokenInvalidoError):
+            _renovar(db_session, reloj, t1.refresh_token, dispositivo_id)
+
+        assert _sesiones_revocadas(db_session, organizacion.id, usuario.id) == 1
+        revocaciones = _auditorias(db_session, organizacion.id, "REVOCAR_SESIONES_REFRESH_USUARIO")
+        assert len(revocaciones) == 1
+        assert _auditorias(db_session, organizacion.id, ACCION_EXCEPCION) == []
+
+    def test_al_cerrarse_la_jornada_la_renovacion_siguiente_se_rechaza(
+        self, db_session: Session
+    ) -> None:
+        reloj = FixedClock(MOMENTO)
+        organizacion = _crear_organizacion(db_session)
+        usuario = _crear_usuario_activo(db_session, organizacion.id)
+        dispositivo_id = nuevo_id()
+        t1 = _login(db_session, reloj, organizacion, usuario, dispositivo_id)
+        jornada_id = _jornada(db_session, organizacion.id, usuario.id, dispositivo_id)
+        usuario.estado = "INACTIVO"
+        db_session.flush()
+        t2 = _renovar(db_session, reloj, t1.refresh_token, dispositivo_id)
+
+        db_session.execute(
+            text(
+                "UPDATE jornada SET estado = 'CERRADA', rendida_en = :m, rendida_por_id = :u, "
+                "cerrada_en = :m, cerrada_por_id = :u WHERE id = :id"
+            ),
+            {"m": MOMENTO, "u": usuario.id, "id": jornada_id},
+        )
+
+        with pytest.raises(RefreshTokenInvalidoError):
+            _renovar(db_session, reloj, t2.refresh_token, dispositivo_id)
+
+        vigentes = db_session.execute(
+            select(func.count())
+            .select_from(SesionRefresh)
+            .where(SesionRefresh.usuario_id == usuario.id, SesionRefresh.revocado_en.is_(None))
+        ).scalar_one()
+        assert vigentes == 0
+
+    def test_la_jornada_de_otro_usuario_en_el_dispositivo_no_habilita(
+        self, db_session: Session
+    ) -> None:
+        reloj = FixedClock(MOMENTO)
+        organizacion = _crear_organizacion(db_session)
+        inactivo = _crear_usuario_activo(db_session, organizacion.id, "inactivo")
+        vendedor = _crear_usuario_activo(db_session, organizacion.id, "vendedor-con-jornada")
+        dispositivo_id = nuevo_id()
+        t_inactivo = _login(db_session, reloj, organizacion, inactivo, dispositivo_id)
+        t_vendedor = _login(db_session, reloj, organizacion, vendedor, dispositivo_id)
+        _jornada(db_session, organizacion.id, vendedor.id, dispositivo_id)
+        inactivo.estado = "INACTIVO"
+        db_session.flush()
+
+        with pytest.raises(RefreshTokenInvalidoError):
+            _renovar(db_session, reloj, t_inactivo.refresh_token, dispositivo_id)
+
+        assert _sesiones_revocadas(db_session, organizacion.id, inactivo.id) == 1
+        # La sesión del vendedor de la jornada sigue pudiendo renovar.
+        assert _renovar(db_session, reloj, t_vendedor.refresh_token, dispositivo_id).access_token
+
+    def test_el_rechazo_en_otro_dispositivo_no_cierra_el_canal_de_la_cola(
+        self, db_session: Session
+    ) -> None:
+        reloj = FixedClock(MOMENTO)
+        organizacion = _crear_organizacion(db_session)
+        usuario = _crear_usuario_activo(db_session, organizacion.id)
+        d1, d2 = nuevo_id(), nuevo_id()
+        t_d1 = _login(db_session, reloj, organizacion, usuario, d1)
+        t_d2 = _login(db_session, reloj, organizacion, usuario, d2)
+        _jornada(db_session, organizacion.id, usuario.id, d1)
+        usuario.estado = "INACTIVO"
+        db_session.flush()
+
+        with pytest.raises(RefreshTokenInvalidoError):
+            _renovar(db_session, reloj, t_d2.refresh_token, d2)
+
+        sesion_d2 = repository.obtener_sesion_refresh_por_token_hash_global(
+            derivar_hash_refresh_token(t_d2.refresh_token), db_session
+        )
+        sesion_d1 = repository.obtener_sesion_refresh_por_token_hash_global(
+            derivar_hash_refresh_token(t_d1.refresh_token), db_session
+        )
+        assert sesion_d2 is not None and sesion_d2.revocado_en is not None
+        assert sesion_d1 is not None and sesion_d1.revocado_en is None
+        assert _renovar(db_session, reloj, t_d1.refresh_token, d1).access_token
+
+    def test_un_usuario_activo_no_consulta_el_puerto(
+        self, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def explota(*_args: object) -> bool:
+            raise AssertionError("el camino normal no debe consultar el puerto")
+
+        reloj = FixedClock(MOMENTO)
+        organizacion = _crear_organizacion(db_session)
+        usuario = _crear_usuario_activo(db_session, organizacion.id)
+        dispositivo_id = nuevo_id()
+        t1 = _login(db_session, reloj, organizacion, usuario, dispositivo_id)
+        monkeypatch.setattr(identidad_service, "_CONSULTA_JORNADA_NO_CERRADA", explota)
+
+        assert _renovar(db_session, reloj, t1.refresh_token, dispositivo_id).access_token
+
+    def test_sin_consulta_registrada_el_inactivo_con_jornada_se_rechaza(
+        self, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        reloj = FixedClock(MOMENTO)
+        organizacion = _crear_organizacion(db_session)
+        usuario = _crear_usuario_activo(db_session, organizacion.id)
+        dispositivo_id = nuevo_id()
+        t1 = _login(db_session, reloj, organizacion, usuario, dispositivo_id)
+        _jornada(db_session, organizacion.id, usuario.id, dispositivo_id)
+        usuario.estado = "INACTIVO"
+        db_session.flush()
+        monkeypatch.setattr(identidad_service, "_CONSULTA_JORNADA_NO_CERRADA", None)
+
+        with pytest.raises(RefreshTokenInvalidoError):
+            _renovar(db_session, reloj, t1.refresh_token, dispositivo_id)
+
+        assert _sesiones_revocadas(db_session, organizacion.id, usuario.id) == 1
+
+
+def test_el_puerto_de_stock_esta_registrado_al_importar_el_modulo() -> None:
+    assert identidad_service._CONSULTA_JORNADA_NO_CERRADA is stock_service.tiene_jornada_no_cerrada

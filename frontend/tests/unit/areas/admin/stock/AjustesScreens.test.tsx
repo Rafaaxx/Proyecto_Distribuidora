@@ -266,6 +266,28 @@ describe('alta de ajuste (tarea 13.2; STK-08, D1, D2, D3)', () => {
     expect(screen.getByLabelText('Unidades')).toHaveValue('11')
   })
 
+  it('el rechazo UBICACION_TOMADA muestra el mensaje de la toma y conserva lo cargado (STK-09)', async () => {
+    enrutar(apiFetchMock, [
+      ...reglasBase(),
+      {
+        metodo: 'POST',
+        ruta: '/stock/ajustes',
+        responder: () => ({ status: 409, cuerpo: { title: 'Tomada', codigo: 'UBICACION_TOMADA' } }),
+      },
+    ])
+    const usuario = userEvent.setup()
+    renderEn('/admin/stock/ajustes/nueva', 'ADM')
+
+    await elegirUbicacionYMotivo(usuario)
+    await elegirProducto(usuario, VINO)
+    await usuario.selectOptions(screen.getByLabelText('Tipo de ajuste'), 'NEGATIVO')
+    await usuario.type(await screen.findByLabelText('Unidades'), '2')
+    await usuario.click(screen.getByRole('button', { name: 'Registrar ajuste' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('La ubicación está tomada por una jornada abierta.')
+    expect(screen.getByLabelText('Unidades')).toHaveValue('2')
+  })
+
   it('regularizar un saldo negativo: abre con la ubicación, el producto y +12 precargados y el resultado en 0', async () => {
     enrutar(apiFetchMock, reglasBase(-12))
     renderEn(`/admin/stock/ajustes/nueva?ubicacion=${DEPOSITO}&producto=${VINO}&cantidad=12`, 'ADM')

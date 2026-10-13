@@ -17,7 +17,7 @@ import {
 } from '../../../domain/stock/ubicacionSchema'
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import type { Ubicacion } from '../../../features/stock/api'
-import { ErrorDeStock } from '../../../features/stock/errores'
+import { ErrorDeStock, mensajeDeErrorDeStock } from '../../../features/stock/errores'
 import { esErrorDeRed, useCrearUbicacion, useModificarUbicacion, useUbicaciones } from '../../../features/stock/hooks'
 import { generarOperationId } from '../../../lib/api/operationId'
 
@@ -31,6 +31,9 @@ const VOLVER = '/admin/stock'
 
 function mensajeDeError(error: unknown): string {
   if (esErrorDeRed(error)) return AVISO_SIN_CONEXION
+  if (error instanceof ErrorDeStock && error.codigo === 'UBICACION_TOMADA') {
+    return mensajeDeErrorDeStock(error, 'ubicacion')
+  }
   return error instanceof ErrorDeStock ? error.message : MENSAJE_GENERICO
 }
 

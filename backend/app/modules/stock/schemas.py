@@ -29,9 +29,12 @@ from pydantic import BaseModel, ConfigDict, StrictInt, field_serializer
 
 from app.modules.stock.queries import (
     DetalleDeAjuste,
+    DetalleDeJornada,
     DetalleDeTransferencia,
     PaginaDeAjustes,
+    PaginaDeJornadas,
     PaginaDeTransferencias,
+    TomaDeUbicacion,
 )
 from app.modules.stock.service import Kardex, LineaDeStock, StockDeUbicacion
 
@@ -61,6 +64,17 @@ class UbicacionModificarRequest(BaseModel):
     activo: bool
 
 
+class TomaDeUbicacionResponse(BaseModel):
+    """Quién tiene tomada la ubicación y desde cuándo (change 15, INV-16): su jornada
+    `ABIERTA` o `EN_RENDICION`."""
+
+    id: UUID
+    usuario_id: UUID
+    usuario_nombre: str | None
+    abierta_en: datetime
+    estado: str
+
+
 class UbicacionResponse(BaseModel):
     id: UUID
     nombre: str
@@ -68,6 +82,8 @@ class UbicacionResponse(BaseModel):
     requiere_toma: bool
     activo: bool
     actualizado_en: datetime
+    jornada: TomaDeUbicacionResponse | None = None
+    """La jornada que la tiene tomada, o `null` si está libre (change 15)."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -557,6 +573,8 @@ class LineaDeStockResponse(BaseModel):
 class StockDeUbicacionResponse(BaseModel):
     items: list[LineaDeStockResponse]
     cursor_siguiente: str | None
+    jornada: TomaDeUbicacionResponse | None = None
+    """La jornada que tiene tomada la ubicación, o `null` si está libre (change 15)."""
 
 
 def linea_de_stock_response(linea: LineaDeStock, *, con_costos: bool) -> LineaDeStockResponse:
@@ -574,12 +592,26 @@ def linea_de_stock_response(linea: LineaDeStock, *, con_costos: bool) -> LineaDe
     return LineaDeStockResponse(**datos)  # type: ignore[arg-type]
 
 
+def toma_response(toma: TomaDeUbicacion | None) -> TomaDeUbicacionResponse | None:
+    """La jornada que tiene tomada una ubicación (change 15), o `None` si está libre."""
+    if toma is None:
+        return None
+    return TomaDeUbicacionResponse(
+        id=toma.jornada_id,
+        usuario_id=toma.usuario_id,
+        usuario_nombre=toma.usuario_nombre,
+        abierta_en=toma.abierta_en,
+        estado=toma.estado,
+    )
+
+
 def stock_de_ubicacion_response(
-    stock: StockDeUbicacion, *, con_costos: bool
+    stock: StockDeUbicacion, *, con_costos: bool, toma: TomaDeUbicacion | None = None
 ) -> StockDeUbicacionResponse:
     return StockDeUbicacionResponse(
         items=[linea_de_stock_response(li, con_costos=con_costos) for li in stock.lineas],
         cursor_siguiente=stock.cursor_siguiente,
+        jornada=toma_response(toma),
     )
 
 
@@ -650,3 +682,107 @@ def kardex_response(kardex: Kardex, *, con_costos: bool) -> KardexResponse:
         items=items,
         cursor_siguiente=kardex.cursor_siguiente,
     )
+
+
+# --- jornadas (change 15) -------------------------------------------------------------------
+
+
+class JornadaAbrirRequest(BaseModel):
+    """Solo `ubicacion_id`. `extra="forbid"`: la organización, el usuario y el dispositivo
+    salen del token (INV-21, RUT-03)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ubicacion_id: UUID
+
+
+class JornadaLiberarRequest(BaseModel):
+    """`motivo_id` (activo, del ámbito `LIBERACION_JORNADA`) y una observación opcional de hasta
+    500 caracteres (la valida el dominio: `OBSERVACION_INVALIDA`). `extra="forbid"` (INV-21)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    motivo_id: UUID
+    observacion: str | None = None
+
+
+class JornadaResponse(BaseModel):
+    """La jornada: sus datos de apertura y, según su estado, los de la rendición, el cierre y
+    la liberación (`01` §18, RUT-09). Los momentos y quién hizo cada transición son nulos
+    mientras la transición no ocurrió."""
+
+    id: UUID
+    ubicacion_id: UUID
+    usuario_id: UUID
+    dispositivo_id: UUID
+    estado: str
+    abierta_en: datetime
+    rendida_en: datetime | None
+    rendida_por_id: UUID | None
+    cerrada_en: datetime | None
+    cerrada_por_id: UUID | None
+    liberada_en: datetime | None
+    liberada_por_id: UUID | None
+    motivo_liberacion_id: UUID | None
+    observacion_liberacion: str | None
+
+
+class JornadaDelListadoResponse(BaseModel):
+    id: UUID
+    ubicacion_id: UUID
+    ubicacion_nombre: str
+    usuario_id: UUID
+    usuario_nombre: str | None
+    dispositivo_id: UUID
+    estado: str
+    abierta_en: datetime
+
+
+class PaginaDeJornadasResponse(BaseModel):
+    items: list[JornadaDelListadoResponse]
+    cursor_siguiente: str | None
+
+
+class DetalleDeJornadaResponse(BaseModel):
+    """Los datos de apertura, rendición, cierre y liberación con los nombres de quienes
+    intervinieron y del motivo (RUT-09)."""
+
+    id: UUID
+    ubicacion_id: UUID
+    ubicacion_nombre: str
+    usuario_id: UUID
+    usuario_nombre: str | None
+    dispositivo_id: UUID
+    estado: str
+    abierta_en: datetime
+    rendida_en: datetime | None
+    rendida_por_id: UUID | None
+    rendida_por_nombre: str | None
+    cerrada_en: datetime | None
+    cerrada_por_id: UUID | None
+    cerrada_por_nombre: str | None
+    liberada_en: datetime | None
+    liberada_por_id: UUID | None
+    liberada_por_nombre: str | None
+    motivo_liberacion_id: UUID | None
+    motivo_liberacion_nombre: str | None
+    observacion_liberacion: str | None
+
+
+def pagina_de_jornadas_response(pagina: PaginaDeJornadas) -> PaginaDeJornadasResponse:
+    return PaginaDeJornadasResponse(
+        items=[
+            JornadaDelListadoResponse.model_validate(j, from_attributes=True)
+            for j in pagina.jornadas
+        ],
+        cursor_siguiente=pagina.cursor_siguiente,
+    )
+
+
+def detalle_de_jornada_response(detalle: DetalleDeJornada) -> DetalleDeJornadaResponse:
+    return DetalleDeJornadaResponse.model_validate(detalle, from_attributes=True)
+
+
+def jornada_response(resultado: dict[str, object]) -> JornadaResponse:
+    """Desde el resultado guardado del comando (`jornadas_commands.resultado_de_jornada`)."""
+    return JornadaResponse.model_validate({**resultado, "id": resultado["jornada_id"]})

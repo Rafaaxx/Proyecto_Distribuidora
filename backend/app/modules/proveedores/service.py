@@ -523,6 +523,10 @@ class ResultadoDeCompra:
     lineas: list[CompraLinea]
     diferencias_de_costo: list[DiferenciaDeCosto]
     pago: PagoProveedor | None = None
+    jornada_tomada_id: UUID | None = None
+    """STK-09: la jornada que tenía tomado el destino cuando la compra pasó por la excepción de
+    `LIBERAR_UBICACION` (`None` si el destino estaba libre). La usa el handler para la
+    constancia en la auditoría (change 15, D8)."""
 
 
 _CUENTA_PROVEEDOR = "PROVEEDOR"
@@ -686,6 +690,7 @@ def confirmar_compra(
     usuario_id: UUID,
     dispositivo_id: UUID,
     occurred_at: datetime,
+    puede_operar_ubicacion_tomada: bool = False,
 ) -> ResultadoDeCompra:
     """`COMPRA_CONFIRMAR` (CMP-01 a CMP-04, INV-01, INV-07; `design.md` D1 a D7, D16).
 
@@ -748,7 +753,7 @@ def confirmar_compra(
     cuentas_corrientes_service.bloquear_saldo(
         organizacion_id, sesion, reloj, cuenta_tipo=_CUENTA_PROVEEDOR, entidad_id=proveedor_id
     )
-    stock_service.registrar_movimientos(
+    movimientos = stock_service.registrar_movimientos(
         organizacion_id,
         sesion,
         reloj,
@@ -768,6 +773,7 @@ def confirmar_compra(
         dispositivo_id=dispositivo_id,
         operation_id=operation_id,
         occurred_at=occurred_at,
+        puede_operar_ubicacion_tomada=puede_operar_ubicacion_tomada,
     )
     cuentas_corrientes_service.registrar_movimiento(
         organizacion_id,
@@ -876,7 +882,13 @@ def confirmar_compra(
             ],
         )
     return ResultadoDeCompra(
-        compra=compra, lineas=filas, diferencias_de_costo=diferencias, pago=pago
+        compra=compra,
+        lineas=filas,
+        diferencias_de_costo=diferencias,
+        pago=pago,
+        jornada_tomada_id=next(
+            (m.jornada_tomada_id for m in movimientos if m.jornada_tomada_id is not None), None
+        ),
     )
 
 
@@ -1147,6 +1159,9 @@ class ResultadoDeAnulacion:
     compra: Compra
     pago_anulado: bool
     avisos: list[AvisoDeAnulacion]
+    jornada_tomada_id: UUID | None = None
+    """STK-09: la jornada que tenía tomado el destino cuando la anulación pasó por la excepción
+    de `LIBERAR_UBICACION` (`None` si estaba libre); para la constancia de auditoría (D8)."""
 
 
 def _validar_motivo_de_anulacion(organizacion_id: UUID, sesion: Session, motivo_id: UUID) -> None:
@@ -1172,6 +1187,7 @@ def anular_compra(
     usuario_id: UUID,
     dispositivo_id: UUID,
     occurred_at: datetime,
+    puede_operar_ubicacion_tomada: bool = False,
 ) -> ResultadoDeAnulacion:
     """`COMPRA_ANULAR` (CMP-05 a CMP-07, INV-01, INV-05; `design.md` D3, D9 a D12).
 
@@ -1242,6 +1258,7 @@ def anular_compra(
         operation_id=operation_id,
         occurred_at=occurred_at,
         permitir_negativo=permitir_stock_negativo,
+        puede_operar_ubicacion_tomada=puede_operar_ubicacion_tomada,
     )
 
     sin_recalculo: list[dict[str, object]] = []
@@ -1321,4 +1338,11 @@ def anular_compra(
         avisos.append(AvisoDeAnulacion(OBSERVACION_SIN_RECALCULO, sin_recalculo))
     if en_negativo:
         avisos.append(AvisoDeAnulacion(OBSERVACION_STOCK_NEGATIVO, en_negativo))
-    return ResultadoDeAnulacion(compra=compra, pago_anulado=pago_anulado, avisos=avisos)
+    return ResultadoDeAnulacion(
+        compra=compra,
+        pago_anulado=pago_anulado,
+        avisos=avisos,
+        jornada_tomada_id=next(
+            (r.jornada_tomada_id for r in resultados if r.jornada_tomada_id is not None), None
+        ),
+    )

@@ -10,6 +10,7 @@ test_repositorios_organizacion_obligatoria.py`, tarea 6.3).
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -544,12 +545,15 @@ def revocar_sesiones_refresh_de_usuario(
     usuario_id: UUID,
     momento: datetime,
     motivo: str,
+    excepto_dispositivo_ids: Collection[UUID] = (),
 ) -> int:
     """Marca como revocadas todas las sesiones de refresh no revocadas de
     `usuario_id`, en TODOS sus dispositivos (ADR-028, D9.3-B: `renovar_sesion`
     la llama cuando el usuario o su rol dejaron de estar activos -- simétrica
     a `revocar_sesiones_refresh_de_dispositivo`, tarea 8.10, pero por
-    usuario en vez de por dispositivo). Devuelve cuántas filas tocó."""
+    usuario en vez de por dispositivo), salvo las de `excepto_dispositivo_ids`:
+    los dispositivos con una jornada no cerrada (change 15, D18). Devuelve
+    cuántas filas tocó."""
     consulta = (
         update(SesionRefresh)
         .where(
@@ -559,9 +563,33 @@ def revocar_sesiones_refresh_de_usuario(
         )
         .values(revocado_en=momento, motivo_revocacion=motivo)
     )
+    if excepto_dispositivo_ids:
+        consulta = consulta.where(
+            SesionRefresh.dispositivo_id.notin_(list(excepto_dispositivo_ids))
+        )
     resultado = sesion.execute(consulta)
     sesion.flush()
     return int(resultado.rowcount or 0)  # type: ignore[attr-defined]
+
+
+def dispositivos_con_sesion_vigente(
+    organizacion_id: UUID, sesion: Session, *, usuario_id: UUID
+) -> list[UUID]:
+    """Dispositivos donde `usuario_id` tiene alguna sesión de refresh no revocada (change 15,
+    D18: candidatos a la excepción de la revocación en bloque)."""
+    return list(
+        sesion.execute(
+            select(SesionRefresh.dispositivo_id)
+            .where(
+                SesionRefresh.organizacion_id == organizacion_id,
+                SesionRefresh.usuario_id == usuario_id,
+                SesionRefresh.revocado_en.is_(None),
+            )
+            .distinct()
+        )
+        .scalars()
+        .all()
+    )
 
 
 def revocar_sesiones_refresh_de_dispositivo(

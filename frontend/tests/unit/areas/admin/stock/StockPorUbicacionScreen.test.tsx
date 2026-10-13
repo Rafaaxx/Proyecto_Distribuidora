@@ -75,6 +75,38 @@ describe('StockPorUbicacionScreen (tarea 8.3, CAT-08, D3)', () => {
     expect(screen.getByRole('link', { name: 'Cargar stock inicial' })).toBeInTheDocument()
   })
 
+  it('marca la ubicación como tomada cuando la respuesta trae su jornada (STK-09)', async () => {
+    enrutar(apiFetchMock, [
+      {
+        ruta: `/stock/ubicaciones/${UBICACION}/saldos`,
+        responder: () => ({
+          status: 200,
+          cuerpo: {
+            items: [CON_COSTO],
+            cursor_siguiente: null,
+            jornada: { id: 'j1', usuario_id: 'u1', usuario_nombre: 'Juan', abierta_en: '2026-04-10T11:00:00Z', estado: 'ABIERTA' },
+          },
+        }),
+      },
+    ])
+    renderStock('VEN')
+
+    expect(await screen.findByText(/^Tomada por Juan desde \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/)).toBeInTheDocument()
+  })
+
+  it('sin jornada no hay marca de toma', async () => {
+    enrutar(apiFetchMock, [
+      {
+        ruta: `/stock/ubicaciones/${UBICACION}/saldos`,
+        responder: () => ({ status: 200, cuerpo: { items: [CON_COSTO], cursor_siguiente: null, jornada: null } }),
+      },
+    ])
+    renderStock('VEN')
+
+    await screen.findByText('Vino A')
+    expect(screen.queryByText(/Tomada por/)).not.toBeInTheDocument()
+  })
+
   it('un Vendedor ve las cantidades y ninguna columna de costo, ni aunque la API la mandara', async () => {
     const sinCosto: Record<string, unknown> = { ...CON_COSTO }
     delete sinCosto.costo_promedio

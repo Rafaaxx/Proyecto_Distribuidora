@@ -213,6 +213,19 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("get", "/api/v1/stock/ajustes"),
         ("get", "/api/v1/stock/ajustes/{ajuste_id}"),
         ("post", "/api/v1/stock/ajustes/{ajuste_id}/anulacion"),
+        # Change 15 (tareas 4.3 y 11.1): la apertura, la rendición, el cierre y la liberación de
+        # una jornada, cada una con su prueba real de aislamiento en
+        # `test_inv21_aislamiento_endpoints_stock.py`.
+        ("post", "/api/v1/stock/jornadas"),
+        ("post", "/api/v1/stock/jornadas/{jornada_id}/rendicion"),
+        ("post", "/api/v1/stock/jornadas/{jornada_id}/cierre"),
+        ("post", "/api/v1/stock/jornadas/{jornada_id}/liberacion"),
+        # Tarea 10.1: las tres lecturas, con su prueba real de aislamiento en
+        # `test_jornadas_consultas_api.py` (otra organización: fuera del listado y 404 en el
+        # detalle) y en `test_jornadas_ubicaciones_api.py`.
+        ("get", "/api/v1/stock/jornadas"),
+        ("get", "/api/v1/stock/jornadas/actual"),
+        ("get", "/api/v1/stock/jornadas/{jornada_id}"),
         ("get", "/api/v1/stock/kardex"),
         ("get", "/api/v1/catalogo/productos/{producto_id}/costo"),
         # Change 10, grupo 4 (`importacion/api.py`, tarea 4.3): la escritura dedicada de

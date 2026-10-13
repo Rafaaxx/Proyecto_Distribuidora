@@ -14,6 +14,7 @@ import { usePermisos } from '../../../features/identidad/usePermisos'
 import type { LineaDeStock } from '../../../features/stock/api'
 import { PermisoRequeridoStockError, RecursoNoEncontradoStockError } from '../../../features/stock/errores'
 import { useSaldos } from '../../../features/stock/hooks'
+import { MarcaDeToma } from './piezasDeJornada'
 
 const SIN_PERMISO = 'No tenés permiso para ver el stock.'
 const NO_EXISTE = 'La ubicación pedida no existe.'
@@ -133,6 +134,9 @@ function StockDeLaUbicacion({ ubicacionId }: { ubicacionId: string }) {
         }
       />
 
+      <div>
+        <MarcaDeToma toma={saldos.data?.pages[0]?.jornada} />
+      </div>
       {saldos.isPending && <p>Cargando…</p>}
       {saldos.isError && <Alert>{mensajeDeError(saldos.error)}</Alert>}
       {saldos.isSuccess && filas.length === 0 && (

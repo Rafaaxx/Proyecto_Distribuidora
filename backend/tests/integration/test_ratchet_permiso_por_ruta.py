@@ -191,6 +191,21 @@ PERMISOS_ESPERADOS_POR_RUTA: dict[tuple[str, str], frozenset[str]] = {
     ("GET", "/api/v1/precios/lista-predeterminada"): frozenset(
         {"ADMIN_CONFIGURACION", "GESTIONAR_LISTAS", "PUBLICAR_LISTAS"}
     ),
+    # Change 15, tareas 4.3, 6.2, 7.1 y 11.1 (`design.md` D2, D13; `01` §19): abrir exige
+    # `ABRIR_JORNADA`; rendir y cerrar, `RENDIR_JORNADA`; liberar, `LIBERAR_UBICACION`.
+    ("POST", "/api/v1/stock/jornadas"): frozenset({"ABRIR_JORNADA"}),
+    ("POST", "/api/v1/stock/jornadas/{jornada_id}/rendicion"): frozenset({"RENDIR_JORNADA"}),
+    ("POST", "/api/v1/stock/jornadas/{jornada_id}/cierre"): frozenset({"RENDIR_JORNADA"}),
+    ("POST", "/api/v1/stock/jornadas/{jornada_id}/liberacion"): frozenset({"LIBERAR_UBICACION"}),
+    # Tarea 10.1 (D15, aprobada): listado y detalle los abre cualquiera de los tres permisos de
+    # jornada; la jornada actual del usuario y del dispositivo, solo `ABRIR_JORNADA`.
+    ("GET", "/api/v1/stock/jornadas"): frozenset(
+        {"ABRIR_JORNADA", "RENDIR_JORNADA", "LIBERAR_UBICACION"}
+    ),
+    ("GET", "/api/v1/stock/jornadas/{jornada_id}"): frozenset(
+        {"ABRIR_JORNADA", "RENDIR_JORNADA", "LIBERAR_UBICACION"}
+    ),
+    ("GET", "/api/v1/stock/jornadas/actual"): frozenset({"ABRIR_JORNADA"}),
 }
 
 

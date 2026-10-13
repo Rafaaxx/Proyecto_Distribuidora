@@ -181,6 +181,30 @@ describe('UbicacionFormScreen: edición (tarea 8.2, D8)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('La ubicación tiene stock.')
   })
 
+  it('desactivar una ubicación tomada muestra el mensaje de la toma y conserva lo cargado (D14)', async () => {
+    apiFetchMock.mockReset()
+    enrutar(apiFetchMock, [
+      { metodo: 'GET', ruta: '/stock/ubicaciones', responder: () => ({ status: 200, cuerpo: { items: [DEPOSITO], cursor_siguiente: null } }) },
+      {
+        metodo: 'PUT',
+        ruta: `/stock/ubicaciones/${ID}`,
+        responder: () => ({ status: 409, cuerpo: { title: 'Tomada', codigo: 'UBICACION_TOMADA' } }),
+      },
+    ])
+    const usuario = userEvent.setup()
+    renderForm('ADM', `/admin/stock/ubicaciones/${ID}`)
+
+    const nombre = await screen.findByDisplayValue('Depósito central')
+    await usuario.clear(nombre)
+    await usuario.type(nombre, 'Depósito sur')
+    await usuario.click(screen.getByLabelText('Activa'))
+    await usuario.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('no se puede desactivar ni cambiar su tipo o su toma')
+    expect(screen.getByDisplayValue('Depósito sur')).toBeInTheDocument()
+    expect(screen.getByLabelText('Activa')).not.toBeChecked()
+  })
+
   it('una ubicación inexistente o ajena lo avisa sin formulario', async () => {
     renderForm('ADM', '/admin/stock/ubicaciones/99999999-9999-4999-8999-999999999999')
 

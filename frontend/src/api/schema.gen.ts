@@ -1498,6 +1498,144 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/stock/jornadas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Jornadas
+         * @description Jornadas de la organización, las más recientes primero (change 15, D15). Filtros de
+         *     ubicación, usuario, estado y fechas de negocio (zona de la organización); cursor y `limite`
+         *     de 1 a 200 (422 fuera de rango). Las abre cualquiera de `ABRIR_JORNADA`, `RENDIR_JORNADA` o
+         *     `LIBERAR_UBICACION`.
+         */
+        get: operations["listar_jornadas_api_v1_stock_jornadas_get"];
+        put?: never;
+        /**
+         * Abrir Jornada
+         * @description `JORNADA_ABRIR` (change 15, RUT-01, RUT-03): toma la ubicación para el usuario y el
+         *     dispositivo del token. 201 con la jornada `ABIERTA`; `UBICACION_TOMADA`,
+         *     `USUARIO_CON_JORNADA`, `DISPOSITIVO_CON_JORNADA`, `UBICACION_SIN_TOMA` y
+         *     `UBICACION_INACTIVA` responden 409, una ubicación ajena 404.
+         */
+        post: operations["abrir_jornada_api_v1_stock_jornadas_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock/jornadas/actual": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Jornada Actual
+         * @description La jornada no cerrada del usuario y del dispositivo del token (RUT-01, ADR-005), o 404.
+         *     Exige `ABRIR_JORNADA`. Va declarada antes que `/jornadas/{jornada_id}`.
+         */
+        get: operations["obtener_jornada_actual_api_v1_stock_jornadas_actual_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock/jornadas/{jornada_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Jornada
+         * @description Detalle de una jornada con los datos de apertura, rendición, cierre y liberación y el
+         *     nombre del motivo (RUT-09). 404 si es ajena o inexistente (INV-21).
+         */
+        get: operations["obtener_jornada_api_v1_stock_jornadas__jornada_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock/jornadas/{jornada_id}/rendicion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rendir Jornada
+         * @description `JORNADA_RENDIR` (change 15, `01` §18): `ABIERTA → EN_RENDICION`, sin conteo hasta el
+         *     change 24. 200 con la jornada; `JORNADA_ESTADO_INVALIDO` responde 409, una jornada ajena
+         *     404.
+         */
+        post: operations["rendir_jornada_api_v1_stock_jornadas__jornada_id__rendicion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock/jornadas/{jornada_id}/cierre": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cerrar Jornada
+         * @description `JORNADA_CERRAR` (change 15, RUT-08): `EN_RENDICION → CERRADA`; la ubicación queda libre.
+         *     200 con la jornada; `JORNADA_ESTADO_INVALIDO` responde 409, una jornada ajena 404.
+         */
+        post: operations["cerrar_jornada_api_v1_stock_jornadas__jornada_id__cierre_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock/jornadas/{jornada_id}/liberacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Liberar Jornada
+         * @description `JORNADA_LIBERAR` (change 15, RUT-09): `ABIERTA | EN_RENDICION → LIBERADA` con motivo y
+         *     observación opcional; el stock de la ubicación no se toca. 200 con la jornada;
+         *     `JORNADA_ESTADO_INVALIDO` responde 409, `MOTIVO_INVALIDO` y `OBSERVACION_INVALIDA` 422, una
+         *     jornada o un motivo ajenos 404.
+         */
+        post: operations["liberar_jornada_api_v1_stock_jornadas__jornada_id__liberacion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/stock/ajustes": {
         parameters: {
             query?: never;
@@ -2729,6 +2867,68 @@ export interface components {
             /** Anulada Por Nombre */
             anulada_por_nombre: string | null;
         };
+        /**
+         * DetalleDeJornadaResponse
+         * @description Los datos de apertura, rendición, cierre y liberación con los nombres de quienes
+         *     intervinieron y del motivo (RUT-09).
+         */
+        DetalleDeJornadaResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Ubicacion Id
+             * Format: uuid
+             */
+            ubicacion_id: string;
+            /** Ubicacion Nombre */
+            ubicacion_nombre: string;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /** Usuario Nombre */
+            usuario_nombre: string | null;
+            /**
+             * Dispositivo Id
+             * Format: uuid
+             */
+            dispositivo_id: string;
+            /** Estado */
+            estado: string;
+            /**
+             * Abierta En
+             * Format: date-time
+             */
+            abierta_en: string;
+            /** Rendida En */
+            rendida_en: string | null;
+            /** Rendida Por Id */
+            rendida_por_id: string | null;
+            /** Rendida Por Nombre */
+            rendida_por_nombre: string | null;
+            /** Cerrada En */
+            cerrada_en: string | null;
+            /** Cerrada Por Id */
+            cerrada_por_id: string | null;
+            /** Cerrada Por Nombre */
+            cerrada_por_nombre: string | null;
+            /** Liberada En */
+            liberada_en: string | null;
+            /** Liberada Por Id */
+            liberada_por_id: string | null;
+            /** Liberada Por Nombre */
+            liberada_por_nombre: string | null;
+            /** Motivo Liberacion Id */
+            motivo_liberacion_id: string | null;
+            /** Motivo Liberacion Nombre */
+            motivo_liberacion_nombre: string | null;
+            /** Observacion Liberacion */
+            observacion_liberacion: string | null;
+        };
         /** DetalleDeTransferenciaResponse */
         DetalleDeTransferenciaResponse: {
             /**
@@ -2954,6 +3154,117 @@ export interface components {
             };
             /** Jornada Id */
             jornada_id?: string | null;
+        };
+        /**
+         * JornadaAbrirRequest
+         * @description Solo `ubicacion_id`. `extra="forbid"`: la organización, el usuario y el dispositivo
+         *     salen del token (INV-21, RUT-03).
+         */
+        JornadaAbrirRequest: {
+            /**
+             * Ubicacion Id
+             * Format: uuid
+             */
+            ubicacion_id: string;
+        };
+        /** JornadaDelListadoResponse */
+        JornadaDelListadoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Ubicacion Id
+             * Format: uuid
+             */
+            ubicacion_id: string;
+            /** Ubicacion Nombre */
+            ubicacion_nombre: string;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /** Usuario Nombre */
+            usuario_nombre: string | null;
+            /**
+             * Dispositivo Id
+             * Format: uuid
+             */
+            dispositivo_id: string;
+            /** Estado */
+            estado: string;
+            /**
+             * Abierta En
+             * Format: date-time
+             */
+            abierta_en: string;
+        };
+        /**
+         * JornadaLiberarRequest
+         * @description `motivo_id` (activo, del ámbito `LIBERACION_JORNADA`) y una observación opcional de hasta
+         *     500 caracteres (la valida el dominio: `OBSERVACION_INVALIDA`). `extra="forbid"` (INV-21).
+         */
+        JornadaLiberarRequest: {
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+            /** Observacion */
+            observacion?: string | null;
+        };
+        /**
+         * JornadaResponse
+         * @description La jornada: sus datos de apertura y, según su estado, los de la rendición, el cierre y
+         *     la liberación (`01` §18, RUT-09). Los momentos y quién hizo cada transición son nulos
+         *     mientras la transición no ocurrió.
+         */
+        JornadaResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Ubicacion Id
+             * Format: uuid
+             */
+            ubicacion_id: string;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /**
+             * Dispositivo Id
+             * Format: uuid
+             */
+            dispositivo_id: string;
+            /** Estado */
+            estado: string;
+            /**
+             * Abierta En
+             * Format: date-time
+             */
+            abierta_en: string;
+            /** Rendida En */
+            rendida_en: string | null;
+            /** Rendida Por Id */
+            rendida_por_id: string | null;
+            /** Cerrada En */
+            cerrada_en: string | null;
+            /** Cerrada Por Id */
+            cerrada_por_id: string | null;
+            /** Liberada En */
+            liberada_en: string | null;
+            /** Liberada Por Id */
+            liberada_por_id: string | null;
+            /** Motivo Liberacion Id */
+            motivo_liberacion_id: string | null;
+            /** Observacion Liberacion */
+            observacion_liberacion: string | null;
         };
         /** KardexResponse */
         KardexResponse: {
@@ -3528,6 +3839,13 @@ export interface components {
         PaginaDeAjustesResponse: {
             /** Items */
             items: components["schemas"]["AjusteDelListadoResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
+        /** PaginaDeJornadasResponse */
+        PaginaDeJornadasResponse: {
+            /** Items */
+            items: components["schemas"]["JornadaDelListadoResponse"][];
             /** Cursor Siguiente */
             cursor_siguiente: string | null;
         };
@@ -4542,6 +4860,7 @@ export interface components {
             items: components["schemas"]["LineaDeStockResponse"][];
             /** Cursor Siguiente */
             cursor_siguiente: string | null;
+            jornada?: components["schemas"]["TomaDeUbicacionResponse"] | null;
         };
         /**
          * StockInicialRegistrarRequest
@@ -4581,6 +4900,32 @@ export interface components {
              * @constant
              */
             token_type: "bearer";
+        };
+        /**
+         * TomaDeUbicacionResponse
+         * @description Quién tiene tomada la ubicación y desde cuándo (change 15, INV-16): su jornada
+         *     `ABIERTA` o `EN_RENDICION`.
+         */
+        TomaDeUbicacionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /** Usuario Nombre */
+            usuario_nombre: string | null;
+            /**
+             * Abierta En
+             * Format: date-time
+             */
+            abierta_en: string;
+            /** Estado */
+            estado: string;
         };
         /**
          * TransferenciaAnuladaResponse
@@ -4771,6 +5116,7 @@ export interface components {
              * Format: date-time
              */
             actualizado_en: string;
+            jornada?: components["schemas"]["TomaDeUbicacionResponse"] | null;
         };
         /**
          * UsuarioResponse
@@ -7985,6 +8331,251 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TransferenciaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_jornadas_api_v1_stock_jornadas_get: {
+        parameters: {
+            query?: {
+                ubicacion_id?: string | null;
+                usuario_id?: string | null;
+                estado?: ("ABIERTA" | "EN_RENDICION" | "CERRADA" | "LIBERADA") | null;
+                desde?: string | null;
+                hasta?: string | null;
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaDeJornadasResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    abrir_jornada_api_v1_stock_jornadas_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JornadaAbrirRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JornadaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_jornada_actual_api_v1_stock_jornadas_actual_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetalleDeJornadaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_jornada_api_v1_stock_jornadas__jornada_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                jornada_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetalleDeJornadaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rendir_jornada_api_v1_stock_jornadas__jornada_id__rendicion_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                jornada_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JornadaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cerrar_jornada_api_v1_stock_jornadas__jornada_id__cierre_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                jornada_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JornadaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    liberar_jornada_api_v1_stock_jornadas__jornada_id__liberacion_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                jornada_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JornadaLiberarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JornadaResponse"];
                 };
             };
             /** @description Validation Error */

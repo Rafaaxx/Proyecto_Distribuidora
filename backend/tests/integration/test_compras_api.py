@@ -1301,6 +1301,36 @@ def test_motivos_de_anulacion_de_stock_responden_a_cualquier_sesion(
     assert respuesta.json()["items"] == [{"id": str(error_de_carga), "nombre": "Error de carga"}]
 
 
+def test_motivos_de_liberacion_de_jornada_responden_a_cualquier_sesion(
+    cliente: TestClient, sesion: Session
+) -> None:
+    """Change 15, tarea 2.2 (RUT-09, `design.md` D13): `GET /configuracion/motivos` sirve el
+    ámbito `LIBERACION_JORNADA` a cualquier usuario autenticado (sin permiso): solo los
+    activos de la organización del token, ordenados por nombre (INV-21)."""
+    entorno = Entorno(sesion, permisos=frozenset())
+    ausente = entorno.crear_motivo("LIBERACION_JORNADA", "Vendedor ausente")
+    perdido = entorno.crear_motivo("LIBERACION_JORNADA", "Dispositivo perdido o averiado")
+    entorno.crear_motivo("AJUSTE_STOCK", "Rotura")
+    sesion.execute(
+        text(
+            "INSERT INTO motivo (id, organizacion_id, ambito, nombre, activo, creado_en, "
+            "actualizado_en) VALUES (:id, :org, 'LIBERACION_JORNADA', 'Viejo', false, :m, :m)"
+        ),
+        {"id": uuid4(), "org": entorno.org, "m": MOMENTO},
+    )
+    ajena = Entorno(sesion, usuario="otro")
+    ajena.crear_motivo("LIBERACION_JORNADA", "Ajeno")
+    headers = entorno.entrar(cliente)
+
+    respuesta = cliente.get(URL_MOTIVOS, params={"ambito": "LIBERACION_JORNADA"}, headers=headers)
+
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["items"] == [
+        {"id": str(perdido), "nombre": "Dispositivo perdido o averiado"},
+        {"id": str(ausente), "nombre": "Vendedor ausente"},
+    ]
+
+
 def test_motivos_con_un_ambito_fuera_de_la_lista_responde_422_ambito_invalido(
     cliente: TestClient, sesion: Session
 ) -> None:

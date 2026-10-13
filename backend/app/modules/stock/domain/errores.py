@@ -201,3 +201,42 @@ class AjusteYaAnuladoError(DomainError):
 
     codigo = "AJUSTE_YA_ANULADO"
     status_http = 409
+
+
+# --- Jornadas y toma de ubicación (change 15, `design.md` D3, D6) -------------------------
+
+
+class JornadaEstadoInvalidoError(DomainError):
+    """La transición no está en la máquina de estados de la jornada (`01` §18, D2)."""
+
+    codigo = "JORNADA_ESTADO_INVALIDO"
+    status_http = 409
+
+
+class UbicacionSinTomaError(DomainError):
+    """Solo se abre una jornada sobre una ubicación que requiere toma (RUT-01, D3)."""
+
+    codigo = "UBICACION_SIN_TOMA"
+    status_http = 409
+
+
+class UbicacionTomadaError(DomainError):
+    """La ubicación ya tiene una jornada no cerrada (INV-16) o su jornada no es la que
+    mueve (STK-09, D6)."""
+
+    codigo = "UBICACION_TOMADA"
+    status_http = 409
+
+
+class UsuarioConJornadaError(DomainError):
+    """El usuario ya tiene una jornada no cerrada (RUT-04, D3)."""
+
+    codigo = "USUARIO_CON_JORNADA"
+    status_http = 409
+
+
+class DispositivoConJornadaError(DomainError):
+    """El dispositivo ya tiene una jornada no cerrada (ADR-005, D3)."""
+
+    codigo = "DISPOSITIVO_CON_JORNADA"
+    status_http = 409

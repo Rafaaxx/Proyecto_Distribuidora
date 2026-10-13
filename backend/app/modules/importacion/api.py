@@ -129,7 +129,9 @@ def importar(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: object,
+    ) -> sync_service.ResultadoHandlerConAuditoria:
         return importacion_commands.manejar_importacion_registrar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]

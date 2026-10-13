@@ -55,6 +55,7 @@ from app.commands.auditoria import DatosDeAuditoria as DatosDeAuditoria
 from app.commands.errores import (
     CodigoDeObservacionInvalidoError,
     ComandoInconsistenteError,
+    JornadaInexistenteError,
     ModoNoAdmitidoParaTipoError,
 )
 from app.commands.huella import ContenidoComando, calcular_huella
@@ -65,6 +66,7 @@ from app.core.errors import DomainError
 from app.core.ids import nuevo_id
 from app.core.logging import comando_contexto_var
 from app.modules.identidad import service as identidad_service
+from app.modules.stock import service as stock_service
 from app.modules.sync import repository
 from app.modules.sync.models import CODIGOS_OBSERVACION, ComandoCuarentena, Observacion
 
@@ -297,6 +299,19 @@ def _espera_para_intento(intento: int, config: ConfiguracionReintentos) -> float
     return random.uniform(0, techo)
 
 
+def _validar_jornada_del_sobre(sesion: Session, sobre: SobreComando) -> None:
+    """Change 15, `design.md` D12: antes de reservar, si el sobre trae `jornada_id`, esa
+    jornada tiene que existir en la organización (SYN-06, INV-21); si no, `JORNADA_INEXISTENTE`
+    y no queda fila de `comando`. NO evalúa el dueño ni el estado de la jornada: eso es regla de
+    cada comando de ruta. Sin `jornada_id` no consulta nada."""
+    if sobre.jornada_id is None:
+        return
+    if not stock_service.existe_jornada(sobre.organizacion_id, sesion, sobre.jornada_id):
+        raise JornadaInexistenteError(
+            f"La jornada {sobre.jornada_id} no existe en esta organización."
+        )
+
+
 def procesar_comando(
     sesion: Session,
     reloj: Clock,
@@ -375,6 +390,7 @@ def procesar_comando(
             se_ejecuto_el_handler = False
             datos_de_auditoria = None
             try:
+                _validar_jornada_del_sobre(sesion, sobre)
                 comando = procesar_idempotente(
                     sesion,
                     reloj,
@@ -396,6 +412,7 @@ def procesar_comando(
                         origen="COMANDO",
                         operation_id=sobre.operation_id,
                         motivo_id=_motivo_para_la_auditoria(comando, datos_de_auditoria),
+                        observacion=_observacion_para_la_auditoria(comando, datos_de_auditoria),
                     )
                 sesion.commit()
                 # Tarea 12.3 (`02` §17): duración, resultado y reintentos por
@@ -544,6 +561,14 @@ def _motivo_para_la_auditoria(comando: Comando, datos: DatosDeAuditoria | None) 
     if datos is None or not comando.estado.startswith("ACEPTADO"):
         return None
     return datos.motivo_id
+
+
+def _observacion_para_la_auditoria(comando: Comando, datos: DatosDeAuditoria | None) -> str | None:
+    """La constancia de STK-09 que el handler pidió copiar, solo si el comando quedó aceptado
+    (change 15, D8): un resultado rechazado no la deja."""
+    if datos is None or not comando.estado.startswith("ACEPTADO"):
+        return None
+    return datos.observacion
 
 
 def resolver_observaciones_del_handler(

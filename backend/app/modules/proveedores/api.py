@@ -677,7 +677,9 @@ def confirmar_compra(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: object,
+    ) -> sync_service.ResultadoHandlerConAuditoria:
         return proveedores_commands.manejar_compra_confirmar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -725,7 +727,7 @@ def anular_compra(
 
     def _ejecutar_handler(
         sesion_protegida: object,
-    ) -> sync_service.ResultadoHandler | sync_service.ResultadoHandlerConObservaciones:
+    ) -> sync_service.ResultadoHandlerConAuditoria:
         return proveedores_commands.manejar_compra_anular(
             sobre,
             contenido_validado,  # type: ignore[arg-type]

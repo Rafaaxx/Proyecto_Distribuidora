@@ -6820,6 +6820,596 @@
         }
       }
     },
+    "/api/v1/stock/jornadas": {
+      "get": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Listar Jornadas",
+        "description": "Jornadas de la organización, las más recientes primero (change 15, D15). Filtros de\nubicación, usuario, estado y fechas de negocio (zona de la organización); cursor y `limite`\nde 1 a 200 (422 fuera de rango). Las abre cualquiera de `ABRIR_JORNADA`, `RENDIR_JORNADA` o\n`LIBERAR_UBICACION`.",
+        "operationId": "listar_jornadas_api_v1_stock_jornadas_get",
+        "parameters": [
+          {
+            "name": "ubicacion_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ubicacion Id"
+            }
+          },
+          {
+            "name": "usuario_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Usuario Id"
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "ABIERTA",
+                    "EN_RENDICION",
+                    "CERRADA",
+                    "LIBERADA"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Estado"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Desde"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hasta"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaDeJornadasResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Abrir Jornada",
+        "description": "`JORNADA_ABRIR` (change 15, RUT-01, RUT-03): toma la ubicación para el usuario y el\ndispositivo del token. 201 con la jornada `ABIERTA`; `UBICACION_TOMADA`,\n`USUARIO_CON_JORNADA`, `DISPOSITIVO_CON_JORNADA`, `UBICACION_SIN_TOMA` y\n`UBICACION_INACTIVA` responden 409, una ubicación ajena 404.",
+        "operationId": "abrir_jornada_api_v1_stock_jornadas_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JornadaAbrirRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JornadaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stock/jornadas/actual": {
+      "get": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Obtener Jornada Actual",
+        "description": "La jornada no cerrada del usuario y del dispositivo del token (RUT-01, ADR-005), o 404.\nExige `ABRIR_JORNADA`. Va declarada antes que `/jornadas/{jornada_id}`.",
+        "operationId": "obtener_jornada_actual_api_v1_stock_jornadas_actual_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetalleDeJornadaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stock/jornadas/{jornada_id}": {
+      "get": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Obtener Jornada",
+        "description": "Detalle de una jornada con los datos de apertura, rendición, cierre y liberación y el\nnombre del motivo (RUT-09). 404 si es ajena o inexistente (INV-21).",
+        "operationId": "obtener_jornada_api_v1_stock_jornadas__jornada_id__get",
+        "parameters": [
+          {
+            "name": "jornada_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Jornada Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetalleDeJornadaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stock/jornadas/{jornada_id}/rendicion": {
+      "post": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Rendir Jornada",
+        "description": "`JORNADA_RENDIR` (change 15, `01` §18): `ABIERTA → EN_RENDICION`, sin conteo hasta el\nchange 24. 200 con la jornada; `JORNADA_ESTADO_INVALIDO` responde 409, una jornada ajena\n404.",
+        "operationId": "rendir_jornada_api_v1_stock_jornadas__jornada_id__rendicion_post",
+        "parameters": [
+          {
+            "name": "jornada_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Jornada Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JornadaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stock/jornadas/{jornada_id}/cierre": {
+      "post": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Cerrar Jornada",
+        "description": "`JORNADA_CERRAR` (change 15, RUT-08): `EN_RENDICION → CERRADA`; la ubicación queda libre.\n200 con la jornada; `JORNADA_ESTADO_INVALIDO` responde 409, una jornada ajena 404.",
+        "operationId": "cerrar_jornada_api_v1_stock_jornadas__jornada_id__cierre_post",
+        "parameters": [
+          {
+            "name": "jornada_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Jornada Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JornadaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stock/jornadas/{jornada_id}/liberacion": {
+      "post": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Liberar Jornada",
+        "description": "`JORNADA_LIBERAR` (change 15, RUT-09): `ABIERTA | EN_RENDICION → LIBERADA` con motivo y\nobservación opcional; el stock de la ubicación no se toca. 200 con la jornada;\n`JORNADA_ESTADO_INVALIDO` responde 409, `MOTIVO_INVALIDO` y `OBSERVACION_INVALIDA` 422, una\njornada o un motivo ajenos 404.",
+        "operationId": "liberar_jornada_api_v1_stock_jornadas__jornada_id__liberacion_post",
+        "parameters": [
+          {
+            "name": "jornada_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Jornada Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JornadaLiberarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JornadaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/stock/ajustes": {
       "post": {
         "tags": [
@@ -9917,6 +10507,218 @@
         ],
         "title": "DetalleDeAnulacionDeTransferenciaResponse"
       },
+      "DetalleDeJornadaResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "ubicacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Id"
+          },
+          "ubicacion_nombre": {
+            "type": "string",
+            "title": "Ubicacion Nombre"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "usuario_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usuario Nombre"
+          },
+          "dispositivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Dispositivo Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "abierta_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Abierta En"
+          },
+          "rendida_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rendida En"
+          },
+          "rendida_por_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rendida Por Id"
+          },
+          "rendida_por_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rendida Por Nombre"
+          },
+          "cerrada_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cerrada En"
+          },
+          "cerrada_por_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cerrada Por Id"
+          },
+          "cerrada_por_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cerrada Por Nombre"
+          },
+          "liberada_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liberada En"
+          },
+          "liberada_por_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liberada Por Id"
+          },
+          "liberada_por_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liberada Por Nombre"
+          },
+          "motivo_liberacion_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Liberacion Id"
+          },
+          "motivo_liberacion_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Liberacion Nombre"
+          },
+          "observacion_liberacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion Liberacion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "ubicacion_id",
+          "ubicacion_nombre",
+          "usuario_id",
+          "usuario_nombre",
+          "dispositivo_id",
+          "estado",
+          "abierta_en",
+          "rendida_en",
+          "rendida_por_id",
+          "rendida_por_nombre",
+          "cerrada_en",
+          "cerrada_por_id",
+          "cerrada_por_nombre",
+          "liberada_en",
+          "liberada_por_id",
+          "liberada_por_nombre",
+          "motivo_liberacion_id",
+          "motivo_liberacion_nombre",
+          "observacion_liberacion"
+        ],
+        "title": "DetalleDeJornadaResponse",
+        "description": "Los datos de apertura, rendición, cierre y liberación con los nombres de quienes\nintervinieron y del motivo (RUT-09)."
+      },
       "DetalleDeTransferenciaResponse": {
         "properties": {
           "id": {
@@ -10379,6 +11181,256 @@
         ],
         "title": "ItemLoteComandoRequest",
         "description": "Un comando de la cola local (`02` §13.2 `cola`), tal como el\ndispositivo lo generó. `usuario_id`/`dispositivo_id` son los que\ndeclaró al generarlo -- el servidor los compara contra la sesión que\nsincroniza (`ColaAjenaError`, tarea 8.5), nunca los usa tal cual para\nconstruir el sobre sin esa verificación."
+      },
+      "JornadaAbrirRequest": {
+        "properties": {
+          "ubicacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ubicacion_id"
+        ],
+        "title": "JornadaAbrirRequest",
+        "description": "Solo `ubicacion_id`. `extra=\"forbid\"`: la organización, el usuario y el dispositivo\nsalen del token (INV-21, RUT-03)."
+      },
+      "JornadaDelListadoResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "ubicacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Id"
+          },
+          "ubicacion_nombre": {
+            "type": "string",
+            "title": "Ubicacion Nombre"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "usuario_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usuario Nombre"
+          },
+          "dispositivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Dispositivo Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "abierta_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Abierta En"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "ubicacion_id",
+          "ubicacion_nombre",
+          "usuario_id",
+          "usuario_nombre",
+          "dispositivo_id",
+          "estado",
+          "abierta_en"
+        ],
+        "title": "JornadaDelListadoResponse"
+      },
+      "JornadaLiberarRequest": {
+        "properties": {
+          "motivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Motivo Id"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "motivo_id"
+        ],
+        "title": "JornadaLiberarRequest",
+        "description": "`motivo_id` (activo, del ámbito `LIBERACION_JORNADA`) y una observación opcional de hasta\n500 caracteres (la valida el dominio: `OBSERVACION_INVALIDA`). `extra=\"forbid\"` (INV-21)."
+      },
+      "JornadaResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "ubicacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Id"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "dispositivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Dispositivo Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "abierta_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Abierta En"
+          },
+          "rendida_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rendida En"
+          },
+          "rendida_por_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rendida Por Id"
+          },
+          "cerrada_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cerrada En"
+          },
+          "cerrada_por_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cerrada Por Id"
+          },
+          "liberada_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liberada En"
+          },
+          "liberada_por_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liberada Por Id"
+          },
+          "motivo_liberacion_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Liberacion Id"
+          },
+          "observacion_liberacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion Liberacion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "ubicacion_id",
+          "usuario_id",
+          "dispositivo_id",
+          "estado",
+          "abierta_en",
+          "rendida_en",
+          "rendida_por_id",
+          "cerrada_en",
+          "cerrada_por_id",
+          "liberada_en",
+          "liberada_por_id",
+          "motivo_liberacion_id",
+          "observacion_liberacion"
+        ],
+        "title": "JornadaResponse",
+        "description": "La jornada: sus datos de apertura y, según su estado, los de la rendición, el cierre y\nla liberación (`01` §18, RUT-09). Los momentos y quién hizo cada transición son nulos\nmientras la transición no ocurrió."
       },
       "KardexResponse": {
         "properties": {
@@ -11719,6 +12771,34 @@
           "cursor_siguiente"
         ],
         "title": "PaginaDeAjustesResponse"
+      },
+      "PaginaDeJornadasResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/JornadaDelListadoResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "cursor_siguiente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Siguiente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "cursor_siguiente"
+        ],
+        "title": "PaginaDeJornadasResponse"
       },
       "PaginaDeTransferenciasResponse": {
         "properties": {
@@ -13965,6 +15045,16 @@
               }
             ],
             "title": "Cursor Siguiente"
+          },
+          "jornada": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TomaDeUbicacionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -14039,6 +15129,50 @@
           "access_token"
         ],
         "title": "TokenResponse"
+      },
+      "TomaDeUbicacionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "usuario_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usuario Nombre"
+          },
+          "abierta_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Abierta En"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "usuario_id",
+          "usuario_nombre",
+          "abierta_en",
+          "estado"
+        ],
+        "title": "TomaDeUbicacionResponse",
+        "description": "Quién tiene tomada la ubicación y desde cuándo (change 15, INV-16): su jornada\n`ABIERTA` o `EN_RENDICION`."
       },
       "TransferenciaAnuladaResponse": {
         "properties": {
@@ -14394,6 +15528,16 @@
             "type": "string",
             "format": "date-time",
             "title": "Actualizado En"
+          },
+          "jornada": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TomaDeUbicacionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

@@ -50,6 +50,7 @@ from app.modules.importacion import models as importacion_models  # noqa: F401
 from app.modules.precios import commands as precios_commands  # noqa: F401
 from app.modules.precios import models as precios_models  # noqa: F401
 from app.modules.stock import commands as stock_commands  # noqa: F401
+from app.modules.stock import jornadas_commands as stock_jornadas_commands  # noqa: F401
 from app.modules.stock import models as stock_models  # noqa: F401
 
 

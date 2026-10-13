@@ -50,9 +50,13 @@ from app.modules.proveedores import service as _proveedores_service  # noqa: F40
 from app.modules.stock import repository as stock_repository
 from app.modules.stock import service as stock_service
 from app.modules.stock.domain.errores import (
+    DispositivoConJornadaError,
+    JornadaEstadoInvalidoError,
     ProductoInactivoError,
     ProductoSinCostoError,
     StockInsuficienteError,
+    UbicacionTomadaError,
+    UsuarioConJornadaError,
 )
 from app.modules.stock.service import LineaDeAjuste, LineaDeMovimiento, LineaDeTransferencia
 from tests.integration.cuentas_corrientes_utiles import (
@@ -495,5 +499,306 @@ def test_inv12_con_transferencias_ajustes_anulaciones_y_desactivaciones(
         mundo.verificar_la_invariante()
         for producto_id in mundo.productos_inactivos():
             assert mundo.saldos_del_producto(producto_id) == {}, "Producto inactivo con stock."
+    finally:
+        savepoint.rollback()
+
+
+# --- change 15, tarea 16.2: jornadas y toma de ubicación ------------------------------------
+
+
+class _Actor:
+    def __init__(self, usuario_id: UUID, dispositivo_id: UUID, *, puede_liberar: bool) -> None:
+        self.usuario_id = usuario_id
+        self.dispositivo_id = dispositivo_id
+        self.puede_liberar = puede_liberar
+
+
+class _MundoConJornadas(_Mundo):
+    """El mundo de INV-12 con la ubicación 0 libre (depósito) y las ubicaciones 1 y 2 como
+    vehículos con toma, tres actores (el dueño de jornada, un tercero y quien tiene
+    `LIBERAR_UBICACION`) y un modelo de referencia de las jornadas y de lo que STK-09 decide."""
+
+    def __init__(self, sesion: Session) -> None:
+        super().__init__(sesion)
+        for ubicacion_id in self.ubicaciones[1:]:
+            sesion.execute(
+                text(
+                    "UPDATE ubicacion SET tipo = 'VEHICULO', requiere_toma = true "
+                    "WHERE organizacion_id = :o AND id = :u"
+                ),
+                {"o": self.org, "u": ubicacion_id},
+            )
+        self.actores = [_Actor(self.usuario_id, self.dispositivo_id, puede_liberar=False)]
+        for puede_liberar in (False, True):
+            usuario_id, dispositivo_id = crear_usuario_y_dispositivo(sesion, self.org)
+            self.actores.append(_Actor(usuario_id, dispositivo_id, puede_liberar=puede_liberar))
+        self.motivo_liberacion = crear_motivo_sql(sesion, self.org, ambito="LIBERACION_JORNADA")
+        self.jornadas: list[dict[str, Any]] = []  # modelo: id, estado, actor, ubicacion
+
+    # --- jornadas ---------------------------------------------------------------------
+
+    def _no_cerrada_de(self, ubicacion_id: UUID) -> dict[str, Any] | None:
+        for jornada in self.jornadas:
+            if jornada["ubicacion"] == ubicacion_id and jornada["estado"] in {
+                "ABIERTA",
+                "EN_RENDICION",
+            }:
+                return jornada
+        return None
+
+    def abrir(self, actor: int, vehiculo: int) -> None:
+        quien = self.actores[actor]
+        ubicacion_id = self.ubicaciones[vehiculo]
+        try:
+            with self.sesion.begin_nested():
+                jornada = stock_service.abrir_jornada(
+                    self.org,
+                    self.sesion,
+                    RELOJ,
+                    ubicacion_id=ubicacion_id,
+                    usuario_id=quien.usuario_id,
+                    dispositivo_id=quien.dispositivo_id,
+                    operation_id=uuid4(),
+                    occurred_at=MOMENTO,
+                )
+        except (UbicacionTomadaError, UsuarioConJornadaError, DispositivoConJornadaError):
+            event("apertura rechazada")
+            return
+        event("apertura aceptada")
+        self.jornadas.append(
+            {"id": jornada.id, "estado": "ABIERTA", "actor": actor, "ubicacion": ubicacion_id}
+        )
+
+    def transicion(self, nombre: str, indice: int) -> None:
+        if not self.jornadas:
+            return
+        jornada = self.jornadas[indice % len(self.jornadas)]
+        origenes = {
+            "rendir": {"ABIERTA"},
+            "cerrar": {"EN_RENDICION"},
+            "liberar": {"ABIERTA", "EN_RENDICION"},
+        }[nombre]
+        destino = {"rendir": "EN_RENDICION", "cerrar": "CERRADA", "liberar": "LIBERADA"}[nombre]
+        quien = self.actores[2]
+        try:
+            with self.sesion.begin_nested():
+                if nombre == "rendir":
+                    stock_service.rendir_jornada(
+                        self.org,
+                        self.sesion,
+                        jornada_id=jornada["id"],
+                        usuario_id=quien.usuario_id,
+                        occurred_at=MOMENTO,
+                    )
+                elif nombre == "cerrar":
+                    stock_service.cerrar_jornada(
+                        self.org,
+                        self.sesion,
+                        jornada_id=jornada["id"],
+                        usuario_id=quien.usuario_id,
+                        occurred_at=MOMENTO,
+                    )
+                else:
+                    stock_service.liberar_jornada(
+                        self.org,
+                        self.sesion,
+                        jornada_id=jornada["id"],
+                        usuario_id=quien.usuario_id,
+                        motivo_id=self.motivo_liberacion,
+                        observacion=None,
+                        occurred_at=MOMENTO,
+                    )
+        except JornadaEstadoInvalidoError:
+            assert jornada["estado"] not in origenes
+            event(f"{nombre} rechazada")
+            return
+        assert jornada["estado"] in origenes
+        jornada["estado"] = destino
+        event(f"{nombre} aceptada")
+
+    # --- movimientos: lo que STK-09 decide, según el modelo -----------------------------
+
+    def _jornada_esperada(self, actor: _Actor, ubicacion_id: UUID) -> tuple[bool, UUID | None]:
+        """`(se acepta la toma, jornada_id que debe quedar en el movimiento)` de una ubicación."""
+        jornada = self._no_cerrada_de(ubicacion_id)
+        if jornada is None:
+            return True, None
+        dueno = self.actores[jornada["actor"]]
+        es_de_la_jornada = jornada["estado"] == "ABIERTA" and (
+            dueno.usuario_id,
+            dueno.dispositivo_id,
+        ) == (actor.usuario_id, actor.dispositivo_id)
+        if es_de_la_jornada:
+            return True, jornada["id"]
+        if actor.puede_liberar:
+            return True, None
+        return False, None
+
+    def _movimientos(self) -> int:
+        return int(
+            self.sesion.execute(
+                text("SELECT count(*) FROM stock_movimiento WHERE organizacion_id = :o"),
+                {"o": self.org},
+            ).scalar_one()
+        )
+
+    def _aplicar_con_toma(
+        self,
+        actor_indice: int,
+        ubicaciones: list[UUID],
+        operacion: Callable[[UUID, _Actor], object],
+        nombre: str,
+    ) -> None:
+        actor = self.actores[actor_indice]
+        esperado = {u: self._jornada_esperada(actor, u) for u in ubicaciones}
+        se_rechaza_por_toma = not all(acepta for acepta, _ in esperado.values())
+        antes = self._movimientos()
+        operation_id = uuid4()
+        try:
+            with self.sesion.begin_nested():
+                operacion(operation_id, actor)
+        except UbicacionTomadaError:
+            assert se_rechaza_por_toma, f"{nombre}: la toma rechazó lo que el modelo admitía."
+            assert self._movimientos() == antes, "Un movimiento rechazado por la toma dejó filas."
+            event(f"{nombre} rechazado por la toma")
+            return
+        except (StockInsuficienteError, ProductoSinCostoError):
+            assert not se_rechaza_por_toma, f"{nombre}: la toma debía rechazar antes que el stock."
+            assert self._movimientos() == antes
+            event(f"{nombre} rechazado por el stock")
+            return
+        assert not se_rechaza_por_toma, f"{nombre}: el modelo esperaba UBICACION_TOMADA."
+        event(f"{nombre} aplicado")
+        filas = self.sesion.execute(
+            text(
+                "SELECT ubicacion_id, jornada_id FROM stock_movimiento "
+                "WHERE organizacion_id = :o AND operation_id = :op"
+            ),
+            {"o": self.org, "op": operation_id},
+        ).all()
+        assert filas
+        for ubicacion_id, jornada_id in filas:
+            assert jornada_id == esperado[ubicacion_id][1]
+
+    def mover(self, actor: int, producto: int, ubicacion: int, cantidad_firmada: int) -> None:
+        ubicacion_id = self.ubicaciones[ubicacion]
+
+        def _operacion(operation_id: UUID, quien: _Actor) -> None:
+            stock_service.registrar_movimientos(
+                self.org,
+                self.sesion,
+                RELOJ,
+                lineas=self.lineas([(producto, ubicacion, cantidad_firmada, 1_500_000_000)]),
+                usuario_id=quien.usuario_id,
+                dispositivo_id=quien.dispositivo_id,
+                operation_id=operation_id,
+                occurred_at=MOMENTO,
+                puede_operar_ubicacion_tomada=quien.puede_liberar,
+            )
+
+        self._aplicar_con_toma(actor, [ubicacion_id], _operacion, "movimiento")
+
+    def transferir_de(
+        self, actor: int, origen: int, desplazamiento: int, producto: int, cantidad: int
+    ) -> None:
+        origen_id = self.ubicaciones[origen]
+        destino_id = self.ubicaciones[(origen + desplazamiento) % 3]
+
+        def _operacion(operation_id: UUID, quien: _Actor) -> None:
+            stock_service.transferir(
+                self.org,
+                self.sesion,
+                RELOJ,
+                ubicacion_origen_id=origen_id,
+                ubicacion_destino_id=destino_id,
+                lineas=[LineaDeTransferencia(self.productos[producto], cantidad)],
+                observacion=None,
+                usuario_id=quien.usuario_id,
+                dispositivo_id=quien.dispositivo_id,
+                operation_id=operation_id,
+                occurred_at=MOMENTO,
+                puede_operar_ubicacion_tomada=quien.puede_liberar,
+            )
+
+        self._aplicar_con_toma(actor, [origen_id, destino_id], _operacion, "transferencia")
+
+    # --- verificación final ---------------------------------------------------------------
+
+    def verificar_la_toma(self) -> None:
+        """STK-09: todo movimiento con `jornada_id` pertenece a la ubicación de esa jornada."""
+        ajenos = self.sesion.execute(
+            text(
+                "SELECT count(*) FROM stock_movimiento m JOIN jornada j "
+                "ON j.organizacion_id = m.organizacion_id AND j.id = m.jornada_id "
+                "WHERE m.organizacion_id = :o AND m.ubicacion_id <> j.ubicacion_id"
+            ),
+            {"o": self.org},
+        ).scalar_one()
+        assert ajenos == 0
+
+
+_ACTOR_DE_JORNADA = st.integers(min_value=0, max_value=2)  # 0 y 1 sin permiso, 2 con LIBERAR
+_VEHICULO = st.integers(min_value=1, max_value=2)
+_OPERACION_CON_JORNADAS = st.one_of(
+    *([st.tuples(st.just("abrir"), _ACTOR_DE_JORNADA, _VEHICULO)] * 2),
+    st.tuples(st.just("rendir"), st.integers(0, 30)),
+    st.tuples(st.just("cerrar"), st.integers(0, 30)),
+    st.tuples(st.just("liberar"), st.integers(0, 30)),
+    *(
+        [
+            st.tuples(
+                st.just("mover"),
+                _ACTOR_DE_JORNADA,
+                _PRODUCTO,
+                _UBICACION,
+                st.integers(1, 60),
+                st.booleans(),
+            )
+        ]
+        * 5
+    ),
+    *(
+        [
+            st.tuples(
+                st.just("transferir"),
+                _ACTOR_DE_JORNADA,
+                _UBICACION,
+                st.integers(1, 2),
+                _PRODUCTO,
+                st.integers(1, 40),
+            )
+        ]
+        * 3
+    ),
+)
+
+
+@_PROPIEDAD
+@given(st.lists(_OPERACION_CON_JORNADAS, min_size=1, max_size=30))
+def test_inv12_stk09_con_aperturas_cierres_liberaciones_y_movimientos_de_terceros(
+    db_session: Session, operaciones: list[tuple[Any, ...]]
+) -> None:
+    """INV-12 y STK-09 con la máquina de estados del change 15: aperturas, rendiciones, cierres y
+    liberaciones de jornadas, y movimientos (compras, ventas y transferencias) hechos por el dueño
+    de la jornada, por un tercero sin permiso y por quien tiene `LIBERAR_UBICACION`. Al final cada
+    `stock_saldo` es la suma SQL de su libro, cada `stock_total` la suma de los saldos,
+    `verificar_consistencia` no informa diferencias, ningún movimiento rechazado por la toma dejó
+    una fila y todo movimiento con `jornada_id` pertenece a la ubicación de esa jornada."""
+    savepoint = db_session.begin_nested()
+    try:
+        mundo = _MundoConJornadas(db_session)
+        for nombre, *argumentos in operaciones:
+            if nombre == "abrir":
+                mundo.abrir(*argumentos)
+            elif nombre == "mover":
+                actor, producto, ubicacion, cantidad, ingresa = argumentos
+                mundo.mover(actor, producto, ubicacion, cantidad if ingresa else -cantidad)
+            elif nombre == "transferir":
+                mundo.transferir_de(*argumentos)
+            else:
+                mundo.transicion(nombre, *argumentos)
+
+        mundo.verificar_la_invariante()
+        mundo.verificar_la_toma()
     finally:
         savepoint.rollback()

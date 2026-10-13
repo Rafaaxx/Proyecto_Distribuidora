@@ -14,7 +14,7 @@ from __future__ import annotations
 from sqlalchemy import ForeignKeyConstraint, Integer, Numeric, inspect
 
 from app.modules.costeo.models import CostoProducto, CostoProductoMov
-from app.modules.stock.models import StockMovimiento, StockSaldo, Ubicacion
+from app.modules.stock.models import Jornada, StockMovimiento, StockSaldo, Ubicacion
 
 TODOS = (Ubicacion, StockSaldo, StockMovimiento, CostoProducto, CostoProductoMov)
 
@@ -51,15 +51,59 @@ def test_los_saldos_tienen_clave_compuesta_que_empieza_por_la_organizacion() -> 
     ]
 
 
-def test_el_libro_exige_el_dispositivo_y_deja_la_jornada_sin_fk() -> None:
-    """D12: `dispositivo_id` `NOT NULL`; `jornada_id` nulable y sin FK hasta el
-    change 15."""
+def test_el_libro_exige_el_dispositivo_y_la_jornada_tiene_fk_compuesta() -> None:
+    """D12 del 09 y D11 del 15: `dispositivo_id` `NOT NULL`; `jornada_id` nulable, con FK
+    compuesta `(organizacion_id, jornada_id)` a `jornada` desde el change 15 (INV-02)."""
     columnas = StockMovimiento.__table__.columns  # type: ignore[attr-defined]
 
     assert columnas["dispositivo_id"].nullable is False
     assert columnas["jornada_id"].nullable is True
-    assert not columnas["jornada_id"].foreign_keys
-    assert not any("jornada_id" in cols for cols in _fks_por_nombre(StockMovimiento).values())
+    assert _fks_por_nombre(StockMovimiento)["fk_stock_movimiento__jornada"] == (
+        "organizacion_id",
+        "jornada_id",
+    )
+
+
+def test_la_jornada_se_llama_como_en_03_y_su_organizacion_encabeza_sus_claves() -> None:
+    """`03` §9, D10: `UNIQUE (organizacion_id, id)` y FK compuestas a usuario, dispositivo,
+    ubicación y motivo."""
+    tabla = Jornada.__table__  # type: ignore[attr-defined]
+
+    assert Jornada.__tablename__ == "jornada"
+    fks = _fks_por_nombre(Jornada)
+    assert set(fks) == {
+        "fk_jornada__organizacion",
+        "fk_jornada__usuario",
+        "fk_jornada__dispositivo",
+        "fk_jornada__ubicacion",
+        "fk_jornada__rendida_por",
+        "fk_jornada__cerrada_por",
+        "fk_jornada__liberada_por",
+        "fk_jornada__motivo_liberacion",
+    }
+    assert fks["fk_jornada__ubicacion"] == ("organizacion_id", "ubicacion_id")
+    assert "ux_jornada__org_id" in {c.name for c in tabla.constraints}
+    assert {
+        "ux_jornada__ubicacion_abierta",
+        "ux_jornada__dispositivo_abierta",
+        "ux_jornada__usuario_abierta",
+        "ix_jornada__abierta_en",
+    } == {i.name for i in tabla.indexes}
+
+
+def test_los_tres_indices_unicos_de_la_jornada_son_parciales_sobre_los_estados_no_cerrados() -> (
+    None
+):
+    """INV-16, D3."""
+    indices = {i.name: i for i in Jornada.__table__.indexes}  # type: ignore[attr-defined]
+    for nombre in (
+        "ux_jornada__ubicacion_abierta",
+        "ux_jornada__dispositivo_abierta",
+        "ux_jornada__usuario_abierta",
+    ):
+        assert indices[nombre].unique is True
+        donde = str(indices[nombre].dialect_options["postgresql"]["where"])
+        assert "ABIERTA" in donde and "EN_RENDICION" in donde
 
 
 def test_los_costos_son_numeric_18_6_y_las_cantidades_integer() -> None:
@@ -105,6 +149,7 @@ def test_toda_fk_a_una_entidad_de_negocio_es_compuesta_con_la_organizacion() -> 
             "fk_stock_movimiento__usuario": ("organizacion_id", "usuario_id"),
             "fk_stock_movimiento__dispositivo": ("organizacion_id", "dispositivo_id"),
             "fk_stock_movimiento__motivo": ("organizacion_id", "motivo_id"),
+            "fk_stock_movimiento__jornada": ("organizacion_id", "jornada_id"),
         },
         StockSaldo: {
             "fk_stock_saldo__producto": ("organizacion_id", "producto_id"),

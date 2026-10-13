@@ -130,6 +130,9 @@ ignore_imports = [
     "app.modules.stock.api -> sqlalchemy",
     "app.modules.stock.api -> app.api_v1.dependencias",
     "app.modules.stock.api -> app.core.autenticacion",
+    # Change 15 (`design.md` D1): los archivos de jornadas dentro de `stock`.
+    "app.modules.stock.jornadas_repository -> sqlalchemy",
+    "app.modules.stock.jornadas_casos -> sqlalchemy",
     # Change 10 (`design.md` D10, `02` §5.3): `importacion` es el septimo modulo de
     # negocio. Cada grupo agrega las entradas de los archivos que crea (`models.py` en
     # el grupo 2; `repository.py` y `queries.py` en el 4; `api.py` en el 4):
@@ -176,11 +179,32 @@ source_modules = ["app.modules.configuracion"]
 forbidden_modules = ["app.modules.identidad.models", "app.modules.identidad.repository"]
 allow_indirect_imports = "true"
 
+# `allow_indirect_imports`: change 15, tarea 5.1 (`design.md` D12). El bus (`sync.service`)
+# pregunta a `stock.service` si existe la jornada del sobre antes de reservar, y
+# `identidad.api` importa `sync.service` (`procesar_comando`). Eso abre la cadena indirecta
+# `identidad.api -> sync.service -> stock.service -> configuracion.service ->
+# configuracion.models/repository`. Sin este campo, el contrato (tipo `forbidden`) la marca
+# aunque `identidad` nunca importa `configuracion.models`/`configuracion.repository`
+# directamente -- mismo caso ya aceptado en su contrato espejo de arriba. Revisado y aceptado
+# por el usuario el 2026-10-09: no introduce un mecanismo nuevo, reaplica el ya usado.
 [[tool.importlinter.contracts]]
 name = "identidad no importa modelos ni repositorio de configuracion"
 type = "forbidden"
 source_modules = ["app.modules.identidad"]
 forbidden_modules = ["app.modules.configuracion.models", "app.modules.configuracion.repository"]
+allow_indirect_imports = "true"
+
+# Change 15, tarea 12.1 (`design.md` D19, `02` §5.3: `identidad <- todos`): `identidad` no
+# importa `stock`; pregunta por el puerto que `stock.service` registra. `allow_indirect_imports`
+# por la cadena `identidad.api -> sync.service -> stock.service`, que no es un import directo
+# de `identidad` a `stock` (mismo criterio que los dos contratos de arriba).
+[[tool.importlinter.contracts]]
+id = "identidad-no-importa-stock"
+name = "identidad no importa stock"
+type = "forbidden"
+source_modules = ["app.modules.identidad"]
+forbidden_modules = ["app.modules.stock"]
+allow_indirect_imports = "true"
 
 # Change 04 (`design.md` D3, `02` §5.3): límites del bus de comandos. El
 # mecanismo (`app/commands/`) no conoce los módulos que lo usan; el dominio
@@ -367,6 +391,9 @@ forbidden_modules = [
     # `service.py`; nunca por sus libros, repositorios, apis, dominios ni comandos.
     "app.modules.stock.models",
     "app.modules.stock.repository",
+    "app.modules.stock.jornadas_repository",
+    "app.modules.stock.jornadas_casos",
+    "app.modules.stock.jornadas_commands",
     "app.modules.stock.domain",
     "app.modules.stock.api",
     "app.modules.stock.commands",
@@ -570,6 +597,9 @@ source_modules = [
 forbidden_modules = [
     "app.modules.stock.models",
     "app.modules.stock.repository",
+    "app.modules.stock.jornadas_repository",
+    "app.modules.stock.jornadas_casos",
+    "app.modules.stock.jornadas_commands",
     "app.modules.stock.domain",
     "app.modules.stock.commands",
     "app.modules.stock.api",
@@ -618,6 +648,9 @@ forbidden_modules = [
     "app.modules.clientes.commands",
     "app.modules.stock.models",
     "app.modules.stock.repository",
+    "app.modules.stock.jornadas_repository",
+    "app.modules.stock.jornadas_casos",
+    "app.modules.stock.jornadas_commands",
     "app.modules.stock.domain",
     "app.modules.stock.api",
     "app.modules.stock.commands",

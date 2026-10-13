@@ -403,3 +403,22 @@ def test_inv02_detecta_una_pk_compuesta_que_no_empieza_por_organizacion_id(
     assert mensaje is not None
     assert "inv02_negativo_pk_desordenada" in mensaje
     assert "no empieza por organizacion_id" in mensaje
+
+
+def test_inv02_la_jornada_y_las_dos_fk_heredadas_estan_cubiertas(database_url: str) -> None:
+    """Change 15, tarea 1.6: el recorrido dinámico incluye `jornada` y, además, la FK de
+    `stock_movimiento.jornada_id` y la de `comando.jornada_id` son compuestas con
+    `organizacion_id` (una jornada de otra organización no se puede referenciar)."""
+    aplicar_migraciones(database_url)
+    engine = crear_engine(database_url)
+
+    assert "jornada" in _tablas_de_negocio(engine)
+    assert _tabla_declara_organizacion_id_obligatoria(engine, "jornada") is None
+    assert _fk_simple_entre_negocio(engine, "jornada") == []
+    for tabla, nombre in (
+        ("stock_movimiento", "fk_stock_movimiento__jornada"),
+        ("comando", "fk_comando__jornada"),
+    ):
+        destino, columnas = _fks_agrupadas(engine, tabla)[nombre]
+        assert destino == "jornada", tabla
+        assert sorted(set(columnas)) == ["jornada_id", "organizacion_id"], tabla

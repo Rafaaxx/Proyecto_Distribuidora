@@ -65,7 +65,7 @@ export async function errorDesdeRespuesta(respuesta: Response): Promise<ErrorDeS
 }
 
 /** Qué operación falló: cambia el texto de algunos códigos (`STOCK_INSUFICIENTE`, 403). */
-export type ContextoDeError = 'transferencia' | 'ajuste' | 'anulacion'
+export type ContextoDeError = 'transferencia' | 'ajuste' | 'anulacion' | 'apertura' | 'jornada' | 'ubicacion'
 
 const AVISO_SIN_CONEXION = 'Se necesita conexión para completar esta operación. Probá de nuevo cuando tengas conexión.'
 
@@ -78,12 +78,36 @@ const MENSAJES_POR_CODIGO: Record<string, string> = {
   UBICACION_INACTIVA: 'Hay una ubicación inactiva en la operación. Reactivala antes de seguir.',
   TRANSFERENCIA_YA_ANULADA: 'La transferencia ya fue anulada.',
   AJUSTE_YA_ANULADO: 'El ajuste ya fue anulado.',
+  UBICACION_SIN_TOMA: 'Esa ubicación no requiere toma: no hace falta abrir una jornada.',
+  USUARIO_CON_JORNADA: 'Ya tenés una jornada abierta. Cerrala o pedí que la liberen antes de abrir otra.',
+  DISPOSITIVO_CON_JORNADA:
+    'Hay una jornada abierta en este dispositivo. Cerrala o pedí que la liberen antes de abrir otra.',
+  JORNADA_ESTADO_INVALIDO: 'La jornada ya cambió de estado. Actualizá la pantalla para ver cómo quedó.',
+  OBSERVACION_INVALIDA: 'La observación admite hasta 500 caracteres.',
 }
 
 const STOCK_INSUFICIENTE: Record<ContextoDeError, string> = {
   transferencia: 'No hay stock suficiente en el origen para transferir esa cantidad.',
   ajuste: 'Un ajuste no puede dejar stock negativo.',
   anulacion: 'No se puede anular: el stock actual no alcanza para revertir la operación.',
+  apertura: 'No hay stock suficiente.',
+  jornada: 'No hay stock suficiente.',
+  ubicacion: 'No hay stock suficiente.',
+}
+
+const TEXTO_MOVER_STOCK_TOMADA =
+  'La ubicación está tomada por una jornada abierta. Solo quien la tiene, o quien puede liberarla, puede mover su stock.'
+const TEXTO_ABRIR_TOMADA = 'Esa ubicación ya la tomó otra jornada. Elegí otra.'
+
+/** `UBICACION_TOMADA` (STK-09, INV-16) se explica distinto según lo que se intentaba hacer. */
+const UBICACION_TOMADA: Record<ContextoDeError, string> = {
+  apertura: TEXTO_ABRIR_TOMADA,
+  jornada: TEXTO_ABRIR_TOMADA,
+  transferencia: TEXTO_MOVER_STOCK_TOMADA,
+  ajuste: TEXTO_MOVER_STOCK_TOMADA,
+  anulacion: TEXTO_MOVER_STOCK_TOMADA,
+  ubicacion:
+    'La ubicación está tomada por una jornada abierta: no se puede desactivar ni cambiar su tipo o su toma hasta que se cierre o se libere.',
 }
 
 /**
@@ -98,6 +122,7 @@ export function mensajeDeErrorDeStock(error: unknown, contexto: ContextoDeError)
   }
   if (error instanceof ErrorDeStock) {
     if (error.codigo === 'STOCK_INSUFICIENTE') return STOCK_INSUFICIENTE[contexto]
+    if (error.codigo === 'UBICACION_TOMADA') return UBICACION_TOMADA[contexto]
     return MENSAJES_POR_CODIGO[error.codigo] ?? error.message
   }
   if (esErrorDeRed(error)) return AVISO_SIN_CONEXION

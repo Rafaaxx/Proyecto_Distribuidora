@@ -33,6 +33,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from stock_utiles import (
     MOMENTO,
+    crear_jornada_sql,
     crear_motivo_sql,
     crear_producto_sql,
     crear_ubicacion_sql,
@@ -208,7 +209,7 @@ def test_las_tablas_tienen_las_columnas_de_03_y_de_las_decisiones(
     _engine_de_sesion: Engine, tabla: str, esperadas: dict[str, tuple[str, bool]]
 ) -> None:
     """`03` §7 y §9; D7 (`actualizado_por_id`), D10 (`costo_promedio` nulo), D12
-    (`dispositivo_id` `NOT NULL`, `jornada_id` sin FK)."""
+    (`dispositivo_id` `NOT NULL`; `jornada_id` con FK desde el change 15)."""
     columnas = _columnas(_engine_de_sesion, tabla)
 
     assert columnas, f"La migración no creó la tabla `{tabla}`."
@@ -308,7 +309,7 @@ def test_el_saldo_y_el_total_nacen_en_cero_por_defecto(_engine_de_sesion: Engine
 
 def test_las_fk_son_compuestas_con_organizacion_id(_engine_de_sesion: Engine) -> None:
     """INV-21, `03` §2.4, D12: toda FK entre entidades de negocio incluye
-    `organizacion_id`; `jornada_id` no tiene FK hasta el change 15 (D12)."""
+    `organizacion_id`; `jornada_id` tiene FK compuesta desde el change 15 (D11)."""
     assert _fks(_engine_de_sesion, "ubicacion") == {
         "fk_ubicacion__organizacion": "organizacion_id",
         "fk_ubicacion__actualizado_por": "organizacion_id,actualizado_por_id",
@@ -333,6 +334,7 @@ def test_las_fk_son_compuestas_con_organizacion_id(_engine_de_sesion: Engine) ->
         "fk_stock_movimiento__usuario": "organizacion_id,usuario_id",
         "fk_stock_movimiento__dispositivo": "organizacion_id,dispositivo_id",
         "fk_stock_movimiento__motivo": "organizacion_id,motivo_id",
+        "fk_stock_movimiento__jornada": "organizacion_id,jornada_id",
     }
 
 
@@ -481,7 +483,20 @@ def test_un_movimiento_valido_entra_con_todos_sus_datos(db_session: Session) -> 
     entorno = _armar(db_session)
     motivo_id = crear_motivo_sql(db_session, entorno["organizacion_id"])  # type: ignore[arg-type]
 
-    _insertar(db_session, entorno, motivo_id=motivo_id, jornada_id=uuid4())
+    jornada_id = crear_jornada_sql(
+        db_session,
+        entorno["organizacion_id"],  # type: ignore[arg-type]
+        usuario_id=entorno["usuario_id"],  # type: ignore[arg-type]
+        dispositivo_id=entorno["dispositivo_id"],  # type: ignore[arg-type]
+        ubicacion_id=crear_ubicacion_sql(
+            db_session,
+            entorno["organizacion_id"],  # type: ignore[arg-type]
+            tipo="VEHICULO",
+            requiere_toma=True,
+        ),
+    )
+
+    _insertar(db_session, entorno, motivo_id=motivo_id, jornada_id=jornada_id)
 
     fila = db_session.execute(
         text(
@@ -494,7 +509,7 @@ def test_un_movimiento_valido_entra_con_todos_sus_datos(db_session: Session) -> 
     assert fila.tipo == "STOCK_INICIAL"
     assert fila.costo_unitario == Decimal("1000.000000")
     assert fila.motivo_id == motivo_id
-    assert fila.jornada_id is not None  # sin FK hasta el 15 (D12)
+    assert fila.jornada_id == jornada_id  # FK compuesta desde el 15 (D11)
 
 
 def test_la_cantidad_cero_se_rechaza(db_session: Session) -> None:

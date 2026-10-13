@@ -202,7 +202,7 @@ El catálogo de `permiso` se sincroniza por migración con `01` §19. Permisos p
 | `medio_pago` | `id`, `organizacion_id`, `nombre`, `requiere_referencia` `boolean`, `activo` |
 | `motivo` | `id`, `organizacion_id`, `ambito` (`AJUSTE_STOCK`, `ANULACION_VENTA`, `ANULACION_COMPRA`, `ANULACION_COBRANZA`, `ANULACION_PAGO`, `ANULACION_TRANSFERENCIA`, `ANULACION_AJUSTE`, `DESCUENTO_MANUAL`, `LISTA_ANTERIOR`, `LIBERACION_JORNADA`), `nombre`, `activo` |
 
-Las organizaciones nuevas nacen con tres motivos del ámbito `ANULACION_COMPRA` ("Error de carga", "Devolución al proveedor" y "Otro") y tres del ámbito `ANULACION_PAGO` ("Error de carga", "Pago rechazado o devuelto" y "Otro"); la migración del change 11 agrega los primeros y la del change 12 (`d1e2f3a4b5c6`) los segundos, de forma idempotente, a las organizaciones existentes que no tengan ninguno de ese ámbito. Los medios de pago y los motivos activos se leen por API (`GET /configuracion/medios-pago` y `GET /configuracion/motivos?ambito=`) (ADR-043). Las organizaciones nuevas nacen también con dos motivos del ámbito `ANULACION_TRANSFERENCIA` ("Error de carga" y "Otro") y dos del ámbito `ANULACION_AJUSTE` ("Error de carga" y "Otro"); la migración del change 14 (`f3a4b5c6d7e8`) los agrega, de forma idempotente, a las organizaciones existentes que no tengan ninguno de ese ámbito (ADR-048). El catálogo de `permiso` (§4, `rol_permiso`) suma `ANULAR_TRANSFERENCIA`, que la misma migración asigna a las plantillas Administrador y Administración.
+Las organizaciones nuevas nacen con tres motivos del ámbito `ANULACION_COMPRA` ("Error de carga", "Devolución al proveedor" y "Otro") y tres del ámbito `ANULACION_PAGO` ("Error de carga", "Pago rechazado o devuelto" y "Otro"); la migración del change 11 agrega los primeros y la del change 12 (`d1e2f3a4b5c6`) los segundos, de forma idempotente, a las organizaciones existentes que no tengan ninguno de ese ámbito. Los medios de pago y los motivos activos se leen por API (`GET /configuracion/medios-pago` y `GET /configuracion/motivos?ambito=`) (ADR-043). Las organizaciones nuevas nacen también con dos motivos del ámbito `ANULACION_TRANSFERENCIA` ("Error de carga" y "Otro") y dos del ámbito `ANULACION_AJUSTE` ("Error de carga" y "Otro"); la migración del change 14 (`f3a4b5c6d7e8`) los agrega, de forma idempotente, a las organizaciones existentes que no tengan ninguno de ese ámbito (ADR-048). El catálogo de `permiso` (§4, `rol_permiso`) suma `ANULAR_TRANSFERENCIA`, que la misma migración asigna a las plantillas Administrador y Administración. Las organizaciones nuevas nacen también con tres motivos del ámbito `LIBERACION_JORNADA` ("Dispositivo perdido o averiado", "Vendedor ausente" y "Otro"); la migración del change 15 (`a4b5c6d7e8f9`) los agrega, de forma idempotente, a las organizaciones existentes que no tengan ninguno de ese ámbito (ADR-049).
 
 ## 5. Catálogo
 
@@ -360,7 +360,7 @@ Libro de stock, de solo inserción (INV-12).
 | `tipo` | `text` | STK-03 |
 | `origen_tipo`, `origen_id` | `text`, `uuid` | Documento que lo generó |
 | `costo_unitario` | `numeric(18,6)` | Congelado en ventas y ajustes |
-| `jornada_id`, `motivo_id` | `uuid` | Opcionales. `motivo_id` con FK compuesta a `motivo`; **`jornada_id` sin FK** hasta que exista `jornada` (change 15, mismo trato que `comando.jornada_id`) |
+| `jornada_id`, `motivo_id` | `uuid` | Opcionales. `motivo_id` con FK compuesta a `motivo`; `jornada_id` con FK compuesta `(organizacion_id, jornada_id)` a `jornada` (change 15, ADR-049). Lo fija la puerta del libro, nunca el sobre: la jornada de la ubicación tomada si el movimiento es de la jornada, y nulo si la ubicación estaba libre o se movió por excepción |
 | `operation_id`, `usuario_id`, `dispositivo_id`, `occurred_at`, `registered_at` | | Columnas de operación (§2.3), todas `NOT NULL`; `dispositivo_id` con FK compuesta a `dispositivo` y `usuario_id` a `usuario` |
 
 `UNIQUE (organizacion_id, id)`; FK compuestas a `producto` y `ubicacion`; `CHECK` de catálogo en `tipo` (los nueve tipos de la etapa 1 de STK-03). El usuario de aplicación solo tiene `SELECT` e `INSERT` (INV-05).
@@ -384,16 +384,29 @@ El origen es genérico (`origen_tipo` + `origen_id`) y no una clave foránea por
 
 | Columna | Tipo | Notas |
 | --- | --- | --- |
-| `id`, `organizacion_id` | `uuid` | |
-| `usuario_id`, `dispositivo_id`, `ubicacion_id` | `uuid` | RUT-01 |
-| `estado` | `text` | `ABIERTA`, `EN_RENDICION`, `CERRADA`, `LIBERADA` |
-| `abierta_en`, `rendida_en`, `cerrada_en`, `liberada_en` | `timestamptz` | |
-| `liberada_por_id`, `motivo_liberacion_id` | `uuid` | RUT-09 |
+| `id`, `organizacion_id` | `uuid` | `UNIQUE (organizacion_id, id)` |
+| `usuario_id`, `dispositivo_id`, `ubicacion_id` | `uuid` | RUT-01. FK compuestas a `usuario`, `dispositivo` y `ubicacion` |
+| `estado` | `text` | `ABIERTA`, `EN_RENDICION`, `CERRADA`, `LIBERADA`; `CHECK` de catálogo |
+| `operation_id`, `occurred_at`, `registered_at`, `creado_en` | | Columnas de operación (§2.3) de la apertura, todas `NOT NULL` |
+| `abierta_en`, `rendida_en`, `cerrada_en`, `liberada_en` | `timestamptz` | `abierta_en` `NOT NULL`; los demás, nulos hasta que ocurre la transición |
+| `rendida_por_id`, `cerrada_por_id`, `liberada_por_id` | `uuid` | Quién rindió, cerró y liberó; FK compuestas a `usuario`; nulos si y solo si su momento es nulo |
+| `motivo_liberacion_id` | `uuid` | RUT-09. FK compuesta a `motivo` (ámbito `LIBERACION_JORNADA`); no nulo si y solo si `liberada_en` no es nulo |
+| `observacion_liberacion` | `text` | Opcional, de 1 a 500 caracteres; solo en una `LIBERADA` |
+
+`CHECK` de coherencia por estado: `CERRADA` tiene cierre y rendición; `LIBERADA` tiene liberación y motivo y no cierre; `EN_RENDICION` tiene rendición; `ABIERTA` no tiene rendición. El usuario de aplicación tiene `SELECT` e `INSERT`, y `UPDATE` **solo** de `estado` y de las columnas de transición (nunca de `ubicacion_id`, `usuario_id`, `dispositivo_id` ni `abierta_en`); no tiene `DELETE` (INV-05, TR-06). No hay tabla de toma: la toma es la fila en `ABIERTA` o `EN_RENDICION` más sus índices.
 
 ```sql
 CREATE UNIQUE INDEX ux_jornada__ubicacion_abierta
     ON jornada (organizacion_id, ubicacion_id)
     WHERE estado IN ('ABIERTA', 'EN_RENDICION');   -- INV-16
+CREATE UNIQUE INDEX ux_jornada__usuario_abierta
+    ON jornada (organizacion_id, usuario_id)
+    WHERE estado IN ('ABIERTA', 'EN_RENDICION');
+CREATE UNIQUE INDEX ux_jornada__dispositivo_abierta
+    ON jornada (organizacion_id, dispositivo_id)
+    WHERE estado IN ('ABIERTA', 'EN_RENDICION');
+CREATE INDEX ix_jornada__abierta_en
+    ON jornada (organizacion_id, abierta_en DESC, id DESC);   -- listado
 ```
 
 ### `rendicion` y `rendicion_linea`
@@ -544,7 +557,7 @@ Libro único para clientes y proveedores, de solo inserción (CC-01).
 | `operation_id` | `uuid` | `UNIQUE (organizacion_id, operation_id)` (INV-06) |
 | `tipo`, `version` | `text`, `integer` | |
 | `modo` | `text` | `ONLINE`, `OFFLINE` |
-| `usuario_id`, `dispositivo_id`, `jornada_id` | `uuid` | |
+| `usuario_id`, `dispositivo_id`, `jornada_id` | `uuid` | `jornada_id` opcional, con FK compuesta `(organizacion_id, jornada_id)` a `jornada` (change 15, ADR-049); el bus comprueba antes de reservar que la jornada existe (`02` §6.3, paso 1b) |
 | `secuencia` | `integer` | Orden en la cola del dispositivo |
 | `huella` | `text` | SHA-256 del contenido canónico |
 | `app_version` | `text` | |
@@ -613,10 +626,10 @@ El débito de IVA en modalidad CLIENTE es un `cuenta_movimiento` de tipo `IVA_FA
 | INV-02 | `organizacion_id` obligatorio y claves foráneas compuestas |
 | INV-03 | Tipos `numeric`; prueba que recorre el catálogo de columnas |
 | INV-04 | `integer` en cantidades base |
-| INV-05 | Permisos del usuario de aplicación sobre tablas de libro y sobre las líneas y cabeceras de transferencias y ajustes (`UPDATE` acotado por columna en las cabeceras) |
+| INV-05 | Permisos del usuario de aplicación sobre tablas de libro y sobre las líneas y cabeceras de transferencias y ajustes (`UPDATE` acotado por columna en las cabeceras) y de jornadas (`UPDATE` acotado por columna) |
 | INV-06 | `UNIQUE (organizacion_id, operation_id)` en `comando` |
 | INV-09 | `CHECK` en `venta.importe_facturado` |
-| INV-16 | Índice único parcial en `jornada` |
+| INV-16 | Índices únicos parciales en `jornada` (por ubicación, por usuario y por dispositivo, sobre `ABIERTA` y `EN_RENDICION`) |
 | INV-18 | Columnas congeladas en `venta_linea` más validación de servicio |
 | VTA-06 | `UNIQUE (organizacion_id, numero)` en `venta` |
 | CAT-03 | Índice único parcial en `presentacion` |

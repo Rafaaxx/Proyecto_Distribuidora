@@ -20,9 +20,67 @@ from sqlalchemy.orm import Session
 from app.modules.catalogo import service as catalogo_service
 from app.modules.configuracion import service as configuracion_service
 from app.modules.identidad import service as identidad_service
-from app.modules.stock import repository
+from app.modules.stock import jornadas_repository, repository
 from app.modules.stock.domain.errores import RecursoNoEncontradoError
 from app.modules.stock.domain.kardex import limite_efectivo, rango_de_instantes
+from app.modules.stock.models import Jornada
+
+
+@dataclass(frozen=True)
+class TomaDeUbicacion:
+    """Quién tiene tomada una ubicación y desde cuándo (INV-16): su jornada `ABIERTA` o
+    `EN_RENDICION`."""
+
+    jornada_id: UUID
+    usuario_id: UUID
+    usuario_nombre: str | None
+    abierta_en: datetime
+    estado: str
+
+
+@dataclass(frozen=True)
+class JornadaDelListado:
+    id: UUID
+    ubicacion_id: UUID
+    ubicacion_nombre: str
+    usuario_id: UUID
+    usuario_nombre: str | None
+    dispositivo_id: UUID
+    estado: str
+    abierta_en: datetime
+
+
+@dataclass(frozen=True)
+class PaginaDeJornadas:
+    jornadas: list[JornadaDelListado]
+    cursor_siguiente: str | None
+
+
+@dataclass(frozen=True)
+class DetalleDeJornada:
+    """Los datos de apertura, rendición, cierre y liberación de una jornada con los nombres de
+    quienes intervinieron y del motivo (RUT-09)."""
+
+    id: UUID
+    ubicacion_id: UUID
+    ubicacion_nombre: str
+    usuario_id: UUID
+    usuario_nombre: str | None
+    dispositivo_id: UUID
+    estado: str
+    abierta_en: datetime
+    rendida_en: datetime | None
+    rendida_por_id: UUID | None
+    rendida_por_nombre: str | None
+    cerrada_en: datetime | None
+    cerrada_por_id: UUID | None
+    cerrada_por_nombre: str | None
+    liberada_en: datetime | None
+    liberada_por_id: UUID | None
+    liberada_por_nombre: str | None
+    motivo_liberacion_id: UUID | None
+    motivo_liberacion_nombre: str | None
+    observacion_liberacion: str | None
 
 
 @dataclass(frozen=True)
@@ -143,6 +201,30 @@ def _nombres_de_usuarios(
     organizacion_id: UUID, sesion: Session, usuarios: set[UUID]
 ) -> dict[UUID, str]:
     return identidad_service.obtener_nombres_de_usuarios(organizacion_id, usuarios, sesion)
+
+
+def tomas_de_ubicaciones(
+    organizacion_id: UUID, sesion: Session, ubicaciones: set[UUID] | list[UUID]
+) -> dict[UUID, TomaDeUbicacion]:
+    """La toma de cada ubicación pedida que la tiene (las libres no aparecen), de la
+    organización del token (INV-21). Dos lecturas por llamada, sin importar cuántas ubicaciones
+    se pidan: las jornadas no cerradas y los nombres de sus usuarios."""
+    jornadas = jornadas_repository.jornadas_no_cerradas(
+        organizacion_id, sesion, ubicaciones=ubicaciones
+    )
+    nombres = _nombres_de_usuarios(
+        organizacion_id, sesion, {jornada.usuario_id for jornada in jornadas.values()}
+    )
+    return {
+        ubicacion_id: TomaDeUbicacion(
+            jornada_id=jornada.id,
+            usuario_id=jornada.usuario_id,
+            usuario_nombre=nombres.get(jornada.usuario_id),
+            abierta_en=jornada.abierta_en,
+            estado=jornada.estado,
+        )
+        for ubicacion_id, jornada in jornadas.items()
+    }
 
 
 def _nombres_de_motivos(
@@ -397,3 +479,132 @@ def obtener_detalle_de_ajuste(
         ),
         anulacion=anulacion,
     )
+
+
+# --- jornadas (change 15, tarea 10.1, `design.md` D15) ------------------------------------------
+
+
+def listar_jornadas(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    ubicacion_id: UUID | None = None,
+    usuario_id: UUID | None = None,
+    estado: str | None = None,
+    desde: date | None = None,
+    hasta: date | None = None,
+    cursor: str | None = None,
+    limite: int | None = None,
+) -> PaginaDeJornadas:
+    """Jornadas de la organización, las más recientes primero. `desde` y `hasta` son fechas de
+    negocio en la zona de la organización (TR-04): `desde` posterior a `hasta` es
+    `RANGO_DE_FECHAS_INVALIDO`; un cursor ilegible, `CURSOR_INVALIDO`. Los nombres de usuario
+    se resuelven en una sola lectura por página."""
+    inicio, fin = _rango(organizacion_id, sesion, desde, hasta)
+    filas, cursor_siguiente = jornadas_repository.listar_jornadas(
+        organizacion_id,
+        sesion,
+        ubicacion_id=ubicacion_id,
+        usuario_id=usuario_id,
+        estado=estado,
+        desde=inicio,
+        hasta=fin,
+        cursor=cursor,
+        limite=limite_efectivo(limite),
+    )
+    usuarios = _nombres_de_usuarios(
+        organizacion_id, sesion, {jornada.usuario_id for jornada, _ in filas}
+    )
+    return PaginaDeJornadas(
+        jornadas=[
+            JornadaDelListado(
+                id=jornada.id,
+                ubicacion_id=jornada.ubicacion_id,
+                ubicacion_nombre=nombre_ubicacion,
+                usuario_id=jornada.usuario_id,
+                usuario_nombre=usuarios.get(jornada.usuario_id),
+                dispositivo_id=jornada.dispositivo_id,
+                estado=jornada.estado,
+                abierta_en=jornada.abierta_en,
+            )
+            for jornada, nombre_ubicacion in filas
+        ],
+        cursor_siguiente=cursor_siguiente,
+    )
+
+
+def _detalle_de(
+    organizacion_id: UUID, sesion: Session, jornada: Jornada, nombre_ubicacion: str
+) -> DetalleDeJornada:
+    protagonistas = {
+        usuario
+        for usuario in (
+            jornada.usuario_id,
+            jornada.rendida_por_id,
+            jornada.cerrada_por_id,
+            jornada.liberada_por_id,
+        )
+        if usuario is not None
+    }
+    nombres = _nombres_de_usuarios(organizacion_id, sesion, protagonistas)
+    motivos = (
+        {}
+        if jornada.motivo_liberacion_id is None
+        else _nombres_de_motivos(organizacion_id, sesion, {jornada.motivo_liberacion_id})
+    )
+
+    def _nombre(usuario_id: UUID | None) -> str | None:
+        return None if usuario_id is None else nombres.get(usuario_id)
+
+    return DetalleDeJornada(
+        id=jornada.id,
+        ubicacion_id=jornada.ubicacion_id,
+        ubicacion_nombre=nombre_ubicacion,
+        usuario_id=jornada.usuario_id,
+        usuario_nombre=_nombre(jornada.usuario_id),
+        dispositivo_id=jornada.dispositivo_id,
+        estado=jornada.estado,
+        abierta_en=jornada.abierta_en,
+        rendida_en=jornada.rendida_en,
+        rendida_por_id=jornada.rendida_por_id,
+        rendida_por_nombre=_nombre(jornada.rendida_por_id),
+        cerrada_en=jornada.cerrada_en,
+        cerrada_por_id=jornada.cerrada_por_id,
+        cerrada_por_nombre=_nombre(jornada.cerrada_por_id),
+        liberada_en=jornada.liberada_en,
+        liberada_por_id=jornada.liberada_por_id,
+        liberada_por_nombre=_nombre(jornada.liberada_por_id),
+        motivo_liberacion_id=jornada.motivo_liberacion_id,
+        motivo_liberacion_nombre=(
+            None
+            if jornada.motivo_liberacion_id is None
+            else motivos.get(jornada.motivo_liberacion_id)
+        ),
+        observacion_liberacion=jornada.observacion_liberacion,
+    )
+
+
+def obtener_detalle_de_jornada(
+    organizacion_id: UUID, sesion: Session, *, jornada_id: UUID
+) -> DetalleDeJornada:
+    """El detalle de una jornada de la organización; una ajena o inexistente es
+    `RecursoNoEncontradoError` (404, INV-21)."""
+    fila = jornadas_repository.obtener_jornada(organizacion_id, sesion, jornada_id=jornada_id)
+    if fila is None:
+        raise RecursoNoEncontradoError(f"La jornada {jornada_id} no existe en esta organización.")
+    return _detalle_de(organizacion_id, sesion, *fila)
+
+
+def obtener_jornada_actual(
+    organizacion_id: UUID, sesion: Session, *, usuario_id: UUID, dispositivo_id: UUID
+) -> DetalleDeJornada:
+    """La jornada `ABIERTA` o `EN_RENDICION` del usuario y del dispositivo del token (RUT-01,
+    ADR-005); 404 si no tiene."""
+    fila = jornadas_repository.jornada_no_cerrada_de(
+        organizacion_id, sesion, usuario_id=usuario_id, dispositivo_id=dispositivo_id
+    )
+    if fila is None:
+        raise RecursoNoEncontradoError(
+            "El usuario no tiene una jornada no cerrada en este dispositivo."
+        )
+    return _detalle_de(organizacion_id, sesion, *fila)

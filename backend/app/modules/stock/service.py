@@ -24,7 +24,7 @@ producto se valida por FK compuesta (404) y su estado por `catalogo/service.py`.
 
 from __future__ import annotations
 
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from decimal import Decimal
@@ -39,7 +39,7 @@ from app.modules.catalogo import service as catalogo_service
 from app.modules.configuracion import service as configuracion_service
 from app.modules.costeo import service as costeo_service
 from app.modules.identidad import service as identidad_service
-from app.modules.stock import repository
+from app.modules.stock import jornadas_casos, jornadas_repository, repository
 from app.modules.stock.domain.anulaciones import (
     AMBITO_ANULACION_AJUSTE,
     AMBITO_ANULACION_TRANSFERENCIA,
@@ -57,6 +57,12 @@ from app.modules.stock.domain.errores import (
     ProductoSinCostoError,
     RecursoNoEncontradoError,
     StockInsuficienteError,
+    UbicacionTomadaError,
+)
+from app.modules.stock.domain.jornadas import (
+    DecisionDeToma,
+    JornadaDeUbicacion,
+    decidir_toma,
 )
 from app.modules.stock.domain.kardex import (
     DiferenciaDeStock,
@@ -104,6 +110,7 @@ from app.modules.stock.domain.ubicaciones import (
 from app.modules.stock.models import (
     AjusteStock,
     AjusteStockLinea,
+    Jornada,
     StockMovimiento,
     Transferencia,
     TransferenciaLinea,
@@ -126,11 +133,16 @@ __all__ = [
     "PaginaDeUbicaciones",
     "ResultadoDeMovimiento",
     "StockDeUbicacion",
+    "abrir_jornada",
+    "cerrar_jornada",
     "ajustar",
     "anular_ajuste",
     "anular_transferencia",
     "buscar_ubicaciones_por_nombre",
     "crear_ubicacion",
+    "existe_jornada",
+    "liberar_jornada",
+    "rendir_jornada",
     "kardex",
     "lineas_de_ajuste",
     "listar_ubicaciones",
@@ -141,6 +153,7 @@ __all__ = [
     "registrar_movimientos",
     "registrar_stock_inicial",
     "stock_por_ubicacion",
+    "tiene_jornada_no_cerrada",
     "transferir",
     "verificar_consistencia",
 ]
@@ -158,6 +171,11 @@ class ResultadoDeMovimiento:
     promedio_recalculado: bool | None = None
     """Solo en un egreso `ANULACION_COMPRA`: si `costeo` recalculó el promedio (CMP-06);
     `None` en cualquier otro movimiento."""
+    jornada_tomada_id: UUID | None = None
+    """STK-09, change 15: la jornada que tenía tomada la ubicación cuando la línea pasó por la
+    excepción de `LIBERAR_UBICACION` (el movimiento queda sin `jornada_id`); `None` si la
+    ubicación estaba libre o el movimiento es de su propia jornada. Quien llama lo usa para la
+    constancia en la auditoría (D8)."""
 
 
 @dataclass(frozen=True)
@@ -284,13 +302,30 @@ def modificar_ubicacion(
     `FOR UPDATE` primero (ningún movimiento se registra sobre ella mientras se
     decide) y, si se desactiva, se comprueba con las filas de saldo leídas `FOR
     SHARE` que ninguna sea distinta de cero (`UBICACION_CON_STOCK`). Una
-    ubicación ajena o inexistente es `RecursoNoEncontradoError` (INV-21)."""
+    ubicación ajena o inexistente es `RecursoNoEncontradoError` (INV-21).
+
+    Change 15 (D14, D9): mientras la ubicación tiene una jornada `ABIERTA` o `EN_RENDICION`
+    (leída `FOR SHARE` después de la ubicación) no se puede cambiar `activo`, `tipo` ni
+    `requiere_toma`: `UBICACION_TOMADA`. El nombre sí."""
     datos = validar_ubicacion(nombre=nombre, tipo=tipo, requiere_toma=requiere_toma)
     ubicacion = repository.obtener_ubicacion(
         organizacion_id, sesion, ubicacion_id=ubicacion_id, para_actualizar=True
     )
     if ubicacion is None:
         raise RecursoNoEncontradoError("La ubicación no existe en esta organización.")
+
+    cambia_lo_que_la_toma_protege = (
+        activo != ubicacion.activo
+        or datos.tipo != ubicacion.tipo
+        or datos.requiere_toma != ubicacion.requiere_toma
+    )
+    if cambia_lo_que_la_toma_protege and jornadas_repository.bloquear_jornadas_no_cerradas(
+        organizacion_id, sesion, ubicaciones=[ubicacion_id]
+    ):
+        raise UbicacionTomadaError(
+            "La ubicación está tomada por una jornada: no se puede desactivar ni cambiar su "
+            "tipo ni su indicador de toma."
+        )
 
     if ubicacion.activo and not activo:
         validar_desactivacion(
@@ -328,7 +363,11 @@ def _preparar(
     sesion: Session,
     reloj: Clock,
     lineas: Sequence[LineaDeMovimiento],
-) -> list[LineaDeMovimiento]:
+    *,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+    puede_operar_ubicacion_tomada: bool = False,
+) -> tuple[list[LineaDeMovimiento], dict[UUID, UUID]]:
     """Valida las líneas contra la base y toma los bloqueos en el orden global.
 
     1. Ubicaciones `FOR SHARE` (existen, D8: activas) y después productos `FOR SHARE`
@@ -338,8 +377,14 @@ def _preparar(
     2. `costo_producto` por `producto_id` ascendente (vía `costeo`).
     3. `stock_saldo` por `(producto_id, ubicacion_id)` ascendentes, creando la fila
        en cero si no existe, sin carrera (D10).
+    4. La jornada no cerrada de cada ubicación `FOR SHARE`, por `ubicacion_id` ascendente
+       (nivel 5, change 15, D9). Con ella se aplica STK-09 por ubicación (D6, D7): libre,
+       de la jornada (la línea queda con su `jornada_id`) o por excepción de
+       `puede_operar_ubicacion_tomada` (sin `jornada_id`); cualquier otro caso es
+       `UBICACION_TOMADA`. Falla cerrado: el parámetro es `False` por defecto.
 
-    Devuelve las líneas con el costo validado. NO escribe ningún movimiento."""
+    Devuelve las líneas con el costo validado y la jornada de cada ubicación que pasó por
+    excepción (`ubicacion_id -> jornada_id`). NO escribe ningún movimiento."""
     validadas = [_con_costo_validado(linea) for linea in lineas]
 
     ubicaciones = repository.bloquear_ubicaciones_compartidas(
@@ -384,7 +429,60 @@ def _preparar(
         repository.bloquear_saldo(
             organizacion_id, sesion, producto_id=producto_id, ubicacion_id=ubicacion_id
         )
-    return validadas
+    return _aplicar_regla_de_toma(
+        organizacion_id,
+        sesion,
+        validadas,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        puede_operar_ubicacion_tomada=puede_operar_ubicacion_tomada,
+    )
+
+
+def _aplicar_regla_de_toma(
+    organizacion_id: UUID,
+    sesion: Session,
+    lineas: Sequence[LineaDeMovimiento],
+    *,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+    puede_operar_ubicacion_tomada: bool,
+) -> tuple[list[LineaDeMovimiento], dict[UUID, UUID]]:
+    """STK-09 (D6, D7): decide cada ubicación de las líneas con su jornada no cerrada, leída
+    `FOR SHARE` (nivel 5). `jornada_id` de cada línea lo fija la decisión, no el sobre: la
+    jornada de la ubicación si el movimiento es de la jornada, y nada si la ubicación estaba
+    libre o se movió por excepción. Un rechazo de cualquier ubicación rechaza todo (INV-01)."""
+    ubicaciones = sorted({linea.ubicacion_id for linea in lineas})
+    jornadas = jornadas_repository.bloquear_jornadas_no_cerradas(
+        organizacion_id, sesion, ubicaciones=ubicaciones
+    )
+    excepciones: dict[UUID, UUID] = {}
+    resultado: list[LineaDeMovimiento] = []
+    for linea in lineas:
+        jornada = jornadas.get(linea.ubicacion_id)
+        try:
+            decision = decidir_toma(
+                None
+                if jornada is None
+                else JornadaDeUbicacion(
+                    id=jornada.id,
+                    usuario_id=jornada.usuario_id,
+                    dispositivo_id=jornada.dispositivo_id,
+                    estado=jornada.estado,
+                ),
+                usuario_id=usuario_id,
+                dispositivo_id=dispositivo_id,
+                puede_operar_ubicacion_tomada=puede_operar_ubicacion_tomada,
+                jornada_id_del_sobre=linea.jornada_id,
+            )
+        except UbicacionTomadaError as error:
+            error.extension = {"ubicacion_id": str(linea.ubicacion_id)}
+            raise
+        if decision is DecisionDeToma.POR_EXCEPCION and jornada is not None:
+            excepciones[linea.ubicacion_id] = jornada.id
+        de_la_jornada = jornada.id if decision is DecisionDeToma.DE_LA_JORNADA and jornada else None
+        resultado.append(replace(linea, jornada_id=de_la_jornada))
+    return resultado, excepciones
 
 
 def _costo_original(linea: LineaDeMovimiento) -> Decimal | None:
@@ -405,6 +503,7 @@ def _aplicar(
     dispositivo_id: UUID,
     operation_id: UUID,
     occurred_at: datetime,
+    jornadas_tomadas: Mapping[UUID, UUID],
     permitir_negativo: bool = False,
 ) -> list[ResultadoDeMovimiento]:
     """Aplica las líneas, en el orden recibido, con todos los bloqueos tomados por
@@ -547,6 +646,7 @@ def _aplicar(
                 saldo=saldo,
                 saldo_negativo=saldo < 0,
                 promedio_recalculado=promedio_recalculado,
+                jornada_tomada_id=jornadas_tomadas.get(linea.ubicacion_id),
             )
         )
     return resultados
@@ -563,6 +663,7 @@ def registrar_movimientos(
     operation_id: UUID,
     occurred_at: datetime,
     permitir_negativo: bool = False,
+    puede_operar_ubicacion_tomada: bool = False,
 ) -> list[ResultadoDeMovimiento]:
     """Registra movimientos de stock con todas las filas bloqueadas en el orden
     global (`02` §7.3), todo en la transacción de quien llama (INV-01, INV-12).
@@ -584,9 +685,24 @@ def registrar_movimientos(
     revierte y delega en `costeo.revertir_ingreso` (CMP-06, D9); admite un producto
     inactivo (CAT-05, D11) y, con `permitir_negativo` (el permiso
     `PERMITIR_STOCK_NEGATIVO`, CMP-07), puede dejar el saldo negativo, que el
-    resultado marca (D10). `permitir_negativo` no alcanza a otros tipos."""
+    resultado marca (D10). `permitir_negativo` no alcanza a otros tipos.
+
+    Change 15, STK-09 (D6, D7): una ubicación con jornada `ABIERTA` o `EN_RENDICION` solo
+    la mueve la jornada (usuario y dispositivo de la jornada `ABIERTA`; la línea queda con
+    su `jornada_id`) o, con `puede_operar_ubicacion_tomada` (el permiso `LIBERAR_UBICACION`
+    de quien llama), por excepción: sin `jornada_id` y con la jornada en
+    `ResultadoDeMovimiento.jornada_tomada_id`. Se decide por ubicación y falla cerrado
+    (`UBICACION_TOMADA`, 409) sin escribir nada."""
     validadas = validar_lineas_de_movimiento(lineas)
-    preparadas = _preparar(organizacion_id, sesion, reloj, validadas)
+    preparadas, jornadas_tomadas = _preparar(
+        organizacion_id,
+        sesion,
+        reloj,
+        validadas,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        puede_operar_ubicacion_tomada=puede_operar_ubicacion_tomada,
+    )
     return _aplicar(
         organizacion_id,
         sesion,
@@ -596,6 +712,7 @@ def registrar_movimientos(
         dispositivo_id=dispositivo_id,
         operation_id=operation_id,
         occurred_at=occurred_at,
+        jornadas_tomadas=jornadas_tomadas,
         permitir_negativo=permitir_negativo,
     )
 
@@ -611,6 +728,7 @@ def registrar_stock_inicial(
     dispositivo_id: UUID,
     operation_id: UUID,
     occurred_at: datetime,
+    puede_operar_ubicacion_tomada: bool = False,
 ) -> list[ResultadoDeMovimiento]:
     """`STOCK_INICIAL_REGISTRAR` (D4, D5, D6, D8).
 
@@ -637,7 +755,15 @@ def registrar_stock_inicial(
         )
         for linea in validadas
     ]
-    preparadas = _preparar(organizacion_id, sesion, reloj, movimientos)
+    preparadas, jornadas_tomadas = _preparar(
+        organizacion_id,
+        sesion,
+        reloj,
+        movimientos,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        puede_operar_ubicacion_tomada=puede_operar_ubicacion_tomada,
+    )
 
     for linea in preparadas:
         validar_stock_inicial_admitido(
@@ -657,6 +783,7 @@ def registrar_stock_inicial(
         dispositivo_id=dispositivo_id,
         operation_id=operation_id,
         occurred_at=occurred_at,
+        jornadas_tomadas=jornadas_tomadas,
     )
 
 
@@ -697,6 +824,9 @@ class ResultadoDeTransferencia:
     lineas: list[TransferenciaLinea]
     saldos: list[SaldoDeLinea]
     negativos: list[SaldoNegativo]
+    jornadas_tomadas: tuple[UUID, ...] = ()
+    """STK-09: las jornadas de las ubicaciones tomadas que se movieron por la excepción de
+    `LIBERAR_UBICACION`; para la constancia de auditoría (change 15, D8)."""
 
 
 def _indicar_la_linea(error: DomainError, lineas: Sequence[LineaDeOperacion]) -> None:
@@ -724,6 +854,7 @@ def transferir(
     operation_id: UUID,
     occurred_at: datetime,
     permitir_negativo: bool = False,
+    puede_operar_ubicacion_tomada: bool = False,
 ) -> ResultadoDeTransferencia:
     """`STOCK_TRANSFERIR` (STK-07, `design.md` D1, D6, D9): valida el contenido, llama UNA
     sola vez a `registrar_movimientos` con `[salida_1, entrada_1, salida_2, ...]` (los
@@ -753,6 +884,7 @@ def transferir(
             operation_id=operation_id,
             occurred_at=occurred_at,
             permitir_negativo=permitir_negativo,
+            puede_operar_ubicacion_tomada=puede_operar_ubicacion_tomada,
         )
     except DomainError as error:
         _indicar_la_linea(error, validada.lineas)
@@ -804,7 +936,11 @@ def transferir(
         if resultado.saldo_negativo
     ]
     return ResultadoDeTransferencia(
-        transferencia=transferencia, lineas=lineas_insertadas, saldos=saldos, negativos=negativos
+        transferencia=transferencia,
+        lineas=lineas_insertadas,
+        saldos=saldos,
+        negativos=negativos,
+        jornadas_tomadas=jornadas_tomadas_de(resultados),
     )
 
 
@@ -836,6 +972,8 @@ class ResultadoDeAjuste:
     negativos: list[SaldoNegativo] = field(default_factory=list)
     """Solo en la anulación de un ajuste con permiso (D5 punto 6): un ajuste nuevo nunca
     deja un saldo negativo (D1 = B)."""
+    jornadas_tomadas: tuple[UUID, ...] = ()
+    """STK-09: ver `ResultadoDeTransferencia.jornadas_tomadas`."""
 
 
 def ajustar(
@@ -851,6 +989,7 @@ def ajustar(
     dispositivo_id: UUID,
     operation_id: UUID,
     occurred_at: datetime,
+    puede_operar_ubicacion_tomada: bool = False,
 ) -> ResultadoDeAjuste:
     """`STOCK_AJUSTAR` (STK-08, `design.md` D1, D3, D6, D9): valida el contenido y el motivo
     (`configuracion`: activo y del ámbito `AJUSTE_STOCK`, si no `MOTIVO_INVALIDO`; ajeno o
@@ -885,6 +1024,7 @@ def ajustar(
             dispositivo_id=dispositivo_id,
             operation_id=operation_id,
             occurred_at=occurred_at,
+            puede_operar_ubicacion_tomada=puede_operar_ubicacion_tomada,
         )
     except DomainError as error:
         _indicar_la_linea(error, validado.lineas)
@@ -926,7 +1066,12 @@ def ajustar(
         )
         for linea, resultado in pares
     ]
-    return ResultadoDeAjuste(ajuste=ajuste, lineas=lineas_insertadas, saldos=saldos)
+    return ResultadoDeAjuste(
+        ajuste=ajuste,
+        lineas=lineas_insertadas,
+        saldos=saldos,
+        jornadas_tomadas=jornadas_tomadas_de(resultados),
+    )
 
 
 def lineas_de_ajuste(
@@ -949,6 +1094,13 @@ def _motivo_de_anulacion(
     if motivo is None:
         raise RecursoNoEncontradoError("El motivo no existe en esta organización.")
     validar_motivo_de_anulacion(activo=motivo.activo, ambito=motivo.ambito, ambito_esperado=ambito)
+
+
+def jornadas_tomadas_de(resultados: Sequence[ResultadoDeMovimiento]) -> tuple[UUID, ...]:
+    """Las jornadas (sin repetir) de las ubicaciones que pasaron por la excepción de toma."""
+    return tuple(
+        sorted({r.jornada_tomada_id for r in resultados if r.jornada_tomada_id is not None})
+    )
 
 
 def _negativos(resultados: Sequence[ResultadoDeMovimiento]) -> list[SaldoNegativo]:
@@ -975,6 +1127,7 @@ def anular_transferencia(
     usuario_id: UUID,
     dispositivo_id: UUID,
     occurred_at: datetime,
+    puede_operar_ubicacion_tomada: bool = False,
 ) -> ResultadoDeTransferencia:
     """`STOCK_TRANSFERENCIA_ANULAR` (TR-06, `design.md` D5, D5.1, D5.2, D5.4): anula por
     completo una transferencia `CONFIRMADA`, una sola vez.
@@ -1032,6 +1185,7 @@ def anular_transferencia(
             operation_id=operation_id,
             occurred_at=occurred_at,
             permitir_negativo=PERMISO_PERMITIR_STOCK_NEGATIVO in permisos,
+            puede_operar_ubicacion_tomada=puede_operar_ubicacion_tomada,
         )
     except DomainError as error:
         _indicar_la_linea(error, lineas)
@@ -1062,6 +1216,7 @@ def anular_transferencia(
         ),
         saldos=saldos,
         negativos=_negativos(resultados),
+        jornadas_tomadas=jornadas_tomadas_de(resultados),
     )
 
 
@@ -1077,6 +1232,7 @@ def anular_ajuste(
     usuario_id: UUID,
     dispositivo_id: UUID,
     occurred_at: datetime,
+    puede_operar_ubicacion_tomada: bool = False,
 ) -> ResultadoDeAjuste:
     """`STOCK_AJUSTE_ANULAR` (TR-06, `design.md` D5, D5.1, D5.2): anula por completo un ajuste
     `CONFIRMADA` (propio o ajeno), una sola vez.
@@ -1117,6 +1273,7 @@ def anular_ajuste(
             operation_id=operation_id,
             occurred_at=occurred_at,
             permitir_negativo=permitir_negativo,
+            puede_operar_ubicacion_tomada=puede_operar_ubicacion_tomada,
         )
     except DomainError as error:
         _indicar_la_linea(error, lineas)
@@ -1142,6 +1299,7 @@ def anular_ajuste(
             for linea, resultado in zip(lineas, resultados, strict=True)
         ],
         negativos=_negativos(resultados),
+        jornadas_tomadas=jornadas_tomadas_de(resultados),
     )
 
 
@@ -1345,3 +1503,115 @@ def verificar_consistencia(organizacion_id: UUID, sesion: Session) -> list[Difer
         )
     )
     return diferencias
+
+
+# --- jornadas (change 15, `design.md` D1) --------------------------------------------------
+# La lógica vive en `jornadas_casos.py`; esta puerta solo delega.
+
+
+def abrir_jornada(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    ubicacion_id: UUID,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+    operation_id: UUID,
+    occurred_at: datetime,
+) -> Jornada:
+    """Abre una jornada `ABIERTA` del usuario y del dispositivo sobre una ubicación activa que
+    requiere toma, y la deja tomada (RUT-01, RUT-03, INV-16). Ver
+    `jornadas_casos.abrir_jornada`."""
+    return jornadas_casos.abrir_jornada(
+        organizacion_id,
+        sesion,
+        reloj,
+        ubicacion_id=ubicacion_id,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        operation_id=operation_id,
+        occurred_at=occurred_at,
+    )
+
+
+def existe_jornada(organizacion_id: UUID, sesion: Session, jornada_id: UUID) -> bool:
+    """Si la jornada existe en la organización, sin mirar su dueño ni su estado. La usa el bus
+    para rechazar un sobre con una `jornada_id` inexistente antes de reservar (`design.md`
+    D12). Ver `jornadas_casos.existe_jornada`."""
+    return jornadas_casos.existe_jornada(organizacion_id, sesion, jornada_id)
+
+
+def tiene_jornada_no_cerrada(
+    organizacion_id: UUID, usuario_id: UUID, dispositivo_id: UUID, sesion: Session
+) -> bool:
+    """Si el usuario tiene una jornada `ABIERTA` o `EN_RENDICION` en ese dispositivo. La consulta
+    que `identidad` usa en la renovación de sesión de un usuario inactivo (D19, ADR-028
+    D9.3-B), por el puerto que se registra al pie de este archivo."""
+    return jornadas_casos.tiene_jornada_no_cerrada(
+        organizacion_id, sesion, usuario_id=usuario_id, dispositivo_id=dispositivo_id
+    )
+
+
+def rendir_jornada(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    jornada_id: UUID,
+    usuario_id: UUID,
+    occurred_at: datetime,
+) -> Jornada:
+    """Pasa una jornada `ABIERTA` a `EN_RENDICION` (sin conteo hasta el change 24). Ver
+    `jornadas_casos.rendir_jornada`."""
+    return jornadas_casos.rendir_jornada(
+        organizacion_id,
+        sesion,
+        jornada_id=jornada_id,
+        usuario_id=usuario_id,
+        occurred_at=occurred_at,
+    )
+
+
+def cerrar_jornada(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    jornada_id: UUID,
+    usuario_id: UUID,
+    occurred_at: datetime,
+) -> Jornada:
+    """Pasa una jornada `EN_RENDICION` a `CERRADA` y deja libre su ubicación (RUT-08). Ver
+    `jornadas_casos.cerrar_jornada`."""
+    return jornadas_casos.cerrar_jornada(
+        organizacion_id,
+        sesion,
+        jornada_id=jornada_id,
+        usuario_id=usuario_id,
+        occurred_at=occurred_at,
+    )
+
+
+def liberar_jornada(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    jornada_id: UUID,
+    usuario_id: UUID,
+    motivo_id: UUID,
+    observacion: str | None,
+    occurred_at: datetime,
+) -> Jornada:
+    """Libera una jornada `ABIERTA` o `EN_RENDICION` con un motivo (RUT-09); no toca el stock.
+    Ver `jornadas_casos.liberar_jornada`."""
+    return jornadas_casos.liberar_jornada(
+        organizacion_id,
+        sesion,
+        jornada_id=jornada_id,
+        usuario_id=usuario_id,
+        motivo_id=motivo_id,
+        observacion=observacion,
+        occurred_at=occurred_at,
+    )
+
+
+identidad_service.registrar_consulta_jornada_no_cerrada(tiene_jornada_no_cerrada)

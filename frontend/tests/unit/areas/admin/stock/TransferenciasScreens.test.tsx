@@ -238,6 +238,46 @@ describe('alta de transferencia (tarea 13.1; STK-07, TR-07, D7)', () => {
     expect(screen.getByLabelText('Origen')).toHaveValue(DEPOSITO)
   })
 
+  it('precarga el destino desde "Cargar vehículo" de la jornada', async () => {
+    enrutar(apiFetchMock, reglasBase())
+    renderEn(`/admin/stock/transferencias/nueva?destino=${CAMIONETA}`, 'VEN')
+
+    await screen.findByLabelText('Destino')
+    await waitFor(() => expect(screen.getByLabelText('Destino')).toHaveValue(CAMIONETA))
+    expect(screen.getByLabelText('Origen')).toHaveValue('')
+  })
+
+  it('un destino que no es una ubicación activa conocida no se precarga', async () => {
+    enrutar(apiFetchMock, reglasBase())
+    renderEn('/admin/stock/transferencias/nueva?destino=99999999-9999-4999-8999-999999999999', 'VEN')
+
+    await screen.findByLabelText('Destino')
+    expect(screen.getByLabelText('Destino')).toHaveValue('')
+  })
+
+  it('el rechazo UBICACION_TOMADA muestra el mensaje de la toma y conserva lo cargado (STK-09)', async () => {
+    enrutar(apiFetchMock, [
+      ...reglasBase(),
+      {
+        metodo: 'POST',
+        ruta: '/stock/transferencias',
+        responder: () => ({ status: 409, cuerpo: { title: 'Tomada', codigo: 'UBICACION_TOMADA' } }),
+      },
+    ])
+    const usuario = userEvent.setup()
+    renderEn('/admin/stock/transferencias/nueva', 'VEN')
+
+    await cargarFormulario(usuario)
+    await elegirProducto(usuario, VINO)
+    await usuario.type(await screen.findByLabelText('Caja x6'), '8')
+    await usuario.click(screen.getByRole('button', { name: 'Registrar transferencia' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('La ubicación está tomada por una jornada abierta.')
+    expect(screen.getByLabelText('Caja x6')).toHaveValue('8')
+    expect(screen.getByLabelText('Destino')).toHaveValue(CAMIONETA)
+    expect(screen.getByTestId('ruta')).toHaveTextContent('/admin/stock/transferencias/nueva')
+  })
+
   it('valida en el cliente: origen igual a destino no se envía', async () => {
     enrutar(apiFetchMock, reglasBase())
     const usuario = userEvent.setup()
@@ -463,6 +503,23 @@ describe('detalle y anulación de una transferencia (tarea 13.1 y 13.3; TR-06, D
     expect(await within(dialogo).findByRole('alert')).toHaveTextContent('No se puede anular: el stock actual')
     expect(screen.getByText('Confirmada')).toBeInTheDocument()
     expect(screen.queryByTestId('anulacion')).not.toBeInTheDocument()
+  })
+
+  it('anular con la ubicación tomada muestra el mensaje de la toma en el diálogo (STK-09)', async () => {
+    enrutar(
+      apiFetchMock,
+      reglasDeDetalle({ anulacion: { status: 409, cuerpo: { title: 'x', codigo: 'UBICACION_TOMADA' } } }),
+    )
+    const usuario = userEvent.setup()
+    renderEn(`/admin/stock/transferencias/${TRANSFERENCIA}`, 'VEN')
+
+    await usuario.click(await screen.findByRole('button', { name: 'Anular' }))
+    const dialogo = await screen.findByRole('dialog')
+    await usuario.selectOptions(await within(dialogo).findByLabelText('Motivo'), MOTIVO)
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Confirmar anulación' }))
+
+    expect(await within(dialogo).findByRole('alert')).toHaveTextContent('tomada por una jornada abierta')
+    expect(screen.getByText('Confirmada')).toBeInTheDocument()
   })
 
   it('el motivo es obligatorio para confirmar la anulación', async () => {

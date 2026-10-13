@@ -24,7 +24,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from stock_utiles import crear_motivo_sql, crear_ubicacion_sql
+from stock_utiles import crear_jornada_sql, crear_motivo_sql, crear_ubicacion_sql
 from test_stock_api import (  # noqa: F401  (fixtures reutilizadas)
     ADMIN,
     URL_INICIALES,
@@ -571,3 +571,96 @@ def test_inv21_filtrar_por_una_ubicacion_o_un_motivo_ajeno_no_revela_nada(
 
     assert por_ubicacion.json()["items"] == []
     assert ajustes_por_ubicacion.json()["items"] == []
+
+
+URL_JORNADAS = "/api/v1/stock/jornadas"
+
+
+def test_inv21_abrir_una_jornada_sobre_una_ubicacion_ajena_es_404_sin_rastro(
+    cliente: TestClient, sesion: Session
+) -> None:
+    """Change 15, tarea 4.3 (INV-21, SEG-07): la ubicación de otra organización responde
+    como inexistente, no toma nada y no deja jornada en ninguna de las dos organizaciones; un
+    `organizacion_id` en el cuerpo se rechaza."""
+    permisos = ADMIN | {"ABRIR_JORNADA"}
+    entorno_a = Entorno(sesion, permisos=permisos, nombre_usuario="a1")
+    entorno_b = Entorno(sesion, permisos=permisos, nombre_usuario="b1")
+    camioneta_a = crear_ubicacion_sql(
+        sesion, entorno_a.org, nombre="Camioneta A", tipo="VEHICULO", requiere_toma=True
+    )
+    headers_b = entorno_b.confirmar_y_entrar(cliente)
+
+    ajena = cliente.post(
+        URL_JORNADAS,
+        json={"ubicacion_id": str(camioneta_a)},
+        headers=_con_op(headers_b),
+    )
+    con_organizacion = cliente.post(
+        URL_JORNADAS,
+        json={"ubicacion_id": str(camioneta_a), "organizacion_id": str(entorno_a.org)},
+        headers=_con_op(headers_b),
+    )
+
+    assert ajena.status_code == 404
+    assert con_organizacion.status_code == 422
+    assert _contar(sesion, "jornada", entorno_a.org) == 0
+    assert _contar(sesion, "jornada", entorno_b.org) == 0
+
+
+@pytest.mark.parametrize("accion", ["rendicion", "cierre", "liberacion"])
+def test_inv21_rendir_cerrar_o_liberar_una_jornada_ajena_es_404_y_no_la_toca(
+    cliente: TestClient, sesion: Session, accion: str
+) -> None:
+    """Change 15, tarea 11.1 (INV-21, SEG-07): rendir, cerrar o liberar la jornada de otra
+    organización responde como inexistente y la deja como estaba; un motivo ajeno también es
+    404; `organizacion_id` en el cuerpo de la liberación se rechaza."""
+    permisos = ADMIN | {"RENDIR_JORNADA", "LIBERAR_UBICACION"}
+    entorno_a = Entorno(sesion, permisos=permisos, nombre_usuario="a1")
+    entorno_b = Entorno(sesion, permisos=permisos, nombre_usuario="b1")
+    camioneta_a = crear_ubicacion_sql(
+        sesion, entorno_a.org, nombre="Camioneta A", tipo="VEHICULO", requiere_toma=True
+    )
+    jornada_a = crear_jornada_sql(
+        sesion,
+        entorno_a.org,
+        usuario_id=entorno_a.usuario_id,
+        dispositivo_id=entorno_a.dispositivo_id,
+        ubicacion_id=camioneta_a,
+        estado="EN_RENDICION",
+    )
+    motivo_a = crear_motivo_sql(sesion, entorno_a.org, ambito="LIBERACION_JORNADA")
+    motivo_b = crear_motivo_sql(sesion, entorno_b.org, ambito="LIBERACION_JORNADA")
+    headers_b = entorno_b.confirmar_y_entrar(cliente)
+    url = f"{URL_JORNADAS}/{jornada_a}/{accion}"
+    cuerpo = {"motivo_id": str(motivo_b)} if accion == "liberacion" else None
+
+    ajena = cliente.post(url, json=cuerpo, headers=_con_op(headers_b))
+
+    assert ajena.status_code == 404
+    assert _estado(sesion, "jornada", jornada_a) == "EN_RENDICION"
+    if accion == "liberacion":
+        con_organizacion = cliente.post(
+            url,
+            json={**(cuerpo or {}), "organizacion_id": str(entorno_a.org)},
+            headers=_con_op(headers_b),
+        )
+        assert con_organizacion.status_code == 422
+        # una jornada propia con un motivo ajeno tampoco se libera
+        camioneta_b = crear_ubicacion_sql(
+            sesion, entorno_b.org, nombre="Camioneta B", tipo="VEHICULO", requiere_toma=True
+        )
+        jornada_b = crear_jornada_sql(
+            sesion,
+            entorno_b.org,
+            usuario_id=entorno_b.usuario_id,
+            dispositivo_id=entorno_b.dispositivo_id,
+            ubicacion_id=camioneta_b,
+        )
+        sesion.commit()
+        con_motivo_ajeno = cliente.post(
+            f"{URL_JORNADAS}/{jornada_b}/liberacion",
+            json={"motivo_id": str(motivo_a)},
+            headers=_con_op(headers_b),
+        )
+        assert con_motivo_ajeno.status_code == 404
+        assert _estado(sesion, "jornada", jornada_b) == "ABIERTA"

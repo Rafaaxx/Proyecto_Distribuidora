@@ -7,11 +7,13 @@ import { Boton } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { PageHeader } from '../../../components/ui/PageHeader'
 import { Tabla, type ColumnaTabla } from '../../../components/ui/Table'
+import { PERMISOS_DE_LECTURA_DE_JORNADAS } from '../../../domain/stock/jornadas'
 import { etiquetaDeTipoDeUbicacion } from '../../../domain/stock/ubicacionSchema'
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import type { Ubicacion } from '../../../features/stock/api'
 import { PermisoRequeridoStockError } from '../../../features/stock/errores'
 import { useUbicaciones } from '../../../features/stock/hooks'
+import { MarcaDeToma } from './piezasDeJornada'
 
 const SIN_PERMISO = 'No tenés permiso para ver el stock.'
 const CLASE_ENLACE = 'text-sm text-primary/70 hover:text-primary hover:underline'
@@ -60,6 +62,7 @@ function UbicacionesListado() {
     { clave: 'nombre', encabezado: 'Nombre', render: (u) => u.nombre },
     { clave: 'tipo', encabezado: 'Tipo', render: (u) => etiquetaDeTipoDeUbicacion(u.tipo) },
     { clave: 'toma', encabezado: 'Requiere toma', render: (u) => (u.requiere_toma ? 'Sí' : 'No') },
+    { clave: 'tomada', encabezado: 'Toma actual', render: (u) => <MarcaDeToma toma={u.jornada} /> },
     {
       clave: 'estado',
       encabezado: 'Estado',
@@ -104,6 +107,16 @@ function UbicacionesListado() {
             <SiTienePermiso permiso="AJUSTAR_STOCK">
               <Link to="/admin/stock/ajustes" className={CLASE_ENLACE}>
                 Ajustes
+              </Link>
+            </SiTienePermiso>
+            <SiTienePermiso permiso={PERMISOS_DE_LECTURA_DE_JORNADAS}>
+              <Link to="/admin/stock/jornadas" className={CLASE_ENLACE}>
+                Jornadas
+              </Link>
+            </SiTienePermiso>
+            <SiTienePermiso permiso="ABRIR_JORNADA">
+              <Link to="/admin/stock/jornadas/abrir" className={CLASE_ENLACE}>
+                Abrir jornada
               </Link>
             </SiTienePermiso>
             <SiTienePermiso permiso="ADMIN_CONFIGURACION">

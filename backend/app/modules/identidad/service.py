@@ -10,6 +10,7 @@ existe el bus de comandos (change 04).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -1331,13 +1332,14 @@ def renovar_sesion(
     if fila.expira_en <= momento:
         raise RefreshTokenInvalidoError("El refresh token venció.")
 
-    # ADR-028 D9.3-B (grupo 2 del change 06b): sin jornadas todavía (change
-    # 15), la excepción de D9.3-B no puede cumplirse -- se comporta igual
-    # que un corte total (D9.3-A). Verificación DESPUÉS de validar el token
-    # (reuso, revocación, vencimiento ya quedaron descartados arriba): si el
-    # usuario o su rol dejaron de estar activos, se revocan TODAS las
-    # familias de refresh del usuario (no solo la de este dispositivo,
-    # simétrico a `revocar_dispositivo`) y se audita antes de rechazar.
+    # ADR-028 D9.3-B / change 15 (D18, D19): si el usuario o su rol dejaron de estar activos,
+    # la renovación se rechaza y se revocan las familias de refresh del usuario, SALVO que ese
+    # dispositivo tenga una jornada no cerrada del usuario (`ABIERTA` o `EN_RENDICION`): ahí se
+    # renueva, rotando el token como siempre y auditando cada renovación. La revocación en
+    # bloque también respeta a los dispositivos con jornada no cerrada, para que rechazar la
+    # renovación desde otro dispositivo no cierre el canal de la cola. Verificación DESPUÉS de
+    # validar el token (reuso, revocación, vencimiento ya quedaron descartados arriba). El
+    # usuario activo no consulta el puerto; sin consulta registrada no hay excepción (D19).
     usuario_con_rol = repository.obtener_usuario_con_rol(
         fila.organizacion_id, fila.usuario_id, sesion
     )
@@ -1347,30 +1349,60 @@ def renovar_sesion(
         else _motivo_sesion_deshabilitada(*usuario_con_rol)
     )
     if motivo_sesion_deshabilitada is not None:
-        repository.revocar_sesiones_refresh_de_usuario(
-            fila.organizacion_id,
-            sesion,
-            usuario_id=fila.usuario_id,
-            momento=momento,
-            motivo=motivo_sesion_deshabilitada,
-        )
-        registrar_auditoria(
-            fila.organizacion_id,
-            sesion,
-            reloj,
-            accion="REVOCAR_SESIONES_REFRESH_USUARIO",
-            entidad="usuario",
-            entidad_id=fila.usuario_id,
-            ocurrido_en=momento,
-            usuario_id=fila.usuario_id,
-            dispositivo_id=fila.dispositivo_id,
-            observacion=(
-                f"Sesión deshabilitada ({motivo_sesion_deshabilitada}): "
-                "se revocan sus familias de refresh (ADR-028)."
-            ),
-            origen="SISTEMA",
-        )
-        raise RefreshTokenInvalidoError("El refresh token no es válido.")
+        if hay_jornada_no_cerrada(
+            fila.organizacion_id, fila.usuario_id, fila.dispositivo_id, sesion
+        ):
+            registrar_auditoria(
+                fila.organizacion_id,
+                sesion,
+                reloj,
+                accion="RENOVAR_SESION_CON_JORNADA_PENDIENTE",
+                entidad="usuario",
+                entidad_id=fila.usuario_id,
+                ocurrido_en=momento,
+                usuario_id=fila.usuario_id,
+                dispositivo_id=fila.dispositivo_id,
+                observacion=(
+                    f"Sesión deshabilitada ({motivo_sesion_deshabilitada}) renovada porque el "
+                    "dispositivo tiene una jornada no cerrada (ADR-028 D9.3-B)."
+                ),
+                origen="SISTEMA",
+            )
+        else:
+            dispositivos_con_jornada = [
+                dispositivo_id
+                for dispositivo_id in repository.dispositivos_con_sesion_vigente(
+                    fila.organizacion_id, sesion, usuario_id=fila.usuario_id
+                )
+                if hay_jornada_no_cerrada(
+                    fila.organizacion_id, fila.usuario_id, dispositivo_id, sesion
+                )
+            ]
+            repository.revocar_sesiones_refresh_de_usuario(
+                fila.organizacion_id,
+                sesion,
+                usuario_id=fila.usuario_id,
+                momento=momento,
+                motivo=motivo_sesion_deshabilitada,
+                excepto_dispositivo_ids=dispositivos_con_jornada,
+            )
+            registrar_auditoria(
+                fila.organizacion_id,
+                sesion,
+                reloj,
+                accion="REVOCAR_SESIONES_REFRESH_USUARIO",
+                entidad="usuario",
+                entidad_id=fila.usuario_id,
+                ocurrido_en=momento,
+                usuario_id=fila.usuario_id,
+                dispositivo_id=fila.dispositivo_id,
+                observacion=(
+                    f"Sesión deshabilitada ({motivo_sesion_deshabilitada}): "
+                    "se revocan sus familias de refresh (ADR-028)."
+                ),
+                origen="SISTEMA",
+            )
+            raise RefreshTokenInvalidoError("El refresh token no es válido.")
 
     fila.usado_en = momento
     sesion.flush()
@@ -1421,6 +1453,32 @@ def cerrar_sesion(sesion: Session, reloj: Clock, *, refresh_token_claro: str | N
 
 
 # --- Sesión con usuario y rol activos (grupo 2, D9, ADR-028) ---------------
+
+
+# --- D19/ADR-028 D9.3-B: puerto de consulta de jornada no cerrada ----------
+
+ConsultaJornadaNoCerrada = Callable[[UUID, UUID, UUID, Session], bool]
+"""`funcion(organizacion_id, usuario_id, dispositivo_id, sesion) -> bool` (change 15, D19):
+verdadero si el usuario tiene una jornada `ABIERTA` o `EN_RENDICION` en ese dispositivo."""
+
+_CONSULTA_JORNADA_NO_CERRADA: ConsultaJornadaNoCerrada | None = None
+
+
+def registrar_consulta_jornada_no_cerrada(funcion: ConsultaJornadaNoCerrada) -> None:
+    """`stock` la registra al importar su `service.py` (mismo patrón que ADR-023, ADR-025).
+    Sin ciclo: `identidad` nunca importa `stock` (`02` §5.3; contrato de import-linter)."""
+    global _CONSULTA_JORNADA_NO_CERRADA
+    _CONSULTA_JORNADA_NO_CERRADA = funcion
+
+
+def hay_jornada_no_cerrada(
+    organizacion_id: UUID, usuario_id: UUID, dispositivo_id: UUID, sesion: Session
+) -> bool:
+    """Falla cerrado hacia el corte (D19): sin consulta registrada responde que no hay jornada,
+    y la renovación del usuario inactivo se rechaza y revoca como en ADR-028 D9.3-A."""
+    if _CONSULTA_JORNADA_NO_CERRADA is None:
+        return False
+    return _CONSULTA_JORNADA_NO_CERRADA(organizacion_id, usuario_id, dispositivo_id, sesion)
 
 
 def _motivo_sesion_deshabilitada(usuario: Usuario, rol: Rol) -> str | None:

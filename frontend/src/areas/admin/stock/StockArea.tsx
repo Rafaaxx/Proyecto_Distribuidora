@@ -3,6 +3,9 @@ import { Route, Routes } from 'react-router-dom'
 import { AjusteDetalleScreen } from './AjusteDetalleScreen'
 import { AjusteFormScreen } from './AjusteFormScreen'
 import { AjustesListScreen } from './AjustesListScreen'
+import { JornadaAbrirScreen } from './JornadaAbrirScreen'
+import { JornadaDetalleScreen } from './JornadaDetalleScreen'
+import { JornadasListScreen } from './JornadasListScreen'
 import { KardexScreen } from './KardexScreen'
 import { StockInicialScreen } from './StockInicialScreen'
 import { StockPorUbicacionScreen } from './StockPorUbicacionScreen'
@@ -22,6 +25,9 @@ import { UbicacionFormScreen } from './UbicacionFormScreen'
  * la misma sección; sus accesos están en el listado de ubicaciones y cada pantalla decide con su
  * permiso (D11). `/transferencias/nueva` y `/ajustes/nueva` van antes que su `:id`.
  *
+ * Change 15 (grupo 14): Jornadas (`ABRIR_JORNADA`, `RENDIR_JORNADA` o `LIBERAR_UBICACION`, D15/D16)
+ * cuelga de la misma sección; `/jornadas/abrir` va antes que su `:jornadaId`.
+ *
  * `/ubicaciones/nueva` se declara antes que `/ubicaciones/:ubicacionId` (mismo
  * criterio que `/nuevo` en `ClientesArea`).
  */
@@ -40,6 +46,9 @@ export function StockArea() {
       <Route path="/ajustes" element={<AjustesListScreen />} />
       <Route path="/ajustes/nueva" element={<AjusteFormScreen />} />
       <Route path="/ajustes/:ajusteId" element={<AjusteDetalleScreen />} />
+      <Route path="/jornadas" element={<JornadasListScreen />} />
+      <Route path="/jornadas/abrir" element={<JornadaAbrirScreen />} />
+      <Route path="/jornadas/:jornadaId" element={<JornadaDetalleScreen />} />
     </Routes>
   )
 }

@@ -1,7 +1,7 @@
 """Modelos SQLAlchemy de `stock`: `Ubicacion`, `StockSaldo` y `StockMovimiento`
 (`docs/03-modelo-de-datos.md` §9; migración `a8b9c0d1e2f3`) y, del change 14,
 `Transferencia`, `TransferenciaLinea`, `AjusteStock` y `AjusteStockLinea` (migración
-`f3a4b5c6d7e8`).
+`f3a4b5c6d7e8`) y, del change 15, `Jornada` (migración `a4b5c6d7e8f9`).
 
 Mapean exactamente lo que crea la migración: `test_modelos_coinciden_con_
 migracion.py` corre `alembic revision --autogenerate` y exige que no detecte
@@ -130,8 +130,8 @@ class StockMovimiento(Base):
     qué operación lo originó; para un stock inicial no hay una tabla a la que
     apuntar, así que `origen_id` es el `operation_id` (`design.md` D5). No tiene
     FK por tipo de documento (`03` §9). `dispositivo_id` es `NOT NULL` con FK
-    compuesta a `dispositivo` (D12). `jornada_id` es nulable y NO tiene FK hasta
-    el change 15, porque `jornada` no existe todavía (D12).
+    compuesta a `dispositivo` (D12). `jornada_id` es nulable y desde el change 15
+    tiene FK compuesta `(organizacion_id, jornada_id)` a `jornada` (`design.md` D11).
     """
 
     __tablename__ = "stock_movimiento"
@@ -164,6 +164,11 @@ class StockMovimiento(Base):
             ["organizacion_id", "motivo_id"],
             ["motivo.organizacion_id", "motivo.id"],
             name="fk_stock_movimiento__motivo",
+        ),
+        ForeignKeyConstraint(
+            ["organizacion_id", "jornada_id"],
+            ["jornada.organizacion_id", "jornada.id"],
+            name="fk_stock_movimiento__jornada",
         ),
         UniqueConstraint("organizacion_id", "id", name="ux_stock_movimiento__org_id"),
         CheckConstraint("cantidad_base <> 0", name="ck_stock_movimiento__cantidad_no_cero"),
@@ -389,3 +394,98 @@ class AjusteStockLinea(Base):
     producto_id: Mapped[UUID]
     cantidad_base: Mapped[int] = mapped_column(Integer)
     costo_unitario: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+
+
+_ESTADOS_DE_JORNADA = "'ABIERTA','EN_RENDICION','CERRADA','LIBERADA'"
+_JORNADA_NO_CERRADA = text("estado IN ('ABIERTA','EN_RENDICION')")
+
+
+class Jornada(Base):
+    """La jornada de un usuario, desde un dispositivo, sobre una ubicación que requiere toma
+    (RUT-01, RUT-03; `01` §18; `design.md` D3, D10). La toma ES la fila en `ABIERTA` o
+    `EN_RENDICION`: tres índices únicos parciales garantizan a lo sumo una jornada no cerrada
+    por ubicación (INV-16), por usuario y por dispositivo; los decide la base, no una
+    verificación previa (`02` §7.5).
+
+    Solo cambian el estado y los datos de cada transición (`app_runtime` tiene `UPDATE` solo de
+    esas columnas, INV-05, TR-06); los datos de la apertura y la jornada misma no se tocan ni
+    se borran. `ck_jornada__estado_coherente` ata cada grupo de columnas de transición al
+    estado."""
+
+    __tablename__ = "jornada"
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_jornada"),
+        ForeignKeyConstraint(
+            ["organizacion_id"], ["organizacion.id"], name="fk_jornada__organizacion"
+        ),
+        _fk("jornada", "usuario", "usuario_id", "usuario"),
+        _fk("jornada", "dispositivo", "dispositivo_id", "dispositivo"),
+        _fk("jornada", "ubicacion", "ubicacion_id", "ubicacion"),
+        _fk("jornada", "rendida_por", "rendida_por_id", "usuario"),
+        _fk("jornada", "cerrada_por", "cerrada_por_id", "usuario"),
+        _fk("jornada", "liberada_por", "liberada_por_id", "usuario"),
+        _fk("jornada", "motivo_liberacion", "motivo_liberacion_id", "motivo"),
+        UniqueConstraint("organizacion_id", "id", name="ux_jornada__org_id"),
+        CheckConstraint(f"estado IN ({_ESTADOS_DE_JORNADA})", name="ck_jornada__estado"),
+        CheckConstraint(
+            "(rendida_en IS NULL) = (rendida_por_id IS NULL) "
+            "AND (cerrada_en IS NULL) = (cerrada_por_id IS NULL) "
+            "AND (liberada_en IS NULL) = (liberada_por_id IS NULL) "
+            "AND (liberada_en IS NULL) = (motivo_liberacion_id IS NULL) "
+            "AND (estado = 'CERRADA') = (cerrada_en IS NOT NULL) "
+            "AND (estado = 'LIBERADA') = (liberada_en IS NOT NULL) "
+            "AND (estado NOT IN ('EN_RENDICION','CERRADA') OR rendida_en IS NOT NULL) "
+            "AND (estado <> 'ABIERTA' OR rendida_en IS NULL) "
+            "AND (observacion_liberacion IS NULL OR estado = 'LIBERADA')",
+            name="ck_jornada__estado_coherente",
+        ),
+        CheckConstraint(
+            "observacion_liberacion IS NULL "
+            "OR char_length(observacion_liberacion) BETWEEN 1 AND 500",
+            name="ck_jornada__observacion_liberacion",
+        ),
+        Index(
+            "ux_jornada__ubicacion_abierta",
+            "organizacion_id",
+            "ubicacion_id",
+            unique=True,
+            postgresql_where=_JORNADA_NO_CERRADA,
+        ),
+        Index(
+            "ux_jornada__usuario_abierta",
+            "organizacion_id",
+            "usuario_id",
+            unique=True,
+            postgresql_where=_JORNADA_NO_CERRADA,
+        ),
+        Index(
+            "ux_jornada__dispositivo_abierta",
+            "organizacion_id",
+            "dispositivo_id",
+            unique=True,
+            postgresql_where=_JORNADA_NO_CERRADA,
+        ),
+        Index(
+            "ix_jornada__abierta_en", "organizacion_id", text("abierta_en DESC"), text("id DESC")
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(default=nuevo_id)
+    organizacion_id: Mapped[UUID]
+    usuario_id: Mapped[UUID]
+    dispositivo_id: Mapped[UUID]
+    ubicacion_id: Mapped[UUID]
+    estado: Mapped[str] = mapped_column(Text)
+    operation_id: Mapped[UUID]
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    abierta_en: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    rendida_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rendida_por_id: Mapped[UUID | None]
+    cerrada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cerrada_por_id: Mapped[UUID | None]
+    liberada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    liberada_por_id: Mapped[UUID | None]
+    motivo_liberacion_id: Mapped[UUID | None]
+    observacion_liberacion: Mapped[str | None] = mapped_column(Text)

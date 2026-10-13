@@ -33,6 +33,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.commands.auditoria import DatosDeAuditoria, constancia_de_ubicacion_tomada
 from app.commands.catalogo import declarar_tipo
 from app.commands.observaciones import ObservacionProducida
 from app.commands.registro import registrar_handler
@@ -53,6 +54,15 @@ ResultadoHandlerConObservaciones = tuple[
     str, dict[str, object] | None, str | None, tuple[ObservacionProducida, ...]
 ]
 """Extensión con las observaciones del handler (`sync/service.py`, tarea 9.5)."""
+
+ResultadoHandlerConAuditoria = tuple[
+    str,
+    dict[str, object] | None,
+    str | None,
+    tuple[ObservacionProducida, ...],
+    DatosDeAuditoria,
+]
+"""Extensión con el dato de auditoría (change 15, D8): la constancia de STK-09."""
 
 
 # --- PROVEEDOR_CREAR / PROVEEDOR_MODIFICAR (D7, D5/ADR-026) ----------------
@@ -188,6 +198,7 @@ declarar_tipo("COSTO_INFORMAR", admite_online=True, admite_offline=False)
 # --- COMPRA_CONFIRMAR (change 11: CMP-01 a CMP-04, CMP-08; `design.md` D1 a D7, D14) ------
 
 PERMISO_REGISTRAR_COMPRA = "REGISTRAR_COMPRA"
+PERMISO_LIBERAR_UBICACION = "LIBERAR_UBICACION"
 _PATRON_DECIMAL = r"^-?\d+(\.\d+)?$"
 
 
@@ -246,11 +257,17 @@ class CompraConfirmarContenidoV1(BaseModel):
 
 def manejar_compra_confirmar(
     sobre: SobreComando, contenido: CompraConfirmarContenidoV1, *, sesion: object, reloj: Clock
-) -> ResultadoHandler:
+) -> ResultadoHandlerConAuditoria:
     """Confirma una compra (D14: `REGISTRAR_COMPRA`, también de contado). El resultado
     se guarda y se reenvía tal cual ante un doble envío (INV-06): los importes viajan
     como string y no incluye costos de valorización ajenos a la compra."""
-    _exigir_permiso(sobre, sesion, PERMISO_REGISTRAR_COMPRA)
+    permisos = identidad_service.listar_permisos_del_usuario(
+        sobre.organizacion_id,
+        sobre.usuario_id,
+        sesion,  # type: ignore[arg-type]
+    )
+    if PERMISO_REGISTRAR_COMPRA not in permisos:
+        raise PermisoRequeridoError(f"Falta el permiso {PERMISO_REGISTRAR_COMPRA}.")
     resultado = proveedores_service.confirmar_compra(
         sobre.organizacion_id,
         sesion,  # type: ignore[arg-type]
@@ -285,6 +302,7 @@ def manejar_compra_confirmar(
         usuario_id=sobre.usuario_id,
         dispositivo_id=sobre.dispositivo_id,
         occurred_at=sobre.occurred_at,
+        puede_operar_ubicacion_tomada=PERMISO_LIBERAR_UBICACION in permisos,
     )
     return (
         "ACEPTADO",
@@ -308,6 +326,8 @@ def manejar_compra_confirmar(
             ],
         },
         None,
+        (),
+        constancia_de_ubicacion_tomada([resultado.jornada_tomada_id]),
     )
 
 
@@ -336,7 +356,7 @@ class CompraAnularContenidoV1(BaseModel):
 
 def manejar_compra_anular(
     sobre: SobreComando, contenido: CompraAnularContenidoV1, *, sesion: object, reloj: Clock
-) -> ResultadoHandlerConObservaciones:
+) -> ResultadoHandlerConAuditoria:
     """Anula una compra (D14: `ANULAR_COMPRA`; si deja stock negativo, además
     `PERMITIR_STOCK_NEGATIVO`, CMP-07). Devuelve `ANULACION_COMPRA_SIN_RECALCULO` y
     `STOCK_NEGATIVO` como observaciones (SYN-07)."""
@@ -359,6 +379,7 @@ def manejar_compra_anular(
         usuario_id=sobre.usuario_id,
         dispositivo_id=sobre.dispositivo_id,
         occurred_at=sobre.occurred_at,
+        puede_operar_ubicacion_tomada=PERMISO_LIBERAR_UBICACION in permisos,
     )
     observaciones = tuple(
         ObservacionProducida(
@@ -379,6 +400,7 @@ def manejar_compra_anular(
         },
         None,
         observaciones,
+        constancia_de_ubicacion_tomada([resultado.jornada_tomada_id]),
     )
 
 

@@ -59,3 +59,12 @@ class ModoNoAdmitidoParaTipoError(DomainError):
     comandos`), donde `OFFLINE` sí es un modo válido en general."""
 
     codigo = "MODO_NO_ADMITIDO_PARA_TIPO"
+
+
+class JornadaInexistenteError(DomainError):
+    """El sobre nombra una `jornada_id` que no existe en la organización (o es de otra):
+    se rechaza antes de reservar el `operation_id` (SYN-06, INV-21, change 15, `design.md`
+    D12). El bus no evalúa el dueño ni el estado de la jornada."""
+
+    codigo = "JORNADA_INEXISTENTE"
+    status_http = 404

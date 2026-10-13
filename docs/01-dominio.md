@@ -246,22 +246,22 @@ Ejemplos de PRC-22 (caja x6):
 | STK-06 | Sin conexión, una venta que deje stock negativo se acepta al sincronizar con observación STOCK_NEGATIVO. | 1 |
 | STK-07 | Una transferencia genera, en la misma transacción, una salida en origen y una entrada en destino por la misma cantidad, para de 1 a 200 productos distintos, con origen y destino distintos. No modifica el promedio ni el stock total del producto (INV-15); ambos movimientos se valorizan al promedio vigente. No se edita ni se borra: se corrige por anulación total con motivo (TR-06). Con conexión solamente. | 1 |
 | STK-08 | Un ajuste requiere `AJUSTAR_STOCK` y un motivo activo del ámbito `AJUSTE_STOCK` de la organización, uno por ajuste. Lleva de 1 a 200 líneas con cantidad con signo distinta de cero (se admiten signos mezclados) sobre una sola ubicación, y una observación opcional. Un ajuste positivo de un producto sin costo promedio se rechaza (`PRODUCTO_SIN_COSTO`). No se edita ni se borra: se corrige por anulación total con motivo del ámbito `ANULACION_AJUSTE`, una sola vez. Con conexión solamente. | 1 |
-| STK-09 | Mientras una ubicación está tomada, solo la jornada que la tomó puede generar movimientos sobre ella, salvo la rendición y usuarios con `LIBERAR_UBICACION`, con auditoría. | 1 |
+| STK-09 | Una ubicación está **tomada** mientras tiene una jornada `ABIERTA` o `EN_RENDICION`; una ubicación que requiere toma y no tiene jornada no cerrada se mueve libremente. Mientras está tomada, solo la jornada que la tomó puede generar movimientos sobre ella: un movimiento es **de la jornada** si la jornada está `ABIERTA` y el usuario y el dispositivo del comando son los de la jornada. Excepciones: la rendición (change 24) y los usuarios con `LIBERAR_UBICACION`, que mueven la ubicación en cualquier estado de la jornada; ese movimiento queda sin jornada y con una observación en la auditoría que nombra la regla y la jornada. En `EN_RENDICION` la propia jornada ya no mueve stock. Cualquier otro caso se rechaza con `UBICACION_TOMADA` y no escribe nada. La regla se aplica en la única puerta del libro, a todo camino que mueve stock (ADR-049). | 1 |
 | STK-10 | Un producto admite varios `STOCK_INICIAL`, cada uno con su cantidad con signo distinta de cero. Uno positivo es un ingreso con costo (CST-11); uno negativo es una corrección: egresa al promedio vigente sin recalcularlo y no puede dejar negativo el saldo de la ubicación (`STOCK_INSUFICIENTE`, sin excepción por `PERMITIR_STOCK_NEGATIVO`). Se admiten solo mientras el producto no tenga en la organización movimientos de otro tipo (`PRODUCTO_CON_OPERACIONES`). Un costo mal cargado se corrige llevando el stock total a cero y recargando. | 1 |
 
 ### 8.2 Jornada y rendición
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| RUT-01 | Una jornada tiene usuario, dispositivo, ubicación, apertura y cierre. Una ubicación que requiere toma admite como máximo una jornada no cerrada. | 1 |
-| RUT-02 | La carga del vehículo es una transferencia desde depósito, con conexión, antes o durante la apertura. | 1 |
-| RUT-03 | La apertura requiere conexión y `ABRIR_JORNADA`. Toma la ubicación y ejecuta el bootstrap. | 1 |
+| RUT-01 | Una jornada tiene usuario, dispositivo, ubicación, apertura y cierre. Una ubicación que requiere toma admite como máximo una jornada no cerrada, y un usuario y un dispositivo, a lo sumo una cada uno. Solo se abre sobre una ubicación activa que requiere toma (`UBICACION_SIN_TOMA`, `UBICACION_INACTIVA`, `UBICACION_TOMADA`, `USUARIO_CON_JORNADA`, `DISPOSITIVO_CON_JORNADA`). | 1 |
+| RUT-02 | La carga del vehículo es una transferencia desde depósito (`STOCK_TRANSFERIR`), con conexión, antes o durante la apertura; la apertura no lleva líneas. Antes de abrir la hace cualquiera con `TRANSFERIR_STOCK`; con la jornada abierta, el vendedor de la jornada desde su dispositivo o quien tenga `LIBERAR_UBICACION`. | 1 |
+| RUT-03 | La apertura requiere conexión y `ABRIR_JORNADA`. Toma la ubicación para el usuario y el dispositivo de la sesión. El bootstrap lo ejecuta el cliente después de abrir (change 21). | 1 |
 | RUT-04 | Durante la jornada, las ventas del dispositivo descuentan stock de la ubicación tomada. | 1 |
 | RUT-05 | La rendición requiere conexión, `RENDIR_JORNADA` y que el dispositivo no tenga comandos pendientes de esa jornada. | 1 |
 | RUT-06 | En la rendición se registra el conteo físico por producto. La diferencia entre contado y esperado genera un movimiento DIFERENCIA_RENDICION auditado. | 1 |
 | RUT-07 | El resumen de rendición muestra stock al abrir, ingresos, ventas, anulaciones, stock esperado, contado, diferencias y cobranzas por medio de pago. | 1 |
-| RUT-08 | Tras la rendición puede transferirse el remanente a depósito. El cierre libera la ubicación. | 1 |
-| RUT-09 | Un usuario con `LIBERAR_UBICACION` puede liberar una jornada abierta con motivo. Los comandos posteriores de esa jornada se aceptan al sincronizar con observación JORNADA_LIBERADA. | 1 |
+| RUT-08 | Tras la rendición puede transferirse el remanente a depósito. El cierre (`EN_RENDICION → CERRADA`) libera la ubicación, que vuelve a moverse libremente. | 1 |
+| RUT-09 | Un usuario con `LIBERAR_UBICACION` puede liberar una jornada `ABIERTA` o `EN_RENDICION`, de cualquier usuario, con un motivo activo del ámbito `LIBERACION_JORNADA` y una observación opcional de hasta 500 caracteres; el stock del vehículo no se toca. Los comandos posteriores de esa jornada se aceptan al sincronizar con observación JORNADA_LIBERADA (a partir del primer comando de ruta, change 17). | 1 |
 | RUT-10 | Rendición completa de efectivo con caja y tesorería. | 2 |
 
 ## 9. Clientes y crédito
@@ -382,7 +382,7 @@ Ejemplo de DSC-03 con regla "cajas equivalentes ≥ 20 → 5%": 19 cajas + 5 uni
 | SYN-03 | Los comandos de un dispositivo se procesan en el orden en que se generaron. Un comando que depende de otro (anulación de una venta) se procesa después de él. | 1 |
 | SYN-04 | Resultados posibles: ACEPTADO, ACEPTADO_CON_OBSERVACIONES o RECHAZADO. | 1 |
 | SYN-05 | Una venta o cobranza registrada sin conexión nunca se rechaza por reglas de negocio (stock, crédito, lista, descuentos, estado del cliente o permisos). Se acepta con las observaciones que correspondan. | 1 |
-| SYN-06 | Solo se rechazan comandos malformados, inconsistentes (SYN-02), de otra organización, con dependencias inexistentes o de dispositivos revocados. Los comandos de dispositivos revocados se guardan en cuarentena para revisión manual; no se pierden. | 1 |
+| SYN-06 | Solo se rechazan comandos malformados, inconsistentes (SYN-02), de otra organización, con dependencias inexistentes o de dispositivos revocados. Una jornada del sobre que no existe en la organización es una dependencia inexistente (`JORNADA_INEXISTENTE`): en el lote el ítem se rechaza sin fila de comando y el lote sigue; por REST responde 404. Los comandos de dispositivos revocados se guardan en cuarentena para revisión manual; no se pierden. | 1 |
 | SYN-07 | Observaciones de la etapa 1: STOCK_NEGATIVO, EXCESO_CREDITO_ADVERTIDO, EXCESO_CREDITO_AUTORIZADO_OFFLINE, EXCESO_CREDITO_DETECTADO_SYNC, LISTA_NO_VIGENTE, DESCUENTO_DIFIERE, CLIENTE_NO_HABILITADO, PERMISO_REVOCADO, JORNADA_LIBERADA, ANULACION_COMPRA_SIN_RECALCULO. | 1 |
 | SYN-08 | Una observación queda PENDIENTE hasta que un usuario con `REVISAR_OBSERVACIONES` la resuelve con un comentario. Resolverla no modifica la operación; las correcciones se hacen con operaciones nuevas. | 1 |
 | SYN-09 | El dispositivo no elimina una operación local hasta recibir ACEPTADO o ACEPTADO_CON_OBSERVACIONES. Un RECHAZADO queda visible en el dispositivo. | 1 |
@@ -416,7 +416,7 @@ Ejemplo de DSC-03 con regla "cajas equivalentes ≥ 20 → 5%": 19 cajas + 5 uni
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| AUD-01 | Se auditan: inicio de sesión, cambios de usuarios, roles, permisos y dispositivos; costos informados; publicación y anulación de versiones de lista; uso de lista no asignada o versión anterior; descuentos manuales y autorizaciones; autorizaciones de crédito; ventas, compras, cobranzas y pagos anulados; transferencias y ajustes de stock y sus anulaciones (la fila de `STOCK_AJUSTAR`, `STOCK_TRANSFERENCIA_ANULAR` y `STOCK_AJUSTE_ANULAR` lleva el motivo, AUD-02); diferencias de rendición; liberación forzada de ubicaciones; cambios de límite y política de crédito; cambios de configuración; resolución de observaciones; comandos rechazados o en cuarentena. | 1 |
+| AUD-01 | Se auditan: inicio de sesión, cambios de usuarios, roles, permisos y dispositivos; costos informados; publicación y anulación de versiones de lista; uso de lista no asignada o versión anterior; descuentos manuales y autorizaciones; autorizaciones de crédito; ventas, compras, cobranzas y pagos anulados; transferencias y ajustes de stock y sus anulaciones (la fila de `STOCK_AJUSTAR`, `STOCK_TRANSFERENCIA_ANULAR` y `STOCK_AJUSTE_ANULAR` lleva el motivo, AUD-02); apertura, rendición, cierre y liberación forzada de jornadas (la fila de `JORNADA_LIBERAR` lleva el motivo, AUD-02); todo movimiento hecho sobre una ubicación tomada por quien tiene `LIBERAR_UBICACION` (la fila del comando lleva una observación que nombra STK-09 y la jornada); renovaciones de sesión de un usuario o rol inactivo con jornada no cerrada; diferencias de rendición; cambios de límite y política de crédito; cambios de configuración; resolución de observaciones; comandos rechazados o en cuarentena. | 1 |
 | AUD-02 | Cada registro guarda usuario, dispositivo, acción, entidad, identificador, valor anterior y nuevo cuando aplica, motivo, autorizador, `occurred_at`, `registered_at` y `operation_id`. | 1 |
 | AUD-03 | La auditoría es de solo agregado: no se modifica ni se elimina. | 1 |
 
@@ -486,6 +486,8 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 
 **Versión de lista.** Una lista tiene a lo sumo un borrador (PRC-18). `PUBLICADA` y `ANULADA` no cambian sus precios (INV-11). Los estados derivados son `PROGRAMADA`, `VIGENTE` e `HISTÓRICA` (en la API, `HISTORICA`). Solo se anula una versión `PROGRAMADA`.
 
+**Jornada.** "No cerrada" es `ABIERTA` o `EN_RENDICION`: en esos dos estados la ubicación está tomada. `ABIERTA → EN_RENDICION` es la rendición; `EN_RENDICION → CERRADA` es el cierre y libera la ubicación; `LIBERADA` es la liberación forzada con motivo. Cualquier otra transición se rechaza con `JORNADA_ESTADO_INVALIDO` y deja la jornada como estaba; una `CERRADA` o `LIBERADA` no admite ninguna. Hasta el change 24 la rendición no registra conteo ni diferencias (RUT-05 a RUT-07 son de ese change): la jornada pasa a `EN_RENDICION` y se cierra. Las jornadas cerradas antes del 24 no tienen conteo.
+
 ## 19. Permisos y roles
 
 | Permiso | Alcance | ADM | GES | SUP | VEN | CON |
@@ -513,9 +515,9 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 | ANULAR_TRANSFERENCIA | Anular transferencias de otros usuarios (exige además `TRANSFERIR_STOCK`) | ✓ | ✓ | | | |
 | AJUSTAR_STOCK | Ajustes; anularlos (propios o ajenos); ver el listado y el detalle de ajustes | ✓ | ✓ | | | |
 | PERMITIR_STOCK_NEGATIVO | Operar con stock negativo online | ✓ | | | | |
-| ABRIR_JORNADA | Abrir jornada y tomar ubicación | ✓ | | ✓ | ✓ | |
-| RENDIR_JORNADA | Rendir y cerrar jornada | ✓ | ✓ | ✓ | | |
-| LIBERAR_UBICACION | Liberación forzada | ✓ | | ✓ | | |
+| ABRIR_JORNADA | Abrir jornada y tomar ubicación; leer las jornadas y la propia jornada actual | ✓ | | ✓ | ✓ | |
+| RENDIR_JORNADA | Rendir y cerrar jornada; leer las jornadas | ✓ | ✓ | ✓ | | |
+| LIBERAR_UBICACION | Liberación forzada de una jornada con motivo; mover una ubicación tomada (STK-09); leer las jornadas | ✓ | | ✓ | | |
 | VENDER | Confirmar ventas | ✓ | | ✓ | ✓ | |
 | ANULAR_VENTA | Anular ventas | ✓ | ✓ | ✓ | | |
 | DESCUENTO_MANUAL | Descuento manual hasta el tope del rol | ✓ (sin tope) | | ✓ | ✓ | |
@@ -539,6 +541,8 @@ Las lecturas de listas, reglas, versiones y precios las puede hacer quien tenga 
 
 El listado y el detalle de transferencias se leen con `TRANSFERIR_STOCK`; los de ajustes, con `AJUSTAR_STOCK`, y sus costos solo con `VER_COSTOS`. `ANULAR_TRANSFERENCIA` solo agrega el alcance sobre las transferencias de otros usuarios y no abre ninguna lectura; sin ese permiso, anular la transferencia de otro responde 403. Quien tiene `PERMITIR_STOCK_NEGATIVO` puede, además, dejar stock negativo con la salida de una transferencia y con la anulación de una transferencia o de un ajuste (ADR-048).
 
+El listado y el detalle de jornadas se leen con cualquiera de `ABRIR_JORNADA`, `RENDIR_JORNADA` o `LIBERAR_UBICACION`, y alcanzan a todas las jornadas de la organización; la jornada actual del usuario y del dispositivo de la sesión se lee con `ABRIR_JORNADA`. El listado de ubicaciones y el stock por ubicación (`TRANSFERIR_STOCK`) indican qué ubicaciones están tomadas, por quién y desde cuándo. Quien tiene `LIBERAR_UBICACION` puede además mover una ubicación tomada (STK-09); los permisos propios de cada operación se exigen igual (ADR-049).
+
 ## 20. Invariantes
 
 Deben cumplirse siempre y estar cubiertos por pruebas automatizadas.
@@ -560,7 +564,7 @@ Deben cumplirse siempre y estar cubiertos por pruebas automatizadas.
 | INV-13 | El saldo de cada cuenta corriente es igual a la suma de sus movimientos. | Nuevo |
 | INV-14 | Total de una venta = suma de netos de sus líneas + suma de IVA de sus líneas. | Nuevo |
 | INV-15 | Una transferencia no modifica el stock total del producto en la organización. | Nuevo |
-| INV-16 | Una ubicación que requiere toma tiene como máximo una jornada no cerrada. | Nuevo |
+| INV-16 | Una ubicación que requiere toma tiene como máximo una jornada no cerrada (`ABIERTA` o `EN_RENDICION`); lo mismo vale para cada usuario y cada dispositivo. | Nuevo |
 | INV-17 | Una venta o cobranza offline nunca se rechaza por reglas de negocio. | Nuevo |
 | INV-18 | Las unidades de una presentación usada en operaciones no cambian. | Nuevo |
 | INV-19 | Anular una venta deja el stock y el saldo del cliente como si no se hubiera registrado, sin borrar ningún registro. | Nuevo |

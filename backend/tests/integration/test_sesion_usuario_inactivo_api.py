@@ -16,12 +16,13 @@ from __future__ import annotations
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
+from stock_utiles import crear_jornada_sql, crear_ubicacion_sql
 
 from app.api_v1 import sistema
 from app.core.config import Settings
@@ -30,7 +31,7 @@ from app.core.ids import nuevo_id
 from app.core.seguridad import hashear_password
 from app.main import crear_app
 from app.modules.identidad import repository
-from app.modules.identidad.models import Auditoria, Organizacion, Usuario
+from app.modules.identidad.models import Auditoria, Organizacion, SesionRefresh, Usuario
 from app.modules.sync.models import Comando
 
 MOMENTO = datetime(2026, 1, 1, tzinfo=UTC)
@@ -266,3 +267,135 @@ class TestRolInactivo:
 
         assert respuesta.status_code == 401
         assert respuesta.json()["codigo"] == "IDENTIDAD_ACCESS_TOKEN_INVALIDO"
+
+
+def _login_con_cookie(
+    cliente: TestClient, slug: str, usuario: str, dispositivo_id: str
+) -> tuple[str, str]:
+    """`(access_token, cookie_refresh)` de un inicio de sesión real en `dispositivo_id`."""
+    respuesta = cliente.post(
+        "/api/v1/auth/login",
+        json={
+            "organizacion_slug": slug,
+            "usuario": usuario,
+            "contrasena": PASSWORD,
+            "dispositivo_id": dispositivo_id,
+            "nombre_dispositivo": "Tablet",
+        },
+    )
+    assert respuesta.status_code == 200
+    return respuesta.json()["access_token"], respuesta.cookies["refresh_token"]
+
+
+def _renovar_http(cliente: TestClient, cookie: str, dispositivo_id: str):
+    return cliente.post(
+        "/api/v1/auth/refresh",
+        json={"dispositivo_id": dispositivo_id},
+        cookies={"refresh_token": cookie},
+    )
+
+
+class TestInactivoConJornadaAbiertaDePuntaAPunta:
+    """Change 15, tarea 12.3 (`design.md` D18, D19; ADR-028 D9.3-B): por HTTP y con login real,
+    un usuario dado de baja con jornada abierta renueva su sesión, pero el token resultante no
+    abre nada salvo el lote de sincronización; al cerrar la jornada la renovación se rechaza."""
+
+    def test_renueva_el_token_no_abre_rutas_de_negocio_y_muere_al_cerrar_la_jornada(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        organizacion = _crear_organizacion(sesion, f"org-inactivo-jornada-{uuid4().hex[:8]}")
+        usuario = _crear_usuario_admin(sesion, organizacion.id, "admin-jornada-1")
+        sesion.commit()
+        dispositivo_id = str(uuid4())
+        _, cookie = _login_con_cookie(cliente, organizacion.slug, usuario.usuario, dispositivo_id)
+
+        ubicacion_id = crear_ubicacion_sql(
+            sesion, organizacion.id, nombre="Camioneta", tipo="VEHICULO", requiere_toma=True
+        )
+        jornada_id = crear_jornada_sql(
+            sesion,
+            organizacion.id,
+            usuario_id=usuario.id,
+            dispositivo_id=UUID(dispositivo_id),
+            ubicacion_id=ubicacion_id,
+        )
+        sesion.execute(
+            text("UPDATE usuario SET estado = 'INACTIVO' WHERE id = :id"), {"id": str(usuario.id)}
+        )
+        sesion.commit()
+
+        # Renueva por la excepción: token nuevo, refresh rotado.
+        renovada = _renovar_http(cliente, cookie, dispositivo_id)
+        assert renovada.status_code == 200
+        token = renovada.json()["access_token"]
+        cookie_rotada = renovada.cookies["refresh_token"]
+        assert cookie_rotada != cookie
+        cabecera = {"Authorization": f"Bearer {token}"}
+
+        # El token no abre `GET /yo` ni una ruta de negocio...
+        for ruta in ("/api/v1/yo", "/api/v1/identidad/dispositivos"):
+            rechazo = cliente.get(ruta, headers=cabecera)
+            assert rechazo.status_code == 401, ruta
+            assert rechazo.json()["codigo"] == "IDENTIDAD_ACCESS_TOKEN_INVALIDO"
+        # ... y el lote de sincronización no lo rechaza por ruta.
+        lote = cliente.post("/api/v1/sync/comandos", json={"items": []}, headers=cabecera)
+        assert lote.status_code == 200
+
+        # SEG-01: con credenciales correctas, el inactivo no inicia sesión.
+        login = cliente.post(
+            "/api/v1/auth/login",
+            json={
+                "organizacion_slug": organizacion.slug,
+                "usuario": usuario.usuario,
+                "contrasena": PASSWORD,
+                "dispositivo_id": dispositivo_id,
+                "nombre_dispositivo": "Tablet",
+            },
+        )
+        assert login.status_code == 401
+        assert login.json()["codigo"] == "IDENTIDAD_CREDENCIALES_INVALIDAS"
+
+        # La renovación dejó su auditoría.
+        auditorias = sesion.execute(
+            select(func.count())
+            .select_from(Auditoria)
+            .where(
+                Auditoria.organizacion_id == organizacion.id,
+                Auditoria.accion == "RENOVAR_SESION_CON_JORNADA_PENDIENTE",
+            )
+        ).scalar_one()
+        assert auditorias == 1
+
+        # Al cerrarse la jornada, la renovación siguiente se rechaza y no queda sesión viva.
+        sesion.execute(
+            text(
+                "UPDATE jornada SET estado = 'CERRADA', rendida_en = :m, rendida_por_id = :u, "
+                "cerrada_en = :m, cerrada_por_id = :u WHERE id = :id"
+            ),
+            {"m": MOMENTO, "u": usuario.id, "id": jornada_id},
+        )
+        sesion.commit()
+        rechazada = _renovar_http(cliente, cookie_rotada, dispositivo_id)
+        assert rechazada.status_code == 401
+        sesion.expire_all()
+        vigentes = sesion.execute(
+            select(func.count())
+            .select_from(SesionRefresh)
+            .where(SesionRefresh.usuario_id == usuario.id, SesionRefresh.revocado_en.is_(None))
+        ).scalar_one()
+        assert vigentes == 0
+
+    def test_sin_jornada_el_inactivo_no_renueva_como_hoy(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        organizacion = _crear_organizacion(sesion, f"org-inactivo-sin-jor-{uuid4().hex[:8]}")
+        usuario = _crear_usuario_admin(sesion, organizacion.id, "admin-jornada-2")
+        sesion.commit()
+        dispositivo_id = str(uuid4())
+        _, cookie = _login_con_cookie(cliente, organizacion.slug, usuario.usuario, dispositivo_id)
+        sesion.execute(
+            text("UPDATE usuario SET estado = 'INACTIVO' WHERE id = :id"), {"id": str(usuario.id)}
+        )
+        sesion.commit()
+
+        assert _renovar_http(cliente, cookie, dispositivo_id).status_code == 401

@@ -85,6 +85,15 @@ MOTIVOS_ANULACION_AJUSTE_INICIALES = ("Error de carga", "Otro")
 `f3a4b5c6d7e8` siembra los mismos nombres en las organizaciones existentes. Sin alguno de
 estos motivos la organización no podría anular una transferencia ni un ajuste."""
 
+MOTIVOS_LIBERACION_JORNADA_INICIALES = (
+    "Dispositivo perdido o averiado",
+    "Vendedor ausente",
+    "Otro",
+)
+"""Change 15 (RUT-09, TR-09, `design.md` D13, aprobados el 2026-10-09). La migración
+`a4b5c6d7e8f9` siembra los mismos nombres en las organizaciones existentes. Sin alguno de
+estos motivos la organización no podría liberar una jornada (`JORNADA_LIBERAR` exige uno)."""
+
 
 class BaseSinMigrarError(RuntimeError):
     """La siembra corrió contra una base sin las migraciones de este change
@@ -196,6 +205,11 @@ def sembrar(sesion: Session, reloj: Clock, *, password_administrador: str) -> Or
     for nombre in MOTIVOS_ANULACION_AJUSTE_INICIALES:
         configuracion_service.crear_motivo(
             organizacion.id, sesion, reloj, ambito="ANULACION_AJUSTE", nombre=nombre
+        )
+
+    for nombre in MOTIVOS_LIBERACION_JORNADA_INICIALES:
+        configuracion_service.crear_motivo(
+            organizacion.id, sesion, reloj, ambito="LIBERACION_JORNADA", nombre=nombre
         )
 
     roles = identidad_service.crear_plantillas_de_rol_iniciales(organizacion.id, sesion, reloj)

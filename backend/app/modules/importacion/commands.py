@@ -26,7 +26,9 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
 
+from app.commands.auditoria import DatosDeAuditoria, constancia_de_ubicacion_tomada
 from app.commands.catalogo import declarar_tipo
+from app.commands.observaciones import ObservacionProducida
 from app.commands.registro import registrar_handler
 from app.commands.sobre import SobreComando
 from app.core.clock import Clock
@@ -45,10 +47,19 @@ from app.modules.importacion.importadores import IMPORTADORES
 from app.modules.importacion.importadores.base import ContextoDeImportacion
 
 ResultadoHandler = tuple[str, dict[str, object] | None, str | None]
+ResultadoHandlerConAuditoria = tuple[
+    str,
+    dict[str, object] | None,
+    str | None,
+    tuple[ObservacionProducida, ...],
+    DatosDeAuditoria,
+]
+"""Extensión con el dato de auditoría (change 15, D8): la constancia de STK-09."""
 """Misma convención que `sync/service.py::ResultadoHandler` (ver
 `catalogo/commands.py` para la justificación de no importarla de `sync`)."""
 
 PERMISO_IMPORTAR = "IMPORTAR_DATOS"
+PERMISO_LIBERAR_UBICACION = "LIBERAR_UBICACION"
 
 
 def _exigir_permiso(sobre: SobreComando, sesion: object, codigo_permiso: str) -> None:
@@ -93,8 +104,14 @@ def manejar_importacion_registrar(
     *,
     sesion: object,
     reloj: Clock,
-) -> ResultadoHandler:
-    _exigir_permiso(sobre, sesion, PERMISO_IMPORTAR)
+) -> ResultadoHandlerConAuditoria:
+    permisos = identidad_service.listar_permisos_del_usuario(
+        sobre.organizacion_id,
+        sobre.usuario_id,
+        sesion,  # type: ignore[arg-type]
+    )
+    if PERMISO_IMPORTAR not in permisos:
+        raise PermisoRequeridoError(f"Falta el permiso {PERMISO_IMPORTAR}.")
     importador = IMPORTADORES.get(contenido.tipo)
     if importador is None:
         raise TipoImportacionInvalidoError(
@@ -103,18 +120,17 @@ def manejar_importacion_registrar(
     filas = [FilaPlanilla(fila=f.fila, valores=dict(f.valores)) for f in contenido.filas]
     verificar_columnas_de_filas(contenido.tipo, filas)
 
-    errores = importador(
-        ContextoDeImportacion(
-            organizacion_id=sobre.organizacion_id,
-            sesion=sesion,  # type: ignore[arg-type]
-            reloj=reloj,
-            usuario_id=sobre.usuario_id,
-            dispositivo_id=sobre.dispositivo_id,
-            operation_id=sobre.operation_id,
-            occurred_at=sobre.occurred_at,
-        ),
-        filas,
+    contexto = ContextoDeImportacion(
+        organizacion_id=sobre.organizacion_id,
+        sesion=sesion,  # type: ignore[arg-type]
+        reloj=reloj,
+        usuario_id=sobre.usuario_id,
+        dispositivo_id=sobre.dispositivo_id,
+        operation_id=sobre.operation_id,
+        occurred_at=sobre.occurred_at,
+        puede_operar_ubicacion_tomada=PERMISO_LIBERAR_UBICACION in permisos,
     )
+    errores = importador(contexto, filas)
     if errores:
         raise error_agregado(errores)
 
@@ -140,6 +156,8 @@ def manejar_importacion_registrar(
             "filas_ok": importacion.filas_ok,
         },
         None,
+        (),
+        constancia_de_ubicacion_tomada(contexto.jornadas_tomadas),
     )
 
 

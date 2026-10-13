@@ -32,6 +32,7 @@ ID_STOCK_AJENO = "stock-solo-por-service-ajeno"
 ID_HACIA_STOCK_Y_COSTEO = "modulos-hacia-stock-y-costeo-solo-por-service"
 ID_DOMAIN_SIN_BUS = "domain-no-commands"
 ID_CATALOGO_AJENO = "catalogo-solo-por-service-ajeno"
+ID_IDENTIDAD_NO_IMPORTA_STOCK = "identidad-no-importa-stock"
 
 
 def _contratos_por_id() -> dict[str, dict[str, Any]]:
@@ -318,3 +319,103 @@ def test_costeo_sigue_sin_importar_catalogo() -> None:
         )
         == 1
     )
+
+
+# --- jornadas dentro de `stock` (change 15, `design.md` D1, tarea 4.4) -------------------
+
+ID_PROVEEDORES_AJENO = "proveedores-solo-por-service-ajeno"
+ID_IMPORTACION_AJENO = "importacion-solo-por-service-ajeno"
+ARCHIVOS_DE_JORNADAS = (
+    "app.modules.stock.jornadas_repository",
+    "app.modules.stock.jornadas_casos",
+    "app.modules.stock.jornadas_commands",
+)
+
+
+@pytest.mark.parametrize(
+    "contrato_id", [ID_HACIA_STOCK_Y_COSTEO, ID_PROVEEDORES_AJENO, ID_IMPORTACION_AJENO]
+)
+def test_los_archivos_de_jornadas_estan_prohibidos_para_los_demas_modulos(
+    contrato_id: str,
+) -> None:
+    """D1: cada contrato que enumera los internos de `stock` (`models`, `repository`,
+    `domain`, `commands`, `api`) suma los tres archivos de jornadas; solo `stock.service`
+    los expone."""
+    prohibidos = set(_contratos_por_id()[contrato_id]["forbidden_modules"])
+
+    assert set(ARCHIVOS_DE_JORNADAS) <= prohibidos
+    assert "app.modules.stock.service" not in prohibidos
+    assert _correr(contrato_id) == 0
+
+
+@pytest.mark.parametrize(
+    ("contrato_id", "modulo"),
+    [
+        (ID_HACIA_STOCK_Y_COSTEO, "clientes"),
+        (ID_HACIA_STOCK_Y_COSTEO, "cuentas_corrientes"),
+        (ID_HACIA_STOCK_Y_COSTEO, "sync"),
+        (ID_PROVEEDORES_AJENO, "proveedores"),
+        (ID_IMPORTACION_AJENO, "importacion"),
+    ],
+)
+def test_otro_modulo_detecta_un_import_de_los_archivos_de_jornadas(
+    contrato_id: str, modulo: str
+) -> None:
+    archivo = MODULOS_DIR / modulo / "__init__.py"
+
+    for nombre in ("jornadas_repository", "jornadas_casos", "jornadas_commands"):
+        linea = f"from app.modules.stock import {nombre} as _j"
+        assert _con_import_agregado(archivo, linea, contrato_id) == 1, (modulo, nombre)
+
+
+def test_otro_modulo_sigue_alcanzando_a_stock_por_su_service() -> None:
+    """`stock.service` es la única puerta: el camino legítimo no se bloquea."""
+    assert (
+        _con_import_agregado(
+            MODULOS_DIR / "clientes" / "__init__.py",
+            "from app.modules.stock import service as _s",
+            ID_HACIA_STOCK_Y_COSTEO,
+        )
+        == 0
+    )
+
+
+def test_el_repositorio_de_jornadas_importa_sqlalchemy_como_los_demas_repositorios() -> None:
+    """La excepción `stock.jornadas_repository -> sqlalchemy` corresponde a un import real:
+    import-linter rechaza una excepción sin import."""
+    datos = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["tool"]["importlinter"]
+    excepciones = next(
+        c["ignore_imports"]
+        for c in datos["contracts"]
+        if c.get("name") == "domain no importa infraestructura"
+    )
+
+    assert "app.modules.stock.jornadas_repository -> sqlalchemy" in excepciones
+    assert cli.lint_imports(no_cache=True) == 0
+
+
+# --- change 15, tarea 12.1 (D19): identidad no importa stock --------------------------------
+
+
+def test_identidad_no_importa_stock_declarado_y_en_verde() -> None:
+    """D19, `02` §5.3: `identidad` consulta a `stock` por un puerto que `stock.service`
+    registra; nunca lo importa (ni siquiera su `service.py`)."""
+    contrato = _contratos_por_id()[ID_IDENTIDAD_NO_IMPORTA_STOCK]
+
+    assert contrato["source_modules"] == ["app.modules.identidad"]
+    assert contrato["forbidden_modules"] == ["app.modules.stock"]
+    assert _correr(ID_IDENTIDAD_NO_IMPORTA_STOCK) == 0
+
+
+@pytest.mark.parametrize(
+    "linea",
+    [
+        "from app.modules.stock import service as _s",
+        "from app.modules.stock import models as _m",
+        "from app.modules.stock import jornadas_casos as _j",
+    ],
+)
+def test_identidad_detecta_un_import_de_stock(linea: str) -> None:
+    archivo = MODULOS_DIR / "identidad" / "__init__.py"
+
+    assert _con_import_agregado(archivo, linea, ID_IDENTIDAD_NO_IMPORTA_STOCK) == 1

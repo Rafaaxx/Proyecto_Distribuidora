@@ -21,6 +21,15 @@ export interface FiltrosAjustes extends FiltrosTransferencias {
   motivoId?: string
 }
 
+export interface FiltrosJornadas {
+  ubicacionId?: string
+  usuarioId?: string
+  estado?: string
+  /** Fecha de negocio `aaaa-mm-dd` (TR-04), inclusive. */
+  desde?: string
+  hasta?: string
+}
+
 export const clavesStock = {
   raiz: () => ['stock'] as const,
   ubicaciones: (activo?: boolean) => ['stock', 'ubicaciones', { activo }] as const,
@@ -31,6 +40,9 @@ export const clavesStock = {
   transferencia: (id: string) => ['stock', 'transferencias', 'detalle', id] as const,
   ajustes: (filtros: FiltrosAjustes = {}) => ['stock', 'ajustes', 'listado', filtros] as const,
   ajuste: (id: string) => ['stock', 'ajustes', 'detalle', id] as const,
+  jornadas: (filtros: FiltrosJornadas = {}) => ['stock', 'jornadas', 'listado', filtros] as const,
+  jornada: (id: string) => ['stock', 'jornadas', 'detalle', id] as const,
+  jornadaActual: () => ['stock', 'jornadas', 'actual'] as const,
 }
 
 export const clavesCostoPromedio = {

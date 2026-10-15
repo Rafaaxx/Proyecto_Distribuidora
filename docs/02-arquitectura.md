@@ -232,6 +232,7 @@ cobranzas ──► cuentas_corrientes
 clientes ──► cuentas_corrientes, precios (lista asignada, solo por service.py, ADR-047)
 precios ──► catalogo, proveedores (costos informados), identidad (configuración y permisos)
 stock ──► catalogo, costeo, configuracion (motivos, solo por service.py, ADR-048)
+descuentos ──► catalogo, identidad (alcances, configuración del descuento manual, permisos y tope; solo por service.py, ADR-050)
 catalogo ──► costeo (solo lectura del costo promedio de un producto, ADR-036)
 facturacion ──► ventas (lectura), cuentas_corrientes, costeo
 sync ──► todos los módulos con comandos
@@ -241,6 +242,8 @@ cuentas_corrientes, costeo ──► (sin dependencias de negocio)
 ```
 
 Nota: `precios` no depende de `clientes`: este registra en `precios` un verificador de uso de listas (patrón de ADR-023) y no hay ciclo.
+
+Nota: `catalogo` e `identidad` no importan `descuentos`; `ventas` consume el motor y la evaluación del descuento manual solo por `descuentos/service.py`.
 
 Nota: `catalogo` no depende de `stock`: este registra en `catalogo` un verificador de stock (`registrar_verificador_de_stock`, patrón de ADR-023 y ADR-025, que falla cerrado) para que un producto con stock no se desactive, y no hay ciclo. El contrato de import-linter `stock-solo-por-service-ajeno` permite a `stock` alcanzar `configuracion` solo por su `service.py`, y `catalogo-solo-por-service-ajeno` prohíbe a `catalogo` importar `stock` (ADR-048).
 
@@ -321,6 +324,8 @@ Errores transitorios de PostgreSQL (serialización `40001`, deadlock `40P01`) se
 | `LISTA_GENERAR_BORRADOR`, `LISTA_BORRADOR_PRECIO_FIJAR` (con `GESTIONAR_LISTAS`) | ✓ | |
 | `LISTA_PUBLICAR`, `LISTA_ANULAR_VERSION` (con `PUBLICAR_LISTAS`) | ✓ | |
 | `LISTA_PRECIO_PREDETERMINADA_DEFINIR` (con `ADMIN_CONFIGURACION`) | ✓ | |
+| `REGLA_DESCUENTO_CREAR`, `REGLA_DESCUENTO_MODIFICAR`, `REGLA_DESCUENTO_ACTIVAR`, `REGLA_DESCUENTO_PAUSAR` (con `GESTIONAR_DESCUENTOS`) | ✓ | |
+| `ROL_TOPE_DESCUENTO_DEFINIR` (con `ADMIN_USUARIOS`) | ✓ | |
 | `SALDO_INICIAL_REGISTRAR` | ✓ | |
 | `OBSERVACION_RESOLVER` | ✓ | |
 | `IMPORTACION_REGISTRAR` (permiso `IMPORTAR_DATOS`) | ✓ | |
@@ -337,6 +342,8 @@ Un handler puede devolver, además del resultado, observaciones de negocio (SYN-
 `JORNADA_ABRIR` (`ABRIR_JORNADA`) lleva solo la ubicación: el usuario y el dispositivo salen de la sesión, nunca del contenido. `JORNADA_RENDIR` y `JORNADA_CERRAR` (`RENDIR_JORNADA`) llevan la jornada (en la ruta); `JORNADA_LIBERAR` (`LIBERAR_UBICACION`) lleva la jornada, un motivo del ámbito `LIBERACION_JORNADA` y una observación opcional de hasta 500 caracteres. Los cuatro son solo online, con `Operation-Id`; la fila de auditoría del bus de `JORNADA_LIBERAR` lleva el motivo (ADR-049). Los errores propios son `UBICACION_TOMADA`, `USUARIO_CON_JORNADA`, `DISPOSITIVO_CON_JORNADA`, `UBICACION_SIN_TOMA` y `JORNADA_ESTADO_INVALIDO` (409), `MOTIVO_INVALIDO` y `OBSERVACION_INVALIDA` (422) y `JORNADA_INEXISTENTE` (404); una jornada ajena o inexistente es 404. Las rutas son `POST /api/v1/stock/jornadas` y `POST /api/v1/stock/jornadas/{id}/rendicion`, `/cierre` y `/liberacion`. Las lecturas son `GET /api/v1/stock/jornadas` (filtros de ubicación, usuario, estado y fechas de negocio, con cursor), `GET /api/v1/stock/jornadas/{id}` y `GET /api/v1/stock/jornadas/actual`, con cualquiera de `ABRIR_JORNADA`, `RENDIR_JORNADA` o `LIBERAR_UBICACION` (la última, con `ABRIR_JORNADA`). Todo comando que mueve stock sobre una ubicación tomada responde `UBICACION_TOMADA` salvo que sea de la jornada o de quien tiene `LIBERAR_UBICACION` (STK-09).
 
 Los comandos de listas son solo online. Los errores propios son `MARGEN_INVALIDO`, `ALCANCE_INVALIDO`, `REDONDEO_INVALIDO`, `IMPORTE_INVALIDO`, `PRECIO_NO_POSITIVO`, `VIGENCIA_INVALIDA`, `VERSION_SIN_PRECIOS` (422) y `NOMBRE_DUPLICADO`, `REGLA_DUPLICADA`, `LISTA_INACTIVA`, `LISTA_EN_USO`, `VERSION_NO_ES_BORRADOR`, `VERSION_NO_PUBLICADA`, `VERSION_YA_VIGENTE`, `VIGENCIA_DUPLICADA`, `SIN_LISTA_APLICABLE`, `LISTA_SIN_VERSION_VIGENTE` (409). Las lecturas cuelgan de `/api/v1/precios/…` (listas, reglas, borrador, versiones, precios de una versión paginados por cursor, `vigente?momento=` y `lista-predeterminada`); `CLIENTE_CREAR` y `CLIENTE_MODIFICAR` aceptan `lista_precio_id` (ADR-047).
+
+`REGLA_DESCUENTO_CREAR` lleva nombre, tipo, medida, operador, umbral, acción (tipo y valor, el valor como cadena: fracción de seis decimales para el porcentaje o importe de dos decimales), prioridad entera desde 1, acumulable, los alcances (identificadores de productos, categorías o marcas) y, opcionalmente, la vigencia desde y hasta; la regla nace en `BORRADOR`. `REGLA_DESCUENTO_MODIFICAR` reemplaza un borrador con los mismos campos; en una regla activada o pausada solo admite la vigencia hasta (`REGLA_NO_ES_BORRADOR`, 409, en cualquier otro caso). `REGLA_DESCUENTO_ACTIVAR` (desde `BORRADOR` o `PAUSADA`) y `REGLA_DESCUENTO_PAUSAR` (desde `ACTIVA`) llevan solo la regla; una transición que no corresponde responde `REGLA_ESTADO_INVALIDO` (409). Los errores propios son `UMBRAL_INVALIDO`, `ACCION_INVALIDA`, `PRIORIDAD_INVALIDA`, `NOMBRE_INVALIDO`, `ALCANCE_INVALIDO`, `VIGENCIA_INVALIDA`, `REGLA_DESCUENTO_INVALIDA` (422) y `REGLA_ESTADO_INVALIDO`, `REGLA_NO_ES_BORRADOR` (409). Las rutas cuelgan de `/api/v1/descuentos/reglas` (alta, edición, `/{id}/activacion`, `/{id}/pausa`) y las lecturas, `GET /api/v1/descuentos/reglas` (filtro de estado, que admite `VENCIDA`, y cursor) y `GET /api/v1/descuentos/reglas/{id}`, todas con `GESTIONAR_DESCUENTOS`. `ROL_TOPE_DESCUENTO_DEFINIR` lleva el rol y el tope como cadena (fracción de hasta seis decimales entre 0 y 1; `IDENTIDAD_TOPE_DESCUENTO_FUERA_DE_RANGO`, 422), cambia solo `rol.tope_descuento`, deja una fila de auditoría con el valor anterior y el nuevo y se expone en `PUT /api/v1/identidad/roles/{rol_id}/tope-descuento`; `GET /api/v1/identidad/roles` devuelve los roles con su tope y sus permisos (`ADMIN_USUARIOS`); la pantalla "Topes por rol" exige `GESTIONAR_DESCUENTOS` y `ADMIN_USUARIOS`, y el tope no se expone en `GET /yo` ni en el token (el usuario ve el suyo recién en el 18b, con el bootstrap, SYN-11). La evaluación del descuento manual no es un comando: la consulta la venta por `descuentos/service.py` y devuelve `DESCUENTO_MANUAL_DESHABILITADO` (409), `MOTIVO_REQUERIDO` (422), `AUTORIZACION_REQUERIDA` y `AUTORIZADOR_SIN_PERMISO` (403) cuando corresponde.
 
 Una importación es un comando por archivo: todo o nada, con savepoints por fila dentro del handler (ADR-040).
 
@@ -445,7 +452,7 @@ Una tarea diaria compara cada tabla de saldo con la suma de su libro. Cualquier 
 
 El dispositivo necesita calcular sin conexión: bruto de línea (PRC-22), descuentos (DSC-05), totales (VTA-04) y evaluación de crédito (CRE-01 a CRE-08). Esa lógica existe en dos implementaciones:
 
-- `backend/app/modules/precios/domain/bruto_de_linea.py` (PRC-22; el motor completo de venta —descuentos, totales, crédito— vivirá en `ventas/domain/calculo.py` desde el change 18a y consumirá esta función por `precios/service.py`) y `frontend/src/domain/precios/brutoDeLinea.ts`; el resto del motor, en `frontend/src/domain/calculo.ts`.
+- `backend/app/modules/precios/domain/bruto_de_linea.py` (PRC-22) y `frontend/src/domain/precios/brutoDeLinea.ts`; el motor de descuentos (DSC-03 a DSC-07), en `backend/app/modules/descuentos/domain/` y `frontend/src/domain/descuentos/`, expuesto por `descuentos/service.py`; el motor completo de venta —bruto, descuentos, totales, crédito— vivirá en `ventas/domain/calculo.py` y `frontend/src/domain/calculo.ts` desde el change 18a, como orquestadores que consumen las funciones de `precios` y `descuentos` por sus `service.py` (ADR-050).
 
 Para que no diverjan:
 
@@ -454,28 +461,37 @@ Para que no diverjan:
 - **DEBE:** todo cambio en una regla de cálculo agrega o modifica casos compartidos antes de modificar el código.
 - **DEBE:** CI falla si cualquiera de las dos suites falla.
 
-Los casos de PRC-22 están en `shared/fixtures/calculo/prc-22-bruto-de-linea.json` (`"motor": "prc22"`). El cálculo de costo de referencia, margen y redondeo (PRC-11, PRC-12, PRC-14) corre solo en el servidor y no tiene gemela (ADR-047 punto 11, matiza ADR-016).
+Los casos de PRC-22 están en `shared/fixtures/calculo/prc-22-bruto-de-linea.json` (`"motor": "prc22"`). Los del motor de descuentos están en `shared/fixtures/calculo/dsc-05-descuentos.json` (`"motor": "dsc05"`: condición, acciones, orden de resolución y descuento manual general y propio, con `porcentaje_manual_maximo`) y los de la evaluación del tope y la autorización, en `shared/fixtures/calculo/dsc-06-descuento-manual.json` (`"motor": "dsc06"`). Los casos de totales (VTA-04) y de crédito se agregan, con el mismo formato, en los changes 18a y 18b. El cálculo de costo de referencia, margen y redondeo (PRC-11, PRC-12, PRC-14) corre solo en el servidor y no tiene gemela (ADR-047 punto 11, matiza ADR-016).
 
-Formato de un caso:
+Formato de un caso (el de descuentos, con el descuento manual en dos niveles):
 
 ```json
 {
-  "id": "PRC-22-caja-y-sueltas",
-  "reglas": ["PRC-22"],
+  "id": "DSC05-res-manual-sin-automaticos",
+  "reglas": ["DSC-05", "PRC-22"],
+  "comentario": "Sin reglas: 5% de 31250.00 = 1562.50; neto 29687.50. Maximo 0.050000.",
   "entrada": {
-    "modo_impositivo": "A",
+    "motor": "dsc05",
     "lineas": [
-      { "producto_id": "p1", "precio_referencia": "12500.00", "unidades_referencia": 6, "cantidad_base": 15, "alicuota": "0.210000" }
+      { "id": "l-vino", "bruto": "31250.00", "cantidad_base": 15, "unidades_referencia": 6,
+        "producto_id": "prod-vino", "categoria_id": "cat-vinos", "marca_id": "marca-bodega-norte",
+        "descuento_manual": null }
     ],
     "reglas_descuento": [],
-    "descuento_manual": null
+    "descuento_manual_general": "0.050000"
   },
   "salida_esperada": {
-    "lineas": [ { "bruto": "31250.00", "descuentos": "0.00", "neto": "31250.00", "iva": "0.00" } ],
-    "total": "31250.00"
+    "lineas": [
+      { "id": "l-vino",
+        "descuentos": [ { "origen": "MANUAL", "regla_id": null, "porcentaje": "0.050000", "importe": "1562.50" } ],
+        "descuento_total": "1562.50", "neto": "29687.50" }
+    ],
+    "porcentaje_manual_maximo": "0.050000"
   }
 }
 ```
+
+El caso completo de venta con IVA y total (`modo_impositivo`, `alicuota`, `iva`, `total`) lo introduce el change 18a sobre este mismo formato; el `descuento_manual` único de nivel venta que traía el ejemplo anterior pasa a `descuento_manual_general` más el `descuento_manual` propio de cada línea.
 
 ## 11. API
 
@@ -490,7 +506,7 @@ Agrupación de endpoints de la etapa 1:
 | Grupo | Ejemplos |
 | --- | --- |
 | Autenticación | `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout` |
-| Identidad | usuarios, roles, dispositivos, PIN |
+| Identidad | usuarios, roles (con su tope de descuento), dispositivos, PIN |
 | Configuración | parámetros, medios de pago, motivos, alícuotas |
 | Catálogo | productos, presentaciones, categorías, marcas |
 | Proveedores | proveedores, costos informados, compras, pagos |
@@ -498,7 +514,7 @@ Agrupación de endpoints de la etapa 1:
 | Stock | ubicaciones, saldos, kardex, transferencias, ajustes |
 | Jornadas | apertura, rendición, cierre, liberación |
 | Clientes | clientes, estado de cuenta |
-| Descuentos | reglas |
+| Descuentos | reglas (alta, edición del borrador, activación, pausa, consulta) |
 | Ventas | confirmación, anulación, consulta |
 | Cobranzas | registro, anulación, consulta |
 | Sync | `GET /sync/bootstrap`, `POST /sync/comandos` |

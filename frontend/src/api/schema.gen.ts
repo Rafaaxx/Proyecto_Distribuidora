@@ -202,6 +202,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/identidad/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Roles
+         * @description Los roles de la organización del token, con nombre, estado, tope y permisos (una consulta
+         *     para todos los permisos, sin N+1). Ningún rol ajeno (INV-21).
+         */
+        get: operations["listar_roles_api_v1_identidad_roles_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identidad/roles/{rol_id}/tope-descuento": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Definir Tope Descuento De Rol
+         * @description `ROL_TOPE_DESCUENTO_DEFINIR` (D13). La respuesta sale de `comando.resultado`, no de una
+         *     relectura: un reenvío idempotente devuelve exactamente lo mismo (INV-06). Un rol que no está
+         *     en la organización del token responde 404 (INV-21, SEG-07).
+         */
+        put: operations["definir_tope_descuento_de_rol_api_v1_identidad_roles__rol_id__tope_descuento_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/identidad/usuarios/{usuario_id}/pin": {
         parameters: {
             query?: never;
@@ -762,6 +805,83 @@ export interface paths {
         put?: never;
         /** Registrar Saldo Inicial */
         post: operations["registrar_saldo_inicial_api_v1_cuentas_corrientes_saldos_iniciales_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/descuentos/reglas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Reglas
+         * @description Las reglas de la organización, de la más nueva a la más vieja, paginadas por cursor.
+         *     `estado` admite `VENCIDA` (derivado). Porcentajes e importes viajan como string.
+         */
+        get: operations["listar_reglas_api_v1_descuentos_reglas_get"];
+        put?: never;
+        /** Crear Regla */
+        post: operations["crear_regla_api_v1_descuentos_reglas_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/descuentos/reglas/{regla_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Regla
+         * @description El detalle de una regla con sus alcances y el nombre de cada entidad; 404 si es ajena.
+         */
+        get: operations["obtener_regla_api_v1_descuentos_reglas__regla_id__get"];
+        /** Modificar Regla */
+        put: operations["modificar_regla_api_v1_descuentos_reglas__regla_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/descuentos/reglas/{regla_id}/activacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Activar Regla */
+        post: operations["activar_regla_api_v1_descuentos_reglas__regla_id__activacion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/descuentos/reglas/{regla_id}/pausa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pausar Regla */
+        post: operations["pausar_regla_api_v1_descuentos_reglas__regla_id__pausa_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1966,6 +2086,37 @@ export interface components {
             observacion: string | null;
             /** Lineas */
             lineas: components["schemas"]["LineaAjusteResponse"][];
+        };
+        /** AlcanceReglaRequest */
+        AlcanceReglaRequest: {
+            /**
+             * Tipo
+             * @enum {string}
+             */
+            tipo: "PRODUCTO" | "CATEGORIA" | "MARCA";
+            /**
+             * Entidad Id
+             * Format: uuid
+             */
+            entidad_id: string;
+        };
+        /**
+         * AlcanceReglaResponse
+         * @description Un alcance con el nombre de su entidad.
+         */
+        AlcanceReglaResponse: {
+            /**
+             * Tipo
+             * @enum {string}
+             */
+            tipo: "PRODUCTO" | "CATEGORIA" | "MARCA";
+            /**
+             * Entidad Id
+             * Format: uuid
+             */
+            entidad_id: string;
+            /** Nombre */
+            nombre: string;
         };
         /** AlicuotaResponse */
         AlicuotaResponse: {
@@ -4667,6 +4818,151 @@ export interface components {
             alcance_id?: string | null;
         };
         /**
+         * ReglaDescuentoCrearRequest
+         * @description Cuerpo de `POST /descuentos/reglas`: la regla nace en `BORRADOR`. `prioridad` admite un
+         *     decimal solo para que la ruta lo rechace con `PRIORIDAD_INVALIDA` (un número con coma no
+         *     puede entrar al contenido de un comando).
+         */
+        ReglaDescuentoCrearRequest: {
+            /** Nombre */
+            nombre: string;
+            /**
+             * Tipo
+             * @enum {string}
+             */
+            tipo: "VOLUMEN_OPERACION" | "VOLUMEN_ALCANCE";
+            /**
+             * Medida
+             * @enum {string}
+             */
+            medida: "CAJAS_EQUIVALENTES" | "UNIDADES_BASE" | "IMPORTE_BRUTO";
+            /**
+             * Operador
+             * @enum {string}
+             */
+            operador: "GTE" | "GT";
+            /** Umbral */
+            umbral: string;
+            /**
+             * Accion Tipo
+             * @enum {string}
+             */
+            accion_tipo: "PORCENTAJE" | "IMPORTE_FIJO";
+            /** Accion Valor */
+            accion_valor: string;
+            /** Prioridad */
+            prioridad: number;
+            /** Acumulable */
+            acumulable: boolean;
+            /**
+             * Alcances
+             * @default []
+             */
+            alcances: components["schemas"]["AlcanceReglaRequest"][];
+            /** Vigencia Desde */
+            vigencia_desde?: string | null;
+            /** Vigencia Hasta */
+            vigencia_hasta?: string | null;
+        };
+        /**
+         * ReglaDescuentoModificarRequest
+         * @description Cuerpo de `PUT /descuentos/reglas/{regla_id}`. Un borrador se reemplaza con los mismos
+         *     campos del alta; una regla activada o pausada solo admite `vigencia_hasta` (`null` quita el
+         *     fin). Los campos que no vienen no se envían al comando.
+         */
+        ReglaDescuentoModificarRequest: {
+            /** Nombre */
+            nombre?: string | null;
+            /** Tipo */
+            tipo?: ("VOLUMEN_OPERACION" | "VOLUMEN_ALCANCE") | null;
+            /** Medida */
+            medida?: ("CAJAS_EQUIVALENTES" | "UNIDADES_BASE" | "IMPORTE_BRUTO") | null;
+            /** Operador */
+            operador?: ("GTE" | "GT") | null;
+            /** Umbral */
+            umbral?: string | null;
+            /** Accion Tipo */
+            accion_tipo?: ("PORCENTAJE" | "IMPORTE_FIJO") | null;
+            /** Accion Valor */
+            accion_valor?: string | null;
+            /** Prioridad */
+            prioridad?: number | null;
+            /** Acumulable */
+            acumulable?: boolean | null;
+            /** Alcances */
+            alcances?: components["schemas"]["AlcanceReglaRequest"][] | null;
+            /** Vigencia Desde */
+            vigencia_desde?: string | null;
+            /** Vigencia Hasta */
+            vigencia_hasta?: string | null;
+        };
+        /**
+         * ReglaDescuentoResponse
+         * @description Una regla con su condición, acción, vigencia y alcances. `estado` es el que se informa:
+         *     `VENCIDA` (derivado, no se almacena) para una regla activa o pausada cuya vigencia hasta ya
+         *     pasó (`01` §18). Exactamente uno de `accion_porcentaje` y `accion_importe` no es nulo.
+         */
+        ReglaDescuentoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /**
+             * Tipo
+             * @enum {string}
+             */
+            tipo: "VOLUMEN_OPERACION" | "VOLUMEN_ALCANCE";
+            /**
+             * Medida
+             * @enum {string}
+             */
+            medida: "CAJAS_EQUIVALENTES" | "UNIDADES_BASE" | "IMPORTE_BRUTO";
+            /**
+             * Operador
+             * @enum {string}
+             */
+            operador: "GTE" | "GT";
+            /** Umbral */
+            umbral: string;
+            /**
+             * Accion Tipo
+             * @enum {string}
+             */
+            accion_tipo: "PORCENTAJE" | "IMPORTE_FIJO";
+            /** Accion Porcentaje */
+            accion_porcentaje: string | null;
+            /** Accion Importe */
+            accion_importe: string | null;
+            /** Prioridad */
+            prioridad: number;
+            /** Acumulable */
+            acumulable: boolean;
+            /** Vigencia Desde */
+            vigencia_desde: string | null;
+            /** Vigencia Hasta */
+            vigencia_hasta: string | null;
+            /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "BORRADOR" | "ACTIVA" | "PAUSADA" | "VENCIDA";
+            /** Alcances */
+            alcances: components["schemas"]["AlcanceReglaResponse"][];
+            /**
+             * Creado En
+             * Format: date-time
+             */
+            creado_en: string;
+            /**
+             * Actualizado En
+             * Format: date-time
+             */
+            actualizado_en: string;
+        };
+        /**
          * ReglaModificarRequest
          * @description Cuerpo de `PUT /precios/listas/{lista_id}/reglas/{regla_id}`: tipo, valor y actividad;
          *     el alcance y la lista no cambian.
@@ -4718,6 +5014,17 @@ export interface components {
              */
             actualizado_en: string;
         };
+        /**
+         * ReglasDescuentoResponse
+         * @description Una página del listado de reglas, de la más nueva a la más vieja; `siguiente_cursor` es
+         *     nulo en la última página.
+         */
+        ReglasDescuentoResponse: {
+            /** Items */
+            items: components["schemas"]["ReglaDescuentoResponse"][];
+            /** Siguiente Cursor */
+            siguiente_cursor: string | null;
+        };
         /** ReglasResponse */
         ReglasResponse: {
             /** Items */
@@ -4754,6 +5061,40 @@ export interface components {
             con_credito_fiscal: number;
             /** Sin Credito Fiscal */
             sin_credito_fiscal: number;
+        };
+        /** RolConTopeResponse */
+        RolConTopeResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Activo */
+            activo: boolean;
+            /** Tope Descuento */
+            tope_descuento: string;
+        };
+        /**
+         * RolConTopeYPermisosResponse
+         * @description La lectura suma los permisos del rol (códigos ordenados) para que la pantalla "Topes por
+         *     rol" avise solo donde el tope 0 % importa (DSC-06). La escritura no los devuelve.
+         */
+        RolConTopeYPermisosResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Activo */
+            activo: boolean;
+            /** Tope Descuento */
+            tope_descuento: string;
+            /** Permisos */
+            permisos: string[];
         };
         /** RolResponse */
         RolResponse: {
@@ -4926,6 +5267,15 @@ export interface components {
             abierta_en: string;
             /** Estado */
             estado: string;
+        };
+        /**
+         * TopeDescuentoRolRequest
+         * @description Solo el tope, como cadena con hasta 6 decimales: un número JSON responde 422 (INV-03).
+         *     Sin `organizacion_id`: sale del token (INV-21).
+         */
+        TopeDescuentoRolRequest: {
+            /** Tope Descuento */
+            tope_descuento: string;
         };
         /**
          * TransferenciaAnuladaResponse
@@ -5556,6 +5906,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RolResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_roles_api_v1_identidad_roles_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RolConTopeYPermisosResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    definir_tope_descuento_de_rol_api_v1_identidad_roles__rol_id__tope_descuento_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                rol_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TopeDescuentoRolRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RolConTopeResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6758,6 +7177,216 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SaldoInicialResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_reglas_api_v1_descuentos_reglas_get: {
+        parameters: {
+            query?: {
+                estado?: ("BORRADOR" | "ACTIVA" | "PAUSADA" | "VENCIDA") | null;
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReglasDescuentoResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_regla_api_v1_descuentos_reglas_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReglaDescuentoCrearRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReglaDescuentoResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_regla_api_v1_descuentos_reglas__regla_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                regla_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReglaDescuentoResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    modificar_regla_api_v1_descuentos_reglas__regla_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                regla_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReglaDescuentoModificarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReglaDescuentoResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activar_regla_api_v1_descuentos_reglas__regla_id__activacion_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                regla_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReglaDescuentoResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pausar_regla_api_v1_descuentos_reglas__regla_id__pausa_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                regla_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReglaDescuentoResponse"];
                 };
             };
             /** @description Validation Error */

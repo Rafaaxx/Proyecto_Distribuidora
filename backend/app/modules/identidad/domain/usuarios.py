@@ -67,6 +67,7 @@ class TransicionEstadoDispositivoInvalidaError(DomainError):
 
 class TopeDescuentoFueraDeRangoError(DomainError):
     codigo = "IDENTIDAD_TOPE_DESCUENTO_FUERA_DE_RANGO"
+    status_http = 422
 
 
 class PinAutorizacionInvalidoError(DomainError):

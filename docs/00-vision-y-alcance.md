@@ -122,7 +122,7 @@ Etapa 1 — Ruta sin papel ─────────┬──> Etapa 2 — Cir
 | Precios | Listas múltiples versionadas con vigencia, margen (markup o margen bruto) con precedencia, redondeo configurable, generación de versión borrador desde nuevos costos, publicación, uso de lista anterior con permiso | Programación masiva, duplicación de listas con reglas porcentuales |
 | Stock | Stock por ubicación en unidad base, visualización en cajas + unidades, transferencias, ajustes con motivo, kardex | Recuento físico guiado, alertas de stock bajo |
 | Ruta | Carga del vehículo, toma de ubicación por jornada, rendición con conteo, diferencias como ajustes auditados, cierre y liberación | Rendición de caja completa, rutas y geolocalización |
-| Venta | Pedido en cajas y unidades, precio desde lista, descuento manual controlado por permiso y tope, una o dos reglas de descuento por volumen, control de crédito, pago total/parcial/cuenta corriente con varios medios, confirmación atómica, costo congelado, anulación por reversión | Fidelización por historial, devoluciones parciales, bonificación en unidades |
+| Venta | Pedido en cajas y unidades, precio desde lista, descuento manual controlado por permiso y tope (un porcentaje general de la venta y, opcionalmente, uno propio por línea), reglas de descuento por volumen (cajas equivalentes, unidades base o importe bruto) sobre toda la venta o sobre productos, categorías o marcas, con prioridad, acumulables y vigencia, control de crédito, pago total/parcial/cuenta corriente con varios medios, confirmación atómica, costo congelado, anulación por reversión | Fidelización por historial, promociones por cliente o segmento, precio especial, bonificación en unidades, devoluciones parciales |
 | Offline | Bootstrap completo al abrir jornada, base local, cola de comandos, venta y cobranza sin señal, sincronización idempotente, marcas de revisión y pantalla de conflictos | Bootstrap incremental (queda previsto en el contrato) |
 | Nota de venta | Comprobante interno sin validez fiscal, numeración por dispositivo, generación en el teléfono, compartir con Web Share API y descarga como respaldo | Plantillas personalizables por organización |
 | Cuenta corriente y cobranzas | Libro de movimientos del cliente, cobranzas independientes con varios medios, estado de cuenta en pantalla | Estado de cuenta en PDF, antigüedad de deuda, imputación por operación |
@@ -132,7 +132,7 @@ Etapa 1 — Ruta sin papel ─────────┬──> Etapa 2 — Cir
 
 - Devoluciones totales y parciales con reingreso de stock según estado.
 - Notas de crédito y débito de clientes; ajustes de cuenta corriente con permiso y motivo.
-- Fidelización por historial de compras y ampliación del motor de descuentos (reglas por categoría, marca, cliente, promociones temporales, acumulabilidad completa).
+- Fidelización por historial de compras y ampliación del motor de descuentos (reglas por cliente o segmento, promociones por cliente, precio especial, bonificación en unidades, margen mínimo, tramos escalonados y combinaciones de condiciones). Las reglas por categoría y marca, la vigencia y la acumulabilidad ya son de la etapa 1 (`01` DSC-02 a DSC-05).
 - Autorización remota de excepciones (crédito, descuentos).
 - Antigüedad de deuda y política de bloqueo por deuda vencida.
 - Vencimientos y calendario de pagos a proveedores; notas de crédito y débito de proveedor.

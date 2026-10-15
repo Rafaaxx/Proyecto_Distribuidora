@@ -20,6 +20,7 @@ from app.modules.clientes import repository as clientes_repository
 from app.modules.configuracion import repository as configuracion_repository
 from app.modules.costeo import repository as costeo_repository
 from app.modules.cuentas_corrientes import repository as cuentas_corrientes_repository
+from app.modules.descuentos import repository as descuentos_repository
 from app.modules.identidad import repository as identidad_repository
 from app.modules.importacion import repository as importacion_repository
 from app.modules.precios import repository as precios_repository
@@ -203,3 +204,14 @@ def test_precios_repository_exige_organizacion_id_primero_en_todo_metodo() -> No
     )
     assert isinstance(precios_repository.FUNCIONES_SIN_ORGANIZACION_ID, frozenset)
     assert not precios_repository.FUNCIONES_SIN_ORGANIZACION_ID
+
+
+def test_descuentos_repository_exige_organizacion_id_primero_en_todo_metodo() -> None:
+    """Change 16, tarea 11.1: `descuentos` tampoco declara excepciones
+    (`FUNCIONES_SIN_ORGANIZACION_ID` vacío): toda regla y todo alcance es de una organización,
+    y ninguna consulta se hace sin filtrarla (INV-21)."""
+    _verificar_organizacion_id_primer_parametro(
+        descuentos_repository, exentas=descuentos_repository.FUNCIONES_SIN_ORGANIZACION_ID
+    )
+    assert isinstance(descuentos_repository.FUNCIONES_SIN_ORGANIZACION_ID, frozenset)
+    assert not descuentos_repository.FUNCIONES_SIN_ORGANIZACION_ID

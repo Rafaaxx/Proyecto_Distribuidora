@@ -39,9 +39,11 @@ from app.modules.identidad.domain.usuarios import (
     RefreshTokenInvalidoError,
     RolConPermisoInexistenteError,
     RolSinAutorizacionParaPinError,
+    TopeDescuentoFueraDeRangoError,
     UsuarioSinRolError,
     rol_confiere_autorizacion_excepcion,
     validar_formato_pin_autorizacion,
+    validar_tope_descuento,
 )
 from app.modules.identidad.domain.valores import (
     CondicionIvaSinCambioError,
@@ -584,6 +586,65 @@ def cambiar_composicion_rol(
         )
 
     return repository.obtener_rol_por_id(organizacion_id, rol_id, sesion)
+
+
+def definir_tope_descuento_de_rol(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    rol_id: UUID,
+    tope_nuevo: str,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> Rol | None:
+    """`ROL_TOPE_DESCUENTO_DEFINIR` (change 16, D13, DSC-06): fija el tope de descuento manual de
+    un rol. Cambia SOLO `rol.tope_descuento`: no toca los permisos del rol, el tope propio de
+    ningún usuario ni el PIN.
+
+    El tope llega como cadena y se valida con `validar_tope_descuento` (de 0 a 1) y, además,
+    con a lo sumo 6 decimales: un séptimo decimal no se redondea en silencio, se rechaza (TR-02,
+    INV-03). Ambos con `IDENTIDAD_TOPE_DESCUENTO_FUERA_DE_RANGO`. Toma el rol `FOR UPDATE` y
+    escribe UNA auditoría con el valor anterior y el nuevo (`origen='COMANDO'`, `operation_id`
+    del sobre; la fila genérica del comando la deja el bus, ADR-022; mismo patrón que
+    `cambiar_condicion_iva`). Devuelve `None` sin escribir nada si el rol no existe en
+    `organizacion_id` (INV-21). Sin `commit`: la transacción la gestiona el bus."""
+    tope = validar_tope_descuento(tope_nuevo)
+    if Decimal(tope_nuevo) != tope:
+        raise TopeDescuentoFueraDeRangoError(
+            f"El tope de descuento {tope_nuevo} tiene más de 6 decimales."
+        )
+    rol = repository.obtener_rol_para_actualizar(organizacion_id, rol_id, sesion)
+    if rol is None:
+        return None
+
+    tope_anterior = rol.tope_descuento
+    momento = reloj.now()
+    repository.actualizar_tope_de_rol(
+        organizacion_id,
+        sesion,
+        rol,
+        tope_descuento=tope,
+        momento=momento,
+        actualizado_por_id=actor_id,
+    )
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="ROL_TOPE_DESCUENTO_DEFINIR",
+        entidad="rol",
+        entidad_id=rol_id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        antes={"tope_descuento": f"{tope_anterior:.6f}"},
+        despues={"tope_descuento": f"{tope:.6f}"},
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+    return rol
 
 
 def _invalidar_pin_de_usuarios_del_rol(
@@ -1533,6 +1594,38 @@ def listar_permisos_del_usuario(
     if _motivo_sesion_deshabilitada(usuario, rol) is not None:
         return frozenset()
     return frozenset(repository.listar_permisos_de_rol(organizacion_id, usuario.rol_id, sesion))
+
+
+@dataclass(frozen=True)
+class DatosParaDescuentoManual:
+    """Lo que `descuentos` necesita de un usuario para evaluar un descuento manual (change 16,
+    DSC-06): sus permisos vigentes y los topes de descuento (`design.md` D12, D19)."""
+
+    usuario_id: UUID
+    permisos: frozenset[str]
+    tope_rol: Decimal
+    tope_propio: Decimal | None
+
+
+def obtener_datos_para_descuento_manual(
+    organizacion_id: UUID, usuario_id: UUID, sesion: Session
+) -> DatosParaDescuentoManual | None:
+    """Lectura de solo lectura para `descuentos/service.py::evaluar_descuento_manual` (change
+    16, tarea 12.4): los permisos vigentes de `usuario_id` (vacíos si el usuario o su rol están
+    inactivos, igual que `listar_permisos_del_usuario`) y su tope de descuento propio y el de su
+    rol, o `None` si no existe en `organizacion_id` (INV-21: el de otra organización tampoco).
+    No escribe nada y no expone secretos."""
+    usuario_con_rol = repository.obtener_usuario_con_rol(organizacion_id, usuario_id, sesion)
+    if usuario_con_rol is None:
+        return None
+    usuario, rol = usuario_con_rol
+    permisos = listar_permisos_del_usuario(organizacion_id, usuario_id, sesion)
+    return DatosParaDescuentoManual(
+        usuario_id=usuario.id,
+        permisos=permisos,
+        tope_rol=rol.tope_descuento,
+        tope_propio=usuario.tope_descuento_override,
+    )
 
 
 # --- `GET /api/v1/yo` (grupo 3, D1) ----------------------------------------

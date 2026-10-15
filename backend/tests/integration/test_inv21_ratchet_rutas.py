@@ -80,6 +80,11 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("get", "/api/v1/identidad/usuarios"),
         ("post", "/api/v1/identidad/usuarios"),
         ("put", "/api/v1/identidad/roles/{rol_id}/permisos"),
+        # Change 16, tarea 13.2: el tope de descuento de un rol (escritura por el bus) y la
+        # lectura de roles. Prueba real de aislamiento en `test_identidad_tope_de_rol.py` (el
+        # rol de otra organizacion responde 404 sin efectos; la lectura no incluye roles ajenos).
+        ("put", "/api/v1/identidad/roles/{rol_id}/tope-descuento"),
+        ("get", "/api/v1/identidad/roles"),
         ("post", "/api/v1/identidad/usuarios/{usuario_id}/pin"),
         ("post", "/api/v1/identidad/usuarios/{usuario_id}/desbloqueo"),
         # Change 04, grupo 8 (`sync/api.py`, tarea 8.6): a diferencia de las
@@ -349,6 +354,17 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         # recurso de otra organizacion responde 404 sin efectos).
         ("put", "/api/v1/precios/lista-predeterminada"),
         ("get", "/api/v1/precios/lista-predeterminada"),
+        # Change 16, grupo 11 (tarea 11.1): las cuatro escrituras y las dos lecturas de
+        # `descuentos/api.py` (alta, edición, activación, pausa, listado y detalle de una regla).
+        # Prueba real de aislamiento en `test_inv21_aislamiento_endpoints_descuentos.py` (login
+        # real de dos organizaciones; la regla o el alcance de otra organización responde 404
+        # sin efectos).
+        ("get", "/api/v1/descuentos/reglas"),
+        ("get", "/api/v1/descuentos/reglas/{regla_id}"),
+        ("post", "/api/v1/descuentos/reglas"),
+        ("put", "/api/v1/descuentos/reglas/{regla_id}"),
+        ("post", "/api/v1/descuentos/reglas/{regla_id}/activacion"),
+        ("post", "/api/v1/descuentos/reglas/{regla_id}/pausa"),
     }
 )
 

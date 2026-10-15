@@ -349,3 +349,66 @@ registrar_handler(
     manejar_organizacion_condicion_iva_cambiar  # type: ignore[arg-type]
 )
 declarar_tipo("ORGANIZACION_CONDICION_IVA_CAMBIAR", admite_online=True, admite_offline=False)
+
+
+# --- ROL_TOPE_DESCUENTO_DEFINIR (change 16, D13, DSC-06, envuelve
+# `identidad_service.definir_tope_descuento_de_rol`) -----------------------
+
+
+class RolTopeDescuentoDefinirContenidoV1(BaseModel):
+    """El rol y su tope nuevo. `organizacion_id` sale del sobre (token), nunca del contenido. El
+    tope es un `str`: un número JSON no es válido (INV-03) y el rango lo valida el dominio con su
+    error (422)."""
+
+    rol_id: UUID
+    tope_descuento: str
+
+
+def manejar_rol_tope_descuento_definir(
+    sobre: SobreComando,
+    contenido: RolTopeDescuentoDefinirContenidoV1,
+    *,
+    sesion: object,
+    reloj: Clock,
+) -> ResultadoHandler:
+    """Handler de `ROL_TOPE_DESCUENTO_DEFINIR` v1 (D13). El permiso se exige acá, PRIMERO
+    (`ADMIN_USUARIOS`, el de la composición de roles; SEG-06). `auditar` no existe: la auditoría
+    con valor anterior y nuevo es la del servicio (mismo patrón que `cambiar_condicion_iva`). El
+    resultado lleva el rol tal como quedó: un reenvío idempotente devuelve exactamente esto
+    (INV-06)."""
+    permisos = identidad_service.listar_permisos_del_usuario(
+        sobre.organizacion_id,
+        sobre.usuario_id,
+        sesion,  # type: ignore[arg-type]
+    )
+    if "ADMIN_USUARIOS" not in permisos:
+        raise PermisoRequeridoError("Falta el permiso ADMIN_USUARIOS.")
+
+    rol = identidad_service.definir_tope_descuento_de_rol(
+        sobre.organizacion_id,
+        sesion,  # type: ignore[arg-type]
+        reloj,
+        rol_id=contenido.rol_id,
+        tope_nuevo=contenido.tope_descuento,
+        actor_id=sobre.usuario_id,
+        dispositivo_id_actor=sobre.dispositivo_id,
+        operation_id=sobre.operation_id,
+    )
+    if rol is None:
+        return "RECHAZADO", None, "ROL_NO_ENCONTRADO"
+    return (
+        "ACEPTADO",
+        {
+            "rol_id": str(rol.id),
+            "nombre": rol.nombre,
+            "activo": rol.activo,
+            "tope_descuento": f"{rol.tope_descuento:.6f}",
+        },
+        None,
+    )
+
+
+registrar_handler("ROL_TOPE_DESCUENTO_DEFINIR", 1, RolTopeDescuentoDefinirContenidoV1)(
+    manejar_rol_tope_descuento_definir  # type: ignore[arg-type]
+)
+declarar_tipo("ROL_TOPE_DESCUENTO_DEFINIR", admite_online=True, admite_offline=False)

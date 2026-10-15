@@ -444,10 +444,10 @@ Las diferencias generan movimientos `DIFERENCIA_RENDICION` con origen en la rend
 
 | Tabla | Columnas | Reglas |
 | --- | --- | --- |
-| `regla_descuento` | `id`, `organizacion_id`, `nombre`, `tipo` (`VOLUMEN_OPERACION`, `VOLUMEN_ALCANCE`), `medida` (`CAJAS_EQUIVALENTES`, `UNIDADES_BASE`, `IMPORTE_BRUTO`), `operador` (`GTE`, `GT`), `umbral` `numeric(14,4)`, `accion_tipo` (`PORCENTAJE`, `IMPORTE_FIJO`), `accion_valor`, `prioridad` `integer`, `acumulable` `boolean`, `vigencia_desde`, `vigencia_hasta`, `estado` (`BORRADOR`, `ACTIVA`, `PAUSADA`) | DSC-01 a DSC-04 |
-| `regla_descuento_alcance` | `id`, `organizacion_id`, `regla_id`, `alcance_tipo` (`PRODUCTO`, `CATEGORIA`, `MARCA`), `alcance_id` | DSC-02 |
+| `regla_descuento` | `id`, `organizacion_id`, `nombre`, `tipo` (`VOLUMEN_OPERACION`, `VOLUMEN_ALCANCE`), `medida` (`CAJAS_EQUIVALENTES`, `UNIDADES_BASE`, `IMPORTE_BRUTO`), `operador` (`GTE`, `GT`), `umbral` `numeric(14,4)` (mayor que 0), `accion_tipo` (`PORCENTAJE`, `IMPORTE_FIJO`), `accion_porcentaje` `numeric(9,6)` (mayor que 0 y hasta 1), `accion_importe` `numeric(14,2)` (mayor que 0) —exactamente una de las dos, la que corresponde a `accion_tipo`—, `prioridad` `integer` (desde 1; el número más bajo es la mayor prioridad), `acumulable` `boolean`, `vigencia_desde` `timestamptz`, `vigencia_hasta` `timestamptz` (posterior a la desde), `estado` (`BORRADOR`, `ACTIVA`, `PAUSADA`; `VENCIDA` es derivado y no se almacena), `creado_en`, `actualizado_en`, `actualizado_por_id` | DSC-01 a DSC-04 |
+| `regla_descuento_alcance` | `id`, `organizacion_id`, `regla_id`, `alcance_tipo` (`PRODUCTO`, `CATEGORIA`, `MARCA`), `alcance_id`, y las columnas generadas `producto_id`, `categoria_id`, `marca_id` (cada una toma `alcance_id` solo si `alcance_tipo` es el suyo), `creado_en` | DSC-02 |
 
-Una regla `VOLUMEN_OPERACION` no tiene filas de alcance. Una `VOLUMEN_ALCANCE` tiene al menos una.
+Una regla `VOLUMEN_OPERACION` no tiene filas de alcance. Una `VOLUMEN_ALCANCE` tiene al menos una (lo garantiza el servicio; no es expresable como `CHECK` de fila). Restricciones: `UNIQUE (organizacion_id, id)` en las dos tablas; `CHECK` de catálogo en `tipo`, `medida`, `operador`, `accion_tipo`, `estado` y `alcance_tipo`; `CHECK` que exige la columna de acción que corresponde y fija el dominio de cada una; `vigencia_hasta > vigencia_desde`; `estado = 'BORRADOR' OR vigencia_desde IS NOT NULL`; claves foráneas compuestas (incluyen `organizacion_id`) de cada alcance a la regla y, por las columnas generadas, a `producto`, `categoria` y `marca`; único por regla, tipo y entidad; índice de listado `(organizacion_id, estado, id DESC)`. El usuario de aplicación tiene `SELECT`, `INSERT` y `UPDATE` sobre `regla_descuento` y ningún `DELETE` (TR-06); sobre `regla_descuento_alcance`, `SELECT`, `INSERT` y `DELETE` y ningún `UPDATE` (el `DELETE` solo lo usa el servicio al reemplazar los alcances de un borrador).
 
 ## 12. Ventas, cobranzas y cuentas corrientes
 
@@ -626,8 +626,9 @@ El débito de IVA en modalidad CLIENTE es un `cuenta_movimiento` de tipo `IVA_FA
 | INV-02 | `organizacion_id` obligatorio y claves foráneas compuestas |
 | INV-03 | Tipos `numeric`; prueba que recorre el catálogo de columnas |
 | INV-04 | `integer` en cantidades base |
-| INV-05 | Permisos del usuario de aplicación sobre tablas de libro y sobre las líneas y cabeceras de transferencias y ajustes (`UPDATE` acotado por columna en las cabeceras) y de jornadas (`UPDATE` acotado por columna) |
+| INV-05 | Permisos del usuario de aplicación sobre tablas de libro y sobre las líneas y cabeceras de transferencias y ajustes (`UPDATE` acotado por columna en las cabeceras), de jornadas (`UPDATE` acotado por columna) y de reglas de descuento (sin `DELETE` en `regla_descuento`; sin `UPDATE` en `regla_descuento_alcance`) |
 | INV-06 | `UNIQUE (organizacion_id, operation_id)` en `comando` |
+| DSC-01 a DSC-04 | `CHECK` de catálogo, de dominio y de coherencia en `regla_descuento` (una sola columna de acción, la que corresponde al tipo; vigencia ordenada; vigencia desde obligatoria si la regla no es borrador) |
 | INV-09 | `CHECK` en `venta.importe_facturado` |
 | INV-16 | Índices únicos parciales en `jornada` (por ubicación, por usuario y por dispositivo, sobre `ABIERTA` y `EN_RENDICION`) |
 | INV-18 | Columnas congeladas en `venta_linea` más validación de servicio |

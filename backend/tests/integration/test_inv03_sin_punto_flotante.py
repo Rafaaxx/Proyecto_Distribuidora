@@ -155,6 +155,33 @@ def test_inv03_el_catalogo_incluye_los_importes_costos_y_porcentajes_de_precios_
     assert [c for c, tipo in tipos.items() if tipo.lower() in TIPOS_PROHIBIDOS] == []
 
 
+COLUMNAS_NUMERIC_DE_DESCUENTOS = {
+    ("regla_descuento", "umbral"),
+    ("regla_descuento", "accion_porcentaje"),
+    ("regla_descuento", "accion_importe"),
+}
+
+
+def test_inv03_el_catalogo_incluye_umbral_y_accion_de_las_reglas_de_descuento_como_numeric(
+    _engine_de_sesion: Engine,
+) -> None:
+    """Change 16, tarea 5.4: el umbral, el porcentaje y el importe fijo de una regla de
+    descuento son `numeric` exacto (D17: dos columnas de acción, no un `accion_valor` único);
+    la prioridad es `integer`."""
+    with _engine_de_sesion.connect() as conexion:
+        tipos = {
+            (tabla, columna): tipo
+            for tabla, columna, tipo in conexion.execute(_CONSULTA_CATALOGO).all()
+        }
+
+    assert {columna: tipos.get(columna) for columna in COLUMNAS_NUMERIC_DE_DESCUENTOS} == {
+        columna: "numeric" for columna in COLUMNAS_NUMERIC_DE_DESCUENTOS
+    }
+    assert tipos.get(("regla_descuento", "prioridad")) == "integer"
+    assert ("regla_descuento", "accion_valor") not in tipos
+    assert [c for c, tipo in tipos.items() if tipo.lower() in TIPOS_PROHIBIDOS] == []
+
+
 @pytest.fixture
 def _tabla_temporal_con_columna_flotante(database_url: str) -> Iterator[Engine]:
     """Crea una tabla temporal con una columna `double precision`, para

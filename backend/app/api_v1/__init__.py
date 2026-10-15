@@ -11,6 +11,7 @@ from app.modules.catalogo import api as catalogo_api
 from app.modules.clientes import api as clientes_api
 from app.modules.configuracion import api as configuracion_api
 from app.modules.cuentas_corrientes import api as cuentas_corrientes_api
+from app.modules.descuentos import api as descuentos_api
 from app.modules.identidad import api as identidad_api
 from app.modules.importacion import api as importacion_api
 from app.modules.precios import api as precios_api
@@ -29,6 +30,7 @@ router.include_router(catalogo_api.router)
 router.include_router(clientes_api.router)
 router.include_router(configuracion_api.router)
 router.include_router(cuentas_corrientes_api.router)
+router.include_router(descuentos_api.router)
 router.include_router(precios_api.router)
 router.include_router(proveedores_api.router)
 router.include_router(stock_api.router)

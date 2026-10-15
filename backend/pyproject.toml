@@ -158,6 +158,19 @@ ignore_imports = [
     "app.modules.precios.api -> sqlalchemy",
     "app.modules.precios.api -> app.api_v1.dependencias",
     "app.modules.precios.api -> app.core.autenticacion",
+    # Change 16 (`design.md` D19, `02` §5.3): `descuentos` es el noveno modulo de negocio.
+    # Cada grupo agrega las entradas de los archivos que crea (`models.py` en el grupo 6;
+    # `repository.py`, `service.py`, `queries.py` y `api.py` mas adelante): `import-linter`
+    # rechaza una excepcion sin import real.
+    "app.modules.descuentos.models -> app.core.db",
+    "app.modules.descuentos.models -> sqlalchemy",
+    "app.modules.descuentos.repository -> sqlalchemy",
+    "app.modules.descuentos.service -> sqlalchemy",
+    "app.modules.descuentos.queries -> sqlalchemy",
+    "app.modules.descuentos.api -> fastapi",
+    "app.modules.descuentos.api -> sqlalchemy",
+    "app.modules.descuentos.api -> app.api_v1.dependencias",
+    "app.modules.descuentos.api -> app.core.autenticacion",
 ]
 
 # `allow_indirect_imports`: descubrimiento de la tarea 9.6 (change 05, D12).
@@ -240,6 +253,7 @@ source_modules = [
     "app.modules.stock.domain",
     "app.modules.importacion.domain",
     "app.modules.precios.domain",
+    "app.modules.descuentos.domain",
 ]
 forbidden_modules = ["app.commands"]
 
@@ -706,6 +720,95 @@ name = "precios domain no importa infraestructura ni el bus de comandos"
 type = "forbidden"
 source_modules = ["app.modules.precios.domain"]
 forbidden_modules = ["fastapi", "sqlalchemy", "app.commands"]
+
+# Change 16 (`design.md` D19, `02` SS5.3): `descuentos` es el noveno modulo de negocio. Su `domain/`
+# (el motor de descuentos) es puro: ni infraestructura ni el bus.
+[[tool.importlinter.contracts]]
+id = "descuentos-domain-no-infraestructura"
+name = "descuentos domain no importa infraestructura ni el bus de comandos"
+type = "forbidden"
+source_modules = ["app.modules.descuentos.domain"]
+forbidden_modules = ["fastapi", "sqlalchemy", "app.commands"]
+
+# `descuentos -> catalogo, identidad` (`02` SS5.3, D19), solo por su `service.py`: nunca por sus
+# modelos, repositorio, dominio, api ni comandos. Ningun otro modulo de negocio; `sync` solo lo
+# toca la api por `procesar_comando` (la excepcion `descuentos.api -> sync.service` se declara
+# al crearse `api.py`).
+[[tool.importlinter.contracts]]
+id = "descuentos-solo-por-service-ajeno"
+name = "descuentos solo alcanza a catalogo e identidad por su service.py"
+type = "forbidden"
+source_modules = ["app.modules.descuentos"]
+forbidden_modules = [
+    "app.modules.catalogo.models",
+    "app.modules.catalogo.repository",
+    "app.modules.catalogo.domain",
+    "app.modules.catalogo.api",
+    "app.modules.catalogo.commands",
+    "app.modules.identidad.models",
+    "app.modules.identidad.repository",
+    "app.modules.identidad.domain",
+    "app.modules.identidad.api",
+    "app.modules.identidad.commands",
+    "app.modules.configuracion",
+    "app.modules.proveedores",
+    "app.modules.clientes",
+    "app.modules.cuentas_corrientes",
+    "app.modules.costeo",
+    "app.modules.stock",
+    "app.modules.importacion",
+    "app.modules.precios",
+    "app.modules.sync",
+]
+# `descuentos/api.py` llama a `sync_service.procesar_comando` (grupo 8, tarea 8.4), igual que
+# `precios.api`, `stock.api` y `proveedores.api`.
+ignore_imports = [
+    "app.modules.descuentos.api -> app.modules.sync.service",
+]
+allow_indirect_imports = "true"
+
+# Los demas modulos alcanzan a `descuentos` solo por su `service.py` (la venta, change 18b, y el
+# bootstrap, change 21): nadie importa su modelo, su repositorio, su dominio, su api, sus
+# consultas ni sus comandos.
+[[tool.importlinter.contracts]]
+id = "modulos-hacia-descuentos-solo-por-service"
+name = "los demas modulos alcanzan a descuentos solo por su service.py"
+type = "forbidden"
+source_modules = [
+    "app.modules.identidad",
+    "app.modules.configuracion",
+    "app.modules.catalogo",
+    "app.modules.proveedores",
+    "app.modules.clientes",
+    "app.modules.cuentas_corrientes",
+    "app.modules.costeo",
+    "app.modules.stock",
+    "app.modules.importacion",
+    "app.modules.precios",
+    "app.modules.sync",
+]
+forbidden_modules = [
+    "app.modules.descuentos.models",
+    "app.modules.descuentos.repository",
+    "app.modules.descuentos.domain",
+    "app.modules.descuentos.api",
+    "app.modules.descuentos.commands",
+    "app.modules.descuentos.queries",
+]
+allow_indirect_imports = "true"
+
+# `02` SS5.3: `descuentos -> catalogo, identidad`. Lo contrario formaria un ciclo, asi que ni
+# `catalogo` ni `identidad` importan `descuentos`, ni siquiera por su `service.py`.
+[[tool.importlinter.contracts]]
+id = "descuentos-no-es-alcanzado-por-sus-dependencias"
+name = "las dependencias de descuentos no lo importan de vuelta"
+type = "forbidden"
+source_modules = [
+    "app.modules.catalogo",
+    "app.modules.identidad",
+]
+forbidden_modules = ["app.modules.descuentos"]
+allow_indirect_imports = "true"
 
 # `precios -> catalogo, proveedores, identidad` (`02` SS5.3), solo por su `service.py`:
 # nunca por sus modelos, repositorio, dominio, api ni comandos. Ningun otro modulo de

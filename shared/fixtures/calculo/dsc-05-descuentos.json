@@ -1,0 +1,4548 @@
+[
+  {
+    "id": "DSC05-cond-veinte-cajas-alcanzan-gte-20",
+    "reglas": [
+      "DSC-03",
+      "DSC-04",
+      "DSC-07",
+      "VTA-04"
+    ],
+    "comentario": "120 unidades / 6 = 20 cajas >= 20: aplica. 5% de 250000.00 = 12500.00; neto 237500.00.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "250000.00",
+          "cantidad_base": 120,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.050000",
+              "importe": "12500.00"
+            }
+          ],
+          "descuento_total": "12500.00",
+          "neto": "237500.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-cond-diecinueve-cajas-y-cinco-unidades-no-alcanzan",
+    "reglas": [
+      "DSC-03",
+      "VTA-02"
+    ],
+    "comentario": "114/6 + 5/6 = 119/6 = 19,8333 < 20: no aplica; ninguna linea recibe descuento (ejemplo de 01 §10).",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a-cajas",
+          "bruto": "237500.00",
+          "cantidad_base": 114,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-vino-a-sueltas",
+          "bruto": "10416.67",
+          "cantidad_base": 5,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a-cajas",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "237500.00"
+        },
+        {
+          "id": "l-vino-a-sueltas",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "10416.67"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-cond-mayor-estricto-con-veinte-exactas-no-aplica",
+    "reglas": [
+      "DSC-03"
+    ],
+    "comentario": "120/6 = 20 exactas; el operador GT exige > 20: no aplica.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "250000.00",
+          "cantidad_base": 120,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GT",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "250000.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-cond-mayor-estricto-con-veintiuna-cajas-aplica",
+    "reglas": [
+      "DSC-03",
+      "DSC-04"
+    ],
+    "comentario": "126/6 = 21 > 20: aplica. Bruto 12500*126/6 = 262500.00; 5% = 13125.00; neto 249375.00.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "262500.00",
+          "cantidad_base": 126,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GT",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.050000",
+              "importe": "13125.00"
+            }
+          ],
+          "descuento_total": "13125.00",
+          "neto": "249375.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-cond-tres-tercios-de-caja-suman-una-exacta",
+    "reglas": [
+      "DSC-03",
+      "TR-03",
+      "DSC-07"
+    ],
+    "comentario": "2/6 + 2/6 + 2/6 = 1 exacto (aritmetica entera; con decimales truncados daria 0,9999). Bruto de cada linea 8600*2/6 = 2866.67. 5% de 2866.67 = 143.3335 -> 143.33 (el tercer decimal es 3: se redondea hacia abajo); neto 2723.34.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-1",
+          "bruto": "2866.67",
+          "cantidad_base": 2,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-1",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-vino-2",
+          "bruto": "2866.67",
+          "cantidad_base": 2,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-2",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-vino-3",
+          "bruto": "2866.67",
+          "cantidad_base": 2,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-3",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-1",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.050000",
+              "importe": "143.33"
+            }
+          ],
+          "descuento_total": "143.33",
+          "neto": "2723.34"
+        },
+        {
+          "id": "l-vino-2",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.050000",
+              "importe": "143.33"
+            }
+          ],
+          "descuento_total": "143.33",
+          "neto": "2723.34"
+        },
+        {
+          "id": "l-vino-3",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.050000",
+              "importe": "143.33"
+            }
+          ],
+          "descuento_total": "143.33",
+          "neto": "2723.34"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-cond-cinco-sextos-de-caja-no-alcanzan-una",
+    "reglas": [
+      "DSC-03",
+      "TR-03"
+    ],
+    "comentario": "2/6 + 2/6 + 1/6 = 5/6 < 1: no aplica.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-1",
+          "bruto": "2866.67",
+          "cantidad_base": 2,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-1",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-vino-2",
+          "bruto": "2866.67",
+          "cantidad_base": 2,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-2",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-vino-3",
+          "bruto": "1433.33",
+          "cantidad_base": 1,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-3",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-1",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "2866.67"
+        },
+        {
+          "id": "l-vino-2",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "2866.67"
+        },
+        {
+          "id": "l-vino-3",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "1433.33"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-cond-cajas-x6-y-x12-suman-una",
+    "reglas": [
+      "DSC-03"
+    ],
+    "comentario": "3/6 + 6/12 = 0,5 + 0,5 = 1: aplica. Brutos 8600*3/6 = 4300.00 y 9000*6/12 = 4500.00. 5%: 215.00 y 225.00; netos 4085.00 y 4275.00.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino",
+          "bruto": "4300.00",
+          "cantidad_base": 3,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-sur",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-cerveza",
+          "bruto": "4500.00",
+          "cantidad_base": 6,
+          "unidades_referencia": 12,
+          "producto_id": "prod-cerveza",
+          "categoria_id": "cat-cervezas",
+          "marca_id": "marca-sur",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.050000",
+              "importe": "215.00"
+            }
+          ],
+          "descuento_total": "215.00",
+          "neto": "4085.00"
+        },
+        {
+          "id": "l-cerveza",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.050000",
+              "importe": "225.00"
+            }
+          ],
+          "descuento_total": "225.00",
+          "neto": "4275.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-cond-cajas-x6-y-x12-no-alcanzan",
+    "reglas": [
+      "DSC-03"
+    ],
+    "comentario": "2/6 + 6/12 = 1/3 + 1/2 = 5/6 < 1: no aplica.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino",
+          "bruto": "2866.67",
+          "cantidad_base": 2,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-cerveza",
+          "bruto": "4500.00",
+          "cantidad_base": 6,
+          "unidades_referencia": 12,
+          "producto_id": "prod-cerveza",
+          "categoria_id": "cat-cervezas",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "2866.67"
+        },
+        {
+          "id": "l-cerveza",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "4500.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-cond-alcance-mide-solo-sus-lineas-no-aplica",
+    "reglas": [
+      "DSC-02",
+      "DSC-03"
+    ],
+    "comentario": "Alcance en Vino A: 48/6 = 8 cajas < 10 (las 10 cajas de Vino B no cuentan): no aplica.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "100000.00",
+          "cantidad_base": 48,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "10",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-a"
+            }
+          ]
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "100000.00"
+        },
+        {
+          "id": "l-vino-b",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "86000.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-cond-alcance-mide-solo-sus-lineas-aplica",
+    "reglas": [
+      "DSC-02",
+      "DSC-03",
+      "DSC-04"
+    ],
+    "comentario": "Alcance en Vino A: 60/6 = 10 cajas >= 10: aplica. 8% de 125000.00 = 10000.00 solo en Vino A; Vino B sin descuento.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "125000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "10",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-a"
+            }
+          ]
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.080000",
+              "importe": "10000.00"
+            }
+          ],
+          "descuento_total": "10000.00",
+          "neto": "115000.00"
+        },
+        {
+          "id": "l-vino-b",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "86000.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-cond-alcance-por-categoria-y-por-marca-es-union",
+    "reglas": [
+      "DSC-02",
+      "DSC-04",
+      "DSC-07"
+    ],
+    "comentario": "Alcances: categoria Vinos o marca Sur. El vino entra por categoria, la cerveza por marca, el alfajor no. 10% de 1433.33 = 143.333 -> 143.33; 10% de 9000.00 = 900.00. Netos 1290.00, 8100.00 y 1500.00.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino",
+          "bruto": "1433.33",
+          "cantidad_base": 1,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-otra",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-cerveza",
+          "bruto": "9000.00",
+          "cantidad_base": 12,
+          "unidades_referencia": 12,
+          "producto_id": "prod-cerveza",
+          "categoria_id": "cat-cervezas",
+          "marca_id": "marca-sur",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-alfajor",
+          "bruto": "1500.00",
+          "cantidad_base": 10,
+          "unidades_referencia": 1,
+          "producto_id": "prod-alfajor",
+          "categoria_id": "cat-golosinas",
+          "marca_id": "marca-dulce",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "UNIDADES_BASE",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.100000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": [
+            {
+              "tipo": "CATEGORIA",
+              "entidad_id": "cat-vinos"
+            },
+            {
+              "tipo": "MARCA",
+              "entidad_id": "marca-sur"
+            }
+          ]
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.100000",
+              "importe": "143.33"
+            }
+          ],
+          "descuento_total": "143.33",
+          "neto": "1290.00"
+        },
+        {
+          "id": "l-cerveza",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.100000",
+              "importe": "900.00"
+            }
+          ],
+          "descuento_total": "900.00",
+          "neto": "8100.00"
+        },
+        {
+          "id": "l-alfajor",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "1500.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-cond-importe-bruto-de-lineas-elegibles-aplica",
+    "reglas": [
+      "DSC-03",
+      "PRC-22"
+    ],
+    "comentario": "Alcance categoria Vinos, importe bruto >= 30000: la medida es 31250.00 (12500*15/6) y aplica. 5% = 1562.50; neto 29687.50. El alfajor no es elegible.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino",
+          "bruto": "31250.00",
+          "cantidad_base": 15,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-alfajor",
+          "bruto": "1500.00",
+          "cantidad_base": 10,
+          "unidades_referencia": 1,
+          "producto_id": "prod-alfajor",
+          "categoria_id": "cat-golosinas",
+          "marca_id": "marca-dulce",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "30000",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": [
+            {
+              "tipo": "CATEGORIA",
+              "entidad_id": "cat-vinos"
+            }
+          ]
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.050000",
+              "importe": "1562.50"
+            }
+          ],
+          "descuento_total": "1562.50",
+          "neto": "29687.50"
+        },
+        {
+          "id": "l-alfajor",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "1500.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-cond-importe-bruto-solo-cuenta-las-lineas-elegibles",
+    "reglas": [
+      "DSC-02",
+      "DSC-03"
+    ],
+    "comentario": "El bruto de la venta es 44300.00 pero las lineas de Vinos suman 4300.00 < 30000: no aplica.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino",
+          "bruto": "4300.00",
+          "cantidad_base": 3,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-alfajor",
+          "bruto": "40000.00",
+          "cantidad_base": 20,
+          "unidades_referencia": 1,
+          "producto_id": "prod-alfajor",
+          "categoria_id": "cat-golosinas",
+          "marca_id": "marca-dulce",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "30000",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": [
+            {
+              "tipo": "CATEGORIA",
+              "entidad_id": "cat-vinos"
+            }
+          ]
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "4300.00"
+        },
+        {
+          "id": "l-alfajor",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "40000.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-cond-importe-bruto-igual-al-umbral-con-gte-aplica",
+    "reglas": [
+      "DSC-03"
+    ],
+    "comentario": "31250.00 >= 31250: comparacion inclusiva, aplica. 5% = 1562.50; neto 29687.50.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino",
+          "bruto": "31250.00",
+          "cantidad_base": 15,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "31250",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.050000",
+              "importe": "1562.50"
+            }
+          ],
+          "descuento_total": "1562.50",
+          "neto": "29687.50"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-cond-importe-bruto-igual-al-umbral-con-gt-no-aplica",
+    "reglas": [
+      "DSC-03"
+    ],
+    "comentario": "31250.00 > 31250 es falso: no aplica.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino",
+          "bruto": "31250.00",
+          "cantidad_base": 15,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GT",
+          "umbral": "31250",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "31250.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-cond-unidades-base-mayor-estricto-con-sesenta-no-aplica",
+    "reglas": [
+      "DSC-03",
+      "INV-04"
+    ],
+    "comentario": "60 unidades base no son > 60: no aplica.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-producto",
+          "bruto": "6000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 1,
+          "producto_id": "prod-x",
+          "categoria_id": "cat-x",
+          "marca_id": "marca-x",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "UNIDADES_BASE",
+          "operador": "GT",
+          "umbral": "60",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-producto",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "6000.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-cond-unidades-base-mayor-estricto-con-sesenta-y-una-aplica",
+    "reglas": [
+      "DSC-03",
+      "INV-04",
+      "DSC-04"
+    ],
+    "comentario": "61 > 60: aplica. Bruto 100.00*61 = 6100.00; 5% = 305.00; neto 5795.00.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-producto",
+          "bruto": "6100.00",
+          "cantidad_base": 61,
+          "unidades_referencia": 1,
+          "producto_id": "prod-x",
+          "categoria_id": "cat-x",
+          "marca_id": "marca-x",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "UNIDADES_BASE",
+          "operador": "GT",
+          "umbral": "60",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-producto",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.050000",
+              "importe": "305.00"
+            }
+          ],
+          "descuento_total": "305.00",
+          "neto": "5795.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-accion-porcentaje-se-redondea-por-linea-mitad-hacia-arriba",
+    "reglas": [
+      "DSC-04",
+      "DSC-07",
+      "TR-03"
+    ],
+    "comentario": "Bruto 8600*1/6 = 1433.33. 5% de 1433.33 = 71.6665 -> 71.67 (mitad hacia arriba); neto 1361.66.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino",
+          "bruto": "1433.33",
+          "cantidad_base": 1,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "UNIDADES_BASE",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.050000",
+              "importe": "71.67"
+            }
+          ],
+          "descuento_total": "71.67",
+          "neto": "1361.66"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-accion-descuento-que-redondea-a-cero-no-se-informa",
+    "reglas": [
+      "DSC-04",
+      "DSC-07",
+      "DSC-08"
+    ],
+    "comentario": "5% de 0.05 = 0.0025 -> 0.00: no figura entre los descuentos de la linea y su neto queda en 0.05. 5% de 100.00 = 5.00; neto 95.00.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-chica",
+          "bruto": "0.05",
+          "cantidad_base": 1,
+          "unidades_referencia": 1,
+          "producto_id": "prod-a",
+          "categoria_id": "cat-x",
+          "marca_id": "marca-x",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-grande",
+          "bruto": "100.00",
+          "cantidad_base": 1,
+          "unidades_referencia": 1,
+          "producto_id": "prod-b",
+          "categoria_id": "cat-x",
+          "marca_id": "marca-x",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "UNIDADES_BASE",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-chica",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "0.05"
+        },
+        {
+          "id": "l-grande",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.050000",
+              "importe": "5.00"
+            }
+          ],
+          "descuento_total": "5.00",
+          "neto": "95.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-accion-importe-fijo-reparto-proporcional-sin-remanente",
+    "reglas": [
+      "DSC-04",
+      "DSC-07",
+      "PRC-22"
+    ],
+    "comentario": "Total 35550.00. 1000*31250/35550 = 879.0436 -> 879.04; 1000*4300/35550 = 120.9564 -> 120.96; suman 1000.00. Netos 30370.96 y 4179.04. Sin porcentaje en el detalle.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-a",
+          "bruto": "31250.00",
+          "cantidad_base": 15,
+          "unidades_referencia": 6,
+          "producto_id": "prod-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-b",
+          "bruto": "4300.00",
+          "cantidad_base": 3,
+          "unidades_referencia": 6,
+          "producto_id": "prod-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "30000",
+          "accion_tipo": "IMPORTE_FIJO",
+          "accion_porcentaje": null,
+          "accion_importe": "1000.00",
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": null,
+              "importe": "879.04"
+            }
+          ],
+          "descuento_total": "879.04",
+          "neto": "30370.96"
+        },
+        {
+          "id": "l-b",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": null,
+              "importe": "120.96"
+            }
+          ],
+          "descuento_total": "120.96",
+          "neto": "4179.04"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-accion-importe-fijo-remanente-negativo-a-la-linea-de-mayor-importe",
+    "reglas": [
+      "DSC-04",
+      "DSC-07"
+    ],
+    "comentario": "Total 36983.33. Partes: 844.9753 -> 844.98; 116.2689 -> 116.27; 38.7554 -> 38.76; suman 1000.01. El centavo sobrante se quita de la linea de 31250.00: 844.97. Suma 1000.00. Netos 30405.03, 4183.73, 1394.57.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-a",
+          "bruto": "31250.00",
+          "cantidad_base": 15,
+          "unidades_referencia": 6,
+          "producto_id": "prod-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-b",
+          "bruto": "4300.00",
+          "cantidad_base": 3,
+          "unidades_referencia": 6,
+          "producto_id": "prod-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-c",
+          "bruto": "1433.33",
+          "cantidad_base": 1,
+          "unidades_referencia": 6,
+          "producto_id": "prod-c",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "30000",
+          "accion_tipo": "IMPORTE_FIJO",
+          "accion_porcentaje": null,
+          "accion_importe": "1000.00",
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": null,
+              "importe": "844.97"
+            }
+          ],
+          "descuento_total": "844.97",
+          "neto": "30405.03"
+        },
+        {
+          "id": "l-b",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": null,
+              "importe": "116.27"
+            }
+          ],
+          "descuento_total": "116.27",
+          "neto": "4183.73"
+        },
+        {
+          "id": "l-c",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": null,
+              "importe": "38.76"
+            }
+          ],
+          "descuento_total": "38.76",
+          "neto": "1394.57"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-accion-importe-fijo-remanente-va-a-la-mayor-aunque-no-sea-la-primera",
+    "reglas": [
+      "DSC-04",
+      "DSC-07"
+    ],
+    "comentario": "Mismas tres lineas en otro orden: partes 38.76, 116.27, 844.98 (suman 1000.01). El centavo sobrante se quita de la linea de mayor importe (31250.00, la ultima): 844.97. Netos 1394.57, 4183.73, 30405.03.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-c",
+          "bruto": "1433.33",
+          "cantidad_base": 1,
+          "unidades_referencia": 6,
+          "producto_id": "prod-c",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-b",
+          "bruto": "4300.00",
+          "cantidad_base": 3,
+          "unidades_referencia": 6,
+          "producto_id": "prod-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-a",
+          "bruto": "31250.00",
+          "cantidad_base": 15,
+          "unidades_referencia": 6,
+          "producto_id": "prod-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "30000",
+          "accion_tipo": "IMPORTE_FIJO",
+          "accion_porcentaje": null,
+          "accion_importe": "1000.00",
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-c",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": null,
+              "importe": "38.76"
+            }
+          ],
+          "descuento_total": "38.76",
+          "neto": "1394.57"
+        },
+        {
+          "id": "l-b",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": null,
+              "importe": "116.27"
+            }
+          ],
+          "descuento_total": "116.27",
+          "neto": "4183.73"
+        },
+        {
+          "id": "l-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": null,
+              "importe": "844.97"
+            }
+          ],
+          "descuento_total": "844.97",
+          "neto": "30405.03"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-accion-importe-fijo-remanente-positivo-empate-a-la-primera-linea",
+    "reglas": [
+      "DSC-04",
+      "DSC-07"
+    ],
+    "comentario": "100*8600/25800 = 33.3333 -> 33.33 en cada una; suman 99.99; falta 0.01. Las tres empatan en importe: va a la primera en el orden de la venta: 33.34, 33.33, 33.33. Netos 8566.66, 8566.67, 8566.67.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-a",
+          "bruto": "8600.00",
+          "cantidad_base": 6,
+          "unidades_referencia": 6,
+          "producto_id": "prod-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-b",
+          "bruto": "8600.00",
+          "cantidad_base": 6,
+          "unidades_referencia": 6,
+          "producto_id": "prod-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-c",
+          "bruto": "8600.00",
+          "cantidad_base": 6,
+          "unidades_referencia": 6,
+          "producto_id": "prod-c",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "UNIDADES_BASE",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "IMPORTE_FIJO",
+          "accion_porcentaje": null,
+          "accion_importe": "100.00",
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": null,
+              "importe": "33.34"
+            }
+          ],
+          "descuento_total": "33.34",
+          "neto": "8566.66"
+        },
+        {
+          "id": "l-b",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": null,
+              "importe": "33.33"
+            }
+          ],
+          "descuento_total": "33.33",
+          "neto": "8566.67"
+        },
+        {
+          "id": "l-c",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": null,
+              "importe": "33.33"
+            }
+          ],
+          "descuento_total": "33.33",
+          "neto": "8566.67"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-accion-importe-fijo-mayor-que-la-linea-elegible-se-topa",
+    "reglas": [
+      "DSC-04",
+      "VTA-04"
+    ],
+    "comentario": "Alcance en Vino B: la unica linea elegible tiene bruto 4300.00 y la regla fija 5000.00: se aplica la suma, 4300.00; neto 0.00. Vino A, no elegible, queda intacta.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-a",
+          "bruto": "31250.00",
+          "cantidad_base": 15,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-b",
+          "bruto": "4300.00",
+          "cantidad_base": 3,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "UNIDADES_BASE",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "IMPORTE_FIJO",
+          "accion_porcentaje": null,
+          "accion_importe": "5000.00",
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-b"
+            }
+          ]
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-a",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "31250.00"
+        },
+        {
+          "id": "l-b",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": null,
+              "importe": "4300.00"
+            }
+          ],
+          "descuento_total": "4300.00",
+          "neto": "0.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-accion-lineas-no-elegibles-no-reciben-descuento",
+    "reglas": [
+      "DSC-02",
+      "DSC-04"
+    ],
+    "comentario": "Regla del 8% con alcance en Vino A: solo Vino A recibe 8% de 31250.00 = 2500.00; Vino B queda con su bruto.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-a",
+          "bruto": "31250.00",
+          "cantidad_base": 15,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-b",
+          "bruto": "4300.00",
+          "cantidad_base": 3,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "UNIDADES_BASE",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-a"
+            }
+          ]
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.080000",
+              "importe": "2500.00"
+            }
+          ],
+          "descuento_total": "2500.00",
+          "neto": "28750.00"
+        },
+        {
+          "id": "l-b",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "4300.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-res-gana-la-de-mayor-beneficio-total",
+    "reglas": [
+      "DSC-05",
+      "DSC-07"
+    ],
+    "comentario": "Vino A: 12 cajas x6 a 12500 = 150000.00; Vino B: 10 cajas x6 a 8600 = 86000.00. R1 (22 cajas >= 20): 5% = 7500.00 + 4300.00 = 11800.00. R2 (12 cajas de Vino A >= 10): 8% de 150000.00 = 12000.00. Gana R2: Vino A queda en 138000.00 y Vino B sin descuento (86000.00).",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "150000.00",
+          "cantidad_base": 72,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "10",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 2,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-a"
+            }
+          ]
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000002",
+              "porcentaje": "0.080000",
+              "importe": "12000.00"
+            }
+          ],
+          "descuento_total": "12000.00",
+          "neto": "138000.00"
+        },
+        {
+          "id": "l-vino-b",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "86000.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-res-gana-la-de-mayor-beneficio-reglas-en-orden-inverso",
+    "reglas": [
+      "DSC-05"
+    ],
+    "comentario": "Mismo caso con las reglas entregadas al reves: el resultado no depende del orden.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "150000.00",
+          "cantidad_base": 72,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "10",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 2,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-a"
+            }
+          ]
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000002",
+              "porcentaje": "0.080000",
+              "importe": "12000.00"
+            }
+          ],
+          "descuento_total": "12000.00",
+          "neto": "138000.00"
+        },
+        {
+          "id": "l-vino-b",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "86000.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-res-empate-de-beneficio-se-resuelve-por-prioridad",
+    "reglas": [
+      "DSC-05"
+    ],
+    "comentario": "Las dos dan 5% de 10000.00 = 500.00. Gana la de prioridad 1 (numero mas bajo; regla 2) aunque la de prioridad 2 se creo antes (identificador menor): la prioridad manda sobre la antiguedad.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-unica",
+          "bruto": "10000.00",
+          "cantidad_base": 10,
+          "unidades_referencia": 1,
+          "producto_id": "prod-x",
+          "categoria_id": "cat-x",
+          "marca_id": "marca-x",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "UNIDADES_BASE",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 2,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "UNIDADES_BASE",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-unica",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000002",
+              "porcentaje": "0.050000",
+              "importe": "500.00"
+            }
+          ],
+          "descuento_total": "500.00",
+          "neto": "9500.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-res-empate-de-prioridad-gana-la-creada-primero",
+    "reglas": [
+      "DSC-05"
+    ],
+    "comentario": "Mismo beneficio (500.00) y misma prioridad: gana la de identificador menor (UUIDv7: la creada primero), la regla 1, entregada en segundo lugar.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-unica",
+          "bruto": "10000.00",
+          "cantidad_base": 10,
+          "unidades_referencia": 1,
+          "producto_id": "prod-x",
+          "categoria_id": "cat-x",
+          "marca_id": "marca-x",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "UNIDADES_BASE",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "UNIDADES_BASE",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-unica",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.050000",
+              "importe": "500.00"
+            }
+          ],
+          "descuento_total": "500.00",
+          "neto": "9500.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-res-empate-de-prioridad-gana-la-creada-primero-orden-inverso",
+    "reglas": [
+      "DSC-05"
+    ],
+    "comentario": "Las mismas dos reglas entregadas en el otro orden: gana igual la regla 1.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-unica",
+          "bruto": "10000.00",
+          "cantidad_base": 10,
+          "unidades_referencia": 1,
+          "producto_id": "prod-x",
+          "categoria_id": "cat-x",
+          "marca_id": "marca-x",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "UNIDADES_BASE",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "UNIDADES_BASE",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-unica",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.050000",
+              "importe": "500.00"
+            }
+          ],
+          "descuento_total": "500.00",
+          "neto": "9500.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-res-una-sola-no-acumulable-aplica-la-otra-no-cumple-condicion",
+    "reglas": [
+      "DSC-05"
+    ],
+    "comentario": "La regla 2 pide >= 1000 unidades y la venta tiene 10: no aplica. Se aplica la 1: 5% de 10000.00 = 500.00.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-unica",
+          "bruto": "10000.00",
+          "cantidad_base": 10,
+          "unidades_referencia": 1,
+          "producto_id": "prod-x",
+          "categoria_id": "cat-x",
+          "marca_id": "marca-x",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "UNIDADES_BASE",
+          "operador": "GTE",
+          "umbral": "1000",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.200000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "UNIDADES_BASE",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-unica",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.050000",
+              "importe": "500.00"
+            }
+          ],
+          "descuento_total": "500.00",
+          "neto": "9500.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-res-una-acumulable-despues-de-la-ganadora",
+    "reglas": [
+      "DSC-05",
+      "DSC-07",
+      "DSC-08"
+    ],
+    "comentario": "R2 gana (Vino A: 12000.00 -> 138000.00). R3 (bruto 236000.00 >= 200000, acumulable): 2% de 138000.00 = 2760.00 -> 135240.00; 2% de 86000.00 = 1720.00 -> 84280.00.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "150000.00",
+          "cantidad_base": 72,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "10",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 2,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-a"
+            }
+          ]
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000003",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "200000",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.020000",
+          "accion_importe": null,
+          "acumulable": true,
+          "prioridad": 3,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000002",
+              "porcentaje": "0.080000",
+              "importe": "12000.00"
+            },
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "2760.00"
+            }
+          ],
+          "descuento_total": "14760.00",
+          "neto": "135240.00"
+        },
+        {
+          "id": "l-vino-b",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "1720.00"
+            }
+          ],
+          "descuento_total": "1720.00",
+          "neto": "84280.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-res-una-acumulable-despues-de-la-ganadora-reglas-en-orden-inverso",
+    "reglas": [
+      "DSC-05"
+    ],
+    "comentario": "Las reglas del caso anterior entregadas en orden inverso: mismo resultado.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "150000.00",
+          "cantidad_base": 72,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000003",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "200000",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.020000",
+          "accion_importe": null,
+          "acumulable": true,
+          "prioridad": 3,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "10",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 2,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-a"
+            }
+          ]
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000002",
+              "porcentaje": "0.080000",
+              "importe": "12000.00"
+            },
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "2760.00"
+            }
+          ],
+          "descuento_total": "14760.00",
+          "neto": "135240.00"
+        },
+        {
+          "id": "l-vino-b",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "1720.00"
+            }
+          ],
+          "descuento_total": "1720.00",
+          "neto": "84280.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-res-dos-acumulables-en-orden-de-prioridad",
+    "reglas": [
+      "DSC-05",
+      "DSC-04",
+      "DSC-07"
+    ],
+    "comentario": "Sobre el resultado anterior (135240.00 y 84280.00, suma 219520.00), R5 de 1000.00 fijos: 1000*135240/219520 = 616.0714 -> 616.07; 1000*84280/219520 = 383.9286 -> 383.93; suman 1000.00. Netos 134623.93 y 83896.07.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "150000.00",
+          "cantidad_base": 72,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000005",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "1000",
+          "accion_tipo": "IMPORTE_FIJO",
+          "accion_porcentaje": null,
+          "accion_importe": "1000.00",
+          "acumulable": true,
+          "prioridad": 4,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000003",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "200000",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.020000",
+          "accion_importe": null,
+          "acumulable": true,
+          "prioridad": 3,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "10",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 2,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-a"
+            }
+          ]
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000002",
+              "porcentaje": "0.080000",
+              "importe": "12000.00"
+            },
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "2760.00"
+            },
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000005",
+              "porcentaje": null,
+              "importe": "616.07"
+            }
+          ],
+          "descuento_total": "15376.07",
+          "neto": "134623.93"
+        },
+        {
+          "id": "l-vino-b",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "1720.00"
+            },
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000005",
+              "porcentaje": null,
+              "importe": "383.93"
+            }
+          ],
+          "descuento_total": "2103.93",
+          "neto": "83896.07"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-res-solo-acumulables-una",
+    "reglas": [
+      "DSC-05"
+    ],
+    "comentario": "Sin no acumulables: la acumulable del 2% se aplica sobre el bruto: 200.00; neto 9800.00.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-unica",
+          "bruto": "10000.00",
+          "cantidad_base": 10,
+          "unidades_referencia": 1,
+          "producto_id": "prod-x",
+          "categoria_id": "cat-x",
+          "marca_id": "marca-x",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "UNIDADES_BASE",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.020000",
+          "accion_importe": null,
+          "acumulable": true,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-unica",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.020000",
+              "importe": "200.00"
+            }
+          ],
+          "descuento_total": "200.00",
+          "neto": "9800.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-res-solo-acumulables-dos-encadenadas-no-suman-porcentajes",
+    "reglas": [
+      "DSC-05",
+      "DSC-07"
+    ],
+    "comentario": "8% (prioridad 1) y despues 2% (prioridad 2): 8% de 10000.00 = 800.00 -> 9200.00; 2% de 9200.00 = 184.00 -> 9016.00. Total 984.00 (9,84%, no 10%).",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-unica",
+          "bruto": "10000.00",
+          "cantidad_base": 10,
+          "unidades_referencia": 1,
+          "producto_id": "prod-x",
+          "categoria_id": "cat-x",
+          "marca_id": "marca-x",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "UNIDADES_BASE",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.020000",
+          "accion_importe": null,
+          "acumulable": true,
+          "prioridad": 2,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "UNIDADES_BASE",
+          "operador": "GTE",
+          "umbral": "1",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": true,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-unica",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": "0.080000",
+              "importe": "800.00"
+            },
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000002",
+              "porcentaje": "0.020000",
+              "importe": "184.00"
+            }
+          ],
+          "descuento_total": "984.00",
+          "neto": "9016.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-res-condicion-de-acumulable-se-evalua-sobre-el-bruto",
+    "reglas": [
+      "DSC-03",
+      "DSC-05",
+      "DSC-04",
+      "DSC-07"
+    ],
+    "comentario": "La ganadora (regla 1) fija 38000.00: 38000*150000/236000 = 24152.5424 -> 24152.54; 38000*86000/236000 = 13847.4576 -> 13847.46; suman 38000.00 -> netos 125847.46 y 72152.54 (suma 198000.00 < 200000). R3 (bruto >= 200000) mira el bruto 236000.00 y aplica: 2% de 125847.46 = 2516.9492 -> 2516.95 (neto 123330.51); 2% de 72152.54 = 1443.0508 -> 1443.05 (neto 70709.49).",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "150000.00",
+          "cantidad_base": 72,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "1000",
+          "accion_tipo": "IMPORTE_FIJO",
+          "accion_porcentaje": null,
+          "accion_importe": "38000.00",
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000003",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "200000",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.020000",
+          "accion_importe": null,
+          "acumulable": true,
+          "prioridad": 3,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": null,
+              "importe": "24152.54"
+            },
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "2516.95"
+            }
+          ],
+          "descuento_total": "26669.49",
+          "neto": "123330.51"
+        },
+        {
+          "id": "l-vino-b",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000001",
+              "porcentaje": null,
+              "importe": "13847.46"
+            },
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "1443.05"
+            }
+          ],
+          "descuento_total": "15290.51",
+          "neto": "70709.49"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-res-sin-reglas-aplicables",
+    "reglas": [
+      "DSC-05",
+      "VTA-04"
+    ],
+    "comentario": "Sin reglas: cada linea queda sin descuentos y su neto es su bruto.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "150000.00",
+          "cantidad_base": 72,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "150000.00"
+        },
+        {
+          "id": "l-vino-b",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "86000.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-res-manual-general-diez-por-ciento-sobre-el-resultado",
+    "reglas": [
+      "DSC-05",
+      "DSC-07",
+      "DSC-08"
+    ],
+    "comentario": "Sobre 135240.00 y 84280.00 (R2 y R3): 10% = 13524.00 y 8428.00, origen MANUAL. Netos 121716.00 y 75852.00. Maximo manual 0.100000.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "150000.00",
+          "cantidad_base": 72,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "10",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 2,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-a"
+            }
+          ]
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000003",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "200000",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.020000",
+          "accion_importe": null,
+          "acumulable": true,
+          "prioridad": 3,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": "0.100000"
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000002",
+              "porcentaje": "0.080000",
+              "importe": "12000.00"
+            },
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "2760.00"
+            },
+            {
+              "origen": "MANUAL",
+              "regla_id": null,
+              "porcentaje": "0.100000",
+              "importe": "13524.00"
+            }
+          ],
+          "descuento_total": "28284.00",
+          "neto": "121716.00"
+        },
+        {
+          "id": "l-vino-b",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "1720.00"
+            },
+            {
+              "origen": "MANUAL",
+              "regla_id": null,
+              "porcentaje": "0.100000",
+              "importe": "8428.00"
+            }
+          ],
+          "descuento_total": "10148.00",
+          "neto": "75852.00"
+        }
+      ],
+      "porcentaje_manual_maximo": "0.100000"
+    }
+  },
+  {
+    "id": "DSC05-res-manual-sin-automaticos",
+    "reglas": [
+      "DSC-05",
+      "PRC-22"
+    ],
+    "comentario": "Sin reglas: 5% de 31250.00 = 1562.50; neto 29687.50. Maximo 0.050000.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino",
+          "bruto": "31250.00",
+          "cantidad_base": 15,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": "0.050000"
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino",
+          "descuentos": [
+            {
+              "origen": "MANUAL",
+              "regla_id": null,
+              "porcentaje": "0.050000",
+              "importe": "1562.50"
+            }
+          ],
+          "descuento_total": "1562.50",
+          "neto": "29687.50"
+        }
+      ],
+      "porcentaje_manual_maximo": "0.050000"
+    }
+  },
+  {
+    "id": "DSC05-res-manual-se-redondea-por-linea",
+    "reglas": [
+      "DSC-07",
+      "TR-03"
+    ],
+    "comentario": "5% de 1433.33 = 71.6665 -> 71.67; neto 1361.66.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino",
+          "bruto": "1433.33",
+          "cantidad_base": 1,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": "0.050000"
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino",
+          "descuentos": [
+            {
+              "origen": "MANUAL",
+              "regla_id": null,
+              "porcentaje": "0.050000",
+              "importe": "71.67"
+            }
+          ],
+          "descuento_total": "71.67",
+          "neto": "1361.66"
+        }
+      ],
+      "porcentaje_manual_maximo": "0.050000"
+    }
+  },
+  {
+    "id": "DSC05-man-propio-de-la-linea-reemplaza-al-general",
+    "reglas": [
+      "DSC-05",
+      "DSC-07",
+      "DSC-08"
+    ],
+    "comentario": "General 5%, Vino A propio 10%. Tras los automaticos: 135240.00 y 84280.00. Vino A: 10% (no suma ni encadena) = 13524.00 -> 121716.00. Vino B: 5% = 4214.00 -> 80066.00. Maximo 0.100000.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "150000.00",
+          "cantidad_base": 72,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": "0.100000"
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "10",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 2,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-a"
+            }
+          ]
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000003",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "200000",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.020000",
+          "accion_importe": null,
+          "acumulable": true,
+          "prioridad": 3,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": "0.050000"
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000002",
+              "porcentaje": "0.080000",
+              "importe": "12000.00"
+            },
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "2760.00"
+            },
+            {
+              "origen": "MANUAL",
+              "regla_id": null,
+              "porcentaje": "0.100000",
+              "importe": "13524.00"
+            }
+          ],
+          "descuento_total": "28284.00",
+          "neto": "121716.00"
+        },
+        {
+          "id": "l-vino-b",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "1720.00"
+            },
+            {
+              "origen": "MANUAL",
+              "regla_id": null,
+              "porcentaje": "0.050000",
+              "importe": "4214.00"
+            }
+          ],
+          "descuento_total": "5934.00",
+          "neto": "80066.00"
+        }
+      ],
+      "porcentaje_manual_maximo": "0.100000"
+    }
+  },
+  {
+    "id": "DSC05-man-propio-menor-que-el-general-tambien-lo-reemplaza",
+    "reglas": [
+      "DSC-05",
+      "DSC-07",
+      "DSC-08"
+    ],
+    "comentario": "General 10%, Vino B propio 3%. Vino A: 10% de 135240.00 = 13524.00. Vino B: 3% de 84280.00 = 2528.40 -> 81751.60. Maximo 0.100000 (el del general, que sigue aplicado en Vino A).",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "150000.00",
+          "cantidad_base": 72,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": "0.030000"
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "10",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 2,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-a"
+            }
+          ]
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000003",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "200000",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.020000",
+          "accion_importe": null,
+          "acumulable": true,
+          "prioridad": 3,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": "0.100000"
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000002",
+              "porcentaje": "0.080000",
+              "importe": "12000.00"
+            },
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "2760.00"
+            },
+            {
+              "origen": "MANUAL",
+              "regla_id": null,
+              "porcentaje": "0.100000",
+              "importe": "13524.00"
+            }
+          ],
+          "descuento_total": "28284.00",
+          "neto": "121716.00"
+        },
+        {
+          "id": "l-vino-b",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "1720.00"
+            },
+            {
+              "origen": "MANUAL",
+              "regla_id": null,
+              "porcentaje": "0.030000",
+              "importe": "2528.40"
+            }
+          ],
+          "descuento_total": "4248.40",
+          "neto": "81751.60"
+        }
+      ],
+      "porcentaje_manual_maximo": "0.100000"
+    }
+  },
+  {
+    "id": "DSC05-man-solo-propio-sin-general",
+    "reglas": [
+      "DSC-05",
+      "DSC-08"
+    ],
+    "comentario": "Sin general, Vino A propio 10%: 13524.00 -> 121716.00. Vino B sin descuento MANUAL (neto 86000.00 - 1720.00 = 84280.00). Maximo 0.100000.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "150000.00",
+          "cantidad_base": 72,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": "0.100000"
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "10",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 2,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-a"
+            }
+          ]
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000003",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "200000",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.020000",
+          "accion_importe": null,
+          "acumulable": true,
+          "prioridad": 3,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000002",
+              "porcentaje": "0.080000",
+              "importe": "12000.00"
+            },
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "2760.00"
+            },
+            {
+              "origen": "MANUAL",
+              "regla_id": null,
+              "porcentaje": "0.100000",
+              "importe": "13524.00"
+            }
+          ],
+          "descuento_total": "28284.00",
+          "neto": "121716.00"
+        },
+        {
+          "id": "l-vino-b",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "1720.00"
+            }
+          ],
+          "descuento_total": "1720.00",
+          "neto": "84280.00"
+        }
+      ],
+      "porcentaje_manual_maximo": "0.100000"
+    }
+  },
+  {
+    "id": "DSC05-man-general-reemplazado-en-todas-las-lineas-no-cuenta-para-el-maximo",
+    "reglas": [
+      "DSC-05",
+      "DSC-06"
+    ],
+    "comentario": "General 10% reemplazado en ambas: Vino A 3% de 135240.00 = 4057.20 -> 131182.80; Vino B 2% de 84280.00 = 1685.60 -> 82594.40. Maximo 0.030000 (el 10% general no se aplico en ninguna linea).",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "150000.00",
+          "cantidad_base": 72,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": "0.030000"
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": "0.020000"
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "10",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 2,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-a"
+            }
+          ]
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000003",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "200000",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.020000",
+          "accion_importe": null,
+          "acumulable": true,
+          "prioridad": 3,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": "0.100000"
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000002",
+              "porcentaje": "0.080000",
+              "importe": "12000.00"
+            },
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "2760.00"
+            },
+            {
+              "origen": "MANUAL",
+              "regla_id": null,
+              "porcentaje": "0.030000",
+              "importe": "4057.20"
+            }
+          ],
+          "descuento_total": "18817.20",
+          "neto": "131182.80"
+        },
+        {
+          "id": "l-vino-b",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "1720.00"
+            },
+            {
+              "origen": "MANUAL",
+              "regla_id": null,
+              "porcentaje": "0.020000",
+              "importe": "1685.60"
+            }
+          ],
+          "descuento_total": "3405.60",
+          "neto": "82594.40"
+        }
+      ],
+      "porcentaje_manual_maximo": "0.030000"
+    }
+  },
+  {
+    "id": "DSC05-man-sin-general-ni-propios-el-maximo-es-nulo",
+    "reglas": [
+      "DSC-05",
+      "DSC-06"
+    ],
+    "comentario": "Sin descuento manual de ningun tipo: ninguna linea lleva MANUAL y el maximo es nulo.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "150000.00",
+          "cantidad_base": 72,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "10",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 2,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-a"
+            }
+          ]
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000003",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "200000",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.020000",
+          "accion_importe": null,
+          "acumulable": true,
+          "prioridad": 3,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000002",
+              "porcentaje": "0.080000",
+              "importe": "12000.00"
+            },
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "2760.00"
+            }
+          ],
+          "descuento_total": "14760.00",
+          "neto": "135240.00"
+        },
+        {
+          "id": "l-vino-b",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "00000000-0000-7000-8000-000000000003",
+              "porcentaje": "0.020000",
+              "importe": "1720.00"
+            }
+          ],
+          "descuento_total": "1720.00",
+          "neto": "84280.00"
+        }
+      ],
+      "porcentaje_manual_maximo": null
+    }
+  },
+  {
+    "id": "DSC05-man-mismo-propio-en-todas-las-lineas-sin-general",
+    "reglas": [
+      "DSC-05",
+      "DSC-07"
+    ],
+    "comentario": "Sin automaticos, propio 5% en ambas: 500.00 cada una; neto 9500.00. Maximo 0.050000.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "10000.00",
+          "cantidad_base": 10,
+          "unidades_referencia": 1,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": "0.050000"
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "10000.00",
+          "cantidad_base": 10,
+          "unidades_referencia": 1,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": "0.050000"
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "descuentos": [
+            {
+              "origen": "MANUAL",
+              "regla_id": null,
+              "porcentaje": "0.050000",
+              "importe": "500.00"
+            }
+          ],
+          "descuento_total": "500.00",
+          "neto": "9500.00"
+        },
+        {
+          "id": "l-vino-b",
+          "descuentos": [
+            {
+              "origen": "MANUAL",
+              "regla_id": null,
+              "porcentaje": "0.050000",
+              "importe": "500.00"
+            }
+          ],
+          "descuento_total": "500.00",
+          "neto": "9500.00"
+        }
+      ],
+      "porcentaje_manual_maximo": "0.050000"
+    }
+  },
+  {
+    "id": "DSC05-man-descuento-manual-de-importe-cero-no-se-informa",
+    "reglas": [
+      "DSC-05",
+      "DSC-07",
+      "DSC-08"
+    ],
+    "comentario": "Linea de 0.00: 5% = 0.00, no se informa y no cuenta para el maximo. Linea de 100.00: 5.00 -> 95.00. Maximo 0.050000 (de la segunda).",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-cero",
+          "bruto": "0.00",
+          "cantidad_base": 1,
+          "unidades_referencia": 1,
+          "producto_id": "prod-a",
+          "categoria_id": "cat-x",
+          "marca_id": "marca-x",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-cien",
+          "bruto": "100.00",
+          "cantidad_base": 1,
+          "unidades_referencia": 1,
+          "producto_id": "prod-b",
+          "categoria_id": "cat-x",
+          "marca_id": "marca-x",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": "0.050000"
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-cero",
+          "descuentos": [],
+          "descuento_total": "0.00",
+          "neto": "0.00"
+        },
+        {
+          "id": "l-cien",
+          "descuentos": [
+            {
+              "origen": "MANUAL",
+              "regla_id": null,
+              "porcentaje": "0.050000",
+              "importe": "5.00"
+            }
+          ],
+          "descuento_total": "5.00",
+          "neto": "95.00"
+        }
+      ],
+      "porcentaje_manual_maximo": "0.050000"
+    }
+  },
+  {
+    "id": "DSC05-man-general-fuera-de-dominio-cero",
+    "reglas": [
+      "TR-02",
+      "INV-03",
+      "DSC-06"
+    ],
+    "comentario": "General 0 no es mayor que 0: DESCUENTO_MANUAL_INVALIDO.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino",
+          "bruto": "31250.00",
+          "cantidad_base": 15,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": "0"
+    },
+    "salida_esperada": {
+      "error": "DESCUENTO_MANUAL_INVALIDO"
+    }
+  },
+  {
+    "id": "DSC05-man-general-fuera-de-dominio-negativo",
+    "reglas": [
+      "TR-02",
+      "INV-03",
+      "DSC-06"
+    ],
+    "comentario": "General negativo: DESCUENTO_MANUAL_INVALIDO.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino",
+          "bruto": "31250.00",
+          "cantidad_base": 15,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": "-0.050000"
+    },
+    "salida_esperada": {
+      "error": "DESCUENTO_MANUAL_INVALIDO"
+    }
+  },
+  {
+    "id": "DSC05-man-general-fuera-de-dominio-mayor-que-uno",
+    "reglas": [
+      "TR-02",
+      "INV-03",
+      "DSC-06"
+    ],
+    "comentario": "General mayor que 1: DESCUENTO_MANUAL_INVALIDO.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino",
+          "bruto": "31250.00",
+          "cantidad_base": 15,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": "1.000001"
+    },
+    "salida_esperada": {
+      "error": "DESCUENTO_MANUAL_INVALIDO"
+    }
+  },
+  {
+    "id": "DSC05-man-general-fuera-de-dominio-siete-decimales",
+    "reglas": [
+      "TR-02",
+      "INV-03",
+      "DSC-06"
+    ],
+    "comentario": "General mas de 6 decimales: DESCUENTO_MANUAL_INVALIDO.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino",
+          "bruto": "31250.00",
+          "cantidad_base": 15,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": "0.0500001"
+    },
+    "salida_esperada": {
+      "error": "DESCUENTO_MANUAL_INVALIDO"
+    }
+  },
+  {
+    "id": "DSC05-man-general-fuera-de-dominio-punto-flotante",
+    "reglas": [
+      "TR-02",
+      "INV-03",
+      "DSC-06"
+    ],
+    "comentario": "General numero de punto flotante en la entrada (INV-03): DESCUENTO_MANUAL_INVALIDO.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino",
+          "bruto": "31250.00",
+          "cantidad_base": 15,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": 0.05
+    },
+    "salida_esperada": {
+      "error": "DESCUENTO_MANUAL_INVALIDO"
+    }
+  },
+  {
+    "id": "DSC05-man-propio-fuera-de-dominio-cero",
+    "reglas": [
+      "TR-02",
+      "INV-03",
+      "DSC-06"
+    ],
+    "comentario": "General valido 5%, propio de Vino A 0 no excluye la linea (D11.1): DESCUENTO_MANUAL_INVALIDO y no se calcula nada.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "150000.00",
+          "cantidad_base": 72,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": "0"
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "10",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 2,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-a"
+            }
+          ]
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000003",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "200000",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.020000",
+          "accion_importe": null,
+          "acumulable": true,
+          "prioridad": 3,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": "0.050000"
+    },
+    "salida_esperada": {
+      "error": "DESCUENTO_MANUAL_INVALIDO"
+    }
+  },
+  {
+    "id": "DSC05-man-propio-fuera-de-dominio-negativo",
+    "reglas": [
+      "TR-02",
+      "INV-03",
+      "DSC-06"
+    ],
+    "comentario": "General valido 5%, propio de Vino A negativo: DESCUENTO_MANUAL_INVALIDO y no se calcula nada.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "150000.00",
+          "cantidad_base": 72,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": "-0.050000"
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "10",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 2,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-a"
+            }
+          ]
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000003",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "200000",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.020000",
+          "accion_importe": null,
+          "acumulable": true,
+          "prioridad": 3,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": "0.050000"
+    },
+    "salida_esperada": {
+      "error": "DESCUENTO_MANUAL_INVALIDO"
+    }
+  },
+  {
+    "id": "DSC05-man-propio-fuera-de-dominio-mayor-que-uno",
+    "reglas": [
+      "TR-02",
+      "INV-03",
+      "DSC-06"
+    ],
+    "comentario": "General valido 5%, propio de Vino A mayor que 1: DESCUENTO_MANUAL_INVALIDO y no se calcula nada.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "150000.00",
+          "cantidad_base": 72,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": "1.000001"
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "10",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 2,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-a"
+            }
+          ]
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000003",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "200000",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.020000",
+          "accion_importe": null,
+          "acumulable": true,
+          "prioridad": 3,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": "0.050000"
+    },
+    "salida_esperada": {
+      "error": "DESCUENTO_MANUAL_INVALIDO"
+    }
+  },
+  {
+    "id": "DSC05-man-propio-fuera-de-dominio-siete-decimales",
+    "reglas": [
+      "TR-02",
+      "INV-03",
+      "DSC-06"
+    ],
+    "comentario": "General valido 5%, propio de Vino A mas de 6 decimales: DESCUENTO_MANUAL_INVALIDO y no se calcula nada.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "150000.00",
+          "cantidad_base": 72,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": "0.0500001"
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "10",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 2,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-a"
+            }
+          ]
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000003",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "200000",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.020000",
+          "accion_importe": null,
+          "acumulable": true,
+          "prioridad": 3,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": "0.050000"
+    },
+    "salida_esperada": {
+      "error": "DESCUENTO_MANUAL_INVALIDO"
+    }
+  },
+  {
+    "id": "DSC05-man-propio-fuera-de-dominio-punto-flotante",
+    "reglas": [
+      "TR-02",
+      "INV-03",
+      "DSC-06"
+    ],
+    "comentario": "General valido 5%, propio de Vino A punto flotante (INV-03): DESCUENTO_MANUAL_INVALIDO y no se calcula nada.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino-a",
+          "bruto": "150000.00",
+          "cantidad_base": 72,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": 0.05
+        },
+        {
+          "id": "l-vino-b",
+          "bruto": "86000.00",
+          "cantidad_base": 60,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "20",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "tipo": "VOLUMEN_ALCANCE",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "10",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.080000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 2,
+          "alcances": [
+            {
+              "tipo": "PRODUCTO",
+              "entidad_id": "prod-vino-a"
+            }
+          ]
+        },
+        {
+          "id": "00000000-0000-7000-8000-000000000003",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "IMPORTE_BRUTO",
+          "operador": "GTE",
+          "umbral": "200000",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.020000",
+          "accion_importe": null,
+          "acumulable": true,
+          "prioridad": 3,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": "0.050000"
+    },
+    "salida_esperada": {
+      "error": "DESCUENTO_MANUAL_INVALIDO"
+    }
+  },
+  {
+    "id": "DSC05-inv03-bruto-de-punto-flotante-se-rechaza",
+    "reglas": [
+      "INV-03",
+      "TR-01"
+    ],
+    "comentario": "El bruto llega como numero JSON (punto flotante): ENTRADA_NO_ES_DINERO_EXACTO.",
+    "entrada": {
+      "motor": "dsc05",
+      "lineas": [
+        {
+          "id": "l-vino",
+          "bruto": 31250.5,
+          "cantidad_base": 15,
+          "unidades_referencia": 6,
+          "producto_id": "prod-vino",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "error": "ENTRADA_NO_ES_DINERO_EXACTO"
+    }
+  }
+]

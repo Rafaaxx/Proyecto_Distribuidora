@@ -20,6 +20,7 @@ from app.modules.clientes import models as clientes_models  # noqa: E402,F401
 from app.modules.configuracion import models as configuracion_models  # noqa: E402,F401
 from app.modules.costeo import models as costeo_models  # noqa: E402,F401
 from app.modules.cuentas_corrientes import models as cuentas_corrientes_models  # noqa: E402,F401
+from app.modules.descuentos import models as descuentos_models  # noqa: E402,F401
 from app.modules.identidad import models as identidad_models  # noqa: E402,F401
 from app.modules.importacion import models as importacion_models  # noqa: E402,F401
 from app.modules.precios import models as precios_models  # noqa: E402,F401

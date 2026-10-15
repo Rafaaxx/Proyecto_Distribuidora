@@ -36,6 +36,11 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("get", "/api/v1/identidad/usuarios"),
         ("post", "/api/v1/identidad/usuarios"),
         ("put", "/api/v1/identidad/roles/{rol_id}/permisos"),
+        # Change 16, tarea 13.2: el tope de descuento de un rol (escritura por el bus) y la
+        # lectura de roles. Prueba real de aislamiento en `test_identidad_tope_de_rol.py` (el
+        # rol de otra organizacion responde 404 sin efectos; la lectura no incluye roles ajenos).
+        ("put", "/api/v1/identidad/roles/{rol_id}/tope-descuento"),
+        ("get", "/api/v1/identidad/roles"),
         ("post", "/api/v1/identidad/usuarios/{usuario_id}/pin"),
         ("post", "/api/v1/identidad/usuarios/{usuario_id}/desbloqueo"),
         # Change 06b, grupo 9, tarea 9.2 (`identidad/api.py::router_yo`,
@@ -94,6 +99,15 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("get", "/api/v1/precios/listas/{lista_id}/vigente"),
         ("put", "/api/v1/precios/lista-predeterminada"),
         ("get", "/api/v1/precios/lista-predeterminada"),
+        # Change 16, tarea 11.1: las cuatro escrituras de `descuentos/api.py`. Su comportamiento
+        # real lo comprueba `test_inv21_aislamiento_endpoints_descuentos.py`; acá la afirmación
+        # estructural: ninguna declara `organizacion_id` (ni parámetro ni campo de cuerpo).
+        ("get", "/api/v1/descuentos/reglas"),
+        ("get", "/api/v1/descuentos/reglas/{regla_id}"),
+        ("post", "/api/v1/descuentos/reglas"),
+        ("put", "/api/v1/descuentos/reglas/{regla_id}"),
+        ("post", "/api/v1/descuentos/reglas/{regla_id}/activacion"),
+        ("post", "/api/v1/descuentos/reglas/{regla_id}/pausa"),
     }
 )
 RUTAS_DE_AUTENTICACION = frozenset(
@@ -272,6 +286,36 @@ def test_toda_ruta_de_precios_esta_recorrida_y_no_declara_organizacion_id(
         assert _NOMBRE_PROHIBIDO not in _nombres_de_parametros(operacion), ruta
         assert _NOMBRE_PROHIBIDO not in _propiedades_del_cuerpo(operacion, componentes), ruta
     assert len(registradas) == 19, "las diecinueve rutas de `precios` (change 13)"
+
+
+def test_toda_ruta_de_descuentos_esta_recorrida_y_no_declara_organizacion_id(
+    database_url: str,
+) -> None:
+    """Change 16, tarea 11.1: cada ruta registrada bajo `/api/v1/descuentos` está en
+    `COBERTURA_DE_AISLAMIENTO` (la recorrida las alcanza) y ninguna declara `organizacion_id` ni
+    como parámetro ni como campo del cuerpo: la organización sale siempre del token."""
+    os.environ.setdefault("DATABASE_URL", database_url)
+    esquema = _esquema_real()
+    rutas = esquema["paths"]  # type: ignore[index]
+    componentes = esquema.get("components", {})  # type: ignore[assignment]
+
+    registradas = {
+        (metodo, path)
+        for path, operaciones in rutas.items()  # type: ignore[union-attr]
+        if path.startswith("/api/v1/descuentos")
+        for metodo in operaciones  # type: ignore[union-attr]
+    }
+    for ruta in registradas:
+        assert ruta in COBERTURA_DE_AISLAMIENTO, (
+            f"La ruta {ruta} de `descuentos` tiene que estar en COBERTURA_DE_AISLAMIENTO."
+        )
+        metodo, path = ruta
+        operacion = rutas[path][metodo]  # type: ignore[index]
+        assert _NOMBRE_PROHIBIDO not in _nombres_de_parametros(operacion), ruta
+        assert _NOMBRE_PROHIBIDO not in _propiedades_del_cuerpo(operacion, componentes), ruta
+    escrituras = {r for r in registradas if r[0] in {"post", "put"}}
+    assert len(escrituras) == 4, "las cuatro escrituras de `descuentos` (change 16)"
+    assert len(registradas) == 6, "más las dos lecturas (listado y detalle, tarea 9.1)"
 
 
 def test_toda_ruta_de_transferencias_y_ajustes_esta_recorrida_y_no_declara_organizacion_id(

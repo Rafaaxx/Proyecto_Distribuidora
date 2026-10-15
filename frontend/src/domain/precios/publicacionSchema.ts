@@ -19,7 +19,7 @@ export interface VigenciaDeComando {
   vigencia_hasta: string | null
 }
 
-function instante(texto: string): Date | null {
+export function instante(texto: string): Date | null {
   if (texto === '') return null
   const fecha = new Date(texto)
   return Number.isNaN(fecha.getTime()) ? null : fecha

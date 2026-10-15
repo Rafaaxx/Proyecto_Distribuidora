@@ -18,6 +18,8 @@ import type { CodigoPermiso } from '../../domain/identidad/permisos'
  *   **o** con cualquiera de ellos (Compras: `REGISTRAR_COMPRA` o `ANULAR_COMPRA`, change 11
  *   D14; Pagos a proveedores: `REGISTRAR_PAGO_PROVEEDOR` o `ANULAR_PAGO_PROVEEDOR`, change 12 D7;
  *   Listas de precios: `GESTIONAR_LISTAS` o `PUBLICAR_LISTAS`, change 13 D12).
+ *   Descuentos (change 16, grupo 15): solo `GESTIONAR_DESCUENTOS`; "Topes por rol" es una entrada
+ *   de la sección que además pide `ADMIN_USUARIOS` (`areas/admin/descuentos/DescuentosArea.tsx`).
  * - `ruta` es **absoluta** (`/admin/...`), nunca relativa: la tarea 10.8
  *   del change 05 fijo que un `to` relativo se resolvía contra el
  *   segmento en el que estaba parado quien navega
@@ -55,6 +57,7 @@ export const SECCIONES: readonly SeccionAdmin[] = [
     permiso: 'GESTIONAR_LISTAS',
     otrosPermisos: ['PUBLICAR_LISTAS'],
   },
+  { ruta: '/admin/descuentos', etiqueta: 'Descuentos', permiso: 'GESTIONAR_DESCUENTOS' },
   { ruta: '/admin/stock', etiqueta: 'Stock', permiso: 'TRANSFERIR_STOCK' },
   { ruta: '/admin/importacion', etiqueta: 'Importación', permiso: 'IMPORTAR_DATOS' },
   { ruta: '/admin/configuracion', etiqueta: 'Configuración', permiso: 'ADMIN_CONFIGURACION' },

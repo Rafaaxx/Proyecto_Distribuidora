@@ -422,3 +422,34 @@ def test_inv02_la_jornada_y_las_dos_fk_heredadas_estan_cubiertas(database_url: s
         destino, columnas = _fks_agrupadas(engine, tabla)[nombre]
         assert destino == "jornada", tabla
         assert sorted(set(columnas)) == ["jornada_id", "organizacion_id"], tabla
+
+
+def test_inv02_las_reglas_de_descuento_y_sus_alcances_estan_cubiertos(
+    database_url: str,
+) -> None:
+    """Change 16, tarea 5.4: el recorrido dinámico incluye `regla_descuento` y
+    `regla_descuento_alcance`, ambas con `organizacion_id` obligatorio, sin FK simple entre
+    entidades de negocio, y el alcance apunta a producto, categoría y marca (y a su regla) con
+    claves compuestas."""
+    aplicar_migraciones(database_url)
+    engine = crear_engine(database_url)
+
+    for tabla in ("regla_descuento", "regla_descuento_alcance"):
+        assert tabla in _tablas_de_negocio(engine), tabla
+        assert _tabla_declara_organizacion_id_obligatoria(engine, tabla) is None, tabla
+        assert _fk_simple_entre_negocio(engine, tabla) == [], tabla
+    destinos = {
+        nombre: _fks_agrupadas(engine, "regla_descuento_alcance")[nombre][0]
+        for nombre in (
+            "fk_regla_descuento_alcance__regla",
+            "fk_regla_descuento_alcance__producto",
+            "fk_regla_descuento_alcance__categoria",
+            "fk_regla_descuento_alcance__marca",
+        )
+    }
+    assert destinos == {
+        "fk_regla_descuento_alcance__regla": "regla_descuento",
+        "fk_regla_descuento_alcance__producto": "producto",
+        "fk_regla_descuento_alcance__categoria": "categoria",
+        "fk_regla_descuento_alcance__marca": "marca",
+    }

@@ -96,6 +96,14 @@ ESCRITURAS_QUE_DEBEN_IR_POR_EL_BUS: frozenset[tuple[str, str]] = frozenset(
         ("POST", "/api/v1/pagos-proveedores"),
         # Grupo 5: `PAGO_PROVEEDOR_ANULAR` (dedicada, `proveedores/api.py`).
         ("POST", "/api/v1/pagos-proveedores/{pago_id}/anulacion"),
+        # Change 16, tarea 11.1: las cuatro escrituras de `descuentos/api.py` (dedicadas, una
+        # por comando `REGLA_DESCUENTO_*`).
+        ("POST", "/api/v1/descuentos/reglas"),
+        ("PUT", "/api/v1/descuentos/reglas/{regla_id}"),
+        ("POST", "/api/v1/descuentos/reglas/{regla_id}/activacion"),
+        ("POST", "/api/v1/descuentos/reglas/{regla_id}/pausa"),
+        # Change 16, tarea 13.2: `ROL_TOPE_DESCUENTO_DEFINIR` (dedicada, `identidad/api.py`).
+        ("PUT", "/api/v1/identidad/roles/{rol_id}/tope-descuento"),
     }
 )
 

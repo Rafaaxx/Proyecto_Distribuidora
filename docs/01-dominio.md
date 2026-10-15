@@ -84,7 +84,7 @@ La columna **Etapa** indica cuándo se implementa la regla. Las reglas marcadas 
 | Tolerancia offline de crédito | Importe o porcentaje del límite | A definir al configurar | 1 |
 | Stock negativo online | Bloqueado salvo permiso | Bloqueado | 1 |
 | Descuento manual | Habilitado / deshabilitado | Habilitado | 1 |
-| Motivo obligatorio en descuento manual | Sí / no | A definir | 1 |
+| Motivo obligatorio en descuento manual | Sí / no | A definir; mientras esté sin definir, el motivo no es obligatorio (el comando que lo define llega con el change 18b) | 1 |
 | Motivo obligatorio al usar lista no asignada o versión anterior | Sí / no | Sí | 1 |
 | Redondeo por defecto | Múltiplo y dirección | A definir | 1 |*solo precarga el formulario de una lista nueva cuando esté definido; la lista siempre tiene su propio redondeo (PRC-01)* |
 | Venta a consumidor final genérico | Sí / no | A definir | 1 |
@@ -302,16 +302,16 @@ Ejemplo: límite $200.000, saldo $150.000, venta $80.000 con cobranza de $20.000
 | --- | --- | --- |
 | DSC-01 | Una regla de descuento tiene tipo, condición, acción, alcance, vigencia, prioridad, indicador de acumulable y estado. | 1 |
 | DSC-02 | Tipos de la etapa 1: VOLUMEN_OPERACION (sobre toda la venta) y VOLUMEN_ALCANCE (sobre líneas de productos, categorías o marcas determinadas). | 1 |
-| DSC-03 | La condición de volumen compara, con operador explícito (≥ o >), una medida contra un umbral. Medidas: cajas equivalentes, unidades base o importe bruto de las líneas elegibles. | 1 |
-| DSC-04 | Acciones de la etapa 1: porcentaje sobre las líneas elegibles o importe fijo distribuido entre ellas en proporción a su bruto; el remanente de redondeo se asigna a la línea de mayor importe. | 1 |
-| DSC-05 | Orden de resolución: (1) bruto por línea desde la lista; (2) se evalúan las reglas activas y vigentes cuyo alcance aplica; (3) entre las no acumulables se aplica solo la de mayor beneficio total, con desempate por prioridad; (4) las acumulables se aplican en orden de prioridad, cada una sobre el resultado anterior; (5) se aplica el descuento manual sobre el resultado. | 1 |
-| DSC-06 | El descuento manual requiere que la organización lo tenga habilitado y el permiso `DESCUENTO_MANUAL`, cuyo tope porcentual depende del rol. Superar el tope requiere `AUTORIZAR_DESCUENTO` o PIN de supervisor. | 1 |
-| DSC-07 | Cada descuento se calcula y redondea a 2 decimales por línea. | 1 |
-| DSC-08 | Cada línea guarda cada descuento aplicado con origen (AUTOMATICO o MANUAL), regla, porcentaje o importe, motivo y autorizador. | 1 |
+| DSC-03 | La condición de volumen compara, con operador explícito (≥ o >), una medida contra un umbral. Medidas: cajas equivalentes, unidades base o importe bruto de las líneas elegibles. Las cajas equivalentes de una línea usan las **unidades de referencia guardadas con su precio** (PRC-22) y la medida es la suma exacta de `cantidad base / unidades de referencia`, **sin redondear**, comparada con aritmética entera. El umbral es mayor que 0: hasta 4 decimales en cajas, entero en unidades base, hasta 2 decimales en importe. La condición de toda regla, también de las acumulables, se evalúa una sola vez sobre cantidades y brutos de las líneas, no sobre importes ya descontados. | 1 |
+| DSC-04 | Acciones de la etapa 1: porcentaje sobre las líneas elegibles (mayor que 0 y hasta 100 %, con hasta 6 decimales de fracción) o importe fijo (mayor que 0, hasta 2 decimales) distribuido entre ellas en proporción a su **importe al momento de aplicar la regla** (el bruto si es la primera en aplicarse; el resultado anterior si es acumulable). Cada parte se redondea a 2 decimales y el remanente de redondeo, positivo o negativo, se asigna a la línea de mayor importe y, en empate, a la primera en el orden de la venta. Si el importe fijo supera la suma de las líneas elegibles, se aplica esa suma: ninguna línea queda con neto negativo. | 1 |
+| DSC-05 | Orden de resolución: (1) bruto por línea desde la lista; (2) se evalúan las reglas activas y vigentes cuyo alcance aplica; (3) entre las no acumulables gana **una sola en toda la venta**: la de mayor beneficio total (la suma de los descuentos que daría sobre sus líneas elegibles), con desempate por prioridad —el número más bajo es la mayor prioridad— y, si también empata, por la regla creada primero; las demás no acumulables no se aplican a ninguna línea; (4) las acumulables se aplican en orden de prioridad (y, a igual prioridad, por antigüedad), cada una sobre el resultado anterior; (5) se aplica el descuento manual sobre el resultado: cada línea lleva el porcentaje manual **propio** si lo tiene y, si no, el **general** de la venta (el propio reemplaza al general; no se suman ni se encadenan). El resultado no depende del orden en que se entregan las reglas. | 1 |
+| DSC-06 | El descuento manual requiere que la organización lo tenga habilitado y el permiso `DESCUENTO_MANUAL`, cuyo tope porcentual depende del rol (o del propio usuario, si lo tiene). Es siempre un **porcentaje** (mayor que 0 y hasta 100 %, hasta 6 decimales), nunca un importe; puede ser **general** para la venta y/o **propio** de líneas individuales, y el propio tiene el mismo dominio que el general. El tope se compara contra el **mayor porcentaje manual que quedó aplicado en alguna línea** de la venta (un general reemplazado en todas las líneas no cuenta). Superar el tope requiere `AUTORIZAR_DESCUENTO` del propio usuario o la autorización de otro usuario que lo tenga (PIN de supervisor, change 18b); **una sola autorización cubre toda la venta** y quien autoriza no queda limitado por su propio tope. Si la organización exige motivo, hay un motivo por venta. | 1 |
+| DSC-07 | Cada descuento se calcula y redondea a 2 decimales por línea (mitad hacia arriba). Un descuento cuyo importe redondea a $0,00 no se informa. | 1 |
+| DSC-08 | Cada línea guarda cada descuento aplicado con origen (AUTOMATICO o MANUAL), regla, porcentaje o importe, motivo y autorizador. Una línea lleva **a lo sumo un descuento `MANUAL`**, y el motivo y el autorizador de la venta se copian en cada uno. | 1 |
 | DSC-09 | Con conexión, el servidor recalcula los descuentos y rechaza la confirmación si difieren de los enviados. Sin conexión, acepta los descuentos registrados y agrega la observación DESCUENTO_DIFIERE si su cálculo no coincide. | 1 |
 | DSC-10 | Fidelización por historial, promociones por cliente o segmento, precio especial, bonificación en unidades y control de margen mínimo. | 2 |
 
-Ejemplo de DSC-03 con regla "cajas equivalentes ≥ 20 → 5%": 19 cajas + 5 unidades de un vino x6 son 19,83 cajas equivalentes y no aplica; 20 cajas aplica.
+Ejemplo de DSC-03 con regla "cajas equivalentes ≥ 20 → 5%": 19 cajas + 5 unidades de un vino x6 son 19,83 cajas equivalentes y no aplica; 20 cajas aplica. Tres líneas de 2 unidades de tres vinos x6 suman exactamente 1 caja equivalente (1/3 + 1/3 + 1/3) y "≥ 1" aplica.
 
 ## 11. Ventas
 
@@ -416,7 +416,7 @@ Ejemplo de DSC-03 con regla "cajas equivalentes ≥ 20 → 5%": 19 cajas + 5 uni
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| AUD-01 | Se auditan: inicio de sesión, cambios de usuarios, roles, permisos y dispositivos; costos informados; publicación y anulación de versiones de lista; uso de lista no asignada o versión anterior; descuentos manuales y autorizaciones; autorizaciones de crédito; ventas, compras, cobranzas y pagos anulados; transferencias y ajustes de stock y sus anulaciones (la fila de `STOCK_AJUSTAR`, `STOCK_TRANSFERENCIA_ANULAR` y `STOCK_AJUSTE_ANULAR` lleva el motivo, AUD-02); apertura, rendición, cierre y liberación forzada de jornadas (la fila de `JORNADA_LIBERAR` lleva el motivo, AUD-02); todo movimiento hecho sobre una ubicación tomada por quien tiene `LIBERAR_UBICACION` (la fila del comando lleva una observación que nombra STK-09 y la jornada); renovaciones de sesión de un usuario o rol inactivo con jornada no cerrada; diferencias de rendición; cambios de límite y política de crédito; cambios de configuración; resolución de observaciones; comandos rechazados o en cuarentena. | 1 |
+| AUD-01 | Se auditan: inicio de sesión, cambios de usuarios, roles, permisos y dispositivos; costos informados; publicación y anulación de versiones de lista; uso de lista no asignada o versión anterior; descuentos manuales y autorizaciones; cambios del tope de descuento de un rol (una fila con el valor anterior y el nuevo); autorizaciones de crédito; ventas, compras, cobranzas y pagos anulados; transferencias y ajustes de stock y sus anulaciones (la fila de `STOCK_AJUSTAR`, `STOCK_TRANSFERENCIA_ANULAR` y `STOCK_AJUSTE_ANULAR` lleva el motivo, AUD-02); apertura, rendición, cierre y liberación forzada de jornadas (la fila de `JORNADA_LIBERAR` lleva el motivo, AUD-02); todo movimiento hecho sobre una ubicación tomada por quien tiene `LIBERAR_UBICACION` (la fila del comando lleva una observación que nombra STK-09 y la jornada); renovaciones de sesión de un usuario o rol inactivo con jornada no cerrada; diferencias de rendición; cambios de límite y política de crédito; cambios de configuración; resolución de observaciones; comandos rechazados o en cuarentena. | 1 |
 | AUD-02 | Cada registro guarda usuario, dispositivo, acción, entidad, identificador, valor anterior y nuevo cuando aplica, motivo, autorizador, `occurred_at`, `registered_at` y `operation_id`. | 1 |
 | AUD-03 | La auditoría es de solo agregado: no se modifica ni se elimina. | 1 |
 
@@ -474,8 +474,8 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 | Ajuste de stock | Operativa | CONFIRMADA → ANULADA | 1 |
 | Versión de lista | Almacenada | BORRADOR → PUBLICADA → ANULADA (solo antes de su vigencia) | 1 |
 | Versión de lista | Derivada | PROGRAMADA / VIGENTE / HISTÓRICA | 1 |
-| Regla de descuento | Almacenada | BORRADOR → ACTIVA ↔ PAUSADA | 1 |
-| Regla de descuento | Derivada | VENCIDA | 1 |
+| Regla de descuento | Almacenada | BORRADOR → ACTIVA ↔ PAUSADA. Solo un borrador se edita completo; activada o pausada solo admite fijar su vigencia hasta. Ninguna regla vuelve a BORRADOR ni se borra. | 1 |
+| Regla de descuento | Derivada | VENCIDA (activa o pausada con la vigencia hasta ya pasada) | 1 |
 | Cliente | Almacenada | ACTIVO ↔ SUSPENDIDO; ACTIVO/SUSPENDIDO → INACTIVO; INACTIVO → ACTIVO solo sin operaciones | 1 |
 | Jornada | Almacenada | ABIERTA → EN_RENDICION → CERRADA; ABIERTA/EN_RENDICION → LIBERADA | 1 |
 | Dispositivo | Almacenada | ACTIVO → REVOCADO | 1 |
@@ -492,7 +492,7 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 
 | Permiso | Alcance | ADM | GES | SUP | VEN | CON |
 | --- | --- | :-: | :-: | :-: | :-: | :-: |
-| ADMIN_USUARIOS | Usuarios, roles y permisos | ✓ | | | | |
+| ADMIN_USUARIOS | Usuarios, roles y permisos (incluye definir el tope de descuento manual de cada rol y consultar los roles con su tope) | ✓ | | | | |
 | ADMIN_CONFIGURACION | Configuración de la organización (incluye crear, modificar y desactivar ubicaciones, STK-02) | ✓ | | | | |
 | GESTIONAR_DISPOSITIVOS | Ver y revocar dispositivos | ✓ | | ✓ | | |
 | IMPORTAR_DATOS | Importaciones y puesta en marcha (incluye registrar saldos iniciales, CC-08, y stock inicial, STK-10) | ✓ | | | | |
@@ -506,7 +506,7 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 | GESTIONAR_LISTAS | Listas, reglas de margen, redondeo y borradores (generar y fijar precios manuales); **leer listas, reglas, versiones y precios** | ✓ | ✓ | | | |
 | PUBLICAR_LISTAS | Publicar y anular versiones; **leer listas, reglas, versiones y precios** | ✓ | | | | |
 | USAR_LISTA_ANTERIOR | Lista no asignada o versión anterior en venta | ✓ | | ✓ | | |
-| GESTIONAR_DESCUENTOS | Reglas de descuento | ✓ | | | | |
+| GESTIONAR_DESCUENTOS | Reglas de descuento: alta, edición del borrador, activación, pausa y consulta. Abre, solo en lectura, las categorías, marcas y productos para elegir alcances | ✓ | | | | |
 | REGISTRAR_COMPRA | Registrar compras | ✓ | ✓ | | | |
 | ANULAR_COMPRA | Anular compras | ✓ | ✓ | | | |
 | REGISTRAR_PAGO_PROVEEDOR | Registrar pagos; ver el listado y el detalle de pagos, el saldo del proveedor y elegir proveedor | ✓ | ✓ | | | |
@@ -521,7 +521,7 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 | VENDER | Confirmar ventas | ✓ | | ✓ | ✓ | |
 | ANULAR_VENTA | Anular ventas | ✓ | ✓ | ✓ | | |
 | DESCUENTO_MANUAL | Descuento manual hasta el tope del rol | ✓ (sin tope) | | ✓ | ✓ | |
-| AUTORIZAR_DESCUENTO | Superar tope de descuento | ✓ | | ✓ | | |
+| AUTORIZAR_DESCUENTO | Superar tope de descuento, el propio o el de otro usuario; quien autoriza no queda limitado por su propio tope | ✓ | | ✓ | | |
 | SUPERAR_CREDITO | Vender con exceso de crédito | ✓ | | ✓ | | |
 | VENDER_CLIENTE_SUSPENDIDO | Vender a suspendidos | ✓ | | ✓ | | |
 | REGISTRAR_COBRANZA | Registrar cobranzas | ✓ | ✓ | ✓ | ✓ | |

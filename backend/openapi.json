@@ -528,6 +528,146 @@
         }
       }
     },
+    "/api/v1/identidad/roles": {
+      "get": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Listar Roles",
+        "description": "Los roles de la organización del token, con nombre, estado, tope y permisos (una consulta\npara todos los permisos, sin N+1). Ningún rol ajeno (INV-21).",
+        "operationId": "listar_roles_api_v1_identidad_roles_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RolConTopeYPermisosResponse"
+                  },
+                  "title": "Response Listar Roles Api V1 Identidad Roles Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identidad/roles/{rol_id}/tope-descuento": {
+      "put": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Definir Tope Descuento De Rol",
+        "description": "`ROL_TOPE_DESCUENTO_DEFINIR` (D13). La respuesta sale de `comando.resultado`, no de una\nrelectura: un reenvío idempotente devuelve exactamente lo mismo (INV-06). Un rol que no está\nen la organización del token responde 404 (INV-21, SEG-07).",
+        "operationId": "definir_tope_descuento_de_rol_api_v1_identidad_roles__rol_id__tope_descuento_put",
+        "parameters": [
+          {
+            "name": "rol_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rol Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TopeDescuentoRolRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RolConTopeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/identidad/usuarios/{usuario_id}/pin": {
       "post": {
         "tags": [
@@ -3140,6 +3280,472 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SaldoInicialResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/descuentos/reglas": {
+      "post": {
+        "tags": [
+          "descuentos"
+        ],
+        "summary": "Crear Regla",
+        "operationId": "crear_regla_api_v1_descuentos_reglas_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReglaDescuentoCrearRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReglaDescuentoResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "descuentos"
+        ],
+        "summary": "Listar Reglas",
+        "description": "Las reglas de la organización, de la más nueva a la más vieja, paginadas por cursor.\n`estado` admite `VENCIDA` (derivado). Porcentajes e importes viajan como string.",
+        "operationId": "listar_reglas_api_v1_descuentos_reglas_get",
+        "parameters": [
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "BORRADOR",
+                    "ACTIVA",
+                    "PAUSADA",
+                    "VENCIDA"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Estado"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReglasDescuentoResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/descuentos/reglas/{regla_id}": {
+      "put": {
+        "tags": [
+          "descuentos"
+        ],
+        "summary": "Modificar Regla",
+        "operationId": "modificar_regla_api_v1_descuentos_reglas__regla_id__put",
+        "parameters": [
+          {
+            "name": "regla_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Regla Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReglaDescuentoModificarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReglaDescuentoResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "descuentos"
+        ],
+        "summary": "Obtener Regla",
+        "description": "El detalle de una regla con sus alcances y el nombre de cada entidad; 404 si es ajena.",
+        "operationId": "obtener_regla_api_v1_descuentos_reglas__regla_id__get",
+        "parameters": [
+          {
+            "name": "regla_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Regla Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReglaDescuentoResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/descuentos/reglas/{regla_id}/activacion": {
+      "post": {
+        "tags": [
+          "descuentos"
+        ],
+        "summary": "Activar Regla",
+        "operationId": "activar_regla_api_v1_descuentos_reglas__regla_id__activacion_post",
+        "parameters": [
+          {
+            "name": "regla_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Regla Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReglaDescuentoResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/descuentos/reglas/{regla_id}/pausa": {
+      "post": {
+        "tags": [
+          "descuentos"
+        ],
+        "summary": "Pausar Regla",
+        "operationId": "pausar_regla_api_v1_descuentos_reglas__regla_id__pausa_post",
+        "parameters": [
+          {
+            "name": "regla_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Regla Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReglaDescuentoResponse"
                 }
               }
             }
@@ -8466,6 +9072,61 @@
         ],
         "title": "AjusteResponse",
         "description": "Sale de `comando.resultado` (un reenvío idempotente devuelve lo mismo, INV-06); la\nruta le agrega el costo de cada línea, leído del ajuste, si el usuario tiene `VER_COSTOS`."
+      },
+      "AlcanceReglaRequest": {
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "PRODUCTO",
+              "CATEGORIA",
+              "MARCA"
+            ],
+            "title": "Tipo"
+          },
+          "entidad_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Entidad Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tipo",
+          "entidad_id"
+        ],
+        "title": "AlcanceReglaRequest"
+      },
+      "AlcanceReglaResponse": {
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "PRODUCTO",
+              "CATEGORIA",
+              "MARCA"
+            ],
+            "title": "Tipo"
+          },
+          "entidad_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Entidad Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tipo",
+          "entidad_id",
+          "nombre"
+        ],
+        "title": "AlcanceReglaResponse",
+        "description": "Un alcance con el nombre de su entidad."
       },
       "AlicuotaResponse": {
         "properties": {
@@ -14626,6 +15287,435 @@
         "title": "ReglaCrearRequest",
         "description": "Cuerpo de `POST /precios/listas/{lista_id}/reglas`: `valor` es una fracción en string\n(30% = `\"0.300000\"`); `alcance_id` va solo con un alcance que no es `LISTA`."
       },
+      "ReglaDescuentoCrearRequest": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "VOLUMEN_OPERACION",
+              "VOLUMEN_ALCANCE"
+            ],
+            "title": "Tipo"
+          },
+          "medida": {
+            "type": "string",
+            "enum": [
+              "CAJAS_EQUIVALENTES",
+              "UNIDADES_BASE",
+              "IMPORTE_BRUTO"
+            ],
+            "title": "Medida"
+          },
+          "operador": {
+            "type": "string",
+            "enum": [
+              "GTE",
+              "GT"
+            ],
+            "title": "Operador"
+          },
+          "umbral": {
+            "type": "string",
+            "title": "Umbral"
+          },
+          "accion_tipo": {
+            "type": "string",
+            "enum": [
+              "PORCENTAJE",
+              "IMPORTE_FIJO"
+            ],
+            "title": "Accion Tipo"
+          },
+          "accion_valor": {
+            "type": "string",
+            "title": "Accion Valor"
+          },
+          "prioridad": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Prioridad"
+          },
+          "acumulable": {
+            "type": "boolean",
+            "title": "Acumulable"
+          },
+          "alcances": {
+            "items": {
+              "$ref": "#/components/schemas/AlcanceReglaRequest"
+            },
+            "type": "array",
+            "title": "Alcances",
+            "default": []
+          },
+          "vigencia_desde": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vigencia Desde"
+          },
+          "vigencia_hasta": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vigencia Hasta"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "nombre",
+          "tipo",
+          "medida",
+          "operador",
+          "umbral",
+          "accion_tipo",
+          "accion_valor",
+          "prioridad",
+          "acumulable"
+        ],
+        "title": "ReglaDescuentoCrearRequest",
+        "description": "Cuerpo de `POST /descuentos/reglas`: la regla nace en `BORRADOR`. `prioridad` admite un\ndecimal solo para que la ruta lo rechace con `PRIORIDAD_INVALIDA` (un número con coma no\npuede entrar al contenido de un comando)."
+      },
+      "ReglaDescuentoModificarRequest": {
+        "properties": {
+          "nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nombre"
+          },
+          "tipo": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "VOLUMEN_OPERACION",
+                  "VOLUMEN_ALCANCE"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tipo"
+          },
+          "medida": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "CAJAS_EQUIVALENTES",
+                  "UNIDADES_BASE",
+                  "IMPORTE_BRUTO"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Medida"
+          },
+          "operador": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "GTE",
+                  "GT"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operador"
+          },
+          "umbral": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Umbral"
+          },
+          "accion_tipo": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "PORCENTAJE",
+                  "IMPORTE_FIJO"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accion Tipo"
+          },
+          "accion_valor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accion Valor"
+          },
+          "prioridad": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prioridad"
+          },
+          "acumulable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acumulable"
+          },
+          "alcances": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AlcanceReglaRequest"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alcances"
+          },
+          "vigencia_desde": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vigencia Desde"
+          },
+          "vigencia_hasta": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vigencia Hasta"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ReglaDescuentoModificarRequest",
+        "description": "Cuerpo de `PUT /descuentos/reglas/{regla_id}`. Un borrador se reemplaza con los mismos\ncampos del alta; una regla activada o pausada solo admite `vigencia_hasta` (`null` quita el\nfin). Los campos que no vienen no se envían al comando."
+      },
+      "ReglaDescuentoResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "VOLUMEN_OPERACION",
+              "VOLUMEN_ALCANCE"
+            ],
+            "title": "Tipo"
+          },
+          "medida": {
+            "type": "string",
+            "enum": [
+              "CAJAS_EQUIVALENTES",
+              "UNIDADES_BASE",
+              "IMPORTE_BRUTO"
+            ],
+            "title": "Medida"
+          },
+          "operador": {
+            "type": "string",
+            "enum": [
+              "GTE",
+              "GT"
+            ],
+            "title": "Operador"
+          },
+          "umbral": {
+            "type": "string",
+            "title": "Umbral"
+          },
+          "accion_tipo": {
+            "type": "string",
+            "enum": [
+              "PORCENTAJE",
+              "IMPORTE_FIJO"
+            ],
+            "title": "Accion Tipo"
+          },
+          "accion_porcentaje": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accion Porcentaje"
+          },
+          "accion_importe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accion Importe"
+          },
+          "prioridad": {
+            "type": "integer",
+            "title": "Prioridad"
+          },
+          "acumulable": {
+            "type": "boolean",
+            "title": "Acumulable"
+          },
+          "vigencia_desde": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vigencia Desde"
+          },
+          "vigencia_hasta": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vigencia Hasta"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "BORRADOR",
+              "ACTIVA",
+              "PAUSADA",
+              "VENCIDA"
+            ],
+            "title": "Estado"
+          },
+          "alcances": {
+            "items": {
+              "$ref": "#/components/schemas/AlcanceReglaResponse"
+            },
+            "type": "array",
+            "title": "Alcances"
+          },
+          "creado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Creado En"
+          },
+          "actualizado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Actualizado En"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "tipo",
+          "medida",
+          "operador",
+          "umbral",
+          "accion_tipo",
+          "accion_porcentaje",
+          "accion_importe",
+          "prioridad",
+          "acumulable",
+          "vigencia_desde",
+          "vigencia_hasta",
+          "estado",
+          "alcances",
+          "creado_en",
+          "actualizado_en"
+        ],
+        "title": "ReglaDescuentoResponse",
+        "description": "Una regla con su condición, acción, vigencia y alcances. `estado` es el que se informa:\n`VENCIDA` (derivado, no se almacena) para una regla activa o pausada cuya vigencia hasta ya\npasó (`01` §18). Exactamente uno de `accion_porcentaje` y `accion_importe` no es nulo."
+      },
       "ReglaModificarRequest": {
         "properties": {
           "tipo": {
@@ -14729,6 +15819,35 @@
         "title": "ReglaResponse",
         "description": "Una regla con su alcance (tipo, entidad y nombre de la entidad), tipo, valor y\nactividad. `alcance_nombre` es nulo en el alcance `LISTA` (no tiene entidad)."
       },
+      "ReglasDescuentoResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReglaDescuentoResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "siguiente_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Siguiente Cursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "siguiente_cursor"
+        ],
+        "title": "ReglasDescuentoResponse",
+        "description": "Una página del listado de reglas, de la más nueva a la más vieja; `siguiente_cursor` es\nnulo en la última página."
+      },
       "ReglasResponse": {
         "properties": {
           "items": {
@@ -14813,6 +15932,73 @@
         ],
         "title": "ResumenReglaIvaResponse",
         "description": "`GET /costos/resumen-regla-iva` (11b, D10): cuántos costos vigentes a `fecha` se\nregistraron con y sin crédito fiscal. Insumo de la confirmación del cambio de condición."
+      },
+      "RolConTopeResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          },
+          "tope_descuento": {
+            "type": "string",
+            "title": "Tope Descuento"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "activo",
+          "tope_descuento"
+        ],
+        "title": "RolConTopeResponse"
+      },
+      "RolConTopeYPermisosResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          },
+          "tope_descuento": {
+            "type": "string",
+            "title": "Tope Descuento"
+          },
+          "permisos": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Permisos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "activo",
+          "tope_descuento",
+          "permisos"
+        ],
+        "title": "RolConTopeYPermisosResponse",
+        "description": "La lectura suma los permisos del rol (códigos ordenados) para que la pantalla \"Topes por\nrol\" avise solo donde el tope 0 % importa (DSC-06). La escritura no los devuelve."
       },
       "RolResponse": {
         "properties": {
@@ -15173,6 +16359,21 @@
         ],
         "title": "TomaDeUbicacionResponse",
         "description": "Quién tiene tomada la ubicación y desde cuándo (change 15, INV-16): su jornada\n`ABIERTA` o `EN_RENDICION`."
+      },
+      "TopeDescuentoRolRequest": {
+        "properties": {
+          "tope_descuento": {
+            "type": "string",
+            "title": "Tope Descuento"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tope_descuento"
+        ],
+        "title": "TopeDescuentoRolRequest",
+        "description": "Solo el tope, como cadena con hasta 6 decimales: un número JSON responde 422 (INV-03).\nSin `organizacion_id`: sale del token (INV-21)."
       },
       "TransferenciaAnuladaResponse": {
         "properties": {

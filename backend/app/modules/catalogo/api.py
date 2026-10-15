@@ -78,6 +78,9 @@ PERMISO_REGISTRAR_COMPRA = "REGISTRAR_COMPRA"
 # D12 (change 13): el selector de alcance de una regla de margen lee productos, categorías y
 # marcas con solo este permiso, solo en lectura.
 PERMISO_GESTIONAR_LISTAS = "GESTIONAR_LISTAS"
+# D18 (change 16, ADR-047 punto 16): el selector de alcance de una regla de descuento lee las
+# mismas cuatro lecturas (categorías, marcas, productos y detalle de producto), solo en lectura.
+PERMISO_GESTIONAR_DESCUENTOS = "GESTIONAR_DESCUENTOS"
 
 
 def _resultado_de(comando: sync_service.Comando) -> dict[str, object]:
@@ -184,7 +187,9 @@ def modificar_categoria(
 def listar_categorias(
     contexto: Annotated[
         ContextoAutenticado,
-        Depends(requiere_algun_permiso(PERMISO, PERMISO_GESTIONAR_LISTAS)),
+        Depends(
+            requiere_algun_permiso(PERMISO, PERMISO_GESTIONAR_LISTAS, PERMISO_GESTIONAR_DESCUENTOS)
+        ),
     ],
     sesion: Annotated[Session, Depends(get_session)],
     limite: int = LIMITE_PAGINA_DEFAULT,
@@ -299,7 +304,9 @@ def modificar_marca(
 def listar_marcas(
     contexto: Annotated[
         ContextoAutenticado,
-        Depends(requiere_algun_permiso(PERMISO, PERMISO_GESTIONAR_LISTAS)),
+        Depends(
+            requiere_algun_permiso(PERMISO, PERMISO_GESTIONAR_LISTAS, PERMISO_GESTIONAR_DESCUENTOS)
+        ),
     ],
     sesion: Annotated[Session, Depends(get_session)],
     limite: int = LIMITE_PAGINA_DEFAULT,
@@ -444,7 +451,12 @@ def listar_productos(
     contexto: Annotated[
         ContextoAutenticado,
         Depends(
-            requiere_algun_permiso(PERMISO, PERMISO_REGISTRAR_COMPRA, PERMISO_GESTIONAR_LISTAS)
+            requiere_algun_permiso(
+                PERMISO,
+                PERMISO_REGISTRAR_COMPRA,
+                PERMISO_GESTIONAR_LISTAS,
+                PERMISO_GESTIONAR_DESCUENTOS,
+            )
         ),
     ],
     sesion: Annotated[Session, Depends(get_session)],
@@ -479,7 +491,12 @@ def obtener_producto(
     contexto: Annotated[
         ContextoAutenticado,
         Depends(
-            requiere_algun_permiso(PERMISO, PERMISO_REGISTRAR_COMPRA, PERMISO_GESTIONAR_LISTAS)
+            requiere_algun_permiso(
+                PERMISO,
+                PERMISO_REGISTRAR_COMPRA,
+                PERMISO_GESTIONAR_LISTAS,
+                PERMISO_GESTIONAR_DESCUENTOS,
+            )
         ),
     ],
     sesion: Annotated[Session, Depends(get_session)],

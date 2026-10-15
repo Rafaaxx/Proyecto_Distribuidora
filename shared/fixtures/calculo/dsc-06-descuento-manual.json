@@ -1,0 +1,857 @@
+[
+  {
+    "id": "DSC06-organizacion-deshabilitada",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "Organización con el descuento manual deshabilitado.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": false,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.030000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "error": "DESCUENTO_MANUAL_DESHABILITADO"
+    }
+  },
+  {
+    "id": "DSC06-usuario-sin-permiso",
+    "reglas": [
+      "DSC-06",
+      "SEG-06"
+    ],
+    "comentario": "Administración no tiene DESCUENTO_MANUAL.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.030000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "error": "PERMISO_REQUERIDO"
+    }
+  },
+  {
+    "id": "DSC06-motivo-obligatorio-y-ausente",
+    "reglas": [
+      "DSC-06",
+      "DSC-08"
+    ],
+    "comentario": "La organización exige motivo y no se indicó.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": true,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.030000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "error": "MOTIVO_REQUERIDO"
+    }
+  },
+  {
+    "id": "DSC06-motivo-obligatorio-con-motivo",
+    "reglas": [
+      "DSC-06",
+      "DSC-08"
+    ],
+    "comentario": "Con motivo presente se evalúa el tope: 3% dentro del 5%.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": true,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.030000",
+      "motivo": "Cliente frecuente",
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "tope_aplicado": "0.050000",
+      "requirio_autorizacion": false,
+      "resolucion": "DENTRO_DEL_TOPE",
+      "autorizador_id": null
+    }
+  },
+  {
+    "id": "DSC06-motivo-obligatorio-en-blanco",
+    "reglas": [
+      "DSC-06",
+      "DSC-08"
+    ],
+    "comentario": "Un motivo solo con espacios cuenta como ausente.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": true,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.030000",
+      "motivo": "   ",
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "error": "MOTIVO_REQUERIDO"
+    }
+  },
+  {
+    "id": "DSC06-motivo-sin-definir-no-obligatorio",
+    "reglas": [
+      "DSC-06",
+      "DSC-08"
+    ],
+    "comentario": "Parámetro de motivo sin definir (nulo): no es obligatorio (D14).",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.030000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "tope_aplicado": "0.050000",
+      "requirio_autorizacion": false,
+      "resolucion": "DENTRO_DEL_TOPE",
+      "autorizador_id": null
+    }
+  },
+  {
+    "id": "DSC06-motivo-no-obligatorio-explicito",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "Motivo no obligatorio (falso): se acepta sin motivo.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": false,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.030000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "tope_aplicado": "0.050000",
+      "requirio_autorizacion": false,
+      "resolucion": "DENTRO_DEL_TOPE",
+      "autorizador_id": null
+    }
+  },
+  {
+    "id": "DSC06-deshabilitada-gana-sobre-permiso-y-motivo",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "Orden de la evaluación (D12): primero la organización.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": false,
+      "motivo_obligatorio": true,
+      "permisos_usuario": [],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.030000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "error": "DESCUENTO_MANUAL_DESHABILITADO"
+    }
+  },
+  {
+    "id": "DSC06-permiso-gana-sobre-motivo",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "Orden de la evaluación (D12): el permiso antes que el motivo.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": true,
+      "permisos_usuario": [],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.030000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "error": "PERMISO_REQUERIDO"
+    }
+  },
+  {
+    "id": "DSC06-dentro-del-tope",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "3% con tope 5%.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.030000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "tope_aplicado": "0.050000",
+      "requirio_autorizacion": false,
+      "resolucion": "DENTRO_DEL_TOPE",
+      "autorizador_id": null
+    }
+  },
+  {
+    "id": "DSC06-igual-al-tope",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "5% con tope 5%: la comparación es inclusiva.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.050000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "tope_aplicado": "0.050000",
+      "requirio_autorizacion": false,
+      "resolucion": "DENTRO_DEL_TOPE",
+      "autorizador_id": null
+    }
+  },
+  {
+    "id": "DSC06-un-paso-sobre-el-tope",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "5,0001% con tope 5%: supera por el menor paso de 6 decimales.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.050001",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "error": "AUTORIZACION_REQUERIDA"
+    }
+  },
+  {
+    "id": "DSC06-sobre-el-tope-sin-autorizacion",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "10% con tope 5% y sin autorizador.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.100000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "error": "AUTORIZACION_REQUERIDA"
+    }
+  },
+  {
+    "id": "DSC06-sobre-el-tope-con-supervisora",
+    "reglas": [
+      "DSC-06",
+      "SEG-05"
+    ],
+    "comentario": "10% con tope 5% autorizado por una Supervisora con AUTORIZAR_DESCUENTO.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.100000",
+      "motivo": null,
+      "autorizador": {
+        "usuario_id": "u-supervisora",
+        "permisos": [
+          "DESCUENTO_MANUAL",
+          "AUTORIZAR_DESCUENTO"
+        ]
+      }
+    },
+    "salida_esperada": {
+      "tope_aplicado": "0.050000",
+      "requirio_autorizacion": true,
+      "resolucion": "AUTORIZADO_POR_SUPERVISOR",
+      "autorizador_id": "u-supervisora"
+    }
+  },
+  {
+    "id": "DSC06-sobre-el-tope-con-permiso-propio",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "Supervisora con tope 10% y AUTORIZAR_DESCUENTO pide 15%: se autoriza ella misma.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-supervisora",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL",
+        "AUTORIZAR_DESCUENTO"
+      ],
+      "tope_rol": "0.100000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.150000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "tope_aplicado": "0.100000",
+      "requirio_autorizacion": true,
+      "resolucion": "PERMISO_PROPIO",
+      "autorizador_id": "u-supervisora"
+    }
+  },
+  {
+    "id": "DSC06-permiso-propio-prevalece-sobre-autorizador",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "Si el propio usuario tiene AUTORIZAR_DESCUENTO, la resolución es PERMISO_PROPIO aunque venga un autorizador.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-supervisora",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL",
+        "AUTORIZAR_DESCUENTO"
+      ],
+      "tope_rol": "0.100000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.150000",
+      "motivo": null,
+      "autorizador": {
+        "usuario_id": "u-otra",
+        "permisos": [
+          "DESCUENTO_MANUAL",
+          "AUTORIZAR_DESCUENTO"
+        ]
+      }
+    },
+    "salida_esperada": {
+      "tope_aplicado": "0.100000",
+      "requirio_autorizacion": true,
+      "resolucion": "PERMISO_PROPIO",
+      "autorizador_id": "u-supervisora"
+    }
+  },
+  {
+    "id": "DSC06-autorizador-sin-permiso",
+    "reglas": [
+      "DSC-06",
+      "SEG-06"
+    ],
+    "comentario": "El segundo Vendedor no tiene AUTORIZAR_DESCUENTO.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.100000",
+      "motivo": null,
+      "autorizador": {
+        "usuario_id": "u-vendedor-2",
+        "permisos": [
+          "DESCUENTO_MANUAL"
+        ]
+      }
+    },
+    "salida_esperada": {
+      "error": "AUTORIZADOR_SIN_PERMISO"
+    }
+  },
+  {
+    "id": "DSC06-autorizador-no-limitado-por-su-tope",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "La Supervisora (tope 10%) autoriza un 20% (D12): su tope no se evalúa.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.200000",
+      "motivo": null,
+      "autorizador": {
+        "usuario_id": "u-supervisora",
+        "permisos": [
+          "DESCUENTO_MANUAL",
+          "AUTORIZAR_DESCUENTO"
+        ]
+      }
+    },
+    "salida_esperada": {
+      "tope_aplicado": "0.050000",
+      "requirio_autorizacion": true,
+      "resolucion": "AUTORIZADO_POR_SUPERVISOR",
+      "autorizador_id": "u-supervisora"
+    }
+  },
+  {
+    "id": "DSC06-autorizador-sin-uso-dentro-del-tope",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "Dentro del tope el autorizador que venga no interviene: sin autorización y sin autorizador.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.030000",
+      "motivo": null,
+      "autorizador": {
+        "usuario_id": "u-supervisora",
+        "permisos": [
+          "DESCUENTO_MANUAL",
+          "AUTORIZAR_DESCUENTO"
+        ]
+      }
+    },
+    "salida_esperada": {
+      "tope_aplicado": "0.050000",
+      "requirio_autorizacion": false,
+      "resolucion": "DENTRO_DEL_TOPE",
+      "autorizador_id": null
+    }
+  },
+  {
+    "id": "DSC06-tope-propio-manda-sobre-el-del-rol",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "Tope propio 8% sobre el 5% del rol: 7% se acepta con tope aplicado 8%.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": "0.080000",
+      "porcentaje_maximo": "0.070000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "tope_aplicado": "0.080000",
+      "requirio_autorizacion": false,
+      "resolucion": "DENTRO_DEL_TOPE",
+      "autorizador_id": null
+    }
+  },
+  {
+    "id": "DSC06-tope-propio-menor-que-el-del-rol-tambien-manda",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "Tope propio 2% bajo el 5% del rol: 3% supera el tope aplicado.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": "0.020000",
+      "porcentaje_maximo": "0.030000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "error": "AUTORIZACION_REQUERIDA"
+    }
+  },
+  {
+    "id": "DSC06-tope-propio-cero-manda-sobre-el-del-rol",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "Un tope propio de 0 no es sin definir: manda sobre el 5% del rol.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": "0.000000",
+      "porcentaje_maximo": "0.010000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "error": "AUTORIZACION_REQUERIDA"
+    }
+  },
+  {
+    "id": "DSC06-administrador-sin-tope",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "Tope 1.000000: 40% se acepta sin autorización.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-admin",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "1.000000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.400000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "tope_aplicado": "1.000000",
+      "requirio_autorizacion": false,
+      "resolucion": "DENTRO_DEL_TOPE",
+      "autorizador_id": null
+    }
+  },
+  {
+    "id": "DSC06-administrador-cien-por-ciento",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "Con tope 1 el 100% también es igual al tope.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-admin",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "1.000000",
+      "tope_propio": null,
+      "porcentaje_maximo": "1.000000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "tope_aplicado": "1.000000",
+      "requirio_autorizacion": false,
+      "resolucion": "DENTRO_DEL_TOPE",
+      "autorizador_id": null
+    }
+  },
+  {
+    "id": "DSC06-tope-cero-de-la-plantilla",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "Vendedor con el tope 0 con que nace la plantilla (D13): 1% pide autorización.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.000000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.010000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "error": "AUTORIZACION_REQUERIDA"
+    }
+  },
+  {
+    "id": "DSC06-venta-general-5-y-linea-10-sin-autorizador",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "D11: general 5% y una línea con 10%; el máximo del motor es 10% y el tope 5%: hace falta autorización.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.100000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "error": "AUTORIZACION_REQUERIDA"
+    }
+  },
+  {
+    "id": "DSC06-venta-general-5-y-linea-10-con-supervisora",
+    "reglas": [
+      "DSC-06",
+      "SEG-05"
+    ],
+    "comentario": "D11, D12: una sola resolución para toda la venta, incluidas las líneas con el general de 5%.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.100000",
+      "motivo": null,
+      "autorizador": {
+        "usuario_id": "u-supervisora",
+        "permisos": [
+          "DESCUENTO_MANUAL",
+          "AUTORIZAR_DESCUENTO"
+        ]
+      }
+    },
+    "salida_esperada": {
+      "tope_aplicado": "0.050000",
+      "requirio_autorizacion": true,
+      "resolucion": "AUTORIZADO_POR_SUPERVISOR",
+      "autorizador_id": "u-supervisora"
+    }
+  },
+  {
+    "id": "DSC06-venta-general-5-y-linea-3-dentro-del-tope",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "D11, D12: el máximo es 5% (el propio de 3% es menor); tope 5%: dentro del tope.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.050000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "tope_aplicado": "0.050000",
+      "requirio_autorizacion": false,
+      "resolucion": "DENTRO_DEL_TOPE",
+      "autorizador_id": null
+    }
+  },
+  {
+    "id": "DSC06-solo-propio-de-8-sobre-el-tope",
+    "reglas": [
+      "DSC-06"
+    ],
+    "comentario": "D12: sin general, una línea con 8%; tope 5%: autorización requerida.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0.080000",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "error": "AUTORIZACION_REQUERIDA"
+    }
+  },
+  {
+    "id": "DSC06-porcentaje-cero-invalido",
+    "reglas": [
+      "DSC-06",
+      "TR-02"
+    ],
+    "comentario": "El máximo es mayor que cero; 0 no es evaluable.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "0",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "error": "DESCUENTO_MANUAL_INVALIDO"
+    }
+  },
+  {
+    "id": "DSC06-porcentaje-mayor-que-uno-invalido",
+    "reglas": [
+      "DSC-06",
+      "TR-02"
+    ],
+    "comentario": "El máximo es una fracción de hasta 1.",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": "1.000001",
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "error": "DESCUENTO_MANUAL_INVALIDO"
+    }
+  },
+  {
+    "id": "DSC06-porcentaje-como-numero-invalido",
+    "reglas": [
+      "DSC-06",
+      "INV-03"
+    ],
+    "comentario": "Un número de punto flotante no es válido (INV-03).",
+    "entrada": {
+      "motor": "dsc06",
+      "usuario_id": "u-vendedor",
+      "descuento_manual_habilitado": true,
+      "motivo_obligatorio": null,
+      "permisos_usuario": [
+        "DESCUENTO_MANUAL"
+      ],
+      "tope_rol": "0.050000",
+      "tope_propio": null,
+      "porcentaje_maximo": 0.05,
+      "motivo": null,
+      "autorizador": null
+    },
+    "salida_esperada": {
+      "error": "DESCUENTO_MANUAL_INVALIDO"
+    }
+  }
+]

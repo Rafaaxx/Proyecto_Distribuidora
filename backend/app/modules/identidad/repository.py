@@ -255,6 +255,38 @@ def obtener_rol_por_id(organizacion_id: UUID, rol_id: UUID, sesion: Session) -> 
     return rol
 
 
+def obtener_rol_para_actualizar(organizacion_id: UUID, rol_id: UUID, sesion: Session) -> Rol | None:
+    """El rol con `FOR UPDATE` (change 16, tarea 13.1): dos cambios simultáneos del tope del mismo
+    rol se serializan. Refresca los valores: nunca devuelve un estado en caché. `None` si no
+    existe en `organizacion_id` (INV-21)."""
+    consulta = (
+        select(Rol)
+        .where(Rol.organizacion_id == organizacion_id, Rol.id == rol_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return sesion.scalars(consulta).one_or_none()
+
+
+def actualizar_tope_de_rol(
+    organizacion_id: UUID,
+    sesion: Session,
+    rol: Rol,
+    *,
+    tope_descuento: Decimal,
+    momento: datetime,
+    actualizado_por_id: UUID | None,
+) -> Rol:
+    """Cambia SOLO el tope de descuento del rol (más su marca de actualización): ni los permisos
+    ni el tope propio de ningún usuario. `rol` viene de `obtener_rol_para_actualizar`."""
+    assert rol.organizacion_id == organizacion_id  # defensa en profundidad (INV-21)
+    rol.tope_descuento = tope_descuento
+    rol.actualizado_en = momento
+    rol.actualizado_por_id = actualizado_por_id
+    sesion.flush()
+    return rol
+
+
 def listar_roles(organizacion_id: UUID, sesion: Session) -> list[Rol]:
     consulta = select(Rol).where(Rol.organizacion_id == organizacion_id).order_by(Rol.nombre)
     return list(sesion.scalars(consulta).all())
@@ -286,6 +318,22 @@ def listar_permisos_de_rol(organizacion_id: UUID, rol_id: UUID, sesion: Session)
         RolPermiso.organizacion_id == organizacion_id, RolPermiso.rol_id == rol_id
     )
     return list(sesion.scalars(consulta).all())
+
+
+def listar_permisos_de_todos_los_roles(
+    organizacion_id: UUID, sesion: Session
+) -> dict[UUID, list[str]]:
+    """Los permisos de TODOS los roles de la organización en una sola consulta (sin N+1), cada
+    lista ordenada por código. Un rol sin permisos no figura en el resultado."""
+    consulta = (
+        select(RolPermiso.rol_id, RolPermiso.permiso_codigo)
+        .where(RolPermiso.organizacion_id == organizacion_id)
+        .order_by(RolPermiso.rol_id, RolPermiso.permiso_codigo)
+    )
+    permisos: dict[UUID, list[str]] = {}
+    for rol_id, codigo in sesion.execute(consulta).all():
+        permisos.setdefault(rol_id, []).append(codigo)
+    return permisos
 
 
 # --- usuario -------------------------------------------------------------

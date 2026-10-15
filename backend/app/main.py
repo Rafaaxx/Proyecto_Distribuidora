@@ -39,6 +39,11 @@ from app.modules.costeo import models as costeo_models  # noqa: F401
 from app.modules.cuentas_corrientes import commands as cuentas_corrientes_commands  # noqa: F401
 from app.modules.cuentas_corrientes import models as cuentas_corrientes_models  # noqa: F401
 
+# Registro de comandos y de modelos de `descuentos` (change 16): explícito para que los handlers
+# `REGLA_DESCUENTO_*` queden registrados aunque se cree la aplicación sin pasar por el router.
+from app.modules.descuentos import commands as descuentos_commands  # noqa: F401
+from app.modules.descuentos import models as descuentos_models  # noqa: F401
+
 # Registro de comandos y de modelos de `importacion` (change 10): explícito para que
 # `Base.metadata` y el registro de tipos no dependan de que exista su `api.py`.
 from app.modules.importacion import commands as importacion_commands  # noqa: F401

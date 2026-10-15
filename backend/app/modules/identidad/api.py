@@ -309,6 +309,113 @@ def cambiar_composicion_rol(
     return RolResponse(id=rol.id, nombre=rol.nombre, permisos=sorted(permisos))
 
 
+# --- Tope de descuento de un rol (change 16, tarea 13.2, `design.md` D13) ---------------
+#
+# Cambia SOLO `rol.tope_descuento`: no toca los permisos del rol, el tope propio de los usuarios,
+# el PIN, el token ni `GET /yo`. Escritura por el bus (`ROL_TOPE_DESCUENTO_DEFINIR`, `ONLINE`) y
+# lectura de los roles de la organización con su tope como cadena (INV-03); ambas con
+# `ADMIN_USUARIOS`.
+
+
+class TopeDescuentoRolRequest(BaseModel):
+    """Solo el tope, como cadena con hasta 6 decimales: un número JSON responde 422 (INV-03).
+    Sin `organizacion_id`: sale del token (INV-21)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tope_descuento: str
+
+
+class RolConTopeResponse(BaseModel):
+    id: UUID
+    nombre: str
+    activo: bool
+    tope_descuento: str
+
+
+class RolConTopeYPermisosResponse(RolConTopeResponse):
+    """La lectura suma los permisos del rol (códigos ordenados) para que la pantalla "Topes por
+    rol" avise solo donde el tope 0 % importa (DSC-06). La escritura no los devuelve."""
+
+    permisos: list[str]
+
+
+@router.get("/roles", response_model=list[RolConTopeYPermisosResponse])
+def listar_roles(
+    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso("ADMIN_USUARIOS"))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> list[RolConTopeYPermisosResponse]:
+    """Los roles de la organización del token, con nombre, estado, tope y permisos (una consulta
+    para todos los permisos, sin N+1). Ningún rol ajeno (INV-21)."""
+    permisos_por_rol = repository.listar_permisos_de_todos_los_roles(
+        contexto.organizacion_id, sesion
+    )
+    return [
+        RolConTopeYPermisosResponse(
+            id=rol.id,
+            nombre=rol.nombre,
+            activo=rol.activo,
+            tope_descuento=f"{rol.tope_descuento:.6f}",
+            permisos=permisos_por_rol.get(rol.id, []),
+        )
+        for rol in repository.listar_roles(contexto.organizacion_id, sesion)
+    ]
+
+
+@router.put("/roles/{rol_id}/tope-descuento", response_model=RolConTopeResponse)
+def definir_tope_descuento_de_rol(
+    rol_id: UUID,
+    datos: TopeDescuentoRolRequest,
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_USUARIOS"))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> RolConTopeResponse:
+    """`ROL_TOPE_DESCUENTO_DEFINIR` (D13). La respuesta sale de `comando.resultado`, no de una
+    relectura: un reenvío idempotente devuelve exactamente lo mismo (INV-06). Un rol que no está
+    en la organización del token responde 404 (INV-21, SEG-07)."""
+    reloj = SystemClock()
+    contenido: dict[str, ContenidoComando] = {
+        "rol_id": str(rol_id),
+        "tope_descuento": datos.tope_descuento,
+    }
+    sobre = construir_sobre_online(
+        operation_id=entrada.operation_id,
+        tipo="ROL_TOPE_DESCUENTO_DEFINIR",
+        version=1,
+        modo="ONLINE",
+        organizacion_id=entrada.contexto.organizacion_id,
+        usuario_id=entrada.contexto.usuario_id,
+        dispositivo_id=entrada.contexto.dispositivo_id,
+        occurred_at=reloj.now(),
+        secuencia=1,
+        app_version="server",
+        contenido=contenido,
+    )
+    huella = calcular_huella(sobre.contenido)
+    handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
+    contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
+
+    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_rol_tope_descuento_definir(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO" or comando.resultado is None:
+        raise RecursoNoEncontradoError(f"El rol {rol_id} no existe en esta organización.")
+    resultado = comando.resultado
+    return RolConTopeResponse(
+        id=UUID(str(resultado["rol_id"])),
+        nombre=str(resultado["nombre"]),
+        activo=bool(resultado["activo"]),
+        tope_descuento=str(resultado["tope_descuento"]),
+    )
+
+
 # --- Rotación de PIN de autorización (tarea 10.7, grupo 9) ------------------
 
 

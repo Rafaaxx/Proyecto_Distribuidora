@@ -206,6 +206,21 @@ PERMISOS_ESPERADOS_POR_RUTA: dict[tuple[str, str], frozenset[str]] = {
         {"ABRIR_JORNADA", "RENDIR_JORNADA", "LIBERAR_UBICACION"}
     ),
     ("GET", "/api/v1/stock/jornadas/actual"): frozenset({"ABRIR_JORNADA"}),
+    # Change 16, tarea 11.1 (`design.md` D18; `01` §19): las cuatro escrituras de reglas de
+    # descuento exigen `GESTIONAR_DESCUENTOS`. Las dos lecturas (tarea 9.1, D18 aprobada
+    # 2026-10-14) también exigen solo `GESTIONAR_DESCUENTOS`.
+    ("GET", "/api/v1/descuentos/reglas"): frozenset({"GESTIONAR_DESCUENTOS"}),
+    ("GET", "/api/v1/descuentos/reglas/{regla_id}"): frozenset({"GESTIONAR_DESCUENTOS"}),
+    ("POST", "/api/v1/descuentos/reglas"): frozenset({"GESTIONAR_DESCUENTOS"}),
+    ("PUT", "/api/v1/descuentos/reglas/{regla_id}"): frozenset({"GESTIONAR_DESCUENTOS"}),
+    ("POST", "/api/v1/descuentos/reglas/{regla_id}/activacion"): frozenset(
+        {"GESTIONAR_DESCUENTOS"}
+    ),
+    ("POST", "/api/v1/descuentos/reglas/{regla_id}/pausa"): frozenset({"GESTIONAR_DESCUENTOS"}),
+    # Change 16, tarea 13.2 (`design.md` D13, D18): el tope de descuento de cada rol se define y
+    # se consulta con `ADMIN_USUARIOS` (`identidad/api.py`, junto a `PUT .../roles/{id}/permisos`).
+    ("PUT", "/api/v1/identidad/roles/{rol_id}/tope-descuento"): frozenset({"ADMIN_USUARIOS"}),
+    ("GET", "/api/v1/identidad/roles"): frozenset({"ADMIN_USUARIOS"}),
 }
 
 

@@ -22,6 +22,8 @@ const ComprasArea = lazy(() => import('./compras/ComprasArea'))
 const PagosArea = lazy(() => import('./pagos-proveedores/PagosArea'))
 const ImportacionArea = lazy(() => import('./importacion/ImportacionArea'))
 const ConfiguracionArea = lazy(() => import('./configuracion/ConfiguracionArea'))
+// Ayuda contextual (change 16b, ADR-051): páginas "Ver más" sin datos ni permisos (D6 = A).
+const AyudaArea = lazy(() => import('./AyudaArea'))
 
 /**
  * `docs/02-arquitectura.md` §13.1: `/admin` usa TanStack Query contra la
@@ -161,6 +163,14 @@ export function AdminScreen() {
             element={
               <Suspense fallback={null}>
                 <ImportacionArea />
+              </Suspense>
+            }
+          />
+          <Route
+            path="ayuda/*"
+            element={
+              <Suspense fallback={null}>
+                <AyudaArea />
               </Suspense>
             }
           />

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 
 import { Alert } from '../../../components/ui/Alert'
 import { Badge } from '../../../components/ui/Badge'
+import { Ayuda } from '../../../components/ui/Ayuda'
 import { Boton } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { PageHeader } from '../../../components/ui/PageHeader'
@@ -75,7 +76,12 @@ export function ReglaDetalleScreen() {
                 Editar
               </Link>
             )}
-            {acciones.activar && <Boton onClick={() => setDialogo('ACTIVAR')}>Activar</Boton>}
+            {acciones.activar && (
+              <span className="inline-flex items-center gap-1">
+                <Boton onClick={() => setDialogo('ACTIVAR')}>Activar</Boton>
+                <Ayuda clave="descuentos.activar" />
+              </span>
+            )}
             {acciones.pausar && (
               <Boton variante="secundario" onClick={() => setDialogo('PAUSAR')}>
                 Pausar

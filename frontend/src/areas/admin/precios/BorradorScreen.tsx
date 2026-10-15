@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 
 import { Alert } from '../../../components/ui/Alert'
 import { Badge } from '../../../components/ui/Badge'
+import { Ayuda } from '../../../components/ui/Ayuda'
 import { Boton } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { PageHeader } from '../../../components/ui/PageHeader'
@@ -133,9 +134,12 @@ function Borrador({ listaId }: { listaId: string }) {
       {resultado && <ResultadoDeGeneracion resultado={resultado} />}
 
       <section className="flex flex-col gap-3" aria-labelledby="titulo-precios">
-        <h2 id="titulo-precios" className="text-base font-semibold text-primary">
-          Precios
-        </h2>
+        <div className="flex items-center gap-1">
+          <h2 id="titulo-precios" className="text-base font-semibold text-primary">
+            Precios
+          </h2>
+          <Ayuda clave="precios.senales" />
+        </div>
         {precios.length === 0 ? (
           <p className="text-sm text-primary/70">El borrador todavía no tiene precios.</p>
         ) : (
@@ -149,9 +153,12 @@ function Borrador({ listaId }: { listaId: string }) {
       </section>
 
       <section className="flex flex-col gap-3" aria-labelledby="titulo-sin-precio">
-        <h2 id="titulo-sin-precio" className="text-base font-semibold text-primary">
-          Productos sin precio
-        </h2>
+        <div className="flex items-center gap-1">
+          <h2 id="titulo-sin-precio" className="text-base font-semibold text-primary">
+            Productos sin precio
+          </h2>
+          <Ayuda clave="precios.sinPrecio" />
+        </div>
         {sinPrecio.length === 0 ? (
           <p className="text-sm text-primary/70">Todos los productos activos tienen precio.</p>
         ) : (
@@ -246,9 +253,12 @@ function BotonRegenerar({
   }
 
   return (
-    <Boton disabled={generar.isPending} onClick={() => void regenerar()}>
-      {etiqueta}
-    </Boton>
+    <span className="inline-flex items-center gap-1">
+      <Boton disabled={generar.isPending} onClick={() => void regenerar()}>
+        {etiqueta}
+      </Boton>
+      <Ayuda clave="precios.borrador" />
+    </span>
   )
 }
 

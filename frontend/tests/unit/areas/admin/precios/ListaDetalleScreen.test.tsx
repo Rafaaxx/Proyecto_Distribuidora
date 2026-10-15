@@ -84,9 +84,9 @@ describe('ListaDetalleScreen: reglas (tarea 13.1; PRC-12, PRC-13, D8)', () => {
 
     await usuario.click(await screen.findByRole('button', { name: /nueva regla/i }))
     const dialogo = within(screen.getByRole('dialog'))
-    await usuario.selectOptions(dialogo.getByLabelText(/tipo de margen/i), 'MARKUP')
+    await usuario.selectOptions(dialogo.getByLabelText(/^tipo de margen$/i), 'MARKUP')
     await usuario.type(dialogo.getByLabelText(/porcentaje/i), '12,5')
-    await usuario.selectOptions(dialogo.getByLabelText(/se aplica a/i), 'CATEGORIA')
+    await usuario.selectOptions(dialogo.getByLabelText(/^se aplica a$/i), 'CATEGORIA')
     await usuario.selectOptions(await dialogo.findByLabelText(/^entidad$/i), CATEGORIA_CERVEZAS_ID)
     expect(dialogo.getByText('Precio = costo × 1,125')).toBeInTheDocument()
     await usuario.click(dialogo.getByRole('button', { name: /guardar regla/i }))
@@ -111,9 +111,9 @@ describe('ListaDetalleScreen: reglas (tarea 13.1; PRC-12, PRC-13, D8)', () => {
 
     await usuario.click(await screen.findByRole('button', { name: /nueva regla/i }))
     const dialogo = within(screen.getByRole('dialog'))
-    await usuario.selectOptions(dialogo.getByLabelText(/tipo de margen/i), 'MARGEN_BRUTO')
+    await usuario.selectOptions(dialogo.getByLabelText(/^tipo de margen$/i), 'MARGEN_BRUTO')
     await usuario.type(dialogo.getByLabelText(/porcentaje/i), '100')
-    await usuario.selectOptions(dialogo.getByLabelText(/se aplica a/i), 'LISTA')
+    await usuario.selectOptions(dialogo.getByLabelText(/^se aplica a$/i), 'LISTA')
     await usuario.click(dialogo.getByRole('button', { name: /guardar regla/i }))
 
     expect(await dialogo.findByText(/un margen bruto debe ser menor que 100%/i)).toBeInTheDocument()
@@ -138,7 +138,7 @@ describe('ListaDetalleScreen: reglas (tarea 13.1; PRC-12, PRC-13, D8)', () => {
     await usuario.click(await screen.findByRole('button', { name: /nueva regla/i }))
     const dialogo = within(screen.getByRole('dialog'))
     await usuario.type(dialogo.getByLabelText(/porcentaje/i), '40')
-    await usuario.selectOptions(dialogo.getByLabelText(/se aplica a/i), 'CATEGORIA')
+    await usuario.selectOptions(dialogo.getByLabelText(/^se aplica a$/i), 'CATEGORIA')
     await usuario.selectOptions(await dialogo.findByLabelText(/^entidad$/i), CATEGORIA_VINOS_ID)
     await usuario.click(dialogo.getByRole('button', { name: /guardar regla/i }))
 
@@ -159,7 +159,7 @@ describe('ListaDetalleScreen: reglas (tarea 13.1; PRC-12, PRC-13, D8)', () => {
     await usuario.click(within(filaDeRegla('Vinos')).getByRole('button', { name: /editar/i }))
     const dialogo = within(screen.getByRole('dialog'))
     expect(dialogo.getByLabelText(/porcentaje/i)).toHaveValue('30')
-    await usuario.selectOptions(dialogo.getByLabelText(/tipo de margen/i), 'MARGEN_BRUTO')
+    await usuario.selectOptions(dialogo.getByLabelText(/^tipo de margen$/i), 'MARGEN_BRUTO')
     await usuario.clear(dialogo.getByLabelText(/porcentaje/i))
     await usuario.type(dialogo.getByLabelText(/porcentaje/i), '25')
     await usuario.click(dialogo.getByRole('button', { name: /guardar regla/i }))

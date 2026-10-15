@@ -184,7 +184,7 @@ function FormularioDeRegla({ valores, nombresIniciales, reglaId, textoDelBoton, 
           <input id="nombre" className={CLASE_CONTROL} {...register('nombre')} />
         </Campo>
 
-        <Campo id="tipo" etiqueta="Alcance de la regla" error={errors.tipo?.message}>
+        <Campo id="tipo" etiqueta="Alcance de la regla" ayuda="descuentos.alcance" error={errors.tipo?.message}>
           <select
             id="tipo"
             className={CLASE_CONTROL}
@@ -215,7 +215,7 @@ function FormularioDeRegla({ valores, nombresIniciales, reglaId, textoDelBoton, 
         )}
 
         <div className="grid gap-4 sm:grid-cols-3">
-          <Campo id="medida" etiqueta="Medida" error={errors.medida?.message}>
+          <Campo id="medida" etiqueta="Medida" ayuda="descuentos.medida" error={errors.medida?.message}>
             <select id="medida" className={CLASE_CONTROL} {...register('medida')}>
               {MEDIDAS.map((valor) => (
                 <option key={valor} value={valor}>
@@ -233,13 +233,13 @@ function FormularioDeRegla({ valores, nombresIniciales, reglaId, textoDelBoton, 
               ))}
             </select>
           </Campo>
-          <Campo id="umbral" etiqueta="Umbral" error={errors.umbral?.message}>
+          <Campo id="umbral" etiqueta="Umbral" ayuda="descuentos.umbral" error={errors.umbral?.message}>
             <input id="umbral" inputMode="decimal" className={CLASE_CONTROL} {...register('umbral')} />
           </Campo>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Campo id="accion_tipo" etiqueta="Acción" error={errors.accion_tipo?.message}>
+          <Campo id="accion_tipo" etiqueta="Acción" ayuda="descuentos.accion" error={errors.accion_tipo?.message}>
             <select id="accion_tipo" className={CLASE_CONTROL} {...register('accion_tipo')}>
               {ACCIONES.map((valor) => (
                 <option key={valor} value={valor}>
@@ -254,16 +254,16 @@ function FormularioDeRegla({ valores, nombresIniciales, reglaId, textoDelBoton, 
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Campo id="prioridad" etiqueta="Prioridad" error={errors.prioridad?.message}>
+          <Campo id="prioridad" etiqueta="Prioridad" ayuda="descuentos.prioridad" error={errors.prioridad?.message}>
             <input id="prioridad" inputMode="numeric" className={CLASE_CONTROL} {...register('prioridad')} />
           </Campo>
-          <Campo id="acumulable" etiqueta="Acumulable">
+          <Campo id="acumulable" etiqueta="Acumulable" ayuda="descuentos.acumulable">
             <input id="acumulable" type="checkbox" className="h-4 w-4 self-start" {...register('acumulable')} />
           </Campo>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Campo id="vigencia_desde" etiqueta="Vigencia desde (opcional)" error={errors.vigencia_desde?.message}>
+          <Campo id="vigencia_desde" etiqueta="Vigencia desde (opcional)" ayuda="descuentos.vigencia" error={errors.vigencia_desde?.message}>
             <input id="vigencia_desde" type="datetime-local" className={CLASE_CONTROL} {...register('vigencia_desde')} />
           </Campo>
           <Campo id="vigencia_hasta" etiqueta="Vigencia hasta (opcional)" error={errors.vigencia_hasta?.message}>

@@ -94,7 +94,7 @@ function ReglaFormulario({ listaId, regla, onCerrar }: Omit<ReglaDialogoProps, '
   return (
     <Dialogo abierto titulo={esEdicion ? 'Editar regla de margen' : 'Nueva regla de margen'} onCerrar={onCerrar}>
       <form onSubmit={alEnviar} noValidate className="flex flex-col gap-4">
-        <Campo id="regla-tipo" etiqueta="Tipo de margen" error={errors.tipo?.message}>
+        <Campo id="regla-tipo" etiqueta="Tipo de margen" ayuda="precios.tipoMargen" error={errors.tipo?.message}>
           <select id="regla-tipo" className={CLASE_CONTROL} {...register('tipo')}>
             {TIPOS_DE_MARGEN.map((valor) => (
               <option key={valor} value={valor}>
@@ -126,7 +126,7 @@ function ReglaFormulario({ listaId, regla, onCerrar }: Omit<ReglaDialogoProps, '
           </>
         ) : (
           <>
-            <Campo id="regla-alcance" etiqueta="Se aplica a" error={errors.alcance_tipo?.message}>
+            <Campo id="regla-alcance" etiqueta="Se aplica a" ayuda="precios.alcanceMargen" error={errors.alcance_tipo?.message}>
               <select
                 id="regla-alcance"
                 className={CLASE_CONTROL}

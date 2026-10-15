@@ -99,13 +99,15 @@ describe('AdminLayout: el menú muestra solo las secciones permitidas (tareas 7.
   it('Vendedor/Repartidor ve solo Stock (TRANSFERIR_STOCK, change 09 D3)', async () => {
     await montarRol('VEN')
 
-    expect(screen.getAllByRole('link').map((enlace) => enlace.textContent)).toEqual(['Stock'])
+    // "Ayuda" (change 16b, D6 = A) la ve todo usuario con sesión; las secciones siguen por permiso.
+    expect(screen.getAllByRole('link').map((enlace) => enlace.textContent)).toEqual(['Stock', 'Ayuda'])
   })
 
   it('Consulta/Dirección no ve ninguna sección', async () => {
     await montarRol('CON')
 
-    expect(screen.queryAllByRole('link')).toHaveLength(0)
+    // Solo queda "Ayuda" (change 16b): ninguna sección de negocio.
+    expect(screen.getAllByRole('link').map((enlace) => enlace.textContent)).toEqual(['Ayuda'])
   })
 
   it('con los permisos ya sembrados no hace ninguna petición extra a /yo (ADR-027: una consulta por sesión)', async () => {
@@ -269,7 +271,8 @@ describe('AdminLayout: la ruta índice /admin/inicio (tarea 7.6, B3)', () => {
     expect(
       await screen.findByText('Tu usuario no tiene secciones de administración disponibles'),
     ).toBeInTheDocument()
-    expect(screen.queryAllByRole('link')).toHaveLength(0)
+    // Solo queda "Ayuda" (change 16b): ninguna sección de negocio.
+    expect(screen.getAllByRole('link').map((enlace) => enlace.textContent)).toEqual(['Ayuda'])
   })
 
   it('mientras /yo está pendiente espera y no redirige a ninguna sección (B1)', () => {

@@ -3,6 +3,7 @@ import { useFieldArray, useForm, useWatch, type Control, type UseFormRegister } 
 import { Link } from 'react-router-dom'
 
 import { Alert } from '../../../components/ui/Alert'
+import { Ayuda } from '../../../components/ui/Ayuda'
 import { Boton } from '../../../components/ui/Button'
 import { Campo } from '../../../components/ui/Field'
 import { Card } from '../../../components/ui/Card'
@@ -272,7 +273,7 @@ function CompraFormulario() {
               <span data-testid="iva-sugerido">{vistaPrevia.totales ? formatearImporte(vistaPrevia.totales.ivaSugerido) : '—'}</span>
             </p>
           )}
-          <Campo id="compra-total-factura" etiqueta="Total de factura">
+          <Campo id="compra-total-factura" etiqueta="Total de factura" ayuda="compras.totalFactura">
             <input
               id="compra-total-factura"
               className={`${CLASE_CONTROL} w-40`}
@@ -400,7 +401,11 @@ function LineaDeCompra({
         <Campo id={`${base}.cantidad`} etiqueta="Cantidad">
           <input id={`${base}.cantidad`} className={`${CLASE_CONTROL} w-24`} {...register(`${base}.cantidad`)} />
         </Campo>
-        <Campo id={`${base}.valor`} etiqueta={computaCreditoFiscal === false ? 'Valor pagado' : 'Valor'}>
+        <Campo
+          id={`${base}.valor`}
+          etiqueta={computaCreditoFiscal === false ? 'Valor pagado' : 'Valor'}
+          ayuda={computaCreditoFiscal === false ? 'costos.valorPagado' : 'costos.valorConIva'}
+        >
           <input id={`${base}.valor`} className={`${CLASE_CONTROL} w-28`} {...register(`${base}.valor`)} />
         </Campo>
         {computaCreditoFiscal === true && (
@@ -409,7 +414,7 @@ function LineaDeCompra({
             Incluye IVA
           </label>
         )}
-        <Campo id={`${base}.bonificacionPorcentaje`} etiqueta="Bonificación %">
+        <Campo id={`${base}.bonificacionPorcentaje`} etiqueta="Bonificación %" ayuda="costos.bonificacion">
           <input id={`${base}.bonificacionPorcentaje`} className={`${CLASE_CONTROL} w-20`} {...register(`${base}.bonificacionPorcentaje`)} />
         </Campo>
         {onQuitar && (
@@ -418,14 +423,17 @@ function LineaDeCompra({
           </Boton>
         )}
       </div>
-      <div className="text-sm text-primary/70" data-testid={`linea-${indice}-vista-previa`}>
-        {vista.estado === 'lista' && (
-          <>
-            Cantidad base: {formatearCantidad(vista.calculada.cantidadBase, referencia)} · Costo base:{' '}
-            {formatearCosto(vista.calculada.costoBase)} · Importe neto: {formatearImporte(vista.calculada.importeNeto)}
-          </>
-        )}
-        {vista.estado === 'error' && <span className="text-danger">{vista.mensaje}</span>}
+      <div className="flex items-center gap-1">
+        <div className="text-sm text-primary/70" data-testid={`linea-${indice}-vista-previa`}>
+          {vista.estado === 'lista' && (
+            <>
+              Cantidad base: {formatearCantidad(vista.calculada.cantidadBase, referencia)} · Costo base:{' '}
+              {formatearCosto(vista.calculada.costoBase)} · Importe neto: {formatearImporte(vista.calculada.importeNeto)}
+            </>
+          )}
+          {vista.estado === 'error' && <span className="text-danger">{vista.mensaje}</span>}
+        </div>
+        <Ayuda clave="costos.costoBase" />
       </div>
       {errorDelServidor && <Alert>{errorDelServidor}</Alert>}
     </Card>

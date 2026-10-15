@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { Alert } from '../../../components/ui/Alert'
+import { Ayuda } from '../../../components/ui/Ayuda'
 import { Boton } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { PageHeader } from '../../../components/ui/PageHeader'
@@ -82,9 +83,12 @@ function Detalle() {
             {acciones.rendir && <Boton onClick={() => setDialogo('rendir')}>Rendir</Boton>}
             {acciones.cerrar && <Boton onClick={() => setDialogo('cerrar')}>Cerrar</Boton>}
             {acciones.liberar && (
-              <Boton variante="peligro" onClick={() => setDialogo('liberar')}>
-                Liberar
-              </Boton>
+              <span className="inline-flex items-center gap-1">
+                <Boton variante="peligro" onClick={() => setDialogo('liberar')}>
+                  Liberar
+                </Boton>
+                <Ayuda clave="stock.liberacion" />
+              </span>
             )}
             <Link to="/admin/stock/jornadas" className={CLASE_ENLACE}>
               Volver al listado

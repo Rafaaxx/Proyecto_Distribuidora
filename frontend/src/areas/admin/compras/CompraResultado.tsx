@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { Alert } from '../../../components/ui/Alert'
+import { Ayuda } from '../../../components/ui/Ayuda'
 import { Boton } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { PageHeader } from '../../../components/ui/PageHeader'
@@ -119,14 +120,12 @@ function OfertaDeCosto({
       {registrado ? (
         <p className="text-primary">Costo informado registrado.</p>
       ) : (
-        <Boton
-          variante="secundario"
-          className="self-start"
-          disabled={informar.isPending || costo === null}
-          onClick={() => void alRegistrar()}
-        >
-          Registrar como costo informado
-        </Boton>
+        <span className="inline-flex items-center gap-1 self-start">
+          <Boton variante="secundario" disabled={informar.isPending || costo === null} onClick={() => void alRegistrar()}>
+            Registrar como costo informado
+          </Boton>
+          <Ayuda clave="compras.costoPromedioEInformado" />
+        </span>
       )}
       {mensajeDeError && !registrado && <Alert>{mensajeDeError}</Alert>}
     </div>

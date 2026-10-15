@@ -168,7 +168,8 @@ Monorepo:
 │   │   ├── domain/            # motor de cálculo TS (§10.4)
 │   │   ├── sync/              # base local, cola, bootstrap, motor de sincronización
 │   │   ├── lib/               # dinero, cliente API, fechas, ids
-│   │   └── components/ui/
+│   │   ├── ayuda/             # archivo único de textos de ayuda y páginas "Ver más" (ADR-051)
+│   │   └── components/ui/     # incluye Ayuda, el botón "(?)"
 │   └── tests/
 │       ├── unit/
 │       └── e2e/
@@ -565,6 +566,7 @@ Agrupación de endpoints de la etapa 1:
 - Las áreas se cargan de forma diferida: el teléfono no descarga el código de administración.
 - React Context se usa solo para sesión, permisos, conectividad y tema.
 - Las pantallas del área de ruta leen siempre de Dexie, con o sin conexión.
+- **Ayuda contextual (ADR-051):** el componente `Ayuda` ("(?)") abre un panel no modal con clic, tap o teclado y cierra con Escape o clic afuera. Todos sus textos viven en `frontend/src/ayuda/textos.ts`, por clave, con los IDs de regla que citan; no piden nada a la red ni dependen de permisos, así que también sirven sin conexión. Las páginas "Ver más" están en `/admin/ayuda/:tema`; `/ruta` montará las suyas cuando tenga pantallas (change 21). Una prueba de Vitest verifica que toda clave usada exista y que todo ID citado exista en `01-dominio.md` o en `docs/adr/`.
 
 ### 13.2 Base local (Dexie)
 

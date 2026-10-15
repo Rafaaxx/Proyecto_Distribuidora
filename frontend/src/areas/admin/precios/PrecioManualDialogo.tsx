@@ -96,7 +96,7 @@ function FormularioDePrecio({
           El precio manual es el precio final de la lista por la presentación de referencia: no se redondea con la
           regla de la lista y se conserva al regenerar el borrador.
         </p>
-        <Campo id="precio-manual" etiqueta="Precio manual" error={errors.precio_final?.message}>
+        <Campo id="precio-manual" etiqueta="Precio manual" ayuda="precios.precioManual" error={errors.precio_final?.message}>
           <input
             id="precio-manual"
             inputMode="decimal"

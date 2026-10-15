@@ -94,7 +94,7 @@ function FormularioDeLista({
         <Campo id="nombre" etiqueta="Nombre" error={errors.nombre?.message}>
           <input id="nombre" className={CLASE_CONTROL} {...register('nombre')} />
         </Campo>
-        <Campo id="redondeo_multiplo" etiqueta="Múltiplo de redondeo" error={errors.redondeo_multiplo?.message}>
+        <Campo id="redondeo_multiplo" etiqueta="Múltiplo de redondeo" ayuda="precios.redondeo" error={errors.redondeo_multiplo?.message}>
           <input id="redondeo_multiplo" inputMode="decimal" className={CLASE_CONTROL} {...register('redondeo_multiplo')} />
         </Campo>
         <Campo id="redondeo_direccion" etiqueta="Dirección del redondeo" error={errors.redondeo_direccion?.message}>

@@ -116,7 +116,7 @@ describe('alta de una regla de descuento (tarea 15.2)', () => {
     await usuario.type(screen.getByLabelText(/^umbral$/i), '20')
     await usuario.type(screen.getByLabelText(/importe fijo/i), '1000,50')
     await usuario.type(screen.getByLabelText(/^prioridad$/i), '5')
-    await usuario.click(screen.getByLabelText(/acumulable/i))
+    await usuario.click(screen.getByLabelText(/^acumulable$/i))
     await usuario.click(screen.getByRole('button', { name: /guardar regla/i }))
 
     await waitFor(() => expect(envios()).toHaveLength(1))
@@ -129,11 +129,11 @@ describe('alta de una regla de descuento (tarea 15.2)', () => {
     montar('/admin/descuentos/nueva')
 
     // Por defecto: sobre toda la venta, sin selector de alcances.
-    expect(screen.getByLabelText(/alcance de la regla/i)).toHaveValue('VOLUMEN_OPERACION')
+    expect(screen.getByLabelText(/^alcance de la regla$/i)).toHaveValue('VOLUMEN_OPERACION')
     expect(screen.queryByRole('button', { name: /agregar alcance/i })).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/tipo de alcance/i)).not.toBeInTheDocument()
 
-    await usuario.selectOptions(screen.getByLabelText(/alcance de la regla/i), 'VOLUMEN_ALCANCE')
+    await usuario.selectOptions(screen.getByLabelText(/^alcance de la regla$/i), 'VOLUMEN_ALCANCE')
     expect(screen.getByRole('button', { name: /agregar alcance/i })).toBeInTheDocument()
 
     // Sin ningún alcance elegido, no deja guardar y lo señala sin enviar nada.
@@ -167,7 +167,7 @@ describe('alta de una regla de descuento (tarea 15.2)', () => {
     enrutar(apiFetchMock, [...reglasDeCatalogo(), altaOk()])
     const usuario = userEvent.setup()
     montar('/admin/descuentos/nueva')
-    await usuario.selectOptions(screen.getByLabelText(/alcance de la regla/i), 'VOLUMEN_ALCANCE')
+    await usuario.selectOptions(screen.getByLabelText(/^alcance de la regla$/i), 'VOLUMEN_ALCANCE')
     await usuario.selectOptions(screen.getByLabelText(/tipo de alcance/i), 'MARCA')
     await usuario.selectOptions(await screen.findByLabelText(/^entidad$/i), MARCA_ID)
     await usuario.click(screen.getByRole('button', { name: /agregar alcance/i }))
@@ -178,7 +178,7 @@ describe('alta de una regla de descuento (tarea 15.2)', () => {
     await usuario.selectOptions(screen.getByLabelText(/tipo de alcance/i), 'MARCA')
     await usuario.selectOptions(await screen.findByLabelText(/^entidad$/i), MARCA_ID)
     await usuario.click(screen.getByRole('button', { name: /agregar alcance/i }))
-    await usuario.selectOptions(screen.getByLabelText(/alcance de la regla/i), 'VOLUMEN_OPERACION')
+    await usuario.selectOptions(screen.getByLabelText(/^alcance de la regla$/i), 'VOLUMEN_OPERACION')
     await completarAlta(usuario)
     await usuario.click(screen.getByRole('button', { name: /guardar regla/i }))
 

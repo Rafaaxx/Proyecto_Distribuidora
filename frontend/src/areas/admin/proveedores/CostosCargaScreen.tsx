@@ -2,6 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useFieldArray, useForm, type FieldPath } from 'react-hook-form'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
+import { Ayuda } from '../../../components/ui/Ayuda'
 import { Boton } from '../../../components/ui/Button'
 import { Campo } from '../../../components/ui/Field'
 import { Card } from '../../../components/ui/Card'
@@ -329,6 +330,7 @@ function FilaCostoInput({
       <Campo
         id={`filas.${indice}.valor`}
         etiqueta={computaCreditoFiscal === false ? 'Valor pagado' : 'Valor'}
+        ayuda={computaCreditoFiscal === false ? 'costos.valorPagado' : 'costos.valorConIva'}
         error={erroresFila?.valor?.message}
       >
         <input
@@ -348,6 +350,7 @@ function FilaCostoInput({
       <Campo
         id={`filas.${indice}.bonificacionPorcentaje`}
         etiqueta="Bonificación %"
+        ayuda="costos.bonificacion"
         error={erroresFila?.bonificacionPorcentaje?.message}
       >
         <input
@@ -378,9 +381,12 @@ function FilaCostoInput({
         />
       </Campo>
 
-      <div className="text-sm text-primary/70" data-testid={`vista-previa-${indice}`}>
-        {vistaPrevia && <>Costo base: {vistaPrevia}</>}
-        {errorDeVistaPrevia && <span className="text-danger">{errorDeVistaPrevia}</span>}
+      <div className="flex items-center gap-1">
+        <div className="text-sm text-primary/70" data-testid={`vista-previa-${indice}`}>
+          {vistaPrevia && <>Costo base: {vistaPrevia}</>}
+          {errorDeVistaPrevia && <span className="text-danger">{errorDeVistaPrevia}</span>}
+        </div>
+        <Ayuda clave="costos.costoBase" />
       </div>
 
       {onQuitar && (

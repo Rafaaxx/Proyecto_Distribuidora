@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { Alert } from '../../../components/ui/Alert'
+import { Ayuda } from '../../../components/ui/Ayuda'
 import { Boton } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { PageHeader } from '../../../components/ui/PageHeader'
@@ -91,9 +92,13 @@ function Formulario() {
         >
           <p className="text-sm text-primary/70">{AVISO_REQUIERE_CONEXION}</p>
           {ubicaciones.isError && <Alert>No se pudieron obtener las ubicaciones.</Alert>}
-          <label className="flex flex-col gap-1 text-sm text-primary">
-            Ubicación
+          <div className="flex flex-col gap-1 text-sm text-primary">
+            <div className="flex items-center gap-1">
+              <label htmlFor="jornada-ubicacion">Ubicación</label>
+              <Ayuda clave="stock.tomaActual" />
+            </div>
             <select
+              id="jornada-ubicacion"
               className={CLASE_CONTROL}
               value={ubicacionId}
               onChange={(evento) => setUbicacionId(evento.target.value)}
@@ -105,7 +110,7 @@ function Formulario() {
                 </option>
               ))}
             </select>
-          </label>
+          </div>
           {error && <Alert>{error}</Alert>}
           <div>
             <Boton type="submit" disabled={enviando || abrir.isPending}>

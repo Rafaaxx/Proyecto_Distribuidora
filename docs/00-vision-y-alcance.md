@@ -164,7 +164,7 @@ Hasta que este módulo esté en producción, la organización inicial factura po
 - Bootstrap incremental y filtrado de datos offline por vendedor o zona.
 - Estrategia de costeo FIFO seleccionable desde fecha de corte.
 - Múltiples proveedores por producto.
-- Documentación de usuario y ayuda contextual.
+- Documentación de usuario completa (manual, guías de tareas, búsqueda). La **ayuda contextual** —el botón "(?)" junto a los campos con reglas no obvias y las páginas "Ver más" de temas puntuales— se adelantó a la etapa 1 con el change 16b, y cada change que trae funcionalidad no obvia suma la suya (ADR-051).
 
 ### 6.5 Evolución (sin etapa asignada)
 

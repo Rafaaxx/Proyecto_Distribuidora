@@ -4,6 +4,7 @@ import { useForm, useWatch } from 'react-hook-form'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { Alert } from '../../../components/ui/Alert'
+import { Ayuda } from '../../../components/ui/Ayuda'
 import { Boton } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { Campo } from '../../../components/ui/Field'
@@ -181,19 +182,23 @@ function FormularioDeUbicacion({ ubicacion }: { ubicacion?: Ubicacion }) {
           </Campo>
 
           <div className="flex flex-col gap-1">
-            <label className="flex items-center gap-2 text-sm text-primary">
-              {/* `aria-disabled` y no `disabled`: un campo deshabilitado no entra en los
-                  valores del formulario y el esquema lo vería como faltante. */}
-              <input
-                type="checkbox"
-                aria-disabled={esVehiculo}
-                onClick={(evento) => {
-                  if (esVehiculo) evento.preventDefault()
-                }}
-                {...register('requiere_toma')}
-              />
-              Requiere toma
-            </label>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 text-sm text-primary">
+                {/* `aria-disabled` y no `disabled`: un campo deshabilitado no entra en los
+                    valores del formulario y el esquema lo vería como faltante. */}
+                <input
+                  type="checkbox"
+                  aria-disabled={esVehiculo}
+                  onClick={(evento) => {
+                    if (esVehiculo) evento.preventDefault()
+                  }}
+                  {...register('requiere_toma')}
+                />
+                Requiere toma
+              </label>
+              {/* Fuera del <label>: activarlo no debe marcar ni desmarcar la casilla. */}
+              <Ayuda clave="stock.requiereToma" />
+            </div>
             {esVehiculo && <p className="text-xs text-primary/70">Un vehículo siempre requiere toma.</p>}
             {errors.requiere_toma?.message && (
               <p role="alert" className="text-sm text-danger">

@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react'
 
+import type { ClaveDeAyuda } from '../../ayuda/textos'
+import { Ayuda } from './Ayuda'
+
 /**
  * Tabla base de `/admin` (tarea 10.1): solo estilo, sin paginación ni
  * lógica -- eso lo maneja cada pantalla (tarea 10.4).
@@ -7,6 +10,8 @@ import type { ReactNode } from 'react'
 export interface ColumnaTabla<T> {
   clave: string
   encabezado: string
+  /** Clave de ayuda (change 16b): pone el "(?)" junto al encabezado de la columna. */
+  ayuda?: ClaveDeAyuda
   render: (fila: T) => ReactNode
 }
 
@@ -35,6 +40,12 @@ export function Tabla<T>({ filas, columnas, obtenerClave, onFilaClick, etiqueta 
           {columnas.map((columna) => (
             <th key={columna.clave} className="px-3 py-2 font-medium text-primary">
               {columna.encabezado}
+              {columna.ayuda && (
+                <>
+                  {' '}
+                  <Ayuda clave={columna.ayuda} />
+                </>
+              )}
             </th>
           ))}
         </tr>

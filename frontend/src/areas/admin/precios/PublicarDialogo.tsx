@@ -85,7 +85,7 @@ function FormularioDePublicacion({
           Una versión publicada no se puede modificar: las correcciones se hacen con una versión nueva. Sin vigencia
           desde, rige desde el momento de la publicación.
         </p>
-        <Campo id="vigencia-desde" etiqueta="Vigencia desde (opcional)" error={errors.vigencia_desde?.message}>
+        <Campo id="vigencia-desde" etiqueta="Vigencia desde (opcional)" ayuda="precios.publicacion" error={errors.vigencia_desde?.message}>
           <input id="vigencia-desde" type="datetime-local" className={CLASE_CONTROL} {...register('vigencia_desde')} />
         </Campo>
         <Campo id="vigencia-hasta" etiqueta="Vigencia hasta (opcional)" error={errors.vigencia_hasta?.message}>

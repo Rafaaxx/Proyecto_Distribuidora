@@ -215,8 +215,8 @@ describe('CostosCargaScreen (tarea 11.4)', () => {
     await usuarioEvento.selectOptions(screen.getByLabelText(/^producto$/i), CERVEZA_B_ID)
     await usuarioEvento.selectOptions(await screen.findByLabelText(/presentaci[oó]n/i), PRESENTACION_CAJA_X12_ID)
     await usuarioEvento.type(screen.getByLabelText(/^valor$/i), '18000')
-    await usuarioEvento.clear(screen.getByLabelText(/bonificaci[oó]n/i))
-    await usuarioEvento.type(screen.getByLabelText(/bonificaci[oó]n/i), '10')
+    await usuarioEvento.clear(screen.getByLabelText(/^bonificaci[oó]n %$/i))
+    await usuarioEvento.type(screen.getByLabelText(/^bonificaci[oó]n %$/i), '10')
 
     await waitFor(() => expect(screen.getByTestId('vista-previa-0')).toHaveTextContent('1.350,000000'))
   })
@@ -546,5 +546,48 @@ describe('CostosCargaScreen sin crédito fiscal (11b, tarea 7.3)', () => {
 
     expect(await screen.findByText(/no se pudo leer la condici[oó]n frente al iva/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /cargar costos/i })).toBeDisabled()
+  })
+})
+
+/**
+ * Change 16b, tarea 5.2: la carga de costos usa las mismas claves de ayuda que la compra
+ * (spec `ayuda-contextual`; CST-02, CST-06; ADR-051).
+ */
+describe('CostosCargaScreen: ayuda contextual (change 16b)', () => {
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+    condicionFiscal = 'RESPONSABLE_INSCRIPTO'
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('un responsable inscripto: "(?)" de "Valor" con $1.239,67, y "Bonificación" y "Costo base"', async () => {
+    mockApiBase()
+    const usuarioEvento = userEvent.setup()
+    renderPantalla()
+    await screen.findByLabelText(/^valor$/i)
+
+    await usuarioEvento.click(screen.getByRole('button', { name: 'Ayuda: Valor' }))
+    expect(screen.getByText(/unos \$1\.239,67 por botella/)).toBeVisible()
+
+    await usuarioEvento.click(screen.getByRole('button', { name: 'Ayuda: Bonificación' }))
+    expect(screen.getByText(/\$16\.200, o sea \$1\.350 por botella/)).toBeVisible()
+
+    await usuarioEvento.click(screen.getByRole('button', { name: 'Ayuda: Costo base' }))
+    expect(screen.getByText(/\$1\.500 por botella/)).toBeVisible()
+  })
+
+  it('un monotributista: "(?)" de "Valor pagado" con $1.815', async () => {
+    condicionFiscal = 'MONOTRIBUTO'
+    mockApiBase()
+    const usuarioEvento = userEvent.setup()
+    renderPantalla()
+    await screen.findByLabelText(/^valor pagado$/i)
+
+    await usuarioEvento.click(screen.getByRole('button', { name: 'Ayuda: Valor pagado' }))
+
+    expect(screen.getByText(/\$21\.780 \/ 12 = \$1\.815 por botella/)).toBeVisible()
   })
 })

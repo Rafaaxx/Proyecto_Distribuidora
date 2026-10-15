@@ -62,7 +62,7 @@ function UbicacionesListado() {
     { clave: 'nombre', encabezado: 'Nombre', render: (u) => u.nombre },
     { clave: 'tipo', encabezado: 'Tipo', render: (u) => etiquetaDeTipoDeUbicacion(u.tipo) },
     { clave: 'toma', encabezado: 'Requiere toma', render: (u) => (u.requiere_toma ? 'Sí' : 'No') },
-    { clave: 'tomada', encabezado: 'Toma actual', render: (u) => <MarcaDeToma toma={u.jornada} /> },
+    { clave: 'tomada', encabezado: 'Toma actual', ayuda: 'stock.tomaActual', render: (u) => <MarcaDeToma toma={u.jornada} /> },
     {
       clave: 'estado',
       encabezado: 'Estado',

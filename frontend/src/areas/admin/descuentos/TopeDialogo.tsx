@@ -71,7 +71,7 @@ export function TopeDialogo({ rol, onCerrar }: TopeDialogoProps) {
   return (
     <Dialogo abierto titulo={`Tope de descuento de ${rol.nombre}`} onCerrar={onCerrar}>
       <form onSubmit={alEnviar} noValidate className="flex flex-col gap-4">
-        <Campo id="tope-descuento" etiqueta="Tope de descuento (%)" error={errors.tope_descuento?.message}>
+        <Campo id="tope-descuento" etiqueta="Tope de descuento (%)" ayuda="descuentos.tope" error={errors.tope_descuento?.message}>
           <input id="tope-descuento" inputMode="decimal" className={CLASE_CONTROL} {...register('tope_descuento')} />
         </Campo>
         {resumen && (

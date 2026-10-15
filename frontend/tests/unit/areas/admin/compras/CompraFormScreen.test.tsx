@@ -118,7 +118,7 @@ describe('CompraFormScreen (tarea 12.1)', () => {
     expect(vista).toHaveTextContent('12 unidades (1 Caja x12)')
     expect(screen.getByTestId('total-neto')).toHaveTextContent('14.876,03')
     expect(screen.getByTestId('iva-sugerido')).toHaveTextContent('3.123,97')
-    expect(screen.getByLabelText(/total de factura/i)).toHaveValue('18000.00')
+    expect(screen.getByLabelText(/^total de factura$/i)).toHaveValue('18000.00')
   })
 
   it('el total de factura es editable y lo editado se envía; el neto no cambia', async () => {
@@ -129,9 +129,9 @@ describe('CompraFormScreen (tarea 12.1)', () => {
     renderPantalla()
     await elegirCabecera(usuario)
     await cargarCajaX12ConIva(usuario)
-    await waitFor(() => expect(screen.getByLabelText(/total de factura/i)).toHaveValue('18000.00'))
+    await waitFor(() => expect(screen.getByLabelText(/^total de factura$/i)).toHaveValue('18000.00'))
 
-    const total = screen.getByLabelText(/total de factura/i)
+    const total = screen.getByLabelText(/^total de factura$/i)
     await usuario.clear(total)
     await usuario.type(total, '18000.50')
     expect(screen.getByTestId('total-neto')).toHaveTextContent('14.876,03')
@@ -154,7 +154,7 @@ describe('CompraFormScreen (tarea 12.1)', () => {
     renderPantalla()
     await elegirCabecera(usuario)
     await cargarCajaX12ConIva(usuario)
-    await waitFor(() => expect(screen.getByLabelText(/total de factura/i)).toHaveValue('18000.00'))
+    await waitFor(() => expect(screen.getByLabelText(/^total de factura$/i)).toHaveValue('18000.00'))
 
     await usuario.selectOptions(screen.getByLabelText(/condici[oó]n/i), 'CONTADO')
     await usuario.click(screen.getByRole('button', { name: /agregar medio/i }))
@@ -271,7 +271,7 @@ describe('CompraFormScreen (tarea 12.1)', () => {
       const vista = await screen.findByTestId('linea-0-vista-previa')
       await waitFor(() => expect(vista).toHaveTextContent('1.815,000000'))
       expect(screen.getByTestId('total-neto')).toHaveTextContent('21.780,00')
-      expect(screen.getByLabelText(/total de factura/i)).toHaveValue('21780.00')
+      expect(screen.getByLabelText(/^total de factura$/i)).toHaveValue('21780.00')
       expect(screen.getByTestId('total-neto').parentElement).toHaveTextContent(/^Total:\s*21\.780,00$/)
 
       await usuario.click(screen.getByRole('button', { name: /confirmar compra/i }))

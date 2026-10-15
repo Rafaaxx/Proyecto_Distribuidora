@@ -8,6 +8,7 @@ import { usePermisos } from '../../features/identidad/usePermisos'
 
 const CLASE_ENLACE_ACTIVO = 'font-semibold text-primary'
 const CLASE_ENLACE = 'text-primary/70 hover:text-primary'
+const RUTA_AYUDA = '/admin/ayuda'
 const MENSAJE_SIN_PERMISOS = 'No se pudieron obtener tus permisos.'
 
 /**
@@ -77,6 +78,13 @@ export function AdminLayout() {
                 {seccion.etiqueta}
               </NavLink>
             ))}
+            {/* Ayuda (change 16b, D6 = A): sin datos ni permisos, la ve todo usuario con sesión
+                confirmada; falla cerrada igual que las secciones mientras /yo está pendiente o falló. */}
+            {permisos.yo && (
+              <NavLink to={RUTA_AYUDA} className={({ isActive }) => (isActive ? CLASE_ENLACE_ACTIVO : CLASE_ENLACE)}>
+                Ayuda
+              </NavLink>
+            )}
           </nav>
 
           {identificacion && <p className="text-sm text-primary/70">{identificacion}</p>}

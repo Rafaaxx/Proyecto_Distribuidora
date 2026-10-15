@@ -135,7 +135,7 @@ export function RedondeosDeCategoria({
       <SiTienePermiso permiso="GESTIONAR_LISTAS">
         <Card>
           <form onSubmit={alEnviar} noValidate className="flex flex-wrap items-end gap-3">
-            <Campo id="redondeo-categoria" etiqueta="Categoría del redondeo" error={errors.categoria_id?.message}>
+            <Campo id="redondeo-categoria" etiqueta="Categoría del redondeo" ayuda="precios.redondeoCategoria" error={errors.categoria_id?.message}>
               <SelectorDeCategoriaDeRedondeo id="redondeo-categoria" registro={register('categoria_id')} />
             </Campo>
             <Campo id="redondeo-multiplo" etiqueta="Múltiplo del redondeo" error={errors.multiplo?.message}>

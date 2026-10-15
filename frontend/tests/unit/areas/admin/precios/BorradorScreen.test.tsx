@@ -334,7 +334,7 @@ describe('BorradorScreen: precio manual (tarea 13.2; D7)', () => {
     await screen.findByRole('table', { name: /precios del borrador/i })
     await usuario.click(within(filaDe('Vino A')).getByRole('button', { name: /fijar precio/i }))
     const dialogo = within(screen.getByRole('dialog'))
-    await usuario.type(dialogo.getByLabelText(/precio manual/i), '9000')
+    await usuario.type(dialogo.getByLabelText(/^precio manual$/i), '9000')
     await usuario.click(dialogo.getByRole('button', { name: /guardar precio/i }))
 
     await waitFor(() => expect(llamadas(apiFetchMock, 'PUT', rutaPrecio(VINO_A_ID))).toHaveLength(1))
@@ -352,7 +352,7 @@ describe('BorradorScreen: precio manual (tarea 13.2; D7)', () => {
     await screen.findByRole('table', { name: /precios del borrador/i })
     await usuario.click(within(filaDe('Vino A')).getByRole('button', { name: /fijar precio/i }))
     const dialogo = within(screen.getByRole('dialog'))
-    await usuario.type(dialogo.getByLabelText(/precio manual/i), '0')
+    await usuario.type(dialogo.getByLabelText(/^precio manual$/i), '0')
     await usuario.click(dialogo.getByRole('button', { name: /guardar precio/i }))
 
     expect(await dialogo.findByText(/importe mayor que cero/i)).toBeInTheDocument()
@@ -370,11 +370,11 @@ describe('BorradorScreen: precio manual (tarea 13.2; D7)', () => {
     await screen.findByRole('table', { name: /precios del borrador/i })
     await usuario.click(within(filaDe('Vino A')).getByRole('button', { name: /fijar precio/i }))
     const dialogo = within(screen.getByRole('dialog'))
-    await usuario.type(dialogo.getByLabelText(/precio manual/i), '9000')
+    await usuario.type(dialogo.getByLabelText(/^precio manual$/i), '9000')
     await usuario.click(dialogo.getByRole('button', { name: /guardar precio/i }))
 
     expect(await dialogo.findByText('El importe no es válido.')).toBeInTheDocument()
-    expect(dialogo.getByLabelText(/precio manual/i)).toHaveValue('9000')
+    expect(dialogo.getByLabelText(/^precio manual$/i)).toHaveValue('9000')
   })
 
   it('el reintento tras un error de red reenvía el mismo Operation-Id y cambiar el importe usa uno nuevo', async () => {
@@ -395,7 +395,7 @@ describe('BorradorScreen: precio manual (tarea 13.2; D7)', () => {
     await screen.findByRole('table', { name: /precios del borrador/i })
     await usuario.click(within(filaDe('Vino A')).getByRole('button', { name: /fijar precio/i }))
     const dialogo = within(screen.getByRole('dialog'))
-    await usuario.type(dialogo.getByLabelText(/precio manual/i), '9000')
+    await usuario.type(dialogo.getByLabelText(/^precio manual$/i), '9000')
     await usuario.click(dialogo.getByRole('button', { name: /guardar precio/i }))
     expect(await dialogo.findByText(/se necesita conexión/i)).toBeInTheDocument()
     await usuario.click(dialogo.getByRole('button', { name: /guardar precio/i }))
@@ -424,11 +424,11 @@ describe('BorradorScreen: precio manual (tarea 13.2; D7)', () => {
     await screen.findByRole('table', { name: /precios del borrador/i })
     await usuario.click(within(filaDe('Vino A')).getByRole('button', { name: /fijar precio/i }))
     const dialogo = within(screen.getByRole('dialog'))
-    await usuario.type(dialogo.getByLabelText(/precio manual/i), '9000')
+    await usuario.type(dialogo.getByLabelText(/^precio manual$/i), '9000')
     await usuario.click(dialogo.getByRole('button', { name: /guardar precio/i }))
     await dialogo.findByText(/se necesita conexión/i)
-    await usuario.clear(dialogo.getByLabelText(/precio manual/i))
-    await usuario.type(dialogo.getByLabelText(/precio manual/i), '9100')
+    await usuario.clear(dialogo.getByLabelText(/^precio manual$/i))
+    await usuario.type(dialogo.getByLabelText(/^precio manual$/i), '9100')
     await usuario.click(dialogo.getByRole('button', { name: /guardar precio/i }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 
@@ -449,7 +449,7 @@ describe('BorradorScreen: precio manual (tarea 13.2; D7)', () => {
     const sinPrecio = within(await screen.findByRole('table', { name: /productos sin precio/i }))
     await usuario.click(sinPrecio.getByRole('button', { name: /fijar precio/i }))
     const dialogo = within(screen.getByRole('dialog'))
-    await usuario.type(dialogo.getByLabelText(/precio manual/i), '1200,00')
+    await usuario.type(dialogo.getByLabelText(/^precio manual$/i), '1200,00')
     await usuario.click(dialogo.getByRole('button', { name: /guardar precio/i }))
 
     await waitFor(() => expect(llamadas(apiFetchMock, 'PUT', rutaPrecio(GASEOSA_C_ID))).toHaveLength(1))
@@ -480,7 +480,7 @@ describe('BorradorScreen: precio manual (tarea 13.2; D7)', () => {
     await screen.findByRole('table', { name: /precios del borrador/i })
     await usuario.click(within(filaDe('Vino A')).getByRole('button', { name: /fijar precio/i }))
     const dialogo = within(screen.getByRole('dialog'))
-    await usuario.type(dialogo.getByLabelText(/precio manual/i), '9000')
+    await usuario.type(dialogo.getByLabelText(/^precio manual$/i), '9000')
     await usuario.click(dialogo.getByRole('button', { name: /guardar precio/i }))
 
     expect(await dialogo.findByText(/se necesita conexión/i)).toBeInTheDocument()
@@ -555,7 +555,7 @@ describe('BorradorScreen: publicar (tarea 13.3; PRC-02, PRC-06, D6)', () => {
 
     await usuario.click(await screen.findByRole('button', { name: /^publicar$/i }))
     const dialogo = within(screen.getByRole('dialog'))
-    fireEvent.change(dialogo.getByLabelText(/vigencia desde/i), { target: { value: '2099-10-10T09:00' } })
+    fireEvent.change(dialogo.getByLabelText(/^vigencia desde/i), { target: { value: '2099-10-10T09:00' } })
     fireEvent.change(dialogo.getByLabelText(/vigencia hasta/i), { target: { value: '2099-11-01T09:00' } })
     await usuario.click(dialogo.getByRole('button', { name: /confirmar publicación/i }))
 
@@ -572,7 +572,7 @@ describe('BorradorScreen: publicar (tarea 13.3; PRC-02, PRC-06, D6)', () => {
 
     await usuario.click(await screen.findByRole('button', { name: /^publicar$/i }))
     const dialogo = within(screen.getByRole('dialog'))
-    fireEvent.change(dialogo.getByLabelText(/vigencia desde/i), { target: { value: '2099-10-10T09:00' } })
+    fireEvent.change(dialogo.getByLabelText(/^vigencia desde/i), { target: { value: '2099-10-10T09:00' } })
     fireEvent.change(dialogo.getByLabelText(/vigencia hasta/i), { target: { value: '2099-10-09T09:00' } })
     await usuario.click(dialogo.getByRole('button', { name: /confirmar publicación/i }))
 
@@ -593,11 +593,11 @@ describe('BorradorScreen: publicar (tarea 13.3; PRC-02, PRC-06, D6)', () => {
 
     await usuario.click(await screen.findByRole('button', { name: /^publicar$/i }))
     const dialogo = within(screen.getByRole('dialog'))
-    fireEvent.change(dialogo.getByLabelText(/vigencia desde/i), { target: { value: '2020-01-01T09:00' } })
+    fireEvent.change(dialogo.getByLabelText(/^vigencia desde/i), { target: { value: '2020-01-01T09:00' } })
     await usuario.click(dialogo.getByRole('button', { name: /confirmar publicación/i }))
 
     expect(await dialogo.findByText('La vigencia desde no puede ser anterior a la publicación.')).toBeInTheDocument()
-    expect(dialogo.getByLabelText(/vigencia desde/i)).toHaveValue('2020-01-01T09:00')
+    expect(dialogo.getByLabelText(/^vigencia desde/i)).toHaveValue('2020-01-01T09:00')
     expect(screen.queryByText(/detalle de la lista/i)).not.toBeInTheDocument()
   })
 

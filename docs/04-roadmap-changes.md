@@ -32,6 +32,7 @@ Un change está terminado cuando:
 5. Se probó a mano el flujo principal en el navegador.
 6. Las specs delta se archivaron en `openspec/specs/` y `04-roadmap-changes.md` quedó actualizado.
 7. Si se tomó una decisión nueva, quedó como ADR.
+8. Si el change trae funcionalidad no obvia, sus pantallas traen su ayuda contextual ("(?)" y, si el tema es largo, su página "Ver más") en el archivo único de textos, cada texto citando la regla de `01-dominio.md` o el ADR en que se apoya. Si el change modifica una regla o un ADR, se revisan los textos que lo citan (se buscan por su ID). Las tareas del change dicen qué claves agrega o revisa, o "no aplica" (ADR-051).
 
 ## 3. Reglas de orden
 
@@ -66,6 +67,7 @@ La tabla indica qué changes deben estar archivados antes de empezar cada uno.
 | 14 transferencias-y-ajustes | 09 |
 | 15 jornadas | 09, 14 |
 | 16 motor-de-descuentos | 05, 13 |
+| 16b ayuda-contextual | 13, 14, 15, 16 |
 | 17 cobranzas | 07, 08, 15 |
 | 18a venta-online-core | 07, 08, 09, 11b, 13, 15, 17 |
 | 18b venta-online-descuentos-credito | 16, 18a |
@@ -193,6 +195,7 @@ La tabla indica qué changes deben estar archivados antes de empezar cada uno.
 | 14 | `transferencias-y-ajustes` | Transferencia entre ubicaciones, ajuste con motivo, ambos atómicos | INV-15 |
 | 15 | `jornadas` | Apertura con toma, bloqueo de ubicación, cierre, liberación auditada | INV-16 (dos aperturas simultáneas) |
 | 16 | `motor-de-descuentos` | Reglas de volumen, alcance, prioridad, acumulabilidad y vigencia; motor en Python y TypeScript; descuento manual (general por venta y propio por línea) con tope y autorización; tope de descuento por rol; fixtures compartidos DSC-05 y DSC-06; pantallas de reglas y de topes. El efecto en la venta es del 18b | — |
+| 16b | `ayuda-contextual` | Botón "(?)" accesible (clic, tap, teclado), archivo único de textos con IDs de regla y prueba de trazabilidad, páginas "Ver más" (descuentos, topes, precio de una lista) y ayuda en las pantallas de descuentos, topes, listas de precios, compras, costos, ubicaciones y jornadas. Adelanta la ayuda contextual de la etapa 4 (ADR-051) | — |
 | 17 | `cobranzas` | Cobranza independiente con varios medios, anulación, efecto en cuenta corriente | INV-08, CC-05 |
 
 **Deuda heredada del change 04 para el change 15 (`jornadas`):** `comando.jornada_id` quedó como columna sin FK porque la tabla `jornada` todavía no existe (`design.md` D8 del change 04-pipeline-comandos). Agregar la FK compuesta (`organizacion_id`, `jornada_id`) hacia `jornada` como parte de este change.
@@ -225,6 +228,8 @@ La tabla indica qué changes deben estar archivados antes de empezar cada uno.
 | 20 | `nota-de-venta` | Generación del comprobante en el dispositivo, Web Share API, descarga de respaldo, reimpresión desde administración | VTA-13 |
 
 **Deudas nuevas del change 16 (`motor-de-descuentos`):** **al change 18a (`venta-online-core`):** `ventas/domain/calculo.py` y `frontend/src/domain/calculo.ts` como orquestadores del bruto, los descuentos y los totales; casos compartidos de totales (VTA-04) sobre el formato de `dsc-05`. **Al change 18b (`venta-online-descuentos-credito`):** llamar al motor y a la evaluación del descuento manual (una evaluación por venta, con el `porcentaje_manual_maximo` que entrega el motor); la **pantalla de venta con un porcentaje manual general y uno propio por línea**, que muestra cuál lleva cada línea; una sola autorización y un solo motivo por venta, copiados a cada descuento `MANUAL`; verificar el PIN; persistir `venta_linea_descuento` con clave foránea compuesta a `regla_descuento`; DSC-09 y `DESCUENTO_DIFIERE`; la auditoría del descuento manual y de su autorización (AUD-01); el comando que define los parámetros del descuento manual, los motivos sembrados del ámbito `DESCUENTO_MANUAL` y la validación del motivo; que la pantalla de venta del vendedor le muestre **su propio tope aplicable** (p. ej. "Podés descontar hasta 5 %; más pide autorización"), recibido con el bootstrap (SYN-11) y no por `GET /yo` ni por el token (decisión del usuario, 2026-10-15: cada usuario no ve su tope hasta el 18b; "Topes por rol" queda solo para administración); y el comportamiento sin conexión (SYN-05, SYN-10). **Al change 21 (`pwa-y-bootstrap`):** el bootstrap incluye las reglas activas con sus alcances y los topes del usuario (SYN-11), y las líneas locales necesitan `categoria_id` y `marca_id` del producto. **Al change de usuarios y roles:** el tope propio por usuario. (La lectura de roles que incluye sus permisos se resolvió dentro del change 16, decisión del 2026-10-15, para que "Topes por rol" avise el tope 0 % solo en los roles con `DESCUENTO_MANUAL`.)
+
+**Change 16b (`ayuda-contextual`) — deudas nuevas (ADR-051):** **al change 18b:** los "(?)" del descuento manual en la venta (porcentaje general y propio por línea, tope y autorización), reutilizando las claves y el tema `topes`. **Al change 21:** la ruta de ayuda en `/ruta` (`/ruta/ayuda/:tema`) con la misma página de tema, sin conexión; en la PWA instalada, "Ver más" navega a la ruta interna en lugar de abrir otra pestaña. **Duda abierta de `01`:** PRC-11 no dice de qué presentación sale el costo cuando hay "costos distintos por presentación"; la ayuda de esa señal no lo explica hasta que se precise.
 
 **Deuda nominada por el change 05 (`catalogo`) para el change 18a (`venta-online-core`):** registrar el verificador de uso de presentaciones de `venta_linea` vía `catalogo/service.py::registrar_verificador_uso` (`design.md` D2 del change 05-catalogo), con una prueba que cite INV-18, y leer la presentación con `SELECT … FOR KEY SHARE` al congelar `unidades_presentacion` en la línea de venta (INV-18, PRC-23).
 

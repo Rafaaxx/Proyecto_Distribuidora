@@ -10,13 +10,17 @@ desactiva, nunca se elimina (`docs/03` §2.5).
 from __future__ import annotations
 
 import base64
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.modules.configuracion.domain.valores import NombreDuplicadoError
 from app.modules.configuracion.models import AlicuotaIva, MedioPago, Motivo
 
 LIMITE_PAGINA_MAXIMO = 100
@@ -155,9 +159,25 @@ def crear_medio_pago(
         actualizado_en=momento,
         actualizado_por_id=actualizado_por_id,
     )
-    sesion.add(medio_pago)
-    sesion.flush()
+    with _traduciendo_nombre_duplicado(sesion):
+        sesion.add(medio_pago)
+        sesion.flush()
     return medio_pago
+
+
+@contextmanager
+def _traduciendo_nombre_duplicado(sesion: Session) -> Iterator[None]:
+    """Ejecuta la escritura en un `SAVEPOINT` y traduce la violación de `ux_medio_pago__nombre`
+    a `NOMBRE_DUPLICADO` (409, change 17b, D3); cualquier otra falla de integridad sube."""
+    try:
+        with sesion.begin_nested():
+            yield
+    except IntegrityError as error:
+        if "ux_medio_pago__nombre" in str(getattr(error, "orig", error)):
+            raise NombreDuplicadoError(
+                "Ya existe un medio de pago con ese nombre en la organización."
+            ) from error
+        raise
 
 
 def obtener_medio_pago_por_id(
@@ -174,6 +194,55 @@ def listar_medios_pago_activos(organizacion_id: UUID, sesion: Session) -> list[M
         MedioPago.organizacion_id == organizacion_id, MedioPago.activo.is_(True)
     )
     return list(sesion.execute(consulta).scalars().all())
+
+
+def listar_medios_pago_todos(organizacion_id: UUID, sesion: Session) -> list[MedioPago]:
+    """Todos los medios de la organización, activos o no, ordenados por nombre (change 17b, D6)."""
+    consulta = (
+        select(MedioPago)
+        .where(MedioPago.organizacion_id == organizacion_id)
+        .order_by(func.lower(MedioPago.nombre), MedioPago.id)
+    )
+    return list(sesion.execute(consulta).scalars().all())
+
+
+def bloquear_medios_pago(organizacion_id: UUID, sesion: Session) -> list[MedioPago]:
+    """Los medios de la organización con `FOR UPDATE`, en orden de `id` (change 17b, D4): dos
+    bajas simultáneas se serializan acá y la segunda cuenta con el estado ya confirmado de la
+    primera (`populate_existing` evita devolver un estado en caché)."""
+    consulta = (
+        select(MedioPago)
+        .where(MedioPago.organizacion_id == organizacion_id)
+        .order_by(MedioPago.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return list(sesion.execute(consulta).scalars().all())
+
+
+def actualizar_medio_pago(
+    organizacion_id: UUID,
+    sesion: Session,
+    medio_pago: MedioPago,
+    *,
+    nombre: str,
+    requiere_referencia: bool,
+    activo: bool,
+    momento: datetime,
+    actualizado_por_id: UUID | None,
+) -> MedioPago:
+    """Reemplazo completo de los campos editables de un medio ya leído (change 17b, D2). Un
+    medio de otra organización no se toca: lo defiende la comprobación de abajo."""
+    if medio_pago.organizacion_id != organizacion_id:
+        raise ValueError("El medio de pago no pertenece a la organización indicada.")
+    medio_pago.nombre = nombre
+    medio_pago.requiere_referencia = requiere_referencia
+    medio_pago.activo = activo
+    medio_pago.actualizado_en = momento
+    medio_pago.actualizado_por_id = actualizado_por_id
+    with _traduciendo_nombre_duplicado(sesion):
+        sesion.flush()
+    return medio_pago
 
 
 def desactivar_medio_pago(

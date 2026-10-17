@@ -10,7 +10,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.modules.configuracion import repository
-from app.modules.configuracion.models import AlicuotaIva
+from app.modules.configuracion.models import AlicuotaIva, MedioPago
 
 
 def listar_alicuotas_paginado(
@@ -23,3 +23,8 @@ def listar_alicuotas_paginado(
     return repository.listar_alicuotas_paginado(
         organizacion_id, sesion, limite=limite, cursor=cursor
     )
+
+
+def listar_medios_pago_todos(organizacion_id: UUID, sesion: Session) -> list[MedioPago]:
+    """Todos los medios de pago de la organización, activos o no, por nombre (change 17b, D6)."""
+    return repository.listar_medios_pago_todos(organizacion_id, sesion)

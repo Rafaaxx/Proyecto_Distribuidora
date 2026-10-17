@@ -424,6 +424,43 @@ export const AYUDAS = {
     reglas: ['SYN-05', 'SYN-07', 'SYN-10', 'RUT-09'],
     verMas: 'cobranzas-observaciones',
   },
+  // --- Medios de pago y roles (change 17b, textos aprobados el 2026-10-17) ---
+  'mediosPago.requiereReferencia': {
+    titulo: 'Pide referencia',
+    texto:
+      'Marcalo si cada vez que se use este medio hay que anotar un dato para encontrar la plata después, como el número de la transferencia o del cheque. Con conexión, sin ese dato no se guarda el cobro ni el pago; si el vendedor está sin señal, entra igual y queda marcado para revisar.',
+    ejemplo: 'Ej.: «Transferencia» pide referencia: al cobrar $20.000 por transferencia hay que escribir el n.º 0042.',
+    reglas: ['COB-02', 'PAG-01', 'SYN-07'],
+  },
+  'mediosPago.baja': {
+    titulo: 'Dar de baja un medio',
+    texto:
+      'Deja de ofrecerse en cobros y pagos nuevos. No se borra: los de antes lo siguen mostrando, y lo podés volver a activar cuando quieras. Siempre tiene que quedar al menos un medio activo.',
+    ejemplo:
+      'Ej.: cerraste la cuenta de la billetera → das de baja «Billetera»; el pago de $10.000 de ayer sigue diciendo «Billetera».',
+    reglas: ['CAT-05', 'TR-06', 'ADR-053'],
+  },
+  'roles.permisos': {
+    titulo: 'Permisos del rol',
+    texto:
+      'Lo que puede hacer cada persona que tiene este rol. Cuando guardás, el cambio vale para todos los usuarios del rol desde su próxima acción, sin cerrar la sesión.',
+    ejemplo: 'Ej.: le quitás «Anular cobranzas» al Supervisor comercial → ya no ven el botón «Anular» en las cobranzas.',
+    reglas: ['ADR-017'],
+  },
+  'roles.ultimoAdministrador': {
+    titulo: 'Último administrador',
+    texto:
+      'Siempre tiene que quedar al menos una persona activa que pueda administrar usuarios y roles; si no, nadie podría arreglar los permisos después. Por eso no te deja quitar este permiso si es el último que lo tiene.',
+    reglas: ['ADR-053'],
+  },
+  'roles.autorizacion': {
+    titulo: 'Permisos de autorización',
+    texto:
+      'Con estos permisos, la persona puede autorizar excepciones con su PIN, como un descuento mayor o vender pasado el límite de crédito. Si el rol se queda sin ninguno, se borra el PIN de sus usuarios y, si después se los devolvés, cada uno tiene que crear uno nuevo.',
+    ejemplo:
+      'Ej.: le sacás «Autorizar descuentos» y «Vender con exceso de crédito» al Supervisor → el PIN de Ana deja de servir.',
+    reglas: ['ADR-011'],
+  },
 } as const satisfies Record<string, EntradaDeAyuda>
 
 export type ClaveDeAyuda = keyof typeof AYUDAS

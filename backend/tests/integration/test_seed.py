@@ -397,6 +397,25 @@ def test_las_tres_alicuotas_y_cinco_medios_de_pago_iniciales(db_session: Session
     }
 
 
+def test_la_siembra_marca_referencia_obligatoria_en_transferencia_cheque_y_tarjeta(
+    db_session: Session,
+) -> None:
+    """17b, D5-A, COB-02 (`01` §4): Transferencia, Cheque y Tarjeta piden referencia; Efectivo y
+    Billetera no."""
+    organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+    assert organizacion is not None
+
+    medios = configuracion_service.listar_medios_pago_activos(organizacion.id, db_session)
+
+    assert {m.nombre: m.requiere_referencia for m in medios} == {
+        "Efectivo": False,
+        "Transferencia": True,
+        "Cheque": True,
+        "Billetera": False,
+        "Tarjeta": True,
+    }
+
+
 class TestPlantillasDeRolYAdministradorInicial:
     """Tarea 8.13 (`design.md` D8): la puesta en marcha crea las cinco
     plantillas de rol y un usuario administrador sin contraseña por

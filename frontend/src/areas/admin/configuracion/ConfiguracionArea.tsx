@@ -1,7 +1,9 @@
 import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
 
 import { ConfiguracionFiscalScreen } from './ConfiguracionFiscalScreen'
+import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { ListaPredeterminadaScreen } from './ListaPredeterminadaScreen'
+import { MediosPagoScreen } from './MediosPagoScreen'
 
 const CLASE_ENLACE_ACTIVO = 'font-semibold text-primary'
 const CLASE_ENLACE = 'text-primary/70 hover:text-primary'
@@ -27,11 +29,20 @@ export function ConfiguracionArea() {
         >
           Lista predeterminada
         </NavLink>
+        <SiTienePermiso permiso="ADMIN_CONFIGURACION">
+          <NavLink
+            to="/admin/configuracion/medios-pago"
+            className={({ isActive }) => (isActive ? CLASE_ENLACE_ACTIVO : CLASE_ENLACE)}
+          >
+            Medios de pago
+          </NavLink>
+        </SiTienePermiso>
       </nav>
       <Routes>
         <Route path="/" element={<Navigate to="fiscal" replace />} />
         <Route path="fiscal" element={<ConfiguracionFiscalScreen />} />
         <Route path="lista-predeterminada" element={<ListaPredeterminadaScreen />} />
+        <Route path="medios-pago" element={<MediosPagoScreen />} />
       </Routes>
     </div>
   )

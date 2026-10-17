@@ -256,6 +256,27 @@ class RolResponse(BaseModel):
     permisos: list[str]
 
 
+class PermisoCatalogoResponse(BaseModel):
+    codigo: str
+    descripcion: str
+    modulo: str
+
+
+@router.get("/permisos", response_model=list[PermisoCatalogoResponse])
+def listar_catalogo_de_permisos(
+    _contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso("ADMIN_USUARIOS"))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> list[PermisoCatalogoResponse]:
+    """El catálogo global de permisos (`01` §19, `03` §4) con código, descripción y módulo, en el
+    orden del documento. No depende de la organización (change 17b, D7, D9)."""
+    return [
+        PermisoCatalogoResponse(
+            codigo=fila.codigo, descripcion=fila.descripcion, modulo=fila.modulo
+        )
+        for fila in identidad_service.listar_catalogo_de_permisos(sesion)
+    ]
+
+
 @router.put("/roles/{rol_id}/permisos", response_model=RolResponse)
 def cambiar_composicion_rol(
     rol_id: UUID,
@@ -344,6 +365,7 @@ class RolConTopeYPermisosResponse(RolConTopeResponse):
     rol" avise solo donde el tope 0 % importa (DSC-06). La escritura no los devuelve."""
 
     permisos: list[str]
+    usuarios_activos: int
 
 
 @router.get("/roles", response_model=list[RolConTopeYPermisosResponse])
@@ -356,6 +378,7 @@ def listar_roles(
     permisos_por_rol = repository.listar_permisos_de_todos_los_roles(
         contexto.organizacion_id, sesion
     )
+    activos_por_rol = repository.contar_usuarios_activos_por_rol(contexto.organizacion_id, sesion)
     return [
         RolConTopeYPermisosResponse(
             id=rol.id,
@@ -363,6 +386,7 @@ def listar_roles(
             activo=rol.activo,
             tope_descuento=f"{rol.tope_descuento:.6f}",
             permisos=permisos_por_rol.get(rol.id, []),
+            usuarios_activos=activos_por_rol.get(rol.id, 0),
         )
         for rol in repository.listar_roles(contexto.organizacion_id, sesion)
     ]

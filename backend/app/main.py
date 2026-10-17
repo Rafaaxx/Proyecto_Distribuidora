@@ -34,6 +34,10 @@ from app.modules.clientes import models as clientes_models  # noqa: F401
 from app.modules.cobranzas import commands as cobranzas_commands  # noqa: F401
 from app.modules.cobranzas import models as cobranzas_models  # noqa: F401
 
+# Registro de comandos de `configuracion` (change 17b): `MEDIO_PAGO_CREAR` y
+# `MEDIO_PAGO_MODIFICAR` quedan registrados aunque se cree la aplicación sin pasar por el router.
+from app.modules.configuracion import commands as configuracion_commands  # noqa: F401
+
 # Registro de modelos de `costeo` y `stock` (change 09): explícito para que
 # `Base.metadata` conozca las tablas sin depender de que existan sus `api.py`
 # (grupo 7) ni sus comandos (grupo 6).

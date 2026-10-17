@@ -11,8 +11,8 @@ const claves = Object.keys(AYUDAS) as ClaveDeAyuda[]
 const temas = Object.keys(TEMAS) as TemaDeAyuda[]
 
 describe('AYUDAS: cada entrada tiene título, texto y regla citada', () => {
-  it('tiene las 32 claves aprobadas (27 del 16b y 5 de cobranzas; la de "Operador" se eliminó)', () => {
-    expect(claves).toHaveLength(32)
+  it('tiene las 37 claves aprobadas (27 del 16b, 5 de cobranzas y 5 de medios de pago y roles; la de "Operador" se eliminó)', () => {
+    expect(claves).toHaveLength(37)
     expect(claves).not.toContain('descuentos.operador')
   })
 

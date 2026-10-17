@@ -248,12 +248,17 @@ class TestComposicionDeRol:
 
         respuesta = cliente.put(
             f"/api/v1/identidad/roles/{rol.id}/permisos",
-            json={"permisos": ["GESTIONAR_CLIENTES", "VER_REPORTES"]},
+            # Conserva ADMIN_USUARIOS: quitarlo al unico administrador se rechaza (17b, ADR-053).
+            json={"permisos": ["ADMIN_USUARIOS", "GESTIONAR_CLIENTES", "VER_REPORTES"]},
             headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
         )
 
         assert respuesta.status_code == 200
-        assert set(respuesta.json()["permisos"]) == {"GESTIONAR_CLIENTES", "VER_REPORTES"}
+        assert set(respuesta.json()["permisos"]) == {
+            "ADMIN_USUARIOS",
+            "GESTIONAR_CLIENTES",
+            "VER_REPORTES",
+        }
 
     def test_cambiar_composicion_de_rol_de_otra_organizacion_no_lo_encuentra(
         self, cliente: TestClient, sesion: Session

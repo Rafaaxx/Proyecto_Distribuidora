@@ -74,6 +74,14 @@ class PinAutorizacionInvalidoError(DomainError):
     codigo = "IDENTIDAD_PIN_AUTORIZACION_INVALIDO"
 
 
+class SinAdministradorError(DomainError):
+    """Un cambio de permisos dejaría a la organización sin nadie que administre usuarios y roles
+    (change 17b, D8, ADR-053, TR-10)."""
+
+    codigo = "IDENTIDAD_SIN_ADMINISTRADOR"
+    status_http = 409
+
+
 class UsuarioSinRolError(DomainError):
     codigo = "IDENTIDAD_USUARIO_SIN_ROL"
 
@@ -195,3 +203,23 @@ def rol_confiere_autorizacion_excepcion(permisos_rol: set[str] | frozenset[str])
     si invalidar el PIN de autorización de los usuarios de ese rol cuando
     pierde su último permiso de autorización."""
     return not PERMISOS_AUTORIZACION_EXCEPCION.isdisjoint(permisos_rol)
+
+
+def validar_queda_administrador(
+    *,
+    administradores_en_otros_roles: int,
+    conserva_el_permiso: bool,
+    rol_activo: bool,
+    usuarios_activos_del_rol: int,
+) -> None:
+    """Regla pura (ADR-053): después del cambio queda al menos un usuario ACTIVO de un rol activo
+    con `ADMIN_USUARIOS`. Recibe conteos hechos en SQL: los usuarios activos de roles activos,
+    distintos del editado, que lo tienen; y los usuarios activos del rol editado. El rol editado
+    solo cuenta si conserva el permiso, está activo y tiene al menos un usuario activo."""
+    if administradores_en_otros_roles >= 1:
+        return
+    if conserva_el_permiso and rol_activo and usuarios_activos_del_rol >= 1:
+        return
+    raise SinAdministradorError(
+        "La organización se quedaría sin nadie que administre usuarios y roles"
+    )

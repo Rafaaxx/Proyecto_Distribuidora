@@ -49,7 +49,35 @@ class ValorAlicuotaInvalidoError(DomainError):
 
 
 class NombreVacioError(DomainError):
-    codigo = "CONFIGURACION_NOMBRE_VACIO"
+    """Nombre de un medio de pago vacío o de solo espacios: 422 `NOMBRE_INVALIDO`, el mismo
+    código que categorías, ubicaciones y listas (change 17b, D2; CAT-01)."""
+
+    codigo = "NOMBRE_INVALIDO"
+    status_http = 422
+
+
+class NombreDuplicadoError(DomainError):
+    """Nombre de medio de pago ya usado en la organización, activo o no y sin distinguir
+    mayúsculas (`ux_medio_pago__nombre`, change 17b, D3): 409 `NOMBRE_DUPLICADO`."""
+
+    codigo = "NOMBRE_DUPLICADO"
+    status_http = 409
+
+
+class MedioPagoNoEncontradoError(DomainError):
+    """El medio de pago no existe en la organización del token (o es de otra): 404, nunca 403
+    (INV-21, SEG-07)."""
+
+    codigo = "RECURSO_NO_ENCONTRADO"
+    status_http = 404
+
+
+class UltimoMedioActivoError(DomainError):
+    """Dar de baja el único medio de pago activo dejaría la organización sin poder cobrar ni
+    pagar: 409 `ULTIMO_MEDIO_ACTIVO` (change 17b, D4; CAT-05, TR-06)."""
+
+    codigo = "ULTIMO_MEDIO_ACTIVO"
+    status_http = 409
 
 
 def validar_ambito_motivo(valor: str) -> str:
@@ -80,6 +108,22 @@ def validar_valor_alicuota(valor: Decimal) -> Decimal:
 
 
 def validar_nombre_medio_pago(valor: str) -> str:
-    if not valor.strip():
+    """Recorta el nombre y rechaza el vacío (`NOMBRE_INVALIDO`, D2). Devuelve el recortado."""
+    recortado = valor.strip()
+    if not recortado:
         raise NombreVacioError("El nombre del medio de pago no puede estar vacío.")
-    return valor
+    return recortado
+
+
+def validar_quedan_medios_activos(
+    activos_antes: int, *, medio_activo: bool, activo_nuevo: bool
+) -> None:
+    """D4: tras el cambio tiene que quedar al menos un medio activo. `activos_antes` es la
+    cantidad de medios activos de la organización antes de aplicar el cambio; `medio_activo` y
+    `activo_nuevo`, el estado del medio que se modifica antes y después. Solo una baja
+    (activo -> inactivo) puede dejar la cuenta en cero (`ULTIMO_MEDIO_ACTIVO`)."""
+    es_baja = medio_activo and not activo_nuevo
+    if es_baja and activos_antes - 1 < 1:
+        raise UltimoMedioActivoError(
+            "Tiene que quedar al menos un medio de pago activo: este es el último."
+        )

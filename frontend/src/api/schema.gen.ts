@@ -174,6 +174,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/identidad/permisos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Catalogo De Permisos
+         * @description El catálogo global de permisos (`01` §19, `03` §4) con código, descripción y módulo, en el
+         *     orden del documento. No depende de la organización (change 17b, D7, D9).
+         */
+        get: operations["listar_catalogo_de_permisos_api_v1_identidad_permisos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/identidad/roles/{rol_id}/permisos": {
         parameters: {
             query?: never;
@@ -891,6 +912,41 @@ export interface paths {
         /** Listar Medios Pago */
         get: operations["listar_medios_pago_api_v1_configuracion_medios_pago_get"];
         put?: never;
+        /** Crear Medio Pago */
+        post: operations["crear_medio_pago_api_v1_configuracion_medios_pago_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/configuracion/medios-pago/todos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Medios Pago Todos */
+        get: operations["listar_medios_pago_todos_api_v1_configuracion_medios_pago_todos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/configuracion/medios-pago/{medio_pago_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Modificar Medio Pago */
+        put: operations["modificar_medio_pago_api_v1_configuracion_medios_pago__medio_pago_id__put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -4089,6 +4145,11 @@ export interface components {
             /** Items */
             items: components["schemas"]["MedioPagoResponse"][];
         };
+        /** ListaMediosPagoAdmin */
+        ListaMediosPagoAdmin: {
+            /** Items */
+            items: components["schemas"]["MedioPagoAdminResponse"][];
+        };
         /**
          * ListaModificarRequest
          * @description Cuerpo de `PUT /precios/listas/{lista_id}`: reemplaza nombre, redondeo y actividad.
@@ -4257,6 +4318,52 @@ export interface components {
              * Format: date-time
              */
             actualizado_en: string;
+        };
+        /**
+         * MedioPagoAdminResponse
+         * @description Un medio de pago activo o no, para la administración (change 17b, D2, D6).
+         */
+        MedioPagoAdminResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Requiere Referencia */
+            requiere_referencia: boolean;
+            /** Activo */
+            activo: boolean;
+            /**
+             * Actualizado En
+             * Format: date-time
+             */
+            actualizado_en: string;
+        };
+        /**
+         * MedioPagoCrearRequest
+         * @description Cuerpo de `POST /configuracion/medios-pago`: el medio nace activo y la organización sale
+         *     del token (`extra="forbid"`).
+         */
+        MedioPagoCrearRequest: {
+            /** Nombre */
+            nombre: string;
+            /** Requiere Referencia */
+            requiere_referencia: boolean;
+        };
+        /**
+         * MedioPagoModificarRequest
+         * @description Reemplazo completo de los campos editables (D2), igual que los `PUT` de los demás
+         *     maestros.
+         */
+        MedioPagoModificarRequest: {
+            /** Nombre */
+            nombre: string;
+            /** Requiere Referencia */
+            requiere_referencia: boolean;
+            /** Activo */
+            activo: boolean;
         };
         /**
          * MedioPagoResponse
@@ -4682,6 +4789,15 @@ export interface components {
             estado: string;
             /** Compra Id */
             compra_id: string | null;
+        };
+        /** PermisoCatalogoResponse */
+        PermisoCatalogoResponse: {
+            /** Codigo */
+            codigo: string;
+            /** Descripcion */
+            descripcion: string;
+            /** Modulo */
+            modulo: string;
         };
         /**
          * PrecioDeVersionResponse
@@ -5502,6 +5618,8 @@ export interface components {
             tope_descuento: string;
             /** Permisos */
             permisos: string[];
+            /** Usuarios Activos */
+            usuarios_activos: number;
         };
         /** RolResponse */
         RolResponse: {
@@ -6275,6 +6393,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UsuarioResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_catalogo_de_permisos_api_v1_identidad_permisos_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PermisoCatalogoResponse"][];
                 };
             };
             /** @description Validation Error */
@@ -7730,6 +7879,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ListaMediosPago"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_medio_pago_api_v1_configuracion_medios_pago_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MedioPagoCrearRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MedioPagoAdminResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_medios_pago_todos_api_v1_configuracion_medios_pago_todos_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListaMediosPagoAdmin"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    modificar_medio_pago_api_v1_configuracion_medios_pago__medio_pago_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                medio_pago_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MedioPagoModificarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MedioPagoAdminResponse"];
                 };
             };
             /** @description Validation Error */

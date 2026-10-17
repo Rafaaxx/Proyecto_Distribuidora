@@ -6,4 +6,6 @@
  */
 export const clavesIdentidad = {
   yo: () => ['yo'] as const,
+  roles: () => ['identidad', 'roles'] as const,
+  permisos: () => ['identidad', 'permisos'] as const,
 }

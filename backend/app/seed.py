@@ -52,7 +52,15 @@ ALICUOTAS_INICIALES = (
     ("10,5%", Decimal("0.105000")),
     ("0%", Decimal("0.000000")),
 )
-MEDIOS_DE_PAGO_INICIALES = ("Efectivo", "Transferencia", "Cheque", "Billetera", "Tarjeta")
+MEDIOS_DE_PAGO_INICIALES = (
+    ("Efectivo", False),
+    ("Transferencia", True),
+    ("Cheque", True),
+    ("Billetera", False),
+    ("Tarjeta", True),
+)
+"""(nombre, `requiere_referencia`): Transferencia, Cheque y Tarjeta piden referencia (`01` §4,
+COB-02; change 17b, D5-A)."""
 MOTIVOS_AJUSTE_STOCK_INICIALES = (
     "Rotura",
     "Vencimiento",
@@ -186,9 +194,9 @@ def sembrar(sesion: Session, reloj: Clock, *, password_administrador: str) -> Or
             organizacion.id, sesion, reloj, nombre=nombre, valor=valor
         )
 
-    for nombre in MEDIOS_DE_PAGO_INICIALES:
+    for nombre, requiere_referencia in MEDIOS_DE_PAGO_INICIALES:
         configuracion_service.crear_medio_pago(
-            organizacion.id, sesion, reloj, nombre=nombre, requiere_referencia=False
+            organizacion.id, sesion, reloj, nombre=nombre, requiere_referencia=requiere_referencia
         )
 
     for nombre in MOTIVOS_AJUSTE_STOCK_INICIALES:

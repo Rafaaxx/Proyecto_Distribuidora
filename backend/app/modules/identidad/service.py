@@ -31,7 +31,11 @@ from app.core.seguridad import (
     verificar_password,
 )
 from app.modules.identidad import repository
-from app.modules.identidad.domain.permisos import ADMINISTRADOR, PLANTILLAS_DE_ROL
+from app.modules.identidad.domain.permisos import (
+    ADMINISTRADOR,
+    PERMISOS_DEL_CATALOGO,
+    PLANTILLAS_DE_ROL,
+)
 from app.modules.identidad.domain.usuarios import (
     CorrelativoNoAvanzaError,
     CredencialesInvalidasError,
@@ -43,6 +47,7 @@ from app.modules.identidad.domain.usuarios import (
     UsuarioSinRolError,
     rol_confiere_autorizacion_excepcion,
     validar_formato_pin_autorizacion,
+    validar_queda_administrador,
     validar_tope_descuento,
 )
 from app.modules.identidad.domain.valores import (
@@ -61,6 +66,7 @@ from app.modules.identidad.models import (
     ConfiguracionOrganizacion,
     Dispositivo,
     Organizacion,
+    Permiso,
     Rol,
     Usuario,
 )
@@ -510,6 +516,48 @@ def crear_usuario(
     return fila
 
 
+PERMISO_ADMIN_USUARIOS = "ADMIN_USUARIOS"
+
+
+def listar_catalogo_de_permisos(sesion: Session) -> list[Permiso]:
+    """El catálogo global de permisos (`03` §4) en el orden de `01` §19; un código fuera del
+    catálogo del código (no debería haberlo) va al final, por código."""
+    orden = {permiso.codigo: posicion for posicion, permiso in enumerate(PERMISOS_DEL_CATALOGO)}
+    return sorted(
+        repository.listar_permisos(sesion),
+        key=lambda fila: (orden.get(fila.codigo, len(orden)), fila.codigo),
+    )
+
+
+def _validar_que_quede_un_administrador(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    rol_id: UUID,
+    permisos_nuevos: frozenset[str],
+) -> None:
+    """Change 17b, D8, ADR-053: se llama SOLO al quitar `ADMIN_USUARIOS` y ANTES de escribir.
+    Bloquea la fila de configuración de la organización (`FOR UPDATE`, el mismo mecanismo de la
+    condición de IVA) para que dos cambios simultáneos sobre roles distintos se serialicen, y
+    recién después cuenta en SQL. El rechazo es un error de dominio que el bus deshace entero."""
+    repository.obtener_configuracion_bloqueada(organizacion_id, sesion, exclusivo=True)
+    rol = repository.obtener_rol_por_id(organizacion_id, rol_id, sesion)
+    assert rol is not None
+    validar_queda_administrador(
+        administradores_en_otros_roles=repository.contar_administradores_en_otros_roles(
+            organizacion_id,
+            sesion,
+            rol_excluido_id=rol_id,
+            permiso_codigo=PERMISO_ADMIN_USUARIOS,
+        ),
+        conserva_el_permiso=PERMISO_ADMIN_USUARIOS in permisos_nuevos,
+        rol_activo=rol.activo,
+        usuarios_activos_del_rol=repository.contar_usuarios_activos_del_rol(
+            organizacion_id, rol_id, sesion
+        ),
+    )
+
+
 def cambiar_composicion_rol(
     organizacion_id: UUID,
     sesion: Session,
@@ -546,6 +594,11 @@ def cambiar_composicion_rol(
     permisos_actuales = frozenset(
         repository.listar_permisos_de_rol(organizacion_id, rol_id, sesion)
     )
+
+    if PERMISO_ADMIN_USUARIOS in permisos_actuales - permisos_nuevos:
+        _validar_que_quede_un_administrador(
+            organizacion_id, sesion, rol_id=rol_id, permisos_nuevos=permisos_nuevos
+        )
 
     for codigo in permisos_nuevos - permisos_actuales:
         repository.asignar_permiso_a_rol(

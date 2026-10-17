@@ -8,10 +8,11 @@ modelo sin perder precisión (`"0.210000"`, no `"0.21"`).
 
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, ConfigDict, field_serializer
 
 
 class AlicuotaResponse(BaseModel):
@@ -44,6 +45,43 @@ class MedioPagoResponse(BaseModel):
 
 class ListaMediosPago(BaseModel):
     items: list[MedioPagoResponse]
+
+
+class MedioPagoAdminResponse(BaseModel):
+    """Un medio de pago activo o no, para la administración (change 17b, D2, D6)."""
+
+    id: UUID
+    nombre: str
+    requiere_referencia: bool
+    activo: bool
+    actualizado_en: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ListaMediosPagoAdmin(BaseModel):
+    items: list[MedioPagoAdminResponse]
+
+
+class MedioPagoCrearRequest(BaseModel):
+    """Cuerpo de `POST /configuracion/medios-pago`: el medio nace activo y la organización sale
+    del token (`extra="forbid"`)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    nombre: str
+    requiere_referencia: bool
+
+
+class MedioPagoModificarRequest(BaseModel):
+    """Reemplazo completo de los campos editables (D2), igual que los `PUT` de los demás
+    maestros."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    nombre: str
+    requiere_referencia: bool
+    activo: bool
 
 
 class MotivoResponse(BaseModel):

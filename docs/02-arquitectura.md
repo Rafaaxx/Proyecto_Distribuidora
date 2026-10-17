@@ -246,6 +246,8 @@ Nota: `precios` no depende de `clientes`: este registra en `precios` un verifica
 
 Nota: `catalogo` e `identidad` no importan `descuentos`; `ventas` consume el motor y la evaluación del descuento manual solo por `descuentos/service.py`.
 
+Nota: `configuracion/commands.py` no importa otros módulos de negocio; el permiso `ADMIN_CONFIGURACION` de los comandos de medios se comprueba con `configuracion/service.py::exigir_permiso_de_medios_pago`, único archivo del módulo que alcanza a `identidad`.
+
 Nota: `catalogo` no depende de `stock`: este registra en `catalogo` un verificador de stock (`registrar_verificador_de_stock`, patrón de ADR-023 y ADR-025, que falla cerrado) para que un producto con stock no se desactive, y no hay ciclo. El contrato de import-linter `stock-solo-por-service-ajeno` permite a `stock` alcanzar `configuracion` solo por su `service.py`, y `catalogo-solo-por-service-ajeno` prohíbe a `catalogo` importar `stock` (ADR-048).
 
 No se permiten ciclos. Si aparece la necesidad de uno, se resuelve moviendo la lógica al módulo que orquesta (normalmente `ventas`) o registrando un ADR.
@@ -327,6 +329,8 @@ Errores transitorios de PostgreSQL (serialización `40001`, deadlock `40P01`) se
 | `LISTA_PRECIO_PREDETERMINADA_DEFINIR` (con `ADMIN_CONFIGURACION`) | ✓ | |
 | `REGLA_DESCUENTO_CREAR`, `REGLA_DESCUENTO_MODIFICAR`, `REGLA_DESCUENTO_ACTIVAR`, `REGLA_DESCUENTO_PAUSAR` (con `GESTIONAR_DESCUENTOS`) | ✓ | |
 | `ROL_TOPE_DESCUENTO_DEFINIR` (con `ADMIN_USUARIOS`) | ✓ | |
+| `ROL_PERMISOS_CAMBIAR` (con `ADMIN_USUARIOS`; rechaza `IDENTIDAD_SIN_ADMINISTRADOR`, 409, ADR-053) | ✓ | |
+| `MEDIO_PAGO_CREAR`, `MEDIO_PAGO_MODIFICAR` (con `ADMIN_CONFIGURACION`; `NOMBRE_INVALIDO` 422, `NOMBRE_DUPLICADO` y `ULTIMO_MEDIO_ACTIVO` 409, ADR-053) | ✓ | |
 | `SALDO_INICIAL_REGISTRAR` | ✓ | |
 | `OBSERVACION_RESOLVER` | ✓ | |
 | `IMPORTACION_REGISTRAR` (permiso `IMPORTAR_DATOS`) | ✓ | |
@@ -347,6 +351,8 @@ Un handler puede devolver, además del resultado, observaciones de negocio (SYN-
 Los comandos de listas son solo online. Los errores propios son `MARGEN_INVALIDO`, `ALCANCE_INVALIDO`, `REDONDEO_INVALIDO`, `IMPORTE_INVALIDO`, `PRECIO_NO_POSITIVO`, `VIGENCIA_INVALIDA`, `VERSION_SIN_PRECIOS` (422) y `NOMBRE_DUPLICADO`, `REGLA_DUPLICADA`, `LISTA_INACTIVA`, `LISTA_EN_USO`, `VERSION_NO_ES_BORRADOR`, `VERSION_NO_PUBLICADA`, `VERSION_YA_VIGENTE`, `VIGENCIA_DUPLICADA`, `SIN_LISTA_APLICABLE`, `LISTA_SIN_VERSION_VIGENTE` (409). Las lecturas cuelgan de `/api/v1/precios/…` (listas, reglas, borrador, versiones, precios de una versión paginados por cursor, `vigente?momento=` y `lista-predeterminada`); `CLIENTE_CREAR` y `CLIENTE_MODIFICAR` aceptan `lista_precio_id` (ADR-047).
 
 `REGLA_DESCUENTO_CREAR` lleva nombre, tipo, medida, operador, umbral, acción (tipo y valor, el valor como cadena: fracción de seis decimales para el porcentaje o importe de dos decimales), prioridad entera desde 1, acumulable, los alcances (identificadores de productos, categorías o marcas) y, opcionalmente, la vigencia desde y hasta; la regla nace en `BORRADOR`. `REGLA_DESCUENTO_MODIFICAR` reemplaza un borrador con los mismos campos; en una regla activada o pausada solo admite la vigencia hasta (`REGLA_NO_ES_BORRADOR`, 409, en cualquier otro caso). `REGLA_DESCUENTO_ACTIVAR` (desde `BORRADOR` o `PAUSADA`) y `REGLA_DESCUENTO_PAUSAR` (desde `ACTIVA`) llevan solo la regla; una transición que no corresponde responde `REGLA_ESTADO_INVALIDO` (409). Los errores propios son `UMBRAL_INVALIDO`, `ACCION_INVALIDA`, `PRIORIDAD_INVALIDA`, `NOMBRE_INVALIDO`, `ALCANCE_INVALIDO`, `VIGENCIA_INVALIDA`, `REGLA_DESCUENTO_INVALIDA` (422) y `REGLA_ESTADO_INVALIDO`, `REGLA_NO_ES_BORRADOR` (409). Las rutas cuelgan de `/api/v1/descuentos/reglas` (alta, edición, `/{id}/activacion`, `/{id}/pausa`) y las lecturas, `GET /api/v1/descuentos/reglas` (filtro de estado, que admite `VENCIDA`, y cursor) y `GET /api/v1/descuentos/reglas/{id}`, todas con `GESTIONAR_DESCUENTOS`. `ROL_TOPE_DESCUENTO_DEFINIR` lleva el rol y el tope como cadena (fracción de hasta seis decimales entre 0 y 1; `IDENTIDAD_TOPE_DESCUENTO_FUERA_DE_RANGO`, 422), cambia solo `rol.tope_descuento`, deja una fila de auditoría con el valor anterior y el nuevo y se expone en `PUT /api/v1/identidad/roles/{rol_id}/tope-descuento`; `GET /api/v1/identidad/roles` devuelve los roles con su tope y sus permisos (`ADMIN_USUARIOS`); la pantalla "Topes por rol" exige `GESTIONAR_DESCUENTOS` y `ADMIN_USUARIOS`, y el tope no se expone en `GET /yo` ni en el token (el usuario ve el suyo recién en el 18b, con el bootstrap, SYN-11). La evaluación del descuento manual no es un comando: la consulta la venta por `descuentos/service.py` y devuelve `DESCUENTO_MANUAL_DESHABILITADO` (409), `MOTIVO_REQUERIDO` (422), `AUTORIZACION_REQUERIDA` y `AUTORIZADOR_SIN_PERMISO` (403) cuando corresponde.
+
+`MEDIO_PAGO_CREAR` y `MEDIO_PAGO_MODIFICAR` (ADR-053) son solo `ONLINE`. Cada uno deja dos filas de auditoría con el mismo `operation_id`: la genérica del bus (`entidad = 'comando'`, ADR-022) y la de la entidad (`entidad = 'medio_pago'`) con `despues` en el alta y `antes` y `despues` en la modificación (AUD-01), igual que la condición de IVA y la modificación de crédito. El diseño (D11) describía una sola fila; el usuario aprobó mantener las dos para no romper el patrón establecido.
 
 Una importación es un comando por archivo: todo o nada, con savepoints por fila dentro del handler (ADR-040).
 
@@ -387,6 +393,8 @@ Los libros son la verdad (INV-12, INV-13). Las tablas de saldo son una materiali
 5. `jornada` (`FOR SHARE`, por `ubicacion_id` ascendente: todo movimiento lee la jornada no cerrada de cada una de sus ubicaciones antes de decidir; `FOR UPDATE` en las transiciones de la propia jornada)
 
 Las filas de la propia operación que el comando corrige o anula se toman **antes** del nivel 1, en este orden: la compra (`FOR UPDATE`) y después su pago (`FOR UPDATE`); o la transferencia o el ajuste (`FOR UPDATE`), que se anula una sola vez. `COMPRA_ANULAR` y `PAGO_PROVEEDOR_ANULAR` usan el mismo orden (compra, pago, `saldo_cuenta`), así que anular una compra y anular su pago a la vez no se interbloquean y dejan una sola `ANULACION_PAGO`. `PAGO_PROVEEDOR_REGISTRAR` parte del nivel 1 (`saldo_cuenta` del proveedor) (ADR-043 punto 15, ADR-046). Las ubicaciones se toman `FOR SHARE` al comienzo del movimiento, como hasta ahora (ADR-038); `JORNADA_ABRIR` toma la ubicación `FOR UPDATE` en ese mismo paso, así que una apertura y un movimiento sobre la misma ubicación se esperan: o el movimiento termina antes de la toma, o ve la ubicación tomada. `JORNADA_RENDIR`, `JORNADA_CERRAR` y `JORNADA_LIBERAR` toman su jornada `FOR UPDATE`, revalidan el estado y no tocan stock ni saldos, por lo que no pueden cerrar un ciclo; una liberación espera a los movimientos en curso de esa jornada y al revés (ADR-049). La rendición del change 24, que necesitará la jornada antes que el stock, debe resolver cómo convive con este nivel. Con el producto como nivel previo a `costo_producto`, un movimiento y la desactivación del mismo producto se esperan: o el movimiento ve el producto inactivo, o la desactivación ve el saldo (`PRODUCTO_CON_STOCK`) (ADR-048). `COBRANZA_ANULAR` toma la cobranza `FOR UPDATE` antes de `saldo_cuenta`; `COBRANZA_REGISTRAR` parte del nivel 1 y lee la jornada `FOR SHARE` en el nivel 5 (ADR-052).
+
+`ROL_PERMISOS_CAMBIAR`: solo cuando el cambio quita `ADMIN_USUARIOS` bloquea `FOR UPDATE` la fila de configuración de la organización y recién entonces cuenta, en SQL, los usuarios activos con rol activo que conservan el permiso; el resto de los cambios de permisos no paga el bloqueo (ADR-053). `MEDIO_PAGO_MODIFICAR`: bloquea los medios de la organización `FOR UPDATE` antes de contar los activos.
 
 Un orden único impide deadlocks entre operaciones concurrentes. Los handlers no bloquean filas directamente: usan funciones de los servicios que respetan este orden, y la venta reúne todos los productos antes de pedir bloqueos.
 
@@ -509,8 +517,8 @@ Agrupación de endpoints de la etapa 1:
 | Grupo | Ejemplos |
 | --- | --- |
 | Autenticación | `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout` |
-| Identidad | usuarios, roles (con su tope de descuento), dispositivos, PIN |
-| Configuración | parámetros, medios de pago, motivos, alícuotas |
+| Identidad | usuarios, roles (con su tope de descuento y sus permisos), catálogo de permisos (`GET /identidad/permisos`), dispositivos, PIN |
+| Configuración | parámetros, medios de pago (alta y modificación por `POST`/`PUT /configuracion/medios-pago`; activos con cualquier sesión y todos con `GET /configuracion/medios-pago/todos` y `ADMIN_CONFIGURACION`), motivos, alícuotas |
 | Catálogo | productos, presentaciones, categorías, marcas |
 | Proveedores | proveedores, costos informados, compras, pagos |
 | Precios | listas, versiones, reglas de margen, redondeo, generación de borrador, publicación |

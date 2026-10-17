@@ -67,3 +67,39 @@ export async function cambiarCondicionIva(
   })
   return leerFiscalOLanzar(respuesta)
 }
+
+// --- medios de pago administrables (change 17b, D2, D6) -------------------------------------
+
+export type MedioPagoAdmin = components['schemas']['MedioPagoAdminResponse']
+export type MedioPagoCrearDatos = components['schemas']['MedioPagoCrearRequest']
+export type MedioPagoModificarDatos = components['schemas']['MedioPagoModificarRequest']
+
+function escrituraDeMedio(metodo: 'POST' | 'PUT', operationId: string, cuerpo: unknown): RequestInit {
+  return {
+    method: metodo,
+    headers: { 'Content-Type': 'application/json', 'Operation-Id': operationId },
+    body: JSON.stringify(cuerpo),
+  }
+}
+
+/** `GET /configuracion/medios-pago/todos` (`ADMIN_CONFIGURACION`): activos e inactivos. */
+export async function listarMediosPagoAdmin(): Promise<MedioPagoAdmin[]> {
+  const lista = await leerFiscalOLanzar<{ items: MedioPagoAdmin[] }>(await apiFetch('/configuracion/medios-pago/todos'))
+  return lista.items
+}
+
+/** `POST /configuracion/medios-pago` (`MEDIO_PAGO_CREAR`). El `Operation-Id` lo conserva quien llama. */
+export async function crearMedioPago(datos: MedioPagoCrearDatos, operationId: string): Promise<MedioPagoAdmin> {
+  return leerFiscalOLanzar(await apiFetch('/configuracion/medios-pago', escrituraDeMedio('POST', operationId, datos)))
+}
+
+/** `PUT /configuracion/medios-pago/{id}` (`MEDIO_PAGO_MODIFICAR`): reemplazo completo; la baja es `activo=false`. */
+export async function modificarMedioPago(
+  medioPagoId: string,
+  datos: MedioPagoModificarDatos,
+  operationId: string,
+): Promise<MedioPagoAdmin> {
+  return leerFiscalOLanzar(
+    await apiFetch(`/configuracion/medios-pago/${medioPagoId}`, escrituraDeMedio('PUT', operationId, datos)),
+  )
+}

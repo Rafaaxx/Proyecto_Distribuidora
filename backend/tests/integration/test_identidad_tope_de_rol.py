@@ -590,6 +590,7 @@ def test_get_roles_lista_los_de_la_organizacion_con_el_tope_como_cadena(
         "activo",
         "tope_descuento",
         "permisos",
+        "usuarios_activos",  # change 17b, 7.2 (aditivo)
     }
     assert "Rol ajeno" not in por_nombre
 

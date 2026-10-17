@@ -16,7 +16,7 @@ from decimal import Decimal
 from uuid import UUID
 
 import sqlalchemy as sa
-from sqlalchemy import func, select, update
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.orm import Session
 
 from app.modules.identidad.models import (
@@ -318,6 +318,57 @@ def listar_permisos_de_rol(organizacion_id: UUID, rol_id: UUID, sesion: Session)
         RolPermiso.organizacion_id == organizacion_id, RolPermiso.rol_id == rol_id
     )
     return list(sesion.scalars(consulta).all())
+
+
+def contar_administradores_en_otros_roles(
+    organizacion_id: UUID, sesion: Session, *, rol_excluido_id: UUID, permiso_codigo: str
+) -> int:
+    """Usuarios ACTIVOS de roles ACTIVOS de la organización, distintos de `rol_excluido_id`, cuyo
+    rol tiene `permiso_codigo` (ADR-053). Se cuenta en SQL, filtrado por organización."""
+    consulta = (
+        select(func.count())
+        .select_from(Usuario)
+        .join(Rol, and_(Rol.organizacion_id == Usuario.organizacion_id, Rol.id == Usuario.rol_id))
+        .join(
+            RolPermiso,
+            and_(
+                RolPermiso.organizacion_id == Rol.organizacion_id,
+                RolPermiso.rol_id == Rol.id,
+            ),
+        )
+        .where(
+            Usuario.organizacion_id == organizacion_id,
+            Usuario.estado == "ACTIVO",
+            Rol.activo.is_(True),
+            Rol.id != rol_excluido_id,
+            RolPermiso.permiso_codigo == permiso_codigo,
+        )
+    )
+    return sesion.scalar(consulta) or 0
+
+
+def contar_usuarios_activos_del_rol(organizacion_id: UUID, rol_id: UUID, sesion: Session) -> int:
+    consulta = (
+        select(func.count())
+        .select_from(Usuario)
+        .where(
+            Usuario.organizacion_id == organizacion_id,
+            Usuario.rol_id == rol_id,
+            Usuario.estado == "ACTIVO",
+        )
+    )
+    return sesion.scalar(consulta) or 0
+
+
+def contar_usuarios_activos_por_rol(organizacion_id: UUID, sesion: Session) -> dict[UUID, int]:
+    """Usuarios ACTIVOS de cada rol de la organización en una sola consulta (SQL, sin N+1). Un rol
+    sin usuarios activos no figura en el resultado."""
+    consulta = (
+        select(Usuario.rol_id, func.count())
+        .where(Usuario.organizacion_id == organizacion_id, Usuario.estado == "ACTIVO")
+        .group_by(Usuario.rol_id)
+    )
+    return {rol_id: cantidad for rol_id, cantidad in sesion.execute(consulta).all()}
 
 
 def listar_permisos_de_todos_los_roles(

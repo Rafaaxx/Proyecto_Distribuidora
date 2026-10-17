@@ -515,7 +515,7 @@ def test_un_medio_ajeno_responde_404_con_el_medio(cliente: TestClient, sesion: S
     entorno = Entorno(sesion)
     headers = entorno.entrar(cliente)
     ajeno = Entorno(sesion, permisos=PAGADOR, usuario="pagador2")
-    medio_ajeno = ajeno.crear_medio("Efectivo", requiere_referencia=False, org=ajeno.org)
+    medio_ajeno = ajeno.crear_medio("Efectivo ajeno", requiere_referencia=False, org=ajeno.org)
     sesion.commit()
 
     respuesta = cliente.post(

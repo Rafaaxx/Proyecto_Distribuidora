@@ -442,6 +442,60 @@
         }
       }
     },
+    "/api/v1/identidad/permisos": {
+      "get": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Listar Catalogo De Permisos",
+        "description": "El catálogo global de permisos (`01` §19, `03` §4) con código, descripción y módulo, en el\norden del documento. No depende de la organización (change 17b, D7, D9).",
+        "operationId": "listar_catalogo_de_permisos_api_v1_identidad_permisos_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PermisoCatalogoResponse"
+                  },
+                  "title": "Response Listar Catalogo De Permisos Api V1 Identidad Permisos Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/identidad/roles/{rol_id}/permisos": {
       "put": {
         "tags": [
@@ -3704,6 +3758,213 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ListaMediosPago"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Crear Medio Pago",
+        "operationId": "crear_medio_pago_api_v1_configuracion_medios_pago_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MedioPagoCrearRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MedioPagoAdminResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/configuracion/medios-pago/todos": {
+      "get": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Listar Medios Pago Todos",
+        "operationId": "listar_medios_pago_todos_api_v1_configuracion_medios_pago_todos_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListaMediosPagoAdmin"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/configuracion/medios-pago/{medio_pago_id}": {
+      "put": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Modificar Medio Pago",
+        "operationId": "modificar_medio_pago_api_v1_configuracion_medios_pago__medio_pago_id__put",
+        "parameters": [
+          {
+            "name": "medio_pago_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Medio Pago Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MedioPagoModificarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MedioPagoAdminResponse"
                 }
               }
             }
@@ -13945,6 +14206,22 @@
         ],
         "title": "ListaMediosPago"
       },
+      "ListaMediosPagoAdmin": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MedioPagoAdminResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListaMediosPagoAdmin"
+      },
       "ListaModificarRequest": {
         "properties": {
           "nombre": {
@@ -14300,6 +14577,87 @@
           "actualizado_en"
         ],
         "title": "MarcaResponse"
+      },
+      "MedioPagoAdminResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "requiere_referencia": {
+            "type": "boolean",
+            "title": "Requiere Referencia"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          },
+          "actualizado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Actualizado En"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "requiere_referencia",
+          "activo",
+          "actualizado_en"
+        ],
+        "title": "MedioPagoAdminResponse",
+        "description": "Un medio de pago activo o no, para la administración (change 17b, D2, D6)."
+      },
+      "MedioPagoCrearRequest": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "requiere_referencia": {
+            "type": "boolean",
+            "title": "Requiere Referencia"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "nombre",
+          "requiere_referencia"
+        ],
+        "title": "MedioPagoCrearRequest",
+        "description": "Cuerpo de `POST /configuracion/medios-pago`: el medio nace activo y la organización sale\ndel token (`extra=\"forbid\"`)."
+      },
+      "MedioPagoModificarRequest": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "requiere_referencia": {
+            "type": "boolean",
+            "title": "Requiere Referencia"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "nombre",
+          "requiere_referencia",
+          "activo"
+        ],
+        "title": "MedioPagoModificarRequest",
+        "description": "Reemplazo completo de los campos editables (D2), igual que los `PUT` de los demás\nmaestros."
       },
       "MedioPagoResponse": {
         "properties": {
@@ -15317,6 +15675,29 @@
         ],
         "title": "PagoResumenResponse",
         "description": "Una fila del listado de pagos (PAG-01, `design.md` D11). Importes como string\n(INV-03). `compra_id` es `None` para un pago `INDEPENDIENTE` y el de la compra para uno\nde origen `COMPRA`: es lo que permite enlazar el pago con su compra."
+      },
+      "PermisoCatalogoResponse": {
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "title": "Codigo"
+          },
+          "descripcion": {
+            "type": "string",
+            "title": "Descripcion"
+          },
+          "modulo": {
+            "type": "string",
+            "title": "Modulo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo",
+          "descripcion",
+          "modulo"
+        ],
+        "title": "PermisoCatalogoResponse"
       },
       "PrecioDeVersionResponse": {
         "properties": {
@@ -17213,6 +17594,10 @@
             },
             "type": "array",
             "title": "Permisos"
+          },
+          "usuarios_activos": {
+            "type": "integer",
+            "title": "Usuarios Activos"
           }
         },
         "type": "object",
@@ -17221,7 +17606,8 @@
           "nombre",
           "activo",
           "tope_descuento",
-          "permisos"
+          "permisos",
+          "usuarios_activos"
         ],
         "title": "RolConTopeYPermisosResponse",
         "description": "La lectura suma los permisos del rol (códigos ordenados) para que la pantalla \"Topes por\nrol\" avise solo donde el tope 0 % importa (DSC-06). La escritura no los devuelve."

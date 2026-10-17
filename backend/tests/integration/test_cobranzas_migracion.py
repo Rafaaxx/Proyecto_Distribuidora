@@ -650,6 +650,9 @@ def test_el_downgrade_aborta_si_hay_observaciones_con_los_codigos_nuevos(
         sesion.commit()
 
     try:
+        # Una revisión posterior (17b) puede estar encima: se baja primero hasta la de este change.
+        escalon = _alembic(database_url, "downgrade", REVISION)
+        assert escalon.returncode == 0, escalon.stderr
         abortada = _alembic(database_url, "downgrade", REVISION_ANTERIOR)
         assert abortada.returncode != 0
         assert codigo in abortada.stderr

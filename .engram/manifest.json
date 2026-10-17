@@ -400,6 +400,14 @@
       "sessions": 0,
       "memories": 2,
       "prompts": 0
+    },
+    {
+      "id": "457c8f65",
+      "created_by": "rafan",
+      "created_at": "2026-10-17T22:04:13Z",
+      "sessions": 0,
+      "memories": 4,
+      "prompts": 0
     }
   ]
 }

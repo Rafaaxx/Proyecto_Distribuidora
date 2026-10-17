@@ -85,6 +85,10 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         # rol de otra organizacion responde 404 sin efectos; la lectura no incluye roles ajenos).
         ("put", "/api/v1/identidad/roles/{rol_id}/tope-descuento"),
         ("get", "/api/v1/identidad/roles"),
+        # Change 17b, tarea 7.1: el catalogo global de permisos (`03` §4) no tiene datos de
+        # ninguna organizacion: no hay recurso ajeno que pedir. Prueba real:
+        # `test_identidad_permisos_catalogo.py` (403 sin `ADMIN_USUARIOS`, 401 sin sesion).
+        ("get", "/api/v1/identidad/permisos"),
         ("post", "/api/v1/identidad/usuarios/{usuario_id}/pin"),
         ("post", "/api/v1/identidad/usuarios/{usuario_id}/desbloqueo"),
         # Change 04, grupo 8 (`sync/api.py`, tarea 8.6): a diferencia de las
@@ -280,6 +284,14 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("post", "/api/v1/configuracion/fiscal/condicion-iva"),
         ("get", "/api/v1/costos/resumen-regla-iva"),
         ("get", "/api/v1/configuracion/medios-pago"),
+        # Change 17b, grupo 4 y 5 (`configuracion/api.py`): el alta y la modificación de medios
+        # de pago y la lectura completa, cada una con su prueba real de aislamiento (login real
+        # de dos organizaciones; un medio ajeno responde 404, la lectura trae solo los de la
+        # organización del token y un `organizacion_id` en el cuerpo se rechaza) en
+        # `test_medio_pago_comandos.py` y `test_medios_pago_lectura.py`.
+        ("post", "/api/v1/configuracion/medios-pago"),
+        ("put", "/api/v1/configuracion/medios-pago/{medio_pago_id}"),
+        ("get", "/api/v1/configuracion/medios-pago/todos"),
         ("get", "/api/v1/configuracion/motivos"),
         # Change 12, grupo 4 (`proveedores/api.py`, tarea 4.3): la escritura dedicada de
         # `PAGO_PROVEEDOR_REGISTRAR`, con su prueba real de aislamiento (login real de dos

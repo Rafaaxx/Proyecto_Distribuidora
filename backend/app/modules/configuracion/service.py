@@ -11,6 +11,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.core.clock import Clock
+from app.core.errors import PermisoRequeridoError
 from app.modules.configuracion import repository
 from app.modules.configuracion.domain.medios import (
     ImporteInvalidoError as ImporteInvalidoError,
@@ -34,11 +35,14 @@ from app.modules.configuracion.domain.medios import (
     validar_medios as validar_medios,
 )
 from app.modules.configuracion.domain.valores import (
+    MedioPagoNoEncontradoError,
     validar_ambito_motivo,
     validar_nombre_medio_pago,
+    validar_quedan_medios_activos,
     validar_valor_alicuota,
 )
 from app.modules.configuracion.models import AlicuotaIva, MedioPago, Motivo
+from app.modules.identidad import service as identidad_service
 
 # --- alicuota_iva -----------------------------------------------------------
 
@@ -86,6 +90,28 @@ def desactivar_alicuota(
 # --- medio_pago --------------------------------------------------------------
 
 
+PERMISO_MEDIOS_PAGO = "ADMIN_CONFIGURACION"
+"""Quien administra los medios de pago (change 17b, D1)."""
+
+
+def exigir_permiso_de_medios_pago(organizacion_id: UUID, usuario_id: UUID, sesion: Session) -> None:
+    """Falla con 403 `PERMISO_REQUERIDO` si el usuario no tiene `ADMIN_CONFIGURACION` (INV-01,
+    SEG-06). Lo llaman los handlers PRIMERO: un rechazo no puede dejar nada escrito. Vive acá
+    porque `service.py` es el único archivo del módulo que alcanza a `identidad`."""
+    permitidos = identidad_service.listar_permisos_del_usuario(organizacion_id, usuario_id, sesion)
+    if PERMISO_MEDIOS_PAGO not in permitidos:
+        raise PermisoRequeridoError(f"Falta el permiso {PERMISO_MEDIOS_PAGO}.")
+
+
+def _estado_para_auditoria(medio: MedioPago) -> dict[str, object]:
+    """Lo que la auditoría guarda de un medio (D11, AUD-01): nombre, marca y estado."""
+    return {
+        "nombre": medio.nombre,
+        "requiere_referencia": medio.requiere_referencia,
+        "activo": medio.activo,
+    }
+
+
 def crear_medio_pago(
     organizacion_id: UUID,
     sesion: Session,
@@ -93,15 +119,98 @@ def crear_medio_pago(
     *,
     nombre: str,
     requiere_referencia: bool,
+    actor_id: UUID | None = None,
+    dispositivo_id_actor: UUID | None = None,
+    operation_id: UUID | None = None,
 ) -> MedioPago:
-    validar_nombre_medio_pago(nombre)
-    return repository.crear_medio_pago(
+    """Alta de un medio activo con el nombre recortado. Un nombre repetido en la organización,
+    activo o no y sin distinguir mayúsculas, es `NOMBRE_DUPLICADO` (D3). Con `operation_id`
+    (llamada desde `MEDIO_PAGO_CREAR`) deja una fila de auditoría con `despues` (D11); la
+    siembra no pasa `operation_id` y no audita. Sin `commit`: la transacción es del bus."""
+    nombre_valido = validar_nombre_medio_pago(nombre)
+    momento = reloj.now()
+    medio = repository.crear_medio_pago(
         organizacion_id,
         sesion,
-        nombre=nombre,
+        nombre=nombre_valido,
         requiere_referencia=requiere_referencia,
-        momento=reloj.now(),
+        momento=momento,
+        actualizado_por_id=actor_id,
     )
+    if operation_id is not None:
+        identidad_service.registrar_auditoria(
+            organizacion_id,
+            sesion,
+            reloj,
+            accion="MEDIO_PAGO_CREAR",
+            entidad="medio_pago",
+            entidad_id=medio.id,
+            ocurrido_en=momento,
+            usuario_id=actor_id,
+            dispositivo_id=dispositivo_id_actor,
+            despues=_estado_para_auditoria(medio),
+            operation_id=operation_id,
+            origen="COMANDO",
+        )
+    return medio
+
+
+def modificar_medio_pago(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    medio_pago_id: UUID,
+    nombre: str,
+    requiere_referencia: bool,
+    activo: bool,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> MedioPago:
+    """`MEDIO_PAGO_MODIFICAR` (D2, D4): reemplazo completo de nombre, marca de referencia y
+    estado. Bloquea los medios de la organización `FOR UPDATE` ANTES de contar los activos, así
+    dos bajas simultáneas no dejan cero (`ULTIMO_MEDIO_ACTIVO`, 409). Un medio ajeno o
+    inexistente es 404 (INV-21). Deja UNA fila de auditoría con `antes` y `despues` (D11).
+    Sin `commit`: la transacción es del bus."""
+    nombre_valido = validar_nombre_medio_pago(nombre)
+    medios = repository.bloquear_medios_pago(organizacion_id, sesion)
+    medio = next((m for m in medios if m.id == medio_pago_id), None)
+    if medio is None:
+        raise MedioPagoNoEncontradoError("El medio de pago no existe en esta organización.")
+
+    validar_quedan_medios_activos(
+        sum(1 for m in medios if m.activo), medio_activo=medio.activo, activo_nuevo=activo
+    )
+
+    antes = _estado_para_auditoria(medio)
+    momento = reloj.now()
+    repository.actualizar_medio_pago(
+        organizacion_id,
+        sesion,
+        medio,
+        nombre=nombre_valido,
+        requiere_referencia=requiere_referencia,
+        activo=activo,
+        momento=momento,
+        actualizado_por_id=actor_id,
+    )
+    identidad_service.registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="MEDIO_PAGO_MODIFICAR",
+        entidad="medio_pago",
+        entidad_id=medio.id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        antes=antes,
+        despues=_estado_para_auditoria(medio),
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+    return medio
 
 
 def obtener_medio_pago(
@@ -114,6 +223,11 @@ def obtener_medio_pago(
 
 def listar_medios_pago_activos(organizacion_id: UUID, sesion: Session) -> list[MedioPago]:
     return repository.listar_medios_pago_activos(organizacion_id, sesion)
+
+
+def listar_medios_pago_todos(organizacion_id: UUID, sesion: Session) -> list[MedioPago]:
+    """Todos los medios de la organización, activos o no, por nombre (change 17b, D6)."""
+    return repository.listar_medios_pago_todos(organizacion_id, sesion)
 
 
 def desactivar_medio_pago(

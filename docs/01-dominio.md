@@ -89,7 +89,7 @@ La columna **Etapa** indica cuándo se implementa la regla. Las reglas marcadas 
 | Redondeo por defecto | Múltiplo y dirección | A definir | 1 |*solo precarga el formulario de una lista nueva cuando esté definido; la lista siempre tiene su propio redondeo (PRC-01)* |
 | Venta a consumidor final genérico | Sí / no | A definir | 1 |
 | Estado de facturación inicial por defecto | NO_REQUIERE / PENDIENTE | NO_REQUIERE | 1 |
-| Medios de pago | Lista con indicador de referencia obligatoria | Efectivo, transferencia, cheque, billetera, tarjeta | 1 |
+| Medios de pago | Lista con indicador de referencia obligatoria; nombre único en la organización sin distinguir mayúsculas; se dan de baja y se reactivan, nunca se borran, y siempre queda al menos uno activo (ADR-053) | Efectivo, transferencia (con referencia), cheque (con referencia), billetera, tarjeta (con referencia) | 1 |
 | Motivos de ajuste de stock | Lista | Rotura, vencimiento, muestra, consumo interno, diferencia de inventario, otro | 1 |
 | Intentos fallidos de PIN antes de bloquear | Número | 5 | 1 |
 
@@ -492,8 +492,8 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 
 | Permiso | Alcance | ADM | GES | SUP | VEN | CON |
 | --- | --- | :-: | :-: | :-: | :-: | :-: |
-| ADMIN_USUARIOS | Usuarios, roles y permisos (incluye definir el tope de descuento manual de cada rol y consultar los roles con su tope) | ✓ | | | | |
-| ADMIN_CONFIGURACION | Configuración de la organización (incluye crear, modificar y desactivar ubicaciones, STK-02) | ✓ | | | | |
+| ADMIN_USUARIOS | Usuarios, roles y permisos (incluye cambiar los permisos de cada rol, consultar el catálogo de permisos, definir el tope de descuento manual de cada rol y consultar los roles con su tope). Ningún cambio puede dejar la organización sin un usuario activo con este permiso (ADR-053) | ✓ | | | | |
+| ADMIN_CONFIGURACION | Configuración de la organización (incluye crear, modificar y desactivar ubicaciones, STK-02, y crear, modificar, dar de baja y reactivar medios de pago, ADR-053) | ✓ | | | | |
 | GESTIONAR_DISPOSITIVOS | Ver y revocar dispositivos | ✓ | | ✓ | | |
 | IMPORTAR_DATOS | Importaciones y puesta en marcha (incluye registrar saldos iniciales, CC-08, y stock inicial, STK-10) | ✓ | | | | |
 | GESTIONAR_CATALOGO | Productos, presentaciones, categorías | ✓ | ✓ | | | |
@@ -533,7 +533,7 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 | FACTURAR_ABSORBIENDO_IVA | Emitir con IVA absorbido | ✓ | | | | |
 | ANULAR_FACTURA | Anular facturas | ✓ | ✓ | | | |
 
-Roles: ADM = Administrador, GES = Administración, SUP = Supervisor comercial, VEN = Vendedor/Repartidor, CON = Consulta/Dirección. Los roles son plantillas: la organización puede modificar su composición y los topes de descuento. El vendedor ve el saldo y el crédito disponible de sus clientes; no ve costos ni utilidad.
+Roles: ADM = Administrador, GES = Administración, SUP = Supervisor comercial, VEN = Vendedor/Repartidor, CON = Consulta/Dirección. Los roles son plantillas: la organización puede modificar su composición y los topes de descuento. Hasta el change de usuarios y roles no se crean roles nuevos ni se desactivan (ADR-028 D9.5, ADR-053). El vendedor ve el saldo y el crédito disponible de sus clientes; no ve costos ni utilidad.
 
 El listado y el detalle de pagos exigen `REGISTRAR_PAGO_PROVEEDOR` o `ANULAR_PAGO_PROVEEDOR`; el saldo de un proveedor se lee con `GESTIONAR_PROVEEDORES`, `REGISTRAR_PAGO_PROVEEDOR` o `REGISTRAR_COMPRA`; la lista de proveedores para elegir también con `REGISTRAR_PAGO_PROVEEDOR`; medios de pago y motivos, con cualquier sesión (ADR-043, ADR-046).
 
@@ -572,6 +572,8 @@ Deben cumplirse siempre y estar cubiertos por pruebas automatizadas.
 | INV-19 | Anular una venta deja el stock y el saldo del cliente como si no se hubiera registrado, sin borrar ningún registro. | Nuevo |
 | INV-20 | Facturar nunca vuelve a generar la deuda de la mercadería. | FAC-01 |
 | INV-21 | Ningún usuario obtiene ni modifica datos de otra organización. | T-022 |
+
+INV-01 (un rechazo por último medio activo o por último administrador no deja ningún cambio), INV-02 (medios y roles siempre filtrados por organización), INV-05 (los medios se desactivan, nunca se borran: el usuario de aplicación no tiene `DELETE` sobre `medio_pago`), INV-06 (el doble envío con el mismo `operation_id` no duplica efectos) e INV-21 (un medio o un rol de otra organización responde 404) tienen pruebas que los citan por ID en el change 17b, incluidas pruebas de concurrencia con commits reales (dos bajas simultáneas de los dos últimos medios; dos cambios simultáneos que quitan `ADMIN_USUARIOS` a los dos únicos roles que lo tienen; dos altas simultáneas del mismo nombre).
 
 ## 21. Efectos de cada evento
 

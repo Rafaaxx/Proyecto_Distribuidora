@@ -23,6 +23,7 @@ const PagosArea = lazy(() => import('./pagos-proveedores/PagosArea'))
 const CobranzasArea = lazy(() => import('./cobranzas/CobranzasArea'))
 const ImportacionArea = lazy(() => import('./importacion/ImportacionArea'))
 const ConfiguracionArea = lazy(() => import('./configuracion/ConfiguracionArea'))
+const RolesArea = lazy(() => import('./roles/RolesArea'))
 // Ayuda contextual (change 16b, ADR-051): páginas "Ver más" sin datos ni permisos (D6 = A).
 const AyudaArea = lazy(() => import('./AyudaArea'))
 
@@ -188,6 +189,14 @@ export function AdminScreen() {
             element={
               <Suspense fallback={null}>
                 <ConfiguracionArea />
+              </Suspense>
+            }
+          />
+          <Route
+            path="roles/*"
+            element={
+              <Suspense fallback={null}>
+                <RolesArea />
               </Suspense>
             }
           />

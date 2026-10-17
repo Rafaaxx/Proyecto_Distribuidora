@@ -10,7 +10,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Numeric, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Numeric, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -33,7 +33,11 @@ class AlicuotaIva(Base):
 
 class MedioPago(Base):
     __tablename__ = "medio_pago"
-    __table_args__ = (UniqueConstraint("organizacion_id", "id", name="ux_medio_pago__org_id"),)
+    __table_args__ = (
+        UniqueConstraint("organizacion_id", "id", name="ux_medio_pago__org_id"),
+        # Nombre único por organización sin distinguir mayúsculas, activo o no (change 17b, D3).
+        Index("ux_medio_pago__nombre", "organizacion_id", text("lower(nombre)"), unique=True),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=nuevo_id)
     organizacion_id: Mapped[UUID] = mapped_column(ForeignKey("organizacion.id"), nullable=False)

@@ -29,7 +29,7 @@ from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, StrictInt
 
 from app.commands.catalogo import declarar_tipo
-from app.commands.registro import registrar_handler
+from app.commands.registro import SesionDeHandler, registrar_handler
 from app.commands.sobre import SobreComando
 from app.core.clock import Clock
 from app.core.errors import PermisoRequeridoError
@@ -44,13 +44,13 @@ justificación de no importarla de `sync`)."""
 PERMISO_GESTIONAR_DESCUENTOS = "GESTIONAR_DESCUENTOS"
 
 
-def _exigir_permiso(sobre: SobreComando, sesion: object, codigo_permiso: str) -> None:
+def _exigir_permiso(sobre: SobreComando, sesion: SesionDeHandler, codigo_permiso: str) -> None:
     """Falla con 403 `PERMISO_REQUERIDO` si el usuario del sobre no tiene el permiso (SEG-06).
     Falla cerrada: un usuario inexistente, inactivo o con el rol inactivo no tiene ninguno."""
     permitidos = identidad_service.listar_permisos_del_usuario(
         sobre.organizacion_id,
         sobre.usuario_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
     )
     if codigo_permiso not in permitidos:
         raise PermisoRequeridoError(f"Falta el permiso {codigo_permiso}.")
@@ -102,13 +102,13 @@ def manejar_regla_descuento_crear(
     sobre: SobreComando,
     contenido: ReglaDescuentoCrearContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     _exigir_permiso(sobre, sesion, PERMISO_GESTIONAR_DESCUENTOS)
     regla = descuentos_service.crear_regla(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         datos=descuentos_service.DatosDeRegla(
             nombre=contenido.nombre,
@@ -130,7 +130,7 @@ def manejar_regla_descuento_crear(
 
 
 registrar_handler("REGLA_DESCUENTO_CREAR", 1, ReglaDescuentoCrearContenidoV1)(
-    manejar_regla_descuento_crear  # type: ignore[arg-type]
+    manejar_regla_descuento_crear
 )
 declarar_tipo("REGLA_DESCUENTO_CREAR", admite_online=True, admite_offline=False)
 
@@ -162,13 +162,13 @@ def manejar_regla_descuento_modificar(
     sobre: SobreComando,
     contenido: ReglaDescuentoModificarContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     _exigir_permiso(sobre, sesion, PERMISO_GESTIONAR_DESCUENTOS)
     regla = descuentos_service.modificar_regla(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         regla_id=contenido.regla_id,
         cambios=descuentos_service.CambiosDeRegla(
@@ -192,7 +192,7 @@ def manejar_regla_descuento_modificar(
 
 
 registrar_handler("REGLA_DESCUENTO_MODIFICAR", 1, ReglaDescuentoModificarContenidoV1)(
-    manejar_regla_descuento_modificar  # type: ignore[arg-type]
+    manejar_regla_descuento_modificar
 )
 declarar_tipo("REGLA_DESCUENTO_MODIFICAR", admite_online=True, admite_offline=False)
 
@@ -208,13 +208,13 @@ def manejar_regla_descuento_activar(
     sobre: SobreComando,
     contenido: ReglaDescuentoTransicionContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     _exigir_permiso(sobre, sesion, PERMISO_GESTIONAR_DESCUENTOS)
     regla = descuentos_service.activar_regla(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         regla_id=contenido.regla_id,
         actor_id=sobre.usuario_id,
@@ -223,7 +223,7 @@ def manejar_regla_descuento_activar(
 
 
 registrar_handler("REGLA_DESCUENTO_ACTIVAR", 1, ReglaDescuentoTransicionContenidoV1)(
-    manejar_regla_descuento_activar  # type: ignore[arg-type]
+    manejar_regla_descuento_activar
 )
 declarar_tipo("REGLA_DESCUENTO_ACTIVAR", admite_online=True, admite_offline=False)
 
@@ -232,13 +232,13 @@ def manejar_regla_descuento_pausar(
     sobre: SobreComando,
     contenido: ReglaDescuentoTransicionContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     _exigir_permiso(sobre, sesion, PERMISO_GESTIONAR_DESCUENTOS)
     regla = descuentos_service.pausar_regla(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         regla_id=contenido.regla_id,
         actor_id=sobre.usuario_id,
@@ -247,6 +247,6 @@ def manejar_regla_descuento_pausar(
 
 
 registrar_handler("REGLA_DESCUENTO_PAUSAR", 1, ReglaDescuentoTransicionContenidoV1)(
-    manejar_regla_descuento_pausar  # type: ignore[arg-type]
+    manejar_regla_descuento_pausar
 )
 declarar_tipo("REGLA_DESCUENTO_PAUSAR", admite_online=True, admite_offline=False)

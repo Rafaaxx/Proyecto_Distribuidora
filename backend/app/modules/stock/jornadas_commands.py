@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict
 from app.commands.auditoria import DatosDeAuditoria
 from app.commands.catalogo import declarar_tipo
 from app.commands.observaciones import ObservacionProducida
-from app.commands.registro import registrar_handler
+from app.commands.registro import SesionDeHandler, registrar_handler
 from app.commands.sobre import SobreComando
 from app.core.clock import Clock
 from app.core.errors import PermisoRequeridoError
@@ -45,13 +45,13 @@ PERMISO_RENDIR_JORNADA = "RENDIR_JORNADA"
 PERMISO_LIBERAR_UBICACION = "LIBERAR_UBICACION"
 
 
-def _exigir_permiso(sobre: SobreComando, sesion: object, codigo_permiso: str) -> None:
+def _exigir_permiso(sobre: SobreComando, sesion: SesionDeHandler, codigo_permiso: str) -> None:
     """403 `PERMISO_REQUERIDO` si el usuario del sobre no tiene el permiso (SEG-06). Va
     PRIMERO: un rechazo no puede dejar nada escrito."""
     permitidos = identidad_service.listar_permisos_del_usuario(
         sobre.organizacion_id,
         sobre.usuario_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
     )
     if codigo_permiso not in permitidos:
         raise PermisoRequeridoError(f"Falta el permiso {codigo_permiso}.")
@@ -98,13 +98,13 @@ def manejar_jornada_abrir(
     sobre: SobreComando,
     contenido: JornadaAbrirContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     _exigir_permiso(sobre, sesion, PERMISO_ABRIR_JORNADA)
     jornada = stock_service.abrir_jornada(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         ubicacion_id=contenido.ubicacion_id,
         usuario_id=sobre.usuario_id,
@@ -115,9 +115,7 @@ def manejar_jornada_abrir(
     return "ACEPTADO", resultado_de_jornada(jornada), None
 
 
-registrar_handler("JORNADA_ABRIR", 1, JornadaAbrirContenidoV1)(
-    manejar_jornada_abrir  # type: ignore[arg-type]
-)
+registrar_handler("JORNADA_ABRIR", 1, JornadaAbrirContenidoV1)(manejar_jornada_abrir)
 declarar_tipo("JORNADA_ABRIR", admite_online=True, admite_offline=False)
 
 
@@ -134,13 +132,13 @@ def manejar_jornada_rendir(
     sobre: SobreComando,
     contenido: JornadaTransicionContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     _exigir_permiso(sobre, sesion, PERMISO_RENDIR_JORNADA)
     jornada = stock_service.rendir_jornada(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         jornada_id=contenido.jornada_id,
         usuario_id=sobre.usuario_id,
         occurred_at=sobre.occurred_at,
@@ -152,13 +150,13 @@ def manejar_jornada_cerrar(
     sobre: SobreComando,
     contenido: JornadaTransicionContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     _exigir_permiso(sobre, sesion, PERMISO_RENDIR_JORNADA)
     jornada = stock_service.cerrar_jornada(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         jornada_id=contenido.jornada_id,
         usuario_id=sobre.usuario_id,
         occurred_at=sobre.occurred_at,
@@ -166,13 +164,9 @@ def manejar_jornada_cerrar(
     return "ACEPTADO", resultado_de_jornada(jornada), None
 
 
-registrar_handler("JORNADA_RENDIR", 1, JornadaTransicionContenidoV1)(
-    manejar_jornada_rendir  # type: ignore[arg-type]
-)
+registrar_handler("JORNADA_RENDIR", 1, JornadaTransicionContenidoV1)(manejar_jornada_rendir)
 declarar_tipo("JORNADA_RENDIR", admite_online=True, admite_offline=False)
-registrar_handler("JORNADA_CERRAR", 1, JornadaTransicionContenidoV1)(
-    manejar_jornada_cerrar  # type: ignore[arg-type]
-)
+registrar_handler("JORNADA_CERRAR", 1, JornadaTransicionContenidoV1)(manejar_jornada_cerrar)
 declarar_tipo("JORNADA_CERRAR", admite_online=True, admite_offline=False)
 
 
@@ -191,7 +185,7 @@ def manejar_jornada_liberar(
     sobre: SobreComando,
     contenido: JornadaLiberarContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandlerConAuditoria:
     """Libera la jornada y devuelve el motivo como dato de auditoría (D8): el único comando de
@@ -199,7 +193,7 @@ def manejar_jornada_liberar(
     _exigir_permiso(sobre, sesion, PERMISO_LIBERAR_UBICACION)
     jornada = stock_service.liberar_jornada(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         jornada_id=contenido.jornada_id,
         usuario_id=sobre.usuario_id,
         motivo_id=contenido.motivo_id,
@@ -215,7 +209,5 @@ def manejar_jornada_liberar(
     )
 
 
-registrar_handler("JORNADA_LIBERAR", 1, JornadaLiberarContenidoV1)(
-    manejar_jornada_liberar  # type: ignore[arg-type]
-)
+registrar_handler("JORNADA_LIBERAR", 1, JornadaLiberarContenidoV1)(manejar_jornada_liberar)
 declarar_tipo("JORNADA_LIBERAR", admite_online=True, admite_offline=False)

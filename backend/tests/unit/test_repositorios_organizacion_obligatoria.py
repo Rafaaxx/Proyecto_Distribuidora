@@ -215,3 +215,15 @@ def test_descuentos_repository_exige_organizacion_id_primero_en_todo_metodo() ->
     )
     assert isinstance(descuentos_repository.FUNCIONES_SIN_ORGANIZACION_ID, frozenset)
     assert not descuentos_repository.FUNCIONES_SIN_ORGANIZACION_ID
+
+
+def test_cobranzas_repository_exige_organizacion_id_primero_en_todo_metodo() -> None:
+    """Change 17, tarea 8.1: `cobranzas` no declara excepciones
+    (`FUNCIONES_SIN_ORGANIZACION_ID` vacío) -- toda función pública recibe `organizacion_id`
+    primero (INV-21)."""
+    from app.modules.cobranzas import repository as cobranzas_repository
+
+    _verificar_organizacion_id_primer_parametro(
+        cobranzas_repository,
+        exentas=cobranzas_repository.FUNCIONES_SIN_ORGANIZACION_ID,
+    )

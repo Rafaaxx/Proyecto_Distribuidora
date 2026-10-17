@@ -86,7 +86,9 @@ def registrar_saldo_inicial(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return cuentas_corrientes_commands.manejar_saldo_inicial_registrar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]

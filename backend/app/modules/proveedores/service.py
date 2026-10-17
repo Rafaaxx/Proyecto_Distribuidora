@@ -937,7 +937,7 @@ def registrar_pago(
         importe, fecha, observacion, hoy=reloj.now().date()
     )
     entradas_de_medio = _resolver_medios(organizacion_id, sesion, medios)
-    pagos.validar_medios(importe, entradas_de_medio)
+    configuracion_service.validar_medios(importe, entradas_de_medio)
 
     # 2) referencias: el proveedor debe existir en la organización (INV-21, 404).
     #    D5: se admite uno inactivo, así que no se mira `activo`.

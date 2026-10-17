@@ -164,7 +164,9 @@ def crear_proveedor(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return proveedores_commands.manejar_proveedor_crear(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -219,7 +221,9 @@ def modificar_proveedor(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return proveedores_commands.manejar_proveedor_modificar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -459,7 +463,9 @@ def informar_costos(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return proveedores_commands.manejar_costo_informar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -678,7 +684,7 @@ def confirmar_compra(
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
     def _ejecutar_handler(
-        sesion_protegida: object,
+        sesion_protegida: registro.SesionDeHandler,
     ) -> sync_service.ResultadoHandlerConAuditoria:
         return proveedores_commands.manejar_compra_confirmar(
             sobre,
@@ -726,7 +732,7 @@ def anular_compra(
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
     def _ejecutar_handler(
-        sesion_protegida: object,
+        sesion_protegida: registro.SesionDeHandler,
     ) -> sync_service.ResultadoHandlerConAuditoria:
         return proveedores_commands.manejar_compra_anular(
             sobre,
@@ -789,7 +795,9 @@ def registrar_pago_proveedor(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return proveedores_commands.manejar_pago_proveedor_registrar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -843,7 +851,9 @@ def anular_pago_proveedor(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return proveedores_commands.manejar_pago_proveedor_anular(
             sobre,
             contenido_validado,  # type: ignore[arg-type]

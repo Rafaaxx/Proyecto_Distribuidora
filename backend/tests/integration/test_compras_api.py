@@ -1281,6 +1281,39 @@ def test_motivos_de_anulacion_de_pago_devuelve_los_del_ambito_nuevo(
     ]
 
 
+# Escenario: "Motivos de anulación de cobranza por API"
+def test_motivos_de_anulacion_de_cobranza_devuelve_solo_los_activos_de_la_organizacion(
+    cliente: TestClient, sesion: Session
+) -> None:
+    """Change 17, tarea 11.3 (COB-05, TR-09, INV-21; spec `organizacion/catalogos-configurables`):
+    `GET /configuracion/motivos?ambito=ANULACION_COBRANZA` sirve a cualquier sesion (sin permiso)
+    solo los activos de ese ambito de la organizacion del token, ordenados por nombre, sin los
+    de `ANULACION_PAGO`."""
+    entorno = Entorno(sesion, permisos=frozenset())
+    rechazado = entorno.crear_motivo("ANULACION_COBRANZA", "Pago rechazado o no acreditado")
+    error_de_carga = entorno.crear_motivo("ANULACION_COBRANZA", "Error de carga")
+    entorno.crear_motivo("ANULACION_PAGO", "Pago rechazado o devuelto")
+    sesion.execute(
+        text(
+            "INSERT INTO motivo (id, organizacion_id, ambito, nombre, activo, creado_en, "
+            "actualizado_en) VALUES (:id, :org, 'ANULACION_COBRANZA', 'Viejo', false, :m, :m)"
+        ),
+        {"id": uuid4(), "org": entorno.org, "m": MOMENTO},
+    )
+    ajena = Entorno(sesion, usuario="otro")
+    ajena.crear_motivo("ANULACION_COBRANZA", "Ajeno")
+    headers = entorno.entrar(cliente)
+
+    respuesta = cliente.get(URL_MOTIVOS, params={"ambito": "ANULACION_COBRANZA"}, headers=headers)
+
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["items"] == [
+        {"id": str(error_de_carga), "nombre": "Error de carga"},
+        {"id": str(rechazado), "nombre": "Pago rechazado o no acreditado"},
+    ]
+    assert cliente.get(URL_MOTIVOS, params={"ambito": "ANULACION_COBRANZA"}).status_code == 401
+
+
 @pytest.mark.parametrize("ambito", ["ANULACION_TRANSFERENCIA", "ANULACION_AJUSTE"])
 def test_motivos_de_anulacion_de_stock_responden_a_cualquier_sesion(
     cliente: TestClient, sesion: Session, ambito: str

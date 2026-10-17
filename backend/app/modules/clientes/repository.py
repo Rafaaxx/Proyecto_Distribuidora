@@ -24,7 +24,8 @@ INV-05), y el usuario de aplicación no tiene `DELETE` sobre la tabla.
 from __future__ import annotations
 
 import base64
-from collections.abc import Callable
+import binascii
+from collections.abc import Callable, Collection
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -35,6 +36,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.clientes.domain.errores import (
     CodigoDuplicadoError,
+    CursorInvalidoError,
     DocumentoDuplicadoError,
 )
 from app.modules.clientes.models import Cliente
@@ -391,3 +393,57 @@ FUNCIONES_SIN_ORGANIZACION_ID: frozenset[str] = frozenset()
 ORGANIZACION_ID` y `proveedores.repository.FUNCIONES_SIN_ORGANIZACION_ID`):
 `clientes` no tiene ningún catálogo global propio -- toda función pública
 recibe `organizacion_id` primero."""
+
+
+def nombres_de_clientes(
+    organizacion_id: UUID, cliente_ids: Collection[UUID], sesion: Session
+) -> dict[UUID, str]:
+    """`{id: nombre}` de los clientes de la organización entre `cliente_ids`, en una consulta
+    (los de otra organización, o inexistentes, no aparecen; INV-21)."""
+    if not cliente_ids:
+        return {}
+    filas = sesion.execute(
+        select(Cliente.id, Cliente.nombre).where(
+            Cliente.organizacion_id == organizacion_id, Cliente.id.in_(list(cliente_ids))
+        )
+    ).all()
+    return {id_: nombre for id_, nombre in filas}
+
+
+ESTADOS_DEL_SELECTOR: tuple[str, ...] = ("ACTIVO", "SUSPENDIDO")
+"""Estados que ofrece el selector de quien cobra (change 17, D14, D4): a un cliente `INACTIVO` se
+le cobra desde su cuenta corriente."""
+
+
+def listar_opciones_paginado(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    limite: int = LIMITE_PAGINA_DEFAULT,
+    cursor: str | None = None,
+    texto: str | None = None,
+) -> tuple[list[Cliente], str | None]:
+    """Clientes `ACTIVO` y `SUSPENDIDO` que no son el consumidor final, por cursor `(nombre, id)`.
+    `texto` busca por nombre o código. Mismo orden y cursor que `listar_clientes_paginado`."""
+    limite_efectivo = min(max(limite, 1), LIMITE_PAGINA_MAXIMO)
+    consulta = select(Cliente).where(
+        Cliente.organizacion_id == organizacion_id,
+        Cliente.estado.in_(ESTADOS_DEL_SELECTOR),
+        Cliente.es_consumidor_final.is_(False),
+    )
+    if cursor is not None:
+        try:
+            nombre_cursor, id_cursor = _decodificar_cursor(cursor)
+        except (ValueError, UnicodeError, binascii.Error) as error:
+            raise CursorInvalidoError("El cursor de paginación no es válido.") from error
+        consulta = consulta.where(tuple_(Cliente.nombre, Cliente.id) > (nombre_cursor, id_cursor))
+    if texto:
+        patron = f"%{texto}%"
+        consulta = consulta.where(or_(Cliente.nombre.ilike(patron), Cliente.codigo.ilike(patron)))
+    consulta = consulta.order_by(Cliente.nombre, Cliente.id).limit(limite_efectivo + 1)
+
+    filas = list(sesion.scalars(consulta).all())
+    if len(filas) > limite_efectivo:
+        pagina = filas[:limite_efectivo]
+        return pagina, _codificar_cursor(pagina[-1].nombre, pagina[-1].id)
+    return filas, None

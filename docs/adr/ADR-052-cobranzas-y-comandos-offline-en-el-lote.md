@@ -1,0 +1,83 @@
+# ADR-052 — Cobranzas y comandos sin conexión en el lote: cobranza independiente con medios, anulación total con motivo, saldo a favor, permiso comparado por el bus (`PERMISO_REVOCADO`), jornada del sobre (`JORNADA_LIBERADA`), medio inactivo y referencia faltante aceptados con observación, firma tipada de los handlers, lecturas, orden de bloqueo y validación de medios compartida
+
+| Campo | Valor |
+| --- | --- |
+| Estado | Vigente |
+| Fecha | 2026-10-16 |
+| Referenciado en | `openspec/changes/17-cobranzas/design.md` D0 a D20 y `specs/cobranzas/registro-de-cobranzas`, `specs/cobranzas/anulacion-de-cobranzas`, `specs/cobranzas/administracion-de-cobranzas`, `specs/cuentas-corrientes/administracion-de-cuentas-corrientes`, `specs/organizacion/catalogos-configurables`, `specs/sistema/ayuda-contextual`, `specs/sistema/pipeline-de-comandos`, `specs/sync/lote-de-comandos`; `01-dominio.md` COB-01 a COB-05, CC-02, CC-04, CC-08, SYN-05 a SYN-07, SYN-10, RUT-09, INV-01, INV-02, INV-03, INV-05, INV-06, INV-08, INV-13, INV-17, INV-21, §19, §20; `02-arquitectura.md` §5.3, §6.3, §6.5, §7.3; `03-modelo-de-datos.md` §4, §12, §13, §15; `04-roadmap-changes.md` §2, §8; ADR-012 (lo precisa), ADR-028 (lo precisa), ADR-034 (lo precisa), ADR-046 (lo reutiliza), ADR-049 (lo precisa), ADR-051 |
+
+**Decisiones D0 a D20 del change aprobadas por el usuario el 2026-10-15, opción A en todas salvo D13 = C (medio inactivo y referencia faltante se aceptan con observación). Las críticas (D10, D11) y altas (D12 a D15) con aprobación explícita; los nombres de los motivos (D6) y los textos de ayuda (tarea 0.2, clave 5 = variante 5b) también. El 2026-10-16 el usuario aprobó, durante el apply, las precisiones que se listan al final. El ADR queda *Propuesto* hasta que el usuario lo apruebe junto con `propuesta-docs.md`.**
+
+## Contexto
+
+El sistema ya tenía el libro de cuenta corriente (ADR-034, ADR-035), los medios de pago y los motivos (change 02), las jornadas (ADR-049) y el bus con el lote de sincronización (change 04). Nadie escribía los movimientos `COBRANZA` y `ANULACION_COBRANZA`, que ya estaban en el `CHECK` y en el catálogo de sentidos. Además, cinco deudas del bus esperaban a este change: la firma tipada de los handlers y su despacho desde el lote (changes 05, 14 y 15), el paso 4 de `02` §6.3 en modo `OFFLINE` y `PERMISO_REVOCADO` (deuda del 06b repartida por el 15), la foto de permisos de SYN-10, la validación de la jornada del sobre y `JORNADA_LIBERADA` (RUT-09).
+
+Lo que `docs/` decía: COB-01 a COB-05 describen la cobranza pero no su contenido exacto, ni qué clientes admite, ni qué pasa si supera la deuda; SYN-05 dice que una operación hecha sin conexión nunca se rechaza por reglas de negocio, y SYN-07 lista los códigos de observación, sin medio inactivo ni referencia faltante; `02` §6.3 describe el paso 4 sin decir quién lo ejecuta sin conexión. Este ADR fija lo que `docs/` no resolvía.
+
+## Decisión
+
+### Tamaño y alcance
+
+1. **Un change en cinco lotes (D0).** (1) firma tipada y despacho por lote; (2) migración, modelos, dominio y `COBRANZA_REGISTRAR` con conexión; (3) `COBRANZA_ANULAR`, motivos, auditoría y lecturas; (4) el camino `OFFLINE`; (5) pantallas, ayuda, concurrencia, cobertura, este ADR, la propuesta de documentación y la prueba manual. Vuelve a superar `04` §2 y se anota la excepción.
+2. **Solo cobranzas independientes (D1).** Se registran con conexión desde `/admin` y por el lote en modo `OFFLINE`. `registrar_cobranza` queda como función de servicio que el change 18a llamará con origen `VENTA` dentro de la transacción de la venta; por comando no se puede registrar una de origen `VENTA`.
+
+### La cobranza
+
+3. **Contenido (D2, D3).** `cobranza_id` generado por quien origina (UUIDv7; uno ya usado, `COBRANZA_DUPLICADA`, 409), `cliente_id`, `importe` explícito mayor que cero con dos decimales, de 1 a 20 medios (`MEDIOS_INVALIDOS`) con importe positivo y referencia donde el medio la exige, y una observación opcional de hasta 500 caracteres, recortada y nula si queda vacía. La suma de los medios debe ser igual al importe (INV-08). No hay campo de fecha: el momento es el `occurred_at` del comando, mostrado en la zona de la organización.
+4. **Cliente (D4).** Se cobra a clientes `ACTIVO`, `SUSPENDIDO` e `INACTIVO`. Al consumidor final no se le registra una cobranza independiente: `CONSUMIDOR_FINAL_SIN_CUENTA` (**422**, igual que `cuentas_corrientes`; precisión del apply). Desde la primera cobranza la cuenta ya no admite saldo inicial (CC-08, heredado).
+5. **Saldo a favor (D5).** Se admite cualquier importe mayor que cero; si el saldo queda negativo es saldo a favor del cliente. El servidor no bloquea ni observa; la pantalla muestra saldo actual y resultante y pide una confirmación explícita (igual que ADR-046 punto 4).
+6. **Jornada con conexión (D8).** El servidor la deduce: si el usuario y el dispositivo del token tienen una jornada `ABIERTA`, la cobranza la lleva; si no, queda sin jornada (también con la jornada `EN_RENDICION`). Si el sobre trae una jornada, tiene que ser esa (`JORNADA_AJENA`, 409).
+
+### La anulación
+
+7. **Motivos y reglas (D6, D7, D15).** Se siembran tres motivos del ámbito `ANULACION_COBRANZA`: "Error de carga", "Pago rechazado o no acreditado" y "Otro", en la siembra y, de forma idempotente, en las organizaciones existentes. `COBRANZA_ANULAR` (`ANULAR_COBRANZA`, solo `ONLINE`) exige un motivo activo de ese ámbito (`MOTIVO_INVALIDO`, 422; ajeno, 404) y admite una observación opcional de hasta 500. Solo anula una `CONFIRMADA` (`COBRANZA_YA_ANULADA`, 409): deja la cobranza `ANULADA`, una fila en `cobranza_anulacion` y un movimiento `ANULACION_COBRANZA` por el importe completo. No hay anulación parcial; se anula la de cualquier usuario, de un cliente inactivo y de una jornada cerrada o liberada. Una de origen `VENTA` se rechaza (`COBRANZA_DE_VENTA`, 409): se anula con la venta. El comando devuelve el motivo para la fila de auditoría del bus (AUD-02): el ratchet pasa de cuatro a cinco comandos con motivo.
+
+### El camino sin conexión
+
+8. **Permiso por comando en el lote (D10, D11; CRÍTICO).** El catálogo de tipos declara el permiso de cada tipo que admite `OFFLINE` (`permiso_offline`) y un ratchet exige que todo tipo `OFFLINE` lo declare. En modo `OFFLINE` **el bus** hace el paso 4: compara con los permisos que el usuario tiene al sincronizar (un usuario o rol inactivo se evalúa sin permisos) y, si falta, el comando sigue y queda `ACEPTADO_CON_OBSERVACIONES` con `PERMISO_REVOCADO` (detalle: permiso y motivo `PERMISO_QUITADO`, `USUARIO_INACTIVO` o `ROL_INACTIVO`). El handler recibe el modo y en `OFFLINE` no vuelve a exigir el permiso. Con conexión nada cambia: lo valida el handler y rechaza con 403. **No hay foto de permisos en el servidor**: la foto de SYN-10 es la del dispositivo (change 21). Un usuario que nunca tuvo el permiso y logra encolar una cobranza también queda con `PERMISO_REVOCADO`, pero se acepta, por SYN-05.
+9. **Jornada del sobre (D12; ALTO).** Sin jornada en el sobre se rechaza `JORNADA_REQUERIDA`; con la jornada de otro usuario u otro dispositivo, `JORNADA_AJENA`; `ABIERTA`, normal; `LIBERADA`, aceptada con `JORNADA_LIBERADA` (detalle: jornada y momento de la liberación, RUT-09); `EN_RENDICION` y `CERRADA`, aceptadas sin observación. La cobranza lleva la jornada del sobre en todos los casos aceptados. El servidor la lee `FOR SHARE` (nivel 5) para que una liberación simultánea se vea o espere.
+10. **Qué no rechaza (D13 = C; ALTO).** Se **rechazan** solo el contenido malformado (esquema, importes inválidos, medios fuera de 1 a 20, **medios que no suman el importe**: INV-08 es un invariante que el dispositivo calcula), un cliente o medio inexistente o de otra organización (SYN-06), un `cobranza_id` repetido y los casos del punto 9. Se **aceptan**: el permiso (punto 8), cualquier estado del cliente, el consumidor final con `CLIENTE_NO_HABILITADO`, y **un medio inactivo o una referencia faltante con observaciones nuevas, una por línea afectada**: `MEDIO_INACTIVO` y `REFERENCIA_FALTANTE` (la referencia vacía o de solo espacios se guarda nula). `detalle` lleva `medio` (posición de la línea), `medio_pago_id`, `nombre` e `importe`. Conviven con `PERMISO_REVOCADO` y `JORNADA_LIBERADA`, y un doble envío devuelve el resultado original con las mismas observaciones, sin duplicarlas. Con conexión nada de esto cambia (`MEDIO_PAGO_INACTIVO`, `REFERENCIA_OBLIGATORIA`).
+
+### El bus
+
+11. **Firma tipada y despacho por lote (D9).** `HandlerFuncion` pasa a un `Protocol` con la firma que los handlers ya tenían: `(sobre, contenido, *, sesion: SesionDeHandler, reloj: Clock)`. El lote le pasa la sesión protegida y el reloj, igual que REST. Se quitan los `# type: ignore[arg-type]`. Una prueba despacha por el lote un comando válido de cada tipo registrado.
+12. **Tipo registrado sin declarar en el catálogo (precisión del apply, aprobada 2026-10-16).** Un tipo con handler registrado pero **sin declarar** en el catálogo de tipos no tiene modo permitido: el lote lo rechaza en cualquier modo (`TIPO_DE_COMANDO_DESCONOCIDO`), antes de reservar, sin dejar fila de `comando`. Antes pasaba en cualquier modo.
+13. **`commit` desde un handler dentro del lote.** Un handler que intenta `commit`, `rollback` o `close` sobre la sesión protegida es un error de programación: **aborta el lote** y no se informa como `RECHAZADO` de ese ítem (precisión del apply, aprobada 2026-10-16).
+
+### Lecturas, bloqueo y datos
+
+14. **Quién lee (D14).** `GET /cobranzas` y `GET /cobranzas/{id}`: con `REGISTRAR_COBRANZA` o `ANULAR_COBRANZA`, todas las de la organización. `GET /clientes/{id}/saldo` y el selector liviano `GET /clientes/opciones` (identificador, nombre, código y estado): con `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`. "Sus clientes" son todos los de la organización mientras no exista una asignación de clientes a vendedores. El estado de cuenta sigue con `GESTIONAR_CLIENTES`. Sin permisos nuevos.
+15. **Orden de bloqueo (D18).** `COBRANZA_REGISTRAR`: `saldo_cuenta` del cliente (nivel 1), luego la jornada `FOR SHARE` (nivel 5) si corresponde, e inserción de la cobranza, sus medios y el movimiento. `COBRANZA_ANULAR`: la cobranza `FOR UPDATE` (se revalida el estado con la fila tomada), luego `saldo_cuenta`. La reserva del bus cubre a ambos (INV-06). Las pruebas de concurrencia confirman transacciones reales (dos cobranzas al mismo cliente, dos anulaciones, cobranza frente a saldo inicial, cobranza sin conexión frente a la liberación de su jornada en los dos órdenes, doble envío).
+16. **Modelo de datos (D16).** `cobranza`, `cobranza_medio` y `cobranza_anulacion` con restricciones y claves foráneas compuestas con `organizacion_id`; `venta_id` nulable **sin clave foránea** hasta el change 18a (que la agrega y aborta si hay filas); `cobranza_anulacion.cobranza_id` único (la base impide anular dos veces); `app_runtime` con `SELECT, INSERT` y `UPDATE` solo de `cobranza.estado`, nunca `DELETE` (INV-05). **`cobranza_medio.orden`** (posición de la línea en el pedido, `CHECK (>= 0)`, único por cobranza) se queda: ordena los medios y ancla las observaciones por línea (precisión del apply). Se amplía `ck_observacion__codigo` con `MEDIO_INACTIVO` y `REFERENCIA_FALTANTE`; el `downgrade` aborta si hay observaciones con los códigos nuevos y pierde por diseño las cobranzas.
+17. **Validación de medios compartida y dependencias (D17).** `validar_medios` (pura) se mueve a `configuracion/domain/medios.py`, expuesta por `configuracion/service.py`, sin cambiar sus códigos; pagos y compras de contado la importan desde ahí. `cobranzas` usa `cuentas_corrientes`, `clientes`, `configuracion`, `stock` (jornada) e `identidad` (permisos), solo por `service.py`; nadie depende de `cobranzas` salvo `sync` (por su `service.py`) y, desde el 18a, `ventas`. **Se registran tres `ignore_imports` de import-linter hacia `configuracion.domain.medios`**, porque es la única pieza de dominio ajena que se alcanza directamente y es código puro sin infraestructura: `cobranzas.domain.cobranza` (contrato `cobranzas-domain-no-infraestructura`), `proveedores.domain.pagos` y `proveedores.domain.errores` (contrato de `proveedores`). Quedan documentados en `pyproject.toml`.
+
+### Pantallas y ayuda
+
+18. **Pantallas (D19).** Área "Cobranzas" en `/admin` (`/admin/cobranzas`): listado paginado con filtros (cliente, estado, usuario, jornada, fechas), alta (selector de clientes, saldo actual y resultante, medios con suma en vivo, referencia cuando se exige, confirmación de saldo a favor, reintento con el mismo `Operation-Id` y el mismo `cobranza_id`), detalle con medios, jornada y observaciones (cada observación de medio junto a su línea) y anulación con motivo. En la cuenta corriente del cliente: "Registrar cobranza" con el cliente precargado y enlace de cada movimiento `COBRANZA` y `ANULACION_COBRANZA` a su cobranza, según el permiso (ADR-027). No se crea la pantalla de `/ruta` (change 23).
+19. **Ayuda contextual (D20, ADR-051).** Cinco claves nuevas, ninguna revisada todavía, con los textos que el usuario aprobó el 2026-10-15: `cobranzas.medios` (cómo se reparte el pago entre medios; ejemplo de $50.000), `cobranzas.saldoAFavor` (qué es el saldo después de la cobranza y qué pasa si paga de más), `cobranzas.jornada` (en qué recorrido entra el pago), `cobranzas.anulacion` (deja el pago sin efecto, queda registrado, se anula entero) y `cobranzas.observaciones` (variante 5b: panel corto, el pago se tomó igual porque la plata ya se cobró, con "Ver más"). El tema nuevo `cobranzas-observaciones` explica en palabras de todos los días las cinco marcas: *Medio inactivo*, *Falta la referencia*, *Permiso revocado*, *Jornada liberada* y *Cliente no habilitado*.
+
+## Consecuencias
+
+- La migración del change 17 agrega tres tablas, motivos sembrados y una ampliación de `CHECK`; volver atrás pierde las cobranzas por diseño (el `downgrade` aborta si hay observaciones con los códigos nuevos).
+- Una cobranza sin conexión acepta un medio inactivo o una referencia faltante: queda una observación `PENDIENTE` por línea que alguien debe revisar. La bandeja para resolverlas llega más adelante; hasta entonces se ven en el detalle de la cobranza.
+- Un tipo de comando nuevo que se registre pero no se declare en el catálogo deja de despacharse por el lote (era un hueco silencioso).
+- Los handlers dejan de ser invocables con una sesión cualquiera: reciben la sesión protegida del bus; un `commit` propio es un error de programación detectado.
+- Todo tipo `OFFLINE` futuro (`VENTA_CONFIRMAR`, `VENTA_ANULAR`, etc.) declara su `permiso_offline` y hereda `PERMISO_REVOCADO` sin código propio.
+
+## Enmiendas a ADR y documentos anteriores
+
+- **ADR-012 (pipeline de comandos):** el despacho por lote pasa la sesión protegida y el reloj; el tipo sin declarar se rechaza (puntos 11 y 12); un `commit` de handler aborta el lote (punto 13).
+- **ADR-028 (sesión exige usuario y rol activos):** el lote de un usuario inactivo se procesa por ítem y, en `OFFLINE`, cada comando recibe `PERMISO_REVOCADO` con `USUARIO_INACTIVO` o `ROL_INACTIVO` (punto 8).
+- **ADR-034 (reglas del libro):** `COBRANZA` y `ANULACION_COBRANZA` empiezan a escribirse; CC-08 vale también frente a una cobranza (puntos 4 y 15).
+- **ADR-046 (pagos a proveedores):** su validación de medios pasa a `configuracion/domain/medios.py` y se comparte con cobranzas (punto 17); el saldo a favor se trata igual (punto 5).
+- **ADR-049 (jornadas):** la validación de la jornada del sobre y `JORNADA_LIBERADA` quedan resueltas aquí (punto 9); la deuda del paso 4 también (punto 8).
+- **SYN-05, SYN-07 y SYN-10 (`01` §13):** se amplía SYN-07 con `MEDIO_INACTIVO` y `REFERENCIA_FALTANTE` (punto 10) y se precisa quién compara el permiso sin conexión (punto 8).
+- Los cambios exactos a `docs/01` a `docs/04` están en `openspec/changes/17-cobranzas/propuesta-docs.md`; **no se aplican a `docs/` sin el visto bueno del usuario**.
+
+## Deudas nominadas
+
+1. **Al change 18a (`ventas`):** agregar la clave foránea de `cobranza.venta_id`; llamar a `registrar_cobranza` con origen `VENTA` dentro de la transacción de la venta; anular las cobranzas de una venta con la venta.
+2. **Al change 21 (bootstrap):** la foto de permisos del dispositivo (SYN-10) y que la pantalla sin conexión decida qué ofrece.
+3. **Al change 23 (`/ruta`):** la pantalla de cobranza del vendedor y su cola local.
+4. **Al change 24 (rendición de jornada):** decidir si RUT-05 necesita un código de observación para una cobranza que llega con la jornada `EN_RENDICION` o `CERRADA`; mostrar la cobranza anulada en el resumen.
+5. **Pendiente de la bandeja de observaciones:** resolverlas (`PENDIENTE` a `RESUELTA`); hoy solo se ven.

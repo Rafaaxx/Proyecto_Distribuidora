@@ -68,3 +68,20 @@ class JornadaInexistenteError(DomainError):
 
     codigo = "JORNADA_INEXISTENTE"
     status_http = 404
+
+
+class JornadaRequeridaError(DomainError):
+    """Un comando en modo `OFFLINE` llegó sin jornada en el sobre (`02` §6.2, SYN-06, change 17,
+    `design.md` D12): se rechaza como malformado, antes de reservar el `operation_id`."""
+
+    codigo = "JORNADA_REQUERIDA"
+    status_http = 422
+
+
+class JornadaAjenaError(DomainError):
+    """El sobre de un comando `OFFLINE` nombra una jornada de otro usuario o de otro dispositivo
+    (SYN-06, `02` §6.4, change 17, `design.md` D12): la cola es de quien la generó, así que se
+    rechaza como inconsistente, antes de reservar el `operation_id`."""
+
+    codigo = "JORNADA_AJENA"
+    status_http = 409

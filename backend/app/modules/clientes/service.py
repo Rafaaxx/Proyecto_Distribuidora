@@ -22,7 +22,7 @@ propagar son los de `domain/errores.py`.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from decimal import Decimal
 from uuid import UUID
 
@@ -516,3 +516,26 @@ def configurar_consumidor_final(
             "el cliente consumidor final (D4, ADR-029)."
         )
     return cliente
+
+
+def nombres_de_clientes(
+    organizacion_id: UUID, cliente_ids: Collection[UUID], sesion: Session
+) -> dict[UUID, str]:
+    """Nombre de cada cliente por lote (change 17: listado y detalle de cobranzas). Un id de
+    otra organización o inexistente no aparece (INV-21)."""
+    return repository.nombres_de_clientes(organizacion_id, cliente_ids, sesion)
+
+
+def listar_opciones(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    limite: int = repository.LIMITE_PAGINA_DEFAULT,
+    cursor: str | None = None,
+    texto: str | None = None,
+) -> tuple[list[Cliente], str | None]:
+    """Selector de clientes de quien cobra (change 17, D14): `ACTIVO` y `SUSPENDIDO`, sin el
+    consumidor final."""
+    return repository.listar_opciones_paginado(
+        organizacion_id, sesion, limite=limite, cursor=cursor, texto=texto
+    )

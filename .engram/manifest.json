@@ -368,6 +368,38 @@
       "sessions": 0,
       "memories": 2,
       "prompts": 0
+    },
+    {
+      "id": "328f35c4",
+      "created_by": "rafan",
+      "created_at": "2026-10-15T19:26:27Z",
+      "sessions": 0,
+      "memories": 5,
+      "prompts": 0
+    },
+    {
+      "id": "9ba6d2cc",
+      "created_by": "rafan",
+      "created_at": "2026-10-16T01:29:00Z",
+      "sessions": 0,
+      "memories": 2,
+      "prompts": 0
+    },
+    {
+      "id": "0a2ed266",
+      "created_by": "rafan",
+      "created_at": "2026-10-16T17:26:01Z",
+      "sessions": 0,
+      "memories": 2,
+      "prompts": 0
+    },
+    {
+      "id": "88c5c0b1",
+      "created_by": "rafan",
+      "created_at": "2026-10-17T02:23:57Z",
+      "sessions": 0,
+      "memories": 2,
+      "prompts": 0
     }
   ]
 }

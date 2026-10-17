@@ -183,3 +183,10 @@ class ConfiguracionDeOrganizacionAusenteError(DomainError):
 
     codigo = "CONFIGURACION_DE_ORGANIZACION_AUSENTE"
     status_http = 409
+
+
+class CursorInvalidoError(DomainError):
+    """El cursor de paginación del selector de clientes no se puede leer."""
+
+    codigo = "CURSOR_INVALIDO"
+    status_http = 422

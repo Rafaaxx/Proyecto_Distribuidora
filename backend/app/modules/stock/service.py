@@ -1542,6 +1542,39 @@ def existe_jornada(organizacion_id: UUID, sesion: Session, jornada_id: UUID) -> 
     return jornadas_casos.existe_jornada(organizacion_id, sesion, jornada_id)
 
 
+EstadoDeJornada = jornadas_casos.EstadoDeJornada
+"""Lo que un comando sin conexión necesita saber de la jornada de su sobre (change 17, D12)."""
+
+
+def jornada_es_de(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    jornada_id: UUID,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+) -> bool:
+    """Si la jornada es de ese usuario en ese dispositivo (change 17, D12). La usa el bus para
+    rechazar un comando `OFFLINE` con una jornada ajena (`JORNADA_AJENA`) antes de reservar. Ver
+    `jornadas_casos.jornada_es_de`."""
+    return jornadas_casos.jornada_es_de(
+        organizacion_id,
+        sesion,
+        jornada_id=jornada_id,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+    )
+
+
+def leer_estado_de_jornada(
+    organizacion_id: UUID, sesion: Session, *, jornada_id: UUID
+) -> EstadoDeJornada | None:
+    """El estado de la jornada leída `FOR SHARE` (nivel 5), o `None`: lo que el handler de una
+    cobranza sin conexión mira para anotar `JORNADA_LIBERADA` (change 17, D12, D18). Ver
+    `jornadas_casos.leer_estado_de_jornada`."""
+    return jornadas_casos.leer_estado_de_jornada(organizacion_id, sesion, jornada_id=jornada_id)
+
+
 def tiene_jornada_no_cerrada(
     organizacion_id: UUID, usuario_id: UUID, dispositivo_id: UUID, sesion: Session
 ) -> bool:
@@ -1549,6 +1582,17 @@ def tiene_jornada_no_cerrada(
     que `identidad` usa en la renovación de sesión de un usuario inactivo (D19, ADR-028
     D9.3-B), por el puerto que se registra al pie de este archivo."""
     return jornadas_casos.tiene_jornada_no_cerrada(
+        organizacion_id, sesion, usuario_id=usuario_id, dispositivo_id=dispositivo_id
+    )
+
+
+def jornada_abierta_de(
+    organizacion_id: UUID, sesion: Session, *, usuario_id: UUID, dispositivo_id: UUID
+) -> UUID | None:
+    """El identificador de la jornada `ABIERTA` del usuario y el dispositivo, leída `FOR SHARE`
+    (nivel 5 del orden de bloqueo), o `None`. La consulta de la cobranza con conexión (change 17,
+    D8, D18). Ver `jornadas_casos.jornada_abierta_de`."""
+    return jornadas_casos.jornada_abierta_de(
         organizacion_id, sesion, usuario_id=usuario_id, dispositivo_id=dispositivo_id
     )
 

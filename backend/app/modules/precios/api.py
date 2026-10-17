@@ -131,7 +131,9 @@ def crear_lista(
         reloj,
     )
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return precios_commands.manejar_lista_precio_crear(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -174,7 +176,9 @@ def modificar_lista(
         reloj,
     )
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return precios_commands.manejar_lista_precio_modificar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -213,7 +217,9 @@ def crear_regla(
         reloj,
     )
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return precios_commands.manejar_regla_margen_crear(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -257,7 +263,9 @@ def modificar_regla(
         reloj,
     )
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return precios_commands.manejar_regla_margen_modificar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -298,7 +306,9 @@ def definir_redondeo_de_categoria(
         reloj,
     )
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return precios_commands.manejar_redondeo_categoria_definir(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -399,7 +409,9 @@ def generar_borrador(
         entrada, "LISTA_GENERAR_BORRADOR", {"lista_id": str(lista_id)}, reloj
     )
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return precios_commands.manejar_lista_generar_borrador(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -446,7 +458,9 @@ def fijar_precio_manual(
         reloj,
     )
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return precios_commands.manejar_lista_borrador_precio_fijar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -526,7 +540,9 @@ def publicar_version(
         reloj,
     )
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return precios_commands.manejar_lista_publicar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -561,7 +577,9 @@ def anular_version(
         reloj,
     )
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return precios_commands.manejar_lista_anular_version(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -663,7 +681,9 @@ def definir_lista_predeterminada(
         reloj,
     )
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return precios_commands.manejar_lista_precio_predeterminada_definir(
             sobre,
             contenido_validado,  # type: ignore[arg-type]

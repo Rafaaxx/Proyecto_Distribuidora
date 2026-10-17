@@ -17,6 +17,7 @@ from app.core.db import Base  # noqa: E402
 # `Base.metadata` (import por efecto secundario, único lugar donde se hace).
 from app.modules.catalogo import models as catalogo_models  # noqa: E402,F401
 from app.modules.clientes import models as clientes_models  # noqa: E402,F401
+from app.modules.cobranzas import models as cobranzas_models  # noqa: E402,F401
 from app.modules.configuracion import models as configuracion_models  # noqa: E402,F401
 from app.modules.costeo import models as costeo_models  # noqa: E402,F401
 from app.modules.cuentas_corrientes import models as cuentas_corrientes_models  # noqa: E402,F401

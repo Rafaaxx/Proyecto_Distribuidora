@@ -221,6 +221,22 @@ PERMISOS_ESPERADOS_POR_RUTA: dict[tuple[str, str], frozenset[str]] = {
     # se consulta con `ADMIN_USUARIOS` (`identidad/api.py`, junto a `PUT .../roles/{id}/permisos`).
     ("PUT", "/api/v1/identidad/roles/{rol_id}/tope-descuento"): frozenset({"ADMIN_USUARIOS"}),
     ("GET", "/api/v1/identidad/roles"): frozenset({"ADMIN_USUARIOS"}),
+    # Change 17, tarea 8.1 (`01` §19): registrar una cobranza exige `REGISTRAR_COBRANZA`.
+    ("POST", "/api/v1/cobranzas"): frozenset({"REGISTRAR_COBRANZA"}),
+    # Change 17, tarea 11.2 (D14, tabla aprobada por el usuario el 2026-10-16): anular es un
+    # permiso propio; leer cobranzas, cualquiera de los dos; el selector de clientes y el saldo,
+    # `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`; el estado de cuenta sigue solo con
+    # `GESTIONAR_CLIENTES` (el Vendedor recibe 403).
+    ("POST", "/api/v1/cobranzas/{cobranza_id}/anulacion"): frozenset({"ANULAR_COBRANZA"}),
+    ("GET", "/api/v1/cobranzas"): frozenset({"REGISTRAR_COBRANZA", "ANULAR_COBRANZA"}),
+    ("GET", "/api/v1/cobranzas/{cobranza_id}"): frozenset(
+        {"REGISTRAR_COBRANZA", "ANULAR_COBRANZA"}
+    ),
+    ("GET", "/api/v1/clientes/opciones"): frozenset({"GESTIONAR_CLIENTES", "REGISTRAR_COBRANZA"}),
+    ("GET", "/api/v1/clientes/{cliente_id}/saldo"): frozenset(
+        {"GESTIONAR_CLIENTES", "REGISTRAR_COBRANZA"}
+    ),
+    ("GET", "/api/v1/clientes/{cliente_id}/cuenta-corriente"): frozenset({"GESTIONAR_CLIENTES"}),
 }
 
 

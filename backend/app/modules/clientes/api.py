@@ -55,6 +55,7 @@ from app.commands.sobre import construir_sobre_online
 from app.core.autenticacion import (
     ContextoAutenticado,
     EntradaComandoOnline,
+    requiere_algun_permiso,
     requiere_comando_online,
     requiere_permiso,
 )
@@ -68,10 +69,13 @@ from app.modules.clientes.schemas import (
     ClienteCrearRequest,
     ClienteCreditoModificarRequest,
     ClienteModificarRequest,
+    ClienteOpcionResponse,
     ClienteResponse,
+    ClienteSaldoResponse,
     ConsumidorFinalConfigurarRequest,
     ConsumidorFinalResponse,
     PaginaClientes,
+    PaginaOpcionesDeClientes,
 )
 from app.modules.cuentas_corrientes import service as cuentas_corrientes_service
 from app.modules.cuentas_corrientes.service import EstadoDeCuentaResponse, estado_de_cuenta_response
@@ -80,6 +84,7 @@ from app.modules.sync import service as sync_service
 PERMISO = "GESTIONAR_CLIENTES"
 PERMISO_CREDITO = "GESTIONAR_CREDITO"
 PERMISO_CONFIGURACION = "ADMIN_CONFIGURACION"
+PERMISO_REGISTRAR_COBRANZA = "REGISTRAR_COBRANZA"
 
 router = APIRouter(prefix="/clientes", tags=["clientes"])
 
@@ -136,7 +141,9 @@ def crear_cliente(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return clientes_commands.manejar_cliente_crear(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -195,7 +202,9 @@ def modificar_cliente(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return clientes_commands.manejar_cliente_modificar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -241,7 +250,9 @@ def modificar_credito_cliente(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return clientes_commands.manejar_cliente_credito_modificar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -282,7 +293,9 @@ def configurar_consumidor_final(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return clientes_commands.manejar_cliente_consumidor_final_configurar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -324,6 +337,30 @@ def listar_clientes(
     )
     return PaginaClientes(
         items=[ClienteResponse.model_validate(item) for item in items],
+        cursor_siguiente=cursor_siguiente,
+    )
+
+
+@router.get("/opciones", response_model=PaginaOpcionesDeClientes)
+def listar_opciones_de_clientes(
+    contexto: Annotated[
+        ContextoAutenticado,
+        Depends(requiere_algun_permiso(PERMISO, PERMISO_REGISTRAR_COBRANZA)),
+    ],
+    sesion: Annotated[Session, Depends(get_session)],
+    texto: str | None = None,
+    cursor: str | None = None,
+    limite: Annotated[int, Query(ge=1, le=100)] = LIMITE_PAGINA_DEFAULT,
+) -> PaginaOpcionesDeClientes:
+    """Selector liviano de clientes para quien cobra (change 17, `design.md` D14, tabla de
+    permisos aprobada por el usuario el 2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`.
+    Devuelve identificador, nombre, código y estado, sin crédito ni documento; solo clientes
+    `ACTIVO` y `SUSPENDIDO` y no el consumidor final. Se declara antes de `/{cliente_id}`."""
+    items, cursor_siguiente = clientes_service.listar_opciones(
+        contexto.organizacion_id, sesion, limite=limite, cursor=cursor, texto=texto
+    )
+    return PaginaOpcionesDeClientes(
+        items=[ClienteOpcionResponse.model_validate(item) for item in items],
         cursor_siguiente=cursor_siguiente,
     )
 
@@ -370,6 +407,27 @@ def obtener_cliente(
     if cliente is None:
         raise RecursoNoEncontradoError(f"El cliente {cliente_id} no existe en esta organización.")
     return ClienteResponse.model_validate(cliente)
+
+
+@router.get("/{cliente_id}/saldo", response_model=ClienteSaldoResponse)
+def obtener_saldo_de_cliente(
+    cliente_id: UUID,
+    contexto: Annotated[
+        ContextoAutenticado,
+        Depends(requiere_algun_permiso(PERMISO, PERMISO_REGISTRAR_COBRANZA)),
+    ],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> ClienteSaldoResponse:
+    """Saldo actual del cliente, desde `saldo_cuenta` (change 17, D14, aprobada por el usuario el
+    2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`. Sin movimientos es `"0.00"` (CC-04).
+    404 para un cliente de otra organización o inexistente, antes de leer el saldo (INV-21)."""
+    cliente = clientes_service.obtener_cliente_por_id(contexto.organizacion_id, cliente_id, sesion)
+    if cliente is None:
+        raise RecursoNoEncontradoError(f"El cliente {cliente_id} no existe en esta organización.")
+    saldo = cuentas_corrientes_service.obtener_saldo(
+        contexto.organizacion_id, sesion, cuenta_tipo="CLIENTE", entidad_id=cliente_id
+    )
+    return ClienteSaldoResponse(cliente_id=cliente_id, saldo=str(saldo))
 
 
 @router.get("/{cliente_id}/cuenta-corriente", response_model=EstadoDeCuentaResponse)

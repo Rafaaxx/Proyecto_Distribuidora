@@ -12,6 +12,27 @@ from sqlalchemy.orm import Session
 
 from app.core.clock import Clock
 from app.modules.configuracion import repository
+from app.modules.configuracion.domain.medios import (
+    ImporteInvalidoError as ImporteInvalidoError,
+)
+from app.modules.configuracion.domain.medios import (
+    MedioDePago as MedioDePago,
+)
+from app.modules.configuracion.domain.medios import (
+    MediosInvalidosError as MediosInvalidosError,
+)
+from app.modules.configuracion.domain.medios import (
+    MediosNoSumanImporteError as MediosNoSumanImporteError,
+)
+from app.modules.configuracion.domain.medios import (
+    ReferenciaObligatoriaError as ReferenciaObligatoriaError,
+)
+from app.modules.configuracion.domain.medios import (
+    posiciones_sin_referencia as posiciones_sin_referencia,
+)
+from app.modules.configuracion.domain.medios import (
+    validar_medios as validar_medios,
+)
 from app.modules.configuracion.domain.valores import (
     validar_ambito_motivo,
     validar_nombre_medio_pago,

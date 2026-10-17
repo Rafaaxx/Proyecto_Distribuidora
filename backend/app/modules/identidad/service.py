@@ -1596,6 +1596,29 @@ def listar_permisos_del_usuario(
     return frozenset(repository.listar_permisos_de_rol(organizacion_id, usuario.rol_id, sesion))
 
 
+def motivo_de_permiso_faltante(
+    organizacion_id: UUID, usuario_id: UUID, permiso_codigo: str, sesion: Session
+) -> str | None:
+    """Por qué `usuario_id` no tiene `permiso_codigo` hoy, o `None` si lo tiene (change 17,
+    `design.md` D10, D11; SYN-10, ADR-028 D9.3-B y D9.4-A). Es la lectura del paso 4 de `02` §6.3
+    en modo `OFFLINE`, contra los permisos vigentes (sin foto en el servidor):
+
+    - `USUARIO_INACTIVO`: el usuario está inactivo (o no existe en la organización, INV-21);
+    - `ROL_INACTIVO`: el usuario está activo pero su rol tiene `activo = false`;
+    - `PERMISO_QUITADO`: ambos activos y el rol no tiene el permiso.
+
+    Un usuario o rol inactivo se evalúa como "sin permisos": nunca se rechaza. Nunca lanza."""
+    usuario_con_rol = repository.obtener_usuario_con_rol(organizacion_id, usuario_id, sesion)
+    if usuario_con_rol is None:
+        return "USUARIO_INACTIVO"
+    usuario, rol = usuario_con_rol
+    motivo_sesion = _motivo_sesion_deshabilitada(usuario, rol)
+    if motivo_sesion is not None:
+        return motivo_sesion
+    permisos = repository.listar_permisos_de_rol(organizacion_id, usuario.rol_id, sesion)
+    return None if permiso_codigo in permisos else "PERMISO_QUITADO"
+
+
 @dataclass(frozen=True)
 class DatosParaDescuentoManual:
     """Lo que `descuentos` necesita de un usuario para evaluar un descuento manual (change 16,

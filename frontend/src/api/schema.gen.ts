@@ -715,6 +715,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/clientes/opciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Opciones De Clientes
+         * @description Selector liviano de clientes para quien cobra (change 17, `design.md` D14, tabla de
+         *     permisos aprobada por el usuario el 2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`.
+         *     Devuelve identificador, nombre, código y estado, sin crédito ni documento; solo clientes
+         *     `ACTIVO` y `SUSPENDIDO` y no el consumidor final. Se declara antes de `/{cliente_id}`.
+         */
+        get: operations["listar_opciones_de_clientes_api_v1_clientes_opciones_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/clientes/{cliente_id}/saldo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Saldo De Cliente
+         * @description Saldo actual del cliente, desde `saldo_cuenta` (change 17, D14, aprobada por el usuario el
+         *     2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`. Sin movimientos es `"0.00"` (CC-04).
+         *     404 para un cliente de otra organización o inexistente, antes de leer el saldo (INV-21).
+         */
+        get: operations["obtener_saldo_de_cliente_api_v1_clientes__cliente_id__saldo_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/clientes/{cliente_id}/cuenta-corriente": {
         parameters: {
             query?: never;
@@ -735,6 +780,82 @@ export interface paths {
          *     movimientos ajenos.
          */
         get: operations["obtener_cuenta_corriente_de_cliente_api_v1_clientes__cliente_id__cuenta_corriente_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cobranzas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Cobranzas
+         * @description Cobranzas de la organización de la más reciente a la más vieja, por cursor (change 17,
+         *     tarea 10.1; `design.md` D14, aprobada por el usuario el 2026-10-16): `REGISTRAR_COBRANZA` o
+         *     `ANULAR_COBRANZA`, todas las de la organización. `desde` y `hasta` son fechas de negocio
+         *     inclusivas en la zona de la organización (TR-04); un `limite` fuera de 1 a 200 o un `estado`
+         *     desconocido son 422, y un rango invertido o un cursor ilegible también, con su código.
+         */
+        get: operations["listar_cobranzas_api_v1_cobranzas_get"];
+        put?: never;
+        /**
+         * Registrar Cobranza
+         * @description `POST /cobranzas` (change 17, tarea 7.3). El resultado sale de `comando.resultado`, no de
+         *     una relectura: un reenvío idempotente del mismo `Operation-Id` devuelve exactamente lo mismo
+         *     (INV-06). Los importes viajan y vuelven como string (INV-03) y los errores de medio traen su
+         *     posición desde 0 en el Problem Details (`02` §11, COB-02).
+         */
+        post: operations["registrar_cobranza_api_v1_cobranzas_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cobranzas/{cobranza_id}/anulacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anular Cobranza
+         * @description `POST /cobranzas/{id}/anulacion` (change 17, tarea 9.1; COB-05). El resultado sale de
+         *     `comando.resultado`: un reenvío idempotente del mismo `Operation-Id` devuelve lo mismo
+         *     (INV-06). Si la cobranza ya está anulada, es de una venta o el motivo no sirve, lo decide el
+         *     servicio con su código estable y el Problem Details (`02` §11).
+         */
+        post: operations["anular_cobranza_api_v1_cobranzas__cobranza_id__anulacion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cobranzas/{cobranza_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Cobranza
+         * @description Detalle de una cobranza: medios con nombre y referencia, jornada, observación, la anulación
+         *     si existe y las observaciones de sincronización (COB-02, COB-05, SYN-07). 404 si es de otra
+         *     organización o no existe (INV-21, SEG-07).
+         */
+        get: operations["obtener_cobranza_api_v1_cobranzas__cobranza_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2309,6 +2430,23 @@ export interface components {
             lista_precio_id?: string | null;
         };
         /**
+         * ClienteOpcionResponse
+         * @description Una opción del selector de clientes de quien cobra (D14): sin crédito ni documento.
+         */
+        ClienteOpcionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Codigo */
+            codigo: string | null;
+            /** Estado */
+            estado: string;
+        };
+        /**
          * ClienteResponse
          * @description La fila de `cliente` tal como la expone la API.
          *
@@ -2371,6 +2509,261 @@ export interface components {
              * Format: date-time
              */
             actualizado_en: string;
+        };
+        /**
+         * ClienteSaldoResponse
+         * @description Saldo actual del cliente como string (INV-03): positivo es lo que el cliente debe y
+         *     negativo es saldo a favor (CC-04).
+         */
+        ClienteSaldoResponse: {
+            /**
+             * Cliente Id
+             * Format: uuid
+             */
+            cliente_id: string;
+            /** Saldo */
+            saldo: string;
+        };
+        /** CobranzaAnulacionResponse */
+        CobranzaAnulacionResponse: {
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+            /** Motivo Nombre */
+            motivo_nombre: string | null;
+            /** Observacion */
+            observacion: string | null;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /** Usuario Nombre */
+            usuario_nombre: string | null;
+            /**
+             * Anulada En
+             * Format: date-time
+             */
+            anulada_en: string;
+        };
+        /**
+         * CobranzaAnularRequest
+         * @description `POST /cobranzas/{id}/anulacion` (COB-05). `cobranza_id` va en la ruta y la organización
+         *     sale del token (INV-21). La observación es opcional y de hasta 500 caracteres (D7).
+         */
+        CobranzaAnularRequest: {
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+            /** Observacion */
+            observacion?: string | null;
+        };
+        /**
+         * CobranzaAnularResponse
+         * @description Sale de `comando.resultado` (INV-06). `saldo` es el saldo del cliente después de devolver
+         *     el importe (CC-04); los importes viajan como string (INV-03).
+         */
+        CobranzaAnularResponse: {
+            /**
+             * Cobranza Id
+             * Format: uuid
+             */
+            cobranza_id: string;
+            /** Estado */
+            estado: string;
+            /** Importe */
+            importe: string;
+            /** Saldo */
+            saldo: string;
+        };
+        /** CobranzaDetalleResponse */
+        CobranzaDetalleResponse: {
+            /**
+             * Cobranza Id
+             * Format: uuid
+             */
+            cobranza_id: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * Cliente Id
+             * Format: uuid
+             */
+            cliente_id: string;
+            /** Cliente Nombre */
+            cliente_nombre: string | null;
+            /** Importe */
+            importe: string;
+            /** Estado */
+            estado: string;
+            /** Origen */
+            origen: string;
+            /** Venta Id */
+            venta_id: string | null;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /** Usuario Nombre */
+            usuario_nombre: string | null;
+            /** Jornada Id */
+            jornada_id: string | null;
+            /** Observacion */
+            observacion: string | null;
+            /**
+             * Registered At
+             * Format: date-time
+             */
+            registered_at: string;
+            /** Medios */
+            medios: components["schemas"]["CobranzaMedioResponse"][];
+            anulacion: components["schemas"]["CobranzaAnulacionResponse"] | null;
+            /** Observaciones */
+            observaciones: components["schemas"]["CobranzaObservacionResponse"][];
+        };
+        /**
+         * CobranzaMedioRequest
+         * @description Un medio de la cobranza (D2). `importe` como string estricto (INV-03).
+         */
+        CobranzaMedioRequest: {
+            /**
+             * Medio Pago Id
+             * Format: uuid
+             */
+            medio_pago_id: string;
+            /** Importe */
+            importe: string;
+            /** Referencia */
+            referencia?: string | null;
+        };
+        /** CobranzaMedioResponse */
+        CobranzaMedioResponse: {
+            /**
+             * Medio Pago Id
+             * Format: uuid
+             */
+            medio_pago_id: string;
+            /** Medio Nombre */
+            medio_nombre: string | null;
+            /** Importe */
+            importe: string;
+            /** Referencia */
+            referencia: string | null;
+        };
+        /**
+         * CobranzaObservacionResponse
+         * @description Una observación de sincronización de la cobranza (SYN-07). `detalle` es el JSON del
+         *     detalle tal cual se guardó (línea, medio e importe en `MEDIO_INACTIVO` y
+         *     `REFERENCIA_FALTANTE`).
+         */
+        CobranzaObservacionResponse: {
+            /** Codigo */
+            codigo: string;
+            /** Estado */
+            estado: string;
+            /** Detalle */
+            detalle: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * CobranzaRegistrarRequest
+         * @description `POST /cobranzas`. `organizacion_id` nunca aparece (sale del token, INV-21/TR-08).
+         *     `cobranza_id` lo genera quien registra (UUIDv7, `02` §9). `medios` no declara `min_length`:
+         *     una lista vacía la rechaza el dominio con `MEDIOS_INVALIDOS` y su código estable, no un 422
+         *     genérico de Pydantic (D2).
+         *
+         *     Sin `extra="forbid"`: el endpoint arma el `contenido` del comando campo por campo, así que un
+         *     campo extra del cuerpo se ignora y nunca llega al bus. Quien manda de verdad es
+         *     `CobranzaRegistrarContenidoV1`, que sí lo prohíbe.
+         */
+        CobranzaRegistrarRequest: {
+            /**
+             * Cobranza Id
+             * Format: uuid
+             */
+            cobranza_id: string;
+            /**
+             * Cliente Id
+             * Format: uuid
+             */
+            cliente_id: string;
+            /** Importe */
+            importe: string;
+            /** Medios */
+            medios: components["schemas"]["CobranzaMedioRequest"][];
+            /** Observacion */
+            observacion?: string | null;
+        };
+        /**
+         * CobranzaRegistrarResponse
+         * @description Sale de `comando.resultado`, no de una relectura: un reenvío idempotente del mismo
+         *     `Operation-Id` devuelve exactamente lo mismo (INV-06). `saldo` es el saldo resultante del
+         *     cliente (CC-04), que la pantalla muestra como "saldo después de la cobranza"; negativo es
+         *     saldo a favor (COB-03). `jornada_id` es la jornada que recibió la cobranza (D8).
+         */
+        CobranzaRegistrarResponse: {
+            /**
+             * Cobranza Id
+             * Format: uuid
+             */
+            cobranza_id: string;
+            /** Estado */
+            estado: string;
+            /** Importe */
+            importe: string;
+            /** Saldo */
+            saldo: string;
+            /** Jornada Id */
+            jornada_id: string | null;
+        };
+        /**
+         * CobranzaResumenResponse
+         * @description Una fila del listado (D14). Los importes viajan como string (INV-03).
+         */
+        CobranzaResumenResponse: {
+            /**
+             * Cobranza Id
+             * Format: uuid
+             */
+            cobranza_id: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * Cliente Id
+             * Format: uuid
+             */
+            cliente_id: string;
+            /** Cliente Nombre */
+            cliente_nombre: string | null;
+            /** Importe */
+            importe: string;
+            /** Estado */
+            estado: string;
+            /** Origen */
+            origen: string;
+            /** Venta Id */
+            venta_id: string | null;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /** Usuario Nombre */
+            usuario_nombre: string | null;
+            /** Jornada Id */
+            jornada_id: string | null;
         };
         /** ComposicionRolRequest */
         ComposicionRolRequest: {
@@ -3972,6 +4365,13 @@ export interface components {
             /** Cursor Siguiente */
             cursor_siguiente: string | null;
         };
+        /** PaginaCobranzas */
+        PaginaCobranzas: {
+            /** Items */
+            items: components["schemas"]["CobranzaResumenResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
         /** PaginaCompras */
         PaginaCompras: {
             /** Items */
@@ -4024,6 +4424,13 @@ export interface components {
         PaginaMarcas: {
             /** Items */
             items: components["schemas"]["MarcaResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
+        /** PaginaOpcionesDeClientes */
+        PaginaOpcionesDeClientes: {
+            /** Items */
+            items: components["schemas"]["ClienteOpcionResponse"][];
             /** Cursor Siguiente */
             cursor_siguiente: string | null;
         };
@@ -7018,6 +7425,74 @@ export interface operations {
             };
         };
     };
+    listar_opciones_de_clientes_api_v1_clientes_opciones_get: {
+        parameters: {
+            query?: {
+                texto?: string | null;
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaOpcionesDeClientes"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_saldo_de_cliente_api_v1_clientes__cliente_id__saldo_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                cliente_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClienteSaldoResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     obtener_cuenta_corriente_de_cliente_api_v1_clientes__cliente_id__cuenta_corriente_get: {
         parameters: {
             query?: {
@@ -7043,6 +7518,153 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EstadoDeCuentaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_cobranzas_api_v1_cobranzas_get: {
+        parameters: {
+            query?: {
+                cliente_id?: string | null;
+                estado?: ("CONFIRMADA" | "ANULADA") | null;
+                usuario_id?: string | null;
+                jornada_id?: string | null;
+                desde?: string | null;
+                hasta?: string | null;
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaCobranzas"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registrar_cobranza_api_v1_cobranzas_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CobranzaRegistrarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CobranzaRegistrarResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    anular_cobranza_api_v1_cobranzas__cobranza_id__anulacion_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                cobranza_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CobranzaAnularRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CobranzaAnularResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_cobranza_api_v1_cobranzas__cobranza_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                cobranza_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CobranzaDetalleResponse"];
                 };
             };
             /** @description Validation Error */

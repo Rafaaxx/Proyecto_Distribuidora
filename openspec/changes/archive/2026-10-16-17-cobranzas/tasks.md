@@ -1,0 +1,118 @@
+# Tareas — 17-cobranzas
+
+> Modo TDD estricto: en cada tarea de los grupos 1 a 16, la prueba que falla se escribe **antes** que el código (RED → GREEN → TRIANGULATE con al menos dos casos por comportamiento → REFACTOR, con la suite en verde después de cada paso). Antes de tocar un archivo existente se corre su suite como **red de seguridad** y se anota la línea base; una falla previa se informa y no se arregla de paso. El grupo 17 completa la cobertura por escenario e invariante; no la reemplaza. Las tareas están escritas con lo aprobado el 2026-10-15 en `design.md`: **opción A en todas salvo D13 = C** (sin conexión, medio inactivo y referencia faltante se aceptan con `MEDIO_INACTIVO` y `REFERENCIA_FALTANTE`).
+>
+> **Dónde va el código:** módulo nuevo `backend/app/modules/cobranzas/` con la disposición de `CLAUDE.md` §7 (módulo chico: no necesita archivos propios por área, ADR-049 punto 2 no aplica). La validación de medios se mueve a `configuracion/domain/medios.py` (D17). La firma de los handlers vive en `app/commands/registro.py`; el paso 4 del lote, en `sync/service.py` (D9, D10). Frontend: `frontend/src/areas/admin/cobranzas/`.
+>
+> **Lotes de apply (cinco, `design.md` D0):** Lote 1 = grupos 1 y 2 (firma tipada y despacho por lote). Lote 2 = grupos 3 a 8 (migración, modelos, medios compartidos, dominio y registro `ONLINE` de punta a punta). Lote 3 = grupos 9 a 11 (anulación, auditoría, consultas y lecturas de apoyo). Lote 4 = grupos 12 y 13 (camino `OFFLINE`: permisos por comando, `PERMISO_REVOCADO`, jornada del sobre, `JORNADA_LIBERADA`). Lote 5 = grupos 14 a 20 (pantallas, ayuda, concurrencia, cobertura, ADR, propuesta de docs y prueba manual). No se frena entre lotes a esperar revisión; el resumen de cada lote informa las comprobaciones automáticas. El usuario revisa con todo el change implementado. Sí se frena en las confirmaciones de alcance de las piezas críticas y altas.
+>
+> **Gobernanza:** **CRÍTICO** (revisión explícita antes de escribir y solo con el alcance escrito; cualquier ampliación se detiene y se consulta): **todo el grupo 12** (permisos por comando y `PERMISO_REVOCADO`, D10, D11). **ALTO** (se muestra el cambio propuesto y se espera el visto bueno): **grupo 13** (jornada del sobre y lo que no rechaza una cobranza offline, D12, D13), **tareas 10.1 y 11.1 a 11.3** (lecturas, D14) y **10.2** (auditoría, D15). **MEDIO:** grupos 5 a 9 y 14. **BAJO:** grupos 1 a 4, 15 y 16.
+>
+> **Fixtures compartidos:** este change no agrega ni modifica reglas de cálculo de precios, descuentos ni costos (la suma de medios es una igualdad exacta que el frontend solo muestra); no hay tarea de fixtures. Si durante el apply aparece un cálculo compartido entre Python y TypeScript, se detiene y se agrega el fixture antes del código.
+>
+> **Cómo correr las suites:** `pytest` por carpeta (`tests/unit`, `tests/integration`, `tests/concurrency`, `tests/properties`) con `backend/.venv`; las de frontend, con Docker detenido.
+
+## 0. Aprobación (bloqueante)
+
+- [x] 0.1 Decisiones: el usuario aprobó D0 a D20 de `design.md` el 2026-10-15, opción A en todas salvo **D13 = C**; las críticas (D10, D11) y altas (D12 a D15) con aprobación explícita; en D6, los nombres de los motivos. Fecha y opción anotadas en cada decisión. **No incluye los textos de ayuda de D20 (tarea 0.2).**
+- [x] 0.2 Textos de ayuda (aprobados 2026-10-15; clave 5 = **5b**): el usuario revisa los cinco textos de D20 (reescritos con el estilo del 16b) y elige para `cobranzas.observaciones` entre la variante 5a (todo en el panel) y 5b (panel corto y tema "Ver más" nuevo). Se anota en D20 la fecha y lo elegido. Verificable: `design.md` sin ninguna "PENDIENTE". Bloquea solo la tarea 15.1; el apply de los lotes 1 a 4 puede empezar antes.
+
+## 1. Firma tipada de los handlers (Lote 1, deudas de los changes 05, 14 y 15)
+
+- [x] 1.1 Red de seguridad: suite completa de backend (`tests/unit`, `tests/integration`, `tests/concurrency`, `tests/properties`), `mypy app` y `lint-imports` en verde; anotar la línea base. RED en `backend/tests/unit/test_registro_firma_handler.py` (spec `sistema/pipeline-de-comandos`, requisito "Un comando se ejecuta igual por REST y por el lote"; D9): `HandlerFuncion` es un `Protocol` con `(sobre, contenido, *, sesion, reloj)`; registrar una función de dos argumentos falla al verificar tipos (prueba con `mypy` sobre un archivo de ejemplo) y en el registro. GREEN en `app/commands/registro.py` con el tipo de la sesión protegida (`SesionDeHandler`), sin importar módulos de negocio (contrato `commands-no-modulos`).
+- [x] 1.2 Mecánico, con la red de seguridad de 1.1: los 54 handlers de `catalogo`, `clientes`, `cuentas_corrientes`, `descuentos`, `identidad`, `importacion`, `precios`, `proveedores` y `stock` (incluido `jornadas_commands.py`) anotan `sesion: SesionDeHandler` y se registran sin `# type: ignore[arg-type]`. Verificable: `mypy app` limpio sin esas excepciones (`grep` no encuentra ninguna en los registros) y la suite igual que la línea base.
+
+## 2. Despacho por lote (Lote 1)
+
+- [x] 2.1 RED en `backend/tests/integration/test_bus_lote_despacho.py` (mismo requisito; cita ADR-048 punto 5, ADR-049 punto 19): `STOCK_TRANSFERIR` y `JORNADA_RENDIR` enviados por el lote en modo `ONLINE` producen el mismo resultado que por REST; un handler que intenta `commit`, `rollback` o `close` por el lote levanta `HandlerNoPuedeConfirmarError`, que es un error de programación: aborta toda la petición del lote (error interno) y NO se convierte en `RECHAZADO` (decisión del usuario, 2026-10-16). GREEN: `_procesar_item_de_lote` pasa la sesión protegida y el reloj al handler.
+- [x] 2.2 RED en el mismo archivo: recorre el registro y despacha por el lote un comando de cada tipo con un contenido inválido; ninguno responde un error interno. GREEN si hace falta. Verificable: suite completa igual que la línea base más las nuevas.
+
+## 3. Migración (Lote 2)
+
+- [x] 3.1 RED: `backend/tests/integration/test_cobranzas_migracion.py` exige (D16, D13): tablas `cobranza`, `cobranza_medio` y `cobranza_anulacion` con `UNIQUE (organizacion_id, id)`; FK compuestas a `cliente`, `jornada`, `usuario`, `dispositivo`, `medio_pago` y `motivo` (una referencia a otra organización se rechaza; cita INV-02); `CHECK` de `estado`, de `origen` coherente con `venta_id` (nulable, sin FK) e importes `> 0` en `numeric(14,2)` (cita INV-03); `cobranza_anulacion.cobranza_id` único; índices de listado y de jornada; siembra idempotente de los motivos de D6 en organizaciones sin motivos de `ANULACION_COBRANZA`; `ck_observacion__codigo` admite `MEDIO_INACTIVO` y `REFERENCIA_FALTANTE` (cita SYN-07) y rechaza un código fuera del catálogo. GREEN: una revisión de Alembic sobre `b5c6d7e8f9a0`.
+- [x] 3.2 RED (privilegios; cita INV-05, TR-06): `app_runtime` tiene `SELECT, INSERT` en las tres tablas, `UPDATE` solo de `cobranza.estado` y ningún `DELETE`; una segunda anulación directa se rechaza. GREEN en la misma revisión.
+- [x] 3.3 RED: ciclo `upgrade → downgrade → upgrade` sobre una base con datos (clientes con saldo inicial, una cobranza y una anulada): sube y baja limpio, no duplica motivos y deja como aserción explícita qué pierde el `downgrade` (cobranzas y motivos) y que aborta si hay observaciones `MEDIO_INACTIVO` o `REFERENCIA_FALTANTE`. Verificable: `04` §2.1 punto 4.
+- [x] 3.4 RED: `test_inv03_sin_punto_flotante.py` (cita INV-03), `test_inv02_aislamiento_esquema.py` (cita INV-02) y `test_modelos_coinciden_con_migracion.py` incluyen las tres tablas. GREEN en 4.1.
+
+## 4. Modelos, siembra y límites del módulo (Lote 2)
+
+- [x] 4.1 RED: las pruebas de 3.4 y la de siembra (motivos de D6 en una organización nueva). GREEN: `cobranzas/models.py` igual a la migración (`alembic revision --autogenerate` sin diferencias), con carga explícita; motivos en `app/seed.py`; `CODIGOS_OBSERVACION` de `sync/models.py` suma los dos códigos de D13 (igual a la migración). Verificable: `mypy app` limpio.
+- [x] 4.2 Red de seguridad: `lint-imports`. RED en `backend/tests/unit/test_import_linter_cobranzas.py` (D17): `cobranzas/domain` no importa infraestructura ni el bus; `cobranzas` alcanza a `cuentas_corrientes`, `clientes`, `configuracion`, `stock` e `identidad` solo por su `service.py`; nadie alcanza a `cobranzas` salvo `sync` (y `ventas` en el futuro) y solo por su `service.py`. GREEN: contratos en `backend/pyproject.toml`.
+
+## 5. Validación de medios compartida (Lote 2)
+
+- [x] 5.1 Red de seguridad: suites de pagos y compras de contado (`test_proveedores_domain_pagos.py`, `test_compras_contado.py`, integración de pagos) en verde; anotar la línea base. RED en `backend/tests/unit/test_configuracion_domain_medios.py`: los mismos casos que hoy cubre `validar_medios` (suma exacta, rango de 1 a 20, importe positivo de 2 decimales, referencia obligatoria, mismo medio repetido) sobre `configuracion/domain/medios.py`; propiedad Hypothesis (cita INV-08). GREEN moviendo la función; `proveedores` la usa por `configuracion/service.py`. Verificable: línea base de pagos y compras intacta, mismos códigos.
+- [x] 5.2 RED en el mismo archivo (D13-C): con `exigir_referencia=False` la validación no lanza `REFERENCIA_OBLIGATORIA` y sigue lanzando `MEDIOS_NO_SUMAN_IMPORTE`, `MEDIOS_INVALIDOS` e `IMPORTE_INVALIDO`; la función pura de líneas sin referencia devuelve las posiciones correctas (ninguna, una, varias; referencia de solo espacios cuenta como faltante). Por defecto (`exigir_referencia=True`) el comportamiento es el de 5.1. GREEN en `configuracion/domain/medios.py`. Verificable: suites de pagos y compras sin cambios.
+
+## 6. Dominio de cobranzas (Lote 2, funciones puras)
+
+- [x] 6.1 RED en `backend/tests/unit/test_cobranzas_domain.py` (spec `cobranzas/registro-de-cobranzas`; cita COB-01, COB-02, TR-01, INV-03, INV-08): `validar_cobranza` (importe, medios por la función compartida, observación recortada y de hasta 500, consumidor final → `CONSUMIDOR_FINAL_SIN_CUENTA` en `ONLINE`, D2, D4) y su versión `OFFLINE` (D13-C: solo malformado e INV-08 rechazan; consumidor final → observación `CLIENTE_NO_HABILITADO`; cada línea con medio inactivo → `MEDIO_INACTIVO` y cada línea sin la referencia exigida → `REFERENCIA_FALTANTE`, con detalle de línea, medio e importe; una línea con las dos da dos observaciones; cita SYN-05, SYN-07, INV-17). GREEN en `cobranzas/domain/` con errores `DomainError` de código estable (`COBRANZA_DUPLICADA`, `JORNADA_AJENA`, `COBRANZA_YA_ANULADA`, `COBRANZA_DE_VENTA`).
+- [x] 6.2 RED: reglas puras de anulación (D7): solo `CONFIRMADA`; origen `VENTA` rechazado; observación de hasta 500. GREEN.
+
+## 7. Registro con conexión de punta a punta (Lote 2)
+
+- [x] 7.1 RED en `backend/tests/integration/test_cobranzas_registrar.py` con los escenarios de los requisitos "Una cobranza se registra por comando con uno o más medios", "La suma de los medios es igual al importe de la cobranza", "La cobranza registra su propio crédito…", "Una cobranza puede dejar saldo a favor…" y "Se cobra a un cliente de cualquier estado…" (citan COB-01 a COB-03, CC-05, CC-08, INV-01, INV-06, INV-08, INV-21). GREEN: `cobranzas/repository.py`, `cobranzas/service.py::registrar_cobranza` (bloquea `saldo_cuenta` por `cuentas_corrientes/service.py`, D18) y el handler `COBRANZA_REGISTRAR` v1 en `cobranzas/commands.py`, declarado por ahora `admite_offline=False` (pasa a `True` en 12.3), registrado con un import en `app/main.py`.
+- [x] 7.2 RED en el mismo archivo con el requisito "Una cobranza con conexión lleva la jornada abierta de quien la registra" (D8): jornada `ABIERTA` del usuario y dispositivo, sin jornada, `EN_RENDICION`, `JORNADA_AJENA`. GREEN: lectura por `stock/service.py`.
+- [x] 7.3 RED en `backend/tests/integration/test_cobranzas_api.py`: `POST /api/v1/cobranzas` (201, `Operation-Id` obligatorio, Problem Details por código, `organizacion_id` solo del token, importes como string en la respuesta, saldo resultante). GREEN: rutas, esquemas y tipos de OpenAPI regenerados (`npm run generate:api-types`). Verificable: `ruff`, `mypy` y `lint-imports` limpios.
+
+## 8. Ratchets (Lote 2)
+
+- [x] 8.1 RED: la ruta nueva entra en `test_ratchet_permiso_por_ruta.py`, en la prueba de aislamiento que recorre los endpoints (cita INV-21) y en la de catálogo y registro de tipos. GREEN si hace falta.
+
+## 9. Anulación (Lote 3)
+
+- [x] 9.1 RED en `backend/tests/integration/test_cobranzas_anular.py` con los escenarios de `cobranzas/anulacion-de-cobranzas` (citan COB-05, CC-02, CC-06, INV-05, INV-06, INV-21, TR-06): anular con motivo y observación, saldo devuelto, 403, `MOTIVO_INVALIDO`, `COBRANZA_YA_ANULADA`, `COBRANZA_DE_VENTA` (fila sembrada por SQL), jornada cerrada, cliente inactivo, `OFFLINE` rechazado. GREEN: `anular_cobranza` (cobranza `FOR UPDATE`, revalida, luego `saldo_cuenta`, D18) y el handler `COBRANZA_ANULAR` v1 (`admite_offline=False`); `POST /api/v1/cobranzas/{id}/anulacion`.
+
+## 10. Auditoría y consultas (Lote 3)
+
+- [x] 10.1 **Gobernanza alta (D14): se muestra qué permiso abre cada lectura antes de escribir. Tabla de permisos aprobada por el usuario el 2026-10-16 (opción A): `GET /cobranzas` y `GET /cobranzas/{id}` con `REGISTRAR_COBRANZA` o `ANULAR_COBRANZA`, todas las de la organización.** RED en `backend/tests/integration/test_cobranzas_consultas_api.py` (requisito "Las cobranzas se consultan por organización"): listado con filtros, cursor, límite fuera de rango (422), `CURSOR_INVALIDO`, 403 sin permiso, detalle con medios, anulación y observaciones, 404 ajeno. GREEN en `cobranzas/queries.py` y `api.py`, sin sumar en Python.
+- [x] 10.2 **Gobernanza alta (D15). Aprobada por el usuario el 2026-10-16: `COBRANZA_ANULAR` devuelve `DatosDeAuditoria(motivo_id)`.** Red de seguridad: ratchet de comandos con motivo en la auditoría. RED: `COBRANZA_ANULAR` aceptado deja una fila con el motivo; un rechazo no (cita AUD-01, AUD-02); el ratchet pasa de cuatro a cinco comandos. GREEN: el handler devuelve `DatosDeAuditoria(motivo_id)`.
+
+## 11. Lecturas de apoyo (Lote 3, gobernanza alta)
+
+- [x] 11.1 **Gobernanza alta (D14). Tabla de permisos aprobada por el usuario el 2026-10-16 (opción A): `GET /clientes/opciones` y `GET /clientes/{id}/saldo` con `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`; el estado de cuenta sigue solo con `GESTIONAR_CLIENTES`.** Red de seguridad: suites de `clientes/api.py` y ratchet de permisos. RED en `backend/tests/integration/test_clientes_opciones_y_saldo_api.py` (requisito "Quien cobra elige el cliente y ve su saldo sin administrar clientes"): `GET /api/v1/clientes/opciones` y `GET /api/v1/clientes/{id}/saldo` con `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`; sin crédito ni documento; 403; 404 ajeno; el estado de cuenta sigue 403 para el Vendedor. GREEN en `clientes/api.py` y `queries.py` (saldo por `cuentas_corrientes/service.py`).
+- [x] 11.2 RED: el ratchet de rutas y la prueba de aislamiento incluyen las dos lecturas. GREEN.
+- [x] 11.3 RED: `GET /configuracion/motivos?ambito=ANULACION_COBRANZA` devuelve solo los activos de la organización (spec `organizacion/catalogos-configurables`). GREEN si hace falta.
+
+## 12. Permisos por comando en el lote (Lote 4, CRÍTICO)
+
+- [x] 12.1 **CRÍTICO: el alcance de este grupo se confirma con el usuario antes de escribir. Alcance confirmado por el usuario el 2026-10-16: (1) todo tipo `admite_offline=True` declara `permiso_offline` y el arranque falla si alguno no; los tipos solo `ONLINE` no se tocan; (2) en `OFFLINE` el bus compara con los permisos actuales (sin foto, D11-A) y un permiso faltante acepta con `PERMISO_REVOCADO` (permiso y motivo `PERMISO_QUITADO` | `USUARIO_INACTIVO` | `ROL_INACTIVO`); el handler recibe el modo y no vuelve a exigirlo; (3) usuario o rol inactivo = sin permisos, aceptado, nunca rechazado; (4) `ONLINE` (REST o lote) sin cambios; (5) solo entonces `COBRANZA_REGISTRAR` pasa a `OFFLINE` (12.3).** Red de seguridad: `test_bus_lote_sincronizacion.py` (incluida `TestUsuarioInactivoNoSeRechazaPorRuta`), pruebas de sesión de ADR-028 y de renovación con jornada. RED en `backend/tests/unit/test_catalogo_tipos_permiso_offline.py` (D10): todo tipo con `admite_offline=True` declara `permiso_offline`; el arranque falla si alguno no. GREEN en `app/commands/catalogo.py`.
+- [x] 12.2 RED en `backend/tests/integration/test_bus_permiso_revocado.py` con los escenarios modificados de "Un permiso faltante rechaza el comando en modo ONLINE" y de "La baja de un usuario no cierra el canal de su cola pendiente" (citan SYN-10, SYN-05, INV-17, ADR-028 D9.3-B y D9.4-A): permiso quitado → `PERMISO_REVOCADO` con detalle; usuario inactivo y rol inactivo (renovación con la excepción de ADR-049 punto 18, de punta a punta); con permiso, sin observación; `ONLINE` por el lote sin permiso → rechazado y el lote sigue. GREEN: paso 4 en `sync/service.py` para `OFFLINE` (D11: contra los permisos actuales, el inactivo sin permisos); el handler recibe el modo y en `OFFLINE` no vuelve a exigir el permiso.
+- [x] 12.3 GREEN: `COBRANZA_REGISTRAR` pasa a `admite_offline=True` con `permiso_offline="REGISTRAR_COBRANZA"`. RED antes: la prueba de modo de `pipeline-de-comandos` exige que se acepte por el lote y no por REST. Verificable: suite del bus igual que la línea base más las nuevas.
+
+## 13. Jornada del sobre y SYN-05 en la cobranza offline (Lote 4, gobernanza alta)
+
+- [x] 13.1 **Gobernanza alta (D12).** RED en `backend/tests/integration/test_lote_jornada_offline.py` (requisito "Un comando sin conexión pertenece a una jornada del usuario y del dispositivo"; citan RUT-09, SYN-06, SYN-07): `JORNADA_REQUERIDA`, `JORNADA_AJENA`, `ABIERTA`, `LIBERADA` con `JORNADA_LIBERADA` y su detalle, `EN_RENDICION` y `CERRADA` sin observación, doble envío con la misma observación (cita INV-06). GREEN en `sync/service.py` (antes de reservar, por `stock/service.py`) y en el handler (lectura `FOR SHARE`, nivel 5).
+- [x] 13.2 **Gobernanza alta (D13 = C).** RED en `backend/tests/integration/test_cobranzas_offline.py` (requisito "Una cobranza sin conexión nunca se rechaza por reglas de negocio"; citan SYN-05, SYN-07, INV-17, INV-08): medio desactivado después de abrir la jornada → aceptado con `MEDIO_INACTIVO` (detalle con línea, medio e importe; saldo baja); medio inactivo en una de varias líneas → una sola observación con esa línea; referencia faltante o de solo espacios → aceptado con `REFERENCIA_FALTANTE` y referencia nula; las dos en la misma línea; junto con `PERMISO_REVOCADO` y doble envío con las mismas observaciones (cita INV-06); medios activos con referencia → `ACEPTADO` sin observaciones; consumidor final con `CLIENTE_NO_HABILITADO`; cliente inactivo sin observación; medios que no suman → rechazado; cliente o medio inexistente → rechazado sin observación. Además, **con conexión no cambia** (cita TR-09): el mismo medio inactivo por REST y por el lote en `ONLINE` → `MEDIO_PAGO_INACTIVO`, y sin referencia → `REFERENCIA_OBLIGATORIA`, sin observaciones. GREEN: en `OFFLINE`, la resolución de medios de `cobranzas/service.py` informa si cada medio está activo en vez de lanzar, y el handler devuelve las observaciones.
+
+## 14. Pantallas (Lote 5)
+
+- [x] 14.1 Red de seguridad: suites de `areas/admin` y de cuenta corriente. RED en `frontend/tests/unit/areas/admin/cobranzas/` (spec `cobranzas/administracion-de-cobranzas`): menú según permiso, listado con filtros y cursor, detalle con medios, jornada, anulación y observaciones (incluidas "Medio de pago inactivo" y "Falta la referencia" junto a su línea, D13). GREEN en `frontend/src/areas/admin/cobranzas/` y `features/cobranzas/` (TanStack Query; importes con `decimal.js` y `lib/money.ts`).
+- [x] 14.2 RED: alta con selector, saldo actual y resultante, suma de medios en vivo, referencia obligatoria, confirmación de saldo a favor, errores por campo, reintento con el mismo `Operation-Id` e identificador (citan COB-02, COB-03, INV-03, INV-06). GREEN (React Hook Form + Zod).
+- [x] 14.3 RED: diálogo de anulación con motivo obligatorio y observación. GREEN.
+- [x] 14.4 RED (spec `cuentas-corrientes/administracion-de-cuentas-corrientes`): "Registrar cobranza" con el cliente precargado, enlaces de `COBRANZA` y `ANULACION_COBRANZA` según permiso, no para el consumidor final. GREEN. Verificable: `npm run typecheck`, `npm run lint` y `npm run test` en verde.
+
+## 15. Ayuda contextual (Lote 5)
+
+- [x] 15.1 **Ayuda: claves nuevas `cobranzas.medios`, `cobranzas.saldoAFavor`, `cobranzas.jornada`, `cobranzas.anulacion` y `cobranzas.observaciones`; ninguna revisada; tema "Ver más" `cobranzas-observaciones` (variante 5b, elegida en 0.2)** (D20, ADR-051). Requiere 0.2 hecha. RED: `tests/unit/ayuda/trazabilidad.test.ts` y pruebas de pantalla exigen los "(?)" del requisito "Las pantallas de cobranzas explican sus reglas" con los textos aprobados en 0.2 (`cobranzas.observaciones` nombra las cinco marcas: medio inactivo, falta la referencia, permiso revocado, jornada liberada y cliente no habilitado). GREEN en `frontend/src/ayuda/textos.ts` y las pantallas de 14.
+
+## 16. Concurrencia y propiedades (Lote 5)
+
+- [x] 16.1 RED en `backend/tests/concurrency/test_cobranzas_concurrencia.py` (commits reales de sesiones independientes; D18): dos cobranzas al mismo cliente (saldo exacto; cita INV-13); dos anulaciones de la misma cobranza (una sola; cita INV-13, INV-01); cobranza frente a saldo inicial (cita CC-08); cobranza offline frente a liberación de su jornada en los dos órdenes (cita RUT-09); doble envío simultáneo del mismo comando (cita INV-06). GREEN si hace falta. Una falla intermitente se investiga, no se ignora.
+- [x] 16.2 RED en `backend/tests/properties/test_cobranzas_propiedades.py` (Hypothesis contra PostgreSQL): INV-08 con SQL sobre cobranzas aceptadas en los dos modos; INV-13 sobre secuencias de saldos iniciales, cobranzas y anulaciones; anular deja el saldo como antes de la cobranza. GREEN si hace falta.
+
+## 17. Cobertura por escenario e invariante (Lote 5)
+
+- [x] 17.1 Cada escenario de las ocho specs delta tiene al menos una prueba que lo nombra; INV-01, INV-02, INV-03, INV-05, INV-06, INV-08, INV-13, INV-17 e INV-21 tienen prueba que los cita por ID (`04` §2.1 puntos 2 y 3). Suites completas, `ruff`, `mypy`, `lint-imports`, `typecheck`, `lint` y `build` en verde, sin `skip` ni `xfail` sin justificación.
+
+## 18. ADR (Lote 5)
+
+- [x] 18.1 Redactar `docs/adr/ADR-052-cobranzas-y-comandos-offline-en-el-lote.md` (estado *Propuesto*) con las decisiones aprobadas en 0.1 (incluida D13 = C y los dos códigos de SYN-07) y los textos de 0.2, y las precisiones del apply, y las enmiendas a ADR-012, ADR-028, ADR-034, ADR-046 y ADR-049. **Recordatorio (aprobado 2026-10-16):** registrar los 3 `ignore_imports` de `cobranzas.domain` hacia `configuracion.domain.medios` (D17).
+
+## 19. Propuesta de docs (Lote 5)
+
+- [x] 19.1 Completar `openspec/changes/17-cobranzas/propuesta-docs.md` con el texto actual y el propuesto de cada sección afectada de `docs/01` a `docs/04`, según lo aprobado. **Recordatorio (aprobado 2026-10-16):** incluir en `docs/03` §12 la columna `orden` de `cobranza_medio` (D16). **No se aplica a `docs/`** sin el visto bueno del usuario.
+
+## 20. Prueba manual (Lote 5)
+
+- [x] 20.1 El orquestador le da al usuario, en el chat, el paso a paso de la prueba manual en el navegador (alta con dos medios, saldo a favor con confirmación, anulación con motivo, cuenta corriente con enlaces, vendedor con jornada abierta desde su teléfono, sin permiso de anulación) y la del camino `OFFLINE` por API (`PERMISO_REVOCADO`, `JORNADA_LIBERADA`, `MEDIO_INACTIVO` desactivando un medio después de abrir la jornada, `REFERENCIA_FALTANTE`), con el detalle de la cobranza mostrando cada marca junto a su línea. No se crea un archivo de verificación. Verificable: `04` §2.1 punto 5.

@@ -38,7 +38,7 @@ from app.commands.auditoria import (
 )
 from app.commands.catalogo import declarar_tipo
 from app.commands.observaciones import ObservacionProducida
-from app.commands.registro import registrar_handler
+from app.commands.registro import SesionDeHandler, registrar_handler
 from app.commands.sobre import SobreComando
 from app.core.clock import Clock
 from app.core.errors import PermisoRequeridoError
@@ -73,25 +73,25 @@ PERMISO_PERMITIR_STOCK_NEGATIVO = "PERMITIR_STOCK_NEGATIVO"
 PERMISO_LIBERAR_UBICACION = "LIBERAR_UBICACION"
 
 
-def _exigir_permiso(sobre: SobreComando, sesion: object, codigo_permiso: str) -> None:
+def _exigir_permiso(sobre: SobreComando, sesion: SesionDeHandler, codigo_permiso: str) -> None:
     """Falla con 403 `PERMISO_REQUERIDO` si el usuario del sobre no tiene el
     permiso (INV-01, SEG-06). Va PRIMERO: un rechazo no puede dejar nada
     escrito."""
     permitidos = identidad_service.listar_permisos_del_usuario(
         sobre.organizacion_id,
         sobre.usuario_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
     )
     if codigo_permiso not in permitidos:
         raise PermisoRequeridoError(f"Falta el permiso {codigo_permiso}.")
 
 
-def _permisos_del_usuario(sobre: SobreComando, sesion: object) -> frozenset[str]:
+def _permisos_del_usuario(sobre: SobreComando, sesion: SesionDeHandler) -> frozenset[str]:
     return frozenset(
         identidad_service.listar_permisos_del_usuario(
             sobre.organizacion_id,
             sobre.usuario_id,
-            sesion,  # type: ignore[arg-type]
+            sesion,
         )
     )
 
@@ -149,13 +149,13 @@ def manejar_ubicacion_crear(
     sobre: SobreComando,
     contenido: UbicacionCrearContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     _exigir_permiso(sobre, sesion, PERMISO_UBICACIONES)
     ubicacion = stock_service.crear_ubicacion(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         nombre=contenido.nombre,
         tipo=contenido.tipo,
@@ -169,13 +169,13 @@ def manejar_ubicacion_modificar(
     sobre: SobreComando,
     contenido: UbicacionModificarContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     _exigir_permiso(sobre, sesion, PERMISO_UBICACIONES)
     ubicacion = stock_service.modificar_ubicacion(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         ubicacion_id=contenido.ubicacion_id,
         nombre=contenido.nombre,
@@ -191,7 +191,7 @@ def manejar_stock_inicial_registrar(
     sobre: SobreComando,
     contenido: StockInicialRegistrarContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandlerConAuditoria:
     permisos = _permisos_del_usuario(sobre, sesion)
@@ -199,7 +199,7 @@ def manejar_stock_inicial_registrar(
         raise PermisoRequeridoError(f"Falta el permiso {PERMISO_STOCK_INICIAL}.")
     resultados = stock_service.registrar_stock_inicial(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         ubicacion_id=contenido.ubicacion_id,
         lineas=[
@@ -236,18 +236,16 @@ def manejar_stock_inicial_registrar(
     )
 
 
-registrar_handler("UBICACION_CREAR", 1, UbicacionCrearContenidoV1)(
-    manejar_ubicacion_crear  # type: ignore[arg-type]
-)
+registrar_handler("UBICACION_CREAR", 1, UbicacionCrearContenidoV1)(manejar_ubicacion_crear)
 declarar_tipo("UBICACION_CREAR", admite_online=True, admite_offline=False)
 
 registrar_handler("UBICACION_MODIFICAR", 1, UbicacionModificarContenidoV1)(
-    manejar_ubicacion_modificar  # type: ignore[arg-type]
+    manejar_ubicacion_modificar
 )
 declarar_tipo("UBICACION_MODIFICAR", admite_online=True, admite_offline=False)
 
 registrar_handler("STOCK_INICIAL_REGISTRAR", 1, StockInicialRegistrarContenidoV1)(
-    manejar_stock_inicial_registrar  # type: ignore[arg-type]
+    manejar_stock_inicial_registrar
 )
 declarar_tipo("STOCK_INICIAL_REGISTRAR", admite_online=True, admite_offline=False)
 
@@ -282,7 +280,7 @@ def manejar_stock_transferir(
     sobre: SobreComando,
     contenido: StockTransferirContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandlerConAuditoria:
     """Transfiere stock entre dos ubicaciones (permiso `TRANSFERIR_STOCK`). Con
@@ -295,7 +293,7 @@ def manejar_stock_transferir(
         raise PermisoRequeridoError(f"Falta el permiso {PERMISO_TRANSFERIR}.")
     resultado = stock_service.transferir(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         ubicacion_origen_id=contenido.ubicacion_origen_id,
         ubicacion_destino_id=contenido.ubicacion_destino_id,
@@ -350,9 +348,7 @@ def manejar_stock_transferir(
     )
 
 
-registrar_handler("STOCK_TRANSFERIR", 1, StockTransferirContenidoV1)(
-    manejar_stock_transferir  # type: ignore[arg-type]
-)
+registrar_handler("STOCK_TRANSFERIR", 1, StockTransferirContenidoV1)(manejar_stock_transferir)
 declarar_tipo("STOCK_TRANSFERIR", admite_online=True, admite_offline=False)
 
 
@@ -385,7 +381,7 @@ def manejar_stock_ajustar(
     sobre: SobreComando,
     contenido: StockAjustarContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandlerConAuditoria:
     """Ajusta el stock de una ubicación con un motivo (permiso `AJUSTAR_STOCK`). Un ajuste
@@ -400,7 +396,7 @@ def manejar_stock_ajustar(
         raise PermisoRequeridoError(f"Falta el permiso {PERMISO_AJUSTAR}.")
     resultado = stock_service.ajustar(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         ubicacion_id=contenido.ubicacion_id,
         motivo_id=contenido.motivo_id,
@@ -442,9 +438,7 @@ def manejar_stock_ajustar(
     )
 
 
-registrar_handler("STOCK_AJUSTAR", 1, StockAjustarContenidoV1)(
-    manejar_stock_ajustar  # type: ignore[arg-type]
-)
+registrar_handler("STOCK_AJUSTAR", 1, StockAjustarContenidoV1)(manejar_stock_ajustar)
 declarar_tipo("STOCK_AJUSTAR", admite_online=True, admite_offline=False)
 
 
@@ -465,7 +459,7 @@ def manejar_stock_transferencia_anular(
     sobre: SobreComando,
     contenido: StockTransferenciaAnularContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandlerConAuditoria:
     """Anula una transferencia confirmada. `TRANSFERIR_STOCK` es siempre necesario (D5.4) y
@@ -480,7 +474,7 @@ def manejar_stock_transferencia_anular(
         raise PermisoRequeridoError(f"Falta el permiso {PERMISO_TRANSFERIR}.")
     resultado = stock_service.anular_transferencia(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         transferencia_id=contenido.transferencia_id,
         motivo_id=contenido.motivo_id,
@@ -542,7 +536,7 @@ def manejar_stock_transferencia_anular(
 
 
 registrar_handler("STOCK_TRANSFERENCIA_ANULAR", 1, StockTransferenciaAnularContenidoV1)(
-    manejar_stock_transferencia_anular  # type: ignore[arg-type]
+    manejar_stock_transferencia_anular
 )
 declarar_tipo("STOCK_TRANSFERENCIA_ANULAR", admite_online=True, admite_offline=False)
 
@@ -563,7 +557,7 @@ def manejar_stock_ajuste_anular(
     sobre: SobreComando,
     contenido: StockAjusteAnularContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandlerConAuditoria:
     """Anula un ajuste confirmado, propio o de otro usuario (permiso `AJUSTAR_STOCK`). Con
@@ -576,7 +570,7 @@ def manejar_stock_ajuste_anular(
         raise PermisoRequeridoError(f"Falta el permiso {PERMISO_AJUSTAR}.")
     resultado = stock_service.anular_ajuste(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         ajuste_id=contenido.ajuste_id,
         motivo_id=contenido.motivo_id,
@@ -637,6 +631,6 @@ def manejar_stock_ajuste_anular(
 
 
 registrar_handler("STOCK_AJUSTE_ANULAR", 1, StockAjusteAnularContenidoV1)(
-    manejar_stock_ajuste_anular  # type: ignore[arg-type]
+    manejar_stock_ajuste_anular
 )
 declarar_tipo("STOCK_AJUSTE_ANULAR", admite_online=True, admite_offline=False)

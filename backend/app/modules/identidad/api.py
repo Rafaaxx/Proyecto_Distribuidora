@@ -124,7 +124,9 @@ def revocar_dispositivo(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return identidad_commands.manejar_dispositivo_revocar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -217,7 +219,9 @@ def crear_usuario(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return identidad_commands.manejar_usuario_crear(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -290,7 +294,9 @@ def cambiar_composicion_rol(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return identidad_commands.manejar_rol_permisos_cambiar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -394,7 +400,9 @@ def definir_tope_descuento_de_rol(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return identidad_commands.manejar_rol_tope_descuento_definir(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -458,7 +466,9 @@ def rotar_pin_autorizacion(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return identidad_commands.manejar_pin_autorizacion_rotar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -504,7 +514,9 @@ def desbloquear_usuario(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return identidad_commands.manejar_usuario_desbloquear(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -657,7 +669,9 @@ def cambiar_condicion_iva(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return identidad_commands.manejar_organizacion_condicion_iva_cambiar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]

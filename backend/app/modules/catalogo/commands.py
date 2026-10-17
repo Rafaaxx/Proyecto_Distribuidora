@@ -43,7 +43,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from app.commands.catalogo import declarar_tipo
-from app.commands.registro import registrar_handler
+from app.commands.registro import SesionDeHandler, registrar_handler
 from app.commands.sobre import SobreComando
 from app.core.clock import Clock
 from app.modules.catalogo import service as catalogo_service
@@ -62,11 +62,15 @@ class CategoriaCrearContenidoV1(BaseModel):
 
 
 def manejar_categoria_crear(
-    sobre: SobreComando, contenido: CategoriaCrearContenidoV1, *, sesion: object, reloj: Clock
+    sobre: SobreComando,
+    contenido: CategoriaCrearContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
 ) -> ResultadoHandler:
     categoria = catalogo_service.crear_categoria(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         nombre=contenido.nombre,
         actor_id=sobre.usuario_id,
@@ -74,9 +78,7 @@ def manejar_categoria_crear(
     return "ACEPTADO", {"categoria_id": str(categoria.id)}, None
 
 
-registrar_handler("CATEGORIA_CREAR", 1, CategoriaCrearContenidoV1)(
-    manejar_categoria_crear  # type: ignore[arg-type]
-)
+registrar_handler("CATEGORIA_CREAR", 1, CategoriaCrearContenidoV1)(manejar_categoria_crear)
 declarar_tipo("CATEGORIA_CREAR", admite_online=True, admite_offline=False)
 
 
@@ -90,12 +92,12 @@ def manejar_categoria_modificar(
     sobre: SobreComando,
     contenido: CategoriaModificarContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     categoria = catalogo_service.modificar_categoria(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         categoria_id=contenido.categoria_id,
         nombre=contenido.nombre,
@@ -106,7 +108,7 @@ def manejar_categoria_modificar(
 
 
 registrar_handler("CATEGORIA_MODIFICAR", 1, CategoriaModificarContenidoV1)(
-    manejar_categoria_modificar  # type: ignore[arg-type]
+    manejar_categoria_modificar
 )
 declarar_tipo("CATEGORIA_MODIFICAR", admite_online=True, admite_offline=False)
 
@@ -119,11 +121,11 @@ class MarcaCrearContenidoV1(BaseModel):
 
 
 def manejar_marca_crear(
-    sobre: SobreComando, contenido: MarcaCrearContenidoV1, *, sesion: object, reloj: Clock
+    sobre: SobreComando, contenido: MarcaCrearContenidoV1, *, sesion: SesionDeHandler, reloj: Clock
 ) -> ResultadoHandler:
     marca = catalogo_service.crear_marca(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         nombre=contenido.nombre,
         actor_id=sobre.usuario_id,
@@ -131,9 +133,7 @@ def manejar_marca_crear(
     return "ACEPTADO", {"marca_id": str(marca.id)}, None
 
 
-registrar_handler("MARCA_CREAR", 1, MarcaCrearContenidoV1)(
-    manejar_marca_crear  # type: ignore[arg-type]
-)
+registrar_handler("MARCA_CREAR", 1, MarcaCrearContenidoV1)(manejar_marca_crear)
 declarar_tipo("MARCA_CREAR", admite_online=True, admite_offline=False)
 
 
@@ -144,11 +144,15 @@ class MarcaModificarContenidoV1(BaseModel):
 
 
 def manejar_marca_modificar(
-    sobre: SobreComando, contenido: MarcaModificarContenidoV1, *, sesion: object, reloj: Clock
+    sobre: SobreComando,
+    contenido: MarcaModificarContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
 ) -> ResultadoHandler:
     marca = catalogo_service.modificar_marca(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         marca_id=contenido.marca_id,
         nombre=contenido.nombre,
@@ -158,9 +162,7 @@ def manejar_marca_modificar(
     return "ACEPTADO", {"marca_id": str(marca.id)}, None
 
 
-registrar_handler("MARCA_MODIFICAR", 1, MarcaModificarContenidoV1)(
-    manejar_marca_modificar  # type: ignore[arg-type]
-)
+registrar_handler("MARCA_MODIFICAR", 1, MarcaModificarContenidoV1)(manejar_marca_modificar)
 declarar_tipo("MARCA_MODIFICAR", admite_online=True, admite_offline=False)
 
 
@@ -199,11 +201,15 @@ class ProductoCrearContenidoV2(BaseModel):
 
 
 def manejar_producto_crear(
-    sobre: SobreComando, contenido: ProductoCrearContenidoV2, *, sesion: object, reloj: Clock
+    sobre: SobreComando,
+    contenido: ProductoCrearContenidoV2,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
 ) -> ResultadoHandler:
     producto, presentaciones = catalogo_service.crear_producto(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         codigo=contenido.codigo,
         nombre=contenido.nombre,
@@ -234,9 +240,7 @@ def manejar_producto_crear(
     )
 
 
-registrar_handler("PRODUCTO_CREAR", 2, ProductoCrearContenidoV2)(
-    manejar_producto_crear  # type: ignore[arg-type]
-)
+registrar_handler("PRODUCTO_CREAR", 2, ProductoCrearContenidoV2)(manejar_producto_crear)
 declarar_tipo("PRODUCTO_CREAR", admite_online=True, admite_offline=False)
 
 
@@ -255,11 +259,15 @@ class ProductoModificarContenidoV2(BaseModel):
 
 
 def manejar_producto_modificar(
-    sobre: SobreComando, contenido: ProductoModificarContenidoV2, *, sesion: object, reloj: Clock
+    sobre: SobreComando,
+    contenido: ProductoModificarContenidoV2,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
 ) -> ResultadoHandler:
     producto = catalogo_service.modificar_producto(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         producto_id=contenido.producto_id,
         codigo=contenido.codigo,
@@ -275,9 +283,7 @@ def manejar_producto_modificar(
     return "ACEPTADO", {"producto_id": str(producto.id)}, None
 
 
-registrar_handler("PRODUCTO_MODIFICAR", 2, ProductoModificarContenidoV2)(
-    manejar_producto_modificar  # type: ignore[arg-type]
-)
+registrar_handler("PRODUCTO_MODIFICAR", 2, ProductoModificarContenidoV2)(manejar_producto_modificar)
 declarar_tipo("PRODUCTO_MODIFICAR", admite_online=True, admite_offline=False)
 
 
@@ -293,11 +299,15 @@ class PresentacionAgregarContenidoV1(BaseModel):
 
 
 def manejar_presentacion_agregar(
-    sobre: SobreComando, contenido: PresentacionAgregarContenidoV1, *, sesion: object, reloj: Clock
+    sobre: SobreComando,
+    contenido: PresentacionAgregarContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
 ) -> ResultadoHandler:
     presentacion = catalogo_service.agregar_presentacion(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         producto_id=contenido.producto_id,
         nombre=contenido.nombre,
@@ -310,7 +320,7 @@ def manejar_presentacion_agregar(
 
 
 registrar_handler("PRESENTACION_AGREGAR", 1, PresentacionAgregarContenidoV1)(
-    manejar_presentacion_agregar  # type: ignore[arg-type]
+    manejar_presentacion_agregar
 )
 declarar_tipo("PRESENTACION_AGREGAR", admite_online=True, admite_offline=False)
 
@@ -328,12 +338,12 @@ def manejar_presentacion_modificar(
     sobre: SobreComando,
     contenido: PresentacionModificarContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     presentacion = catalogo_service.modificar_presentacion(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         presentacion_id=contenido.presentacion_id,
         nombre=contenido.nombre,
@@ -347,7 +357,7 @@ def manejar_presentacion_modificar(
 
 
 registrar_handler("PRESENTACION_MODIFICAR", 1, PresentacionModificarContenidoV1)(
-    manejar_presentacion_modificar  # type: ignore[arg-type]
+    manejar_presentacion_modificar
 )
 declarar_tipo("PRESENTACION_MODIFICAR", admite_online=True, admite_offline=False)
 
@@ -364,12 +374,12 @@ def manejar_presentacion_referencia_cambiar(
     sobre: SobreComando,
     contenido: PresentacionReferenciaCambiarContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     presentacion = catalogo_service.cambiar_referencia(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         producto_id=contenido.producto_id,
         presentacion_id=contenido.presentacion_id,
@@ -379,6 +389,6 @@ def manejar_presentacion_referencia_cambiar(
 
 
 registrar_handler("PRESENTACION_REFERENCIA_CAMBIAR", 1, PresentacionReferenciaCambiarContenidoV1)(
-    manejar_presentacion_referencia_cambiar  # type: ignore[arg-type]
+    manejar_presentacion_referencia_cambiar
 )
 declarar_tipo("PRESENTACION_REFERENCIA_CAMBIAR", admite_online=True, admite_offline=False)

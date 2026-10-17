@@ -43,7 +43,9 @@ def _registro_aislado(monkeypatch: pytest.MonkeyPatch) -> dict[tuple[str, int], 
     return registro_vacio
 
 
-def _handler_de_prueba(sobre: object, contenido: BaseModel) -> str:
+def _handler_de_prueba(
+    sobre: object, contenido: BaseModel, *, sesion: object, reloj: object
+) -> str:
     return "ejecutado"
 
 

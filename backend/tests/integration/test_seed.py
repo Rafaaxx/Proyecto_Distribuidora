@@ -283,6 +283,39 @@ def test_sembrar_dos_veces_no_duplica_los_motivos_de_liberacion_de_jornada(
     assert cantidad == 3
 
 
+def test_una_organizacion_nueva_tiene_los_tres_motivos_de_anulacion_de_cobranza(
+    db_session: Session,
+) -> None:
+    """Change 17, tarea 4.1 (COB-05, TR-09, `design.md` D6, aprobada el 2026-10-15): los mismos
+    nombres que siembra la migración `d7e8f9a0b1c2`; sin ellos no se podría anular ninguna
+    cobranza (`COBRANZA_ANULAR` exige un motivo del ámbito)."""
+    organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+    assert organizacion is not None
+
+    motivos = configuracion_service.listar_motivos_por_ambito(
+        organizacion.id, db_session, "ANULACION_COBRANZA"
+    )
+
+    assert sorted(motivo.nombre for motivo in motivos) == [
+        "Error de carga",
+        "Otro",
+        "Pago rechazado o no acreditado",
+    ]
+    assert all(motivo.ambito == "ANULACION_COBRANZA" and motivo.activo for motivo in motivos)
+
+
+def test_sembrar_dos_veces_no_duplica_los_motivos_de_anulacion_de_cobranza(
+    db_session: Session,
+) -> None:
+    sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+    assert sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA) is None
+
+    cantidad = db_session.execute(
+        text("SELECT count(*) FROM motivo WHERE ambito = 'ANULACION_COBRANZA'")
+    ).scalar_one()
+    assert cantidad == 3
+
+
 def test_solo_administrador_y_administracion_reciben_anular_transferencia(
     db_session: Session,
 ) -> None:

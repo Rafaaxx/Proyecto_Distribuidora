@@ -247,3 +247,20 @@ def listar_observaciones_pendientes(
         Observacion.estado == "PENDIENTE",
     )
     return list(sesion.scalars(consulta).all())
+
+
+def listar_observaciones_de_operacion(
+    sesion: Session, organizacion_id: UUID, operacion_tipo: str, operacion_id: UUID
+) -> list[Observacion]:
+    """Todas las observaciones (pendientes o resueltas) de una operación de negocio, en el orden
+    en que se registraron (SYN-07)."""
+    consulta = (
+        select(Observacion)
+        .where(
+            Observacion.organizacion_id == organizacion_id,
+            Observacion.operacion_tipo == operacion_tipo,
+            Observacion.operacion_id == operacion_id,
+        )
+        .order_by(Observacion.id)
+    )
+    return list(sesion.scalars(consulta).all())

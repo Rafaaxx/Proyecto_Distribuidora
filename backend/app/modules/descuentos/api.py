@@ -128,7 +128,9 @@ def crear_regla(
         reloj,
     )
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return descuentos_commands.manejar_regla_descuento_crear(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -177,7 +179,9 @@ def modificar_regla(
         entrada, "REGLA_DESCUENTO_MODIFICAR", contenido, reloj
     )
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return descuentos_commands.manejar_regla_descuento_modificar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -206,7 +210,9 @@ def activar_regla(
         entrada, "REGLA_DESCUENTO_ACTIVAR", {"regla_id": str(regla_id)}, reloj
     )
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return descuentos_commands.manejar_regla_descuento_activar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -235,7 +241,9 @@ def pausar_regla(
         entrada, "REGLA_DESCUENTO_PAUSAR", {"regla_id": str(regla_id)}, reloj
     )
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return descuentos_commands.manejar_regla_descuento_pausar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]

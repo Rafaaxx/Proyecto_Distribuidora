@@ -167,7 +167,9 @@ def crear_ubicacion(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return stock_commands.manejar_ubicacion_crear(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -214,7 +216,9 @@ def modificar_ubicacion(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return stock_commands.manejar_ubicacion_modificar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -273,7 +277,7 @@ def registrar_stock_inicial(
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
     def _ejecutar_handler(
-        sesion_protegida: object,
+        sesion_protegida: registro.SesionDeHandler,
     ) -> sync_service.ResultadoHandlerConAuditoria:
         return stock_commands.manejar_stock_inicial_registrar(
             sobre,
@@ -326,7 +330,7 @@ def registrar_transferencia(
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
     def _ejecutar_handler(
-        sesion_protegida: object,
+        sesion_protegida: registro.SesionDeHandler,
     ) -> sync_service.ResultadoHandlerConAuditoria:
         return stock_commands.manejar_stock_transferir(
             sobre,
@@ -447,7 +451,9 @@ def abrir_jornada(
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return jornadas_commands.manejar_jornada_abrir(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -504,7 +510,9 @@ def rendir_jornada(
         "JORNADA_RENDIR", {"jornada_id": str(jornada_id)}, entrada, reloj
     )
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return jornadas_commands.manejar_jornada_rendir(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -533,7 +541,9 @@ def cerrar_jornada(
         "JORNADA_CERRAR", {"jornada_id": str(jornada_id)}, entrada, reloj
     )
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandler:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
         return jornadas_commands.manejar_jornada_cerrar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -571,7 +581,9 @@ def liberar_jornada(
         "JORNADA_LIBERAR", contenido, entrada, reloj
     )
 
-    def _ejecutar_handler(sesion_protegida: object) -> sync_service.ResultadoHandlerConAuditoria:
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandlerConAuditoria:
         return jornadas_commands.manejar_jornada_liberar(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
@@ -628,7 +640,7 @@ def registrar_ajuste(
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
     def _ejecutar_handler(
-        sesion_protegida: object,
+        sesion_protegida: registro.SesionDeHandler,
     ) -> sync_service.ResultadoHandlerConAuditoria:
         return stock_commands.manejar_stock_ajustar(
             sobre,
@@ -691,7 +703,7 @@ def anular_transferencia(
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
     def _ejecutar_handler(
-        sesion_protegida: object,
+        sesion_protegida: registro.SesionDeHandler,
     ) -> sync_service.ResultadoHandlerConAuditoria:
         return stock_commands.manejar_stock_transferencia_anular(
             sobre,
@@ -749,7 +761,7 @@ def anular_ajuste(
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
 
     def _ejecutar_handler(
-        sesion_protegida: object,
+        sesion_protegida: registro.SesionDeHandler,
     ) -> sync_service.ResultadoHandlerConAuditoria:
         return stock_commands.manejar_stock_ajuste_anular(
             sobre,

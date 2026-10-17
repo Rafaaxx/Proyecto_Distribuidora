@@ -453,3 +453,26 @@ def test_inv02_las_reglas_de_descuento_y_sus_alcances_estan_cubiertos(
         "fk_regla_descuento_alcance__categoria": "categoria",
         "fk_regla_descuento_alcance__marca": "marca",
     }
+
+
+def test_inv02_las_tablas_de_cobranzas_estan_cubiertas(database_url: str) -> None:
+    """Change 17, tarea 3.4: el recorrido dinámico incluye `cobranza`, `cobranza_medio` y
+    `cobranza_anulacion`, las tres con `organizacion_id` obligatorio y `UNIQUE (organizacion_id,
+    id)`, sin FK simple entre entidades de negocio; cliente, jornada, medio de pago y motivo se
+    referencian con claves compuestas."""
+    aplicar_migraciones(database_url)
+    engine = crear_engine(database_url)
+
+    for tabla in ("cobranza", "cobranza_medio", "cobranza_anulacion"):
+        assert tabla in _tablas_de_negocio(engine), tabla
+        assert _tabla_declara_organizacion_id_obligatoria(engine, tabla) is None, tabla
+        assert _fk_simple_entre_negocio(engine, tabla) == [], tabla
+    for tabla, nombre, destino, columna in (
+        ("cobranza", "fk_cobranza__cliente", "cliente", "cliente_id"),
+        ("cobranza", "fk_cobranza__jornada", "jornada", "jornada_id"),
+        ("cobranza_medio", "fk_cobranza_medio__medio_pago", "medio_pago", "medio_pago_id"),
+        ("cobranza_anulacion", "fk_cobranza_anulacion__motivo", "motivo", "motivo_id"),
+    ):
+        tabla_destino, columnas = _fks_agrupadas(engine, tabla)[nombre]
+        assert tabla_destino == destino, nombre
+        assert sorted(set(columnas)) == sorted([columna, "organizacion_id"]), nombre

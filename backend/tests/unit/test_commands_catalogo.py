@@ -32,7 +32,9 @@ class _Esquema(BaseModel):
     nombre: str
 
 
-def _handler_de_prueba(sobre: object, contenido: BaseModel) -> str:
+def _handler_de_prueba(
+    sobre: object, contenido: BaseModel, *, sesion: object, reloj: object
+) -> str:
     return "ejecutado"
 
 
@@ -47,7 +49,12 @@ def _estado_aislado(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_un_tipo_declarado_sin_handler_falla_la_verificacion() -> None:
     """Un tipo declarado en el catálogo que nadie implementó (ningún
     handler registrado para ninguna versión) se detecta en el arranque."""
-    catalogo.declarar_tipo("VENTA_CONFIRMAR", admite_online=True, admite_offline=True)
+    catalogo.declarar_tipo(
+        "VENTA_CONFIRMAR",
+        admite_online=True,
+        admite_offline=True,
+        permiso_offline="REGISTRAR_COBRANZA",
+    )
 
     with pytest.raises(CatalogoDesincronizadoError):
         verificar_catalogo_y_registro()

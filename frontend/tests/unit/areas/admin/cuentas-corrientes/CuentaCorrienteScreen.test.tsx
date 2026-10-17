@@ -420,3 +420,90 @@ describe('CuentaCorrienteScreen: pagos y enlaces a la operación del proveedor (
     expect(within(tabla).queryAllByRole('link')).toHaveLength(0)
   })
 })
+
+describe('CuentaCorrienteScreen: cobranzas del cliente (change 17, tarea 14.4)', () => {
+  const COBRANZA_MOV = movimiento('k1', {
+    tipo: 'COBRANZA',
+    sentido: 'REDUCE',
+    importe: '20000.00',
+    saldo_acumulado: '130000.00',
+    occurred_at: '2026-04-10T15:00:00Z',
+  })
+  const ANULACION_COBRANZA_MOV = movimiento('k2', {
+    tipo: 'ANULACION_COBRANZA',
+    sentido: 'AUMENTA',
+    importe: '20000.00',
+    saldo_acumulado: '150000.00',
+    occurred_at: '2026-04-11T15:00:00Z',
+  })
+
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+    apiFetchMock.mockResolvedValue(respuesta(200, estado([SALDO_INICIAL_150, COBRANZA_MOV, ANULACION_COBRANZA_MOV])))
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // Escenario: "Registrar desde la cuenta"
+  it('con REGISTRAR_COBRANZA ofrece "Registrar cobranza" con el cliente precargado', async () => {
+    renderCuenta('CLIENTE', queryClientConYo('GES'))
+
+    const enlace = await screen.findByRole('link', { name: /registrar cobranza/i })
+
+    expect(enlace).toHaveAttribute('href', `/admin/cobranzas/nuevo?cliente=${ENTIDAD_ID}`)
+  })
+
+  it('sin REGISTRAR_COBRANZA no la ofrece', async () => {
+    renderCuenta('CLIENTE', queryClientConYo('GES', { permisos: ['GESTIONAR_CLIENTES', 'ANULAR_COBRANZA'] }))
+
+    await screen.findByRole('table')
+
+    expect(screen.queryByRole('link', { name: /registrar cobranza/i })).not.toBeInTheDocument()
+  })
+
+  it('la cuenta de un proveedor nunca la ofrece', async () => {
+    renderCuenta('PROVEEDOR', queryClientConYo('ADM'))
+
+    await screen.findByRole('table')
+
+    expect(screen.queryByRole('link', { name: /registrar cobranza/i })).not.toBeInTheDocument()
+  })
+
+  it('no la ofrece si la cuenta no se pudo leer (el consumidor final no tiene cuenta)', async () => {
+    apiFetchMock.mockResolvedValue(
+      respuesta(422, { title: 'El consumidor final no tiene cuenta corriente', codigo: 'CONSUMIDOR_FINAL_SIN_CUENTA' }),
+    )
+    renderCuenta('CLIENTE', queryClientConYo('GES'))
+
+    await screen.findByRole('alert')
+
+    expect(screen.queryByRole('link', { name: /registrar cobranza/i })).not.toBeInTheDocument()
+  })
+
+  // Escenario: "Enlace al detalle"
+  it('los movimientos COBRANZA y ANULACION_COBRANZA enlazan a su cobranza con permiso de lectura', async () => {
+    renderCuenta('CLIENTE', queryClientConYo('GES'))
+
+    expect(await screen.findByRole('link', { name: 'Cobranza' })).toHaveAttribute('href', '/admin/cobranzas/k1')
+    expect(screen.getByRole('link', { name: 'Anulación de cobranza' })).toHaveAttribute('href', '/admin/cobranzas/k2')
+    expect(screen.queryByRole('link', { name: 'Saldo inicial' })).not.toBeInTheDocument()
+  })
+
+  it('con solo ANULAR_COBRANZA también enlaza', async () => {
+    renderCuenta('CLIENTE', queryClientConYo('GES', { permisos: ['GESTIONAR_CLIENTES', 'ANULAR_COBRANZA'] }))
+
+    expect(await screen.findByRole('link', { name: 'Cobranza' })).toHaveAttribute('href', '/admin/cobranzas/k1')
+  })
+
+  // Escenario: "Sin permiso de cobranzas"
+  it('sin permisos de cobranza ve los tipos sin enlace', async () => {
+    renderCuenta('CLIENTE', queryClientConYo('GES', { permisos: ['GESTIONAR_CLIENTES'] }))
+
+    const tabla = await screen.findByRole('table')
+
+    expect(within(tabla).getByText('Cobranza')).toBeInTheDocument()
+    expect(within(tabla).queryAllByRole('link')).toHaveLength(0)
+  })
+})

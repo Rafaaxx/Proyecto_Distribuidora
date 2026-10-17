@@ -94,6 +94,15 @@ MOTIVOS_LIBERACION_JORNADA_INICIALES = (
 `a4b5c6d7e8f9` siembra los mismos nombres en las organizaciones existentes. Sin alguno de
 estos motivos la organización no podría liberar una jornada (`JORNADA_LIBERAR` exige uno)."""
 
+MOTIVOS_ANULACION_COBRANZA_INICIALES = (
+    "Error de carga",
+    "Pago rechazado o no acreditado",
+    "Otro",
+)
+"""Change 17 (COB-05, `design.md` D6, aprobados el 2026-10-15). La migración `d7e8f9a0b1c2`
+siembra los mismos nombres en las organizaciones existentes. Sin alguno de estos motivos la
+organización no podría anular una cobranza (`COBRANZA_ANULAR` exige uno)."""
+
 
 class BaseSinMigrarError(RuntimeError):
     """La siembra corrió contra una base sin las migraciones de este change
@@ -210,6 +219,11 @@ def sembrar(sesion: Session, reloj: Clock, *, password_administrador: str) -> Or
     for nombre in MOTIVOS_LIBERACION_JORNADA_INICIALES:
         configuracion_service.crear_motivo(
             organizacion.id, sesion, reloj, ambito="LIBERACION_JORNADA", nombre=nombre
+        )
+
+    for nombre in MOTIVOS_ANULACION_COBRANZA_INICIALES:
+        configuracion_service.crear_motivo(
+            organizacion.id, sesion, reloj, ambito="ANULACION_COBRANZA", nombre=nombre
         )
 
     roles = identidad_service.crear_plantillas_de_rol_iniciales(organizacion.id, sesion, reloj)

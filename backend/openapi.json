@@ -2918,6 +2918,160 @@
         }
       }
     },
+    "/api/v1/clientes/opciones": {
+      "get": {
+        "tags": [
+          "clientes"
+        ],
+        "summary": "Listar Opciones De Clientes",
+        "description": "Selector liviano de clientes para quien cobra (change 17, `design.md` D14, tabla de\npermisos aprobada por el usuario el 2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`.\nDevuelve identificador, nombre, código y estado, sin crédito ni documento; solo clientes\n`ACTIVO` y `SUSPENDIDO` y no el consumidor final. Se declara antes de `/{cliente_id}`.",
+        "operationId": "listar_opciones_de_clientes_api_v1_clientes_opciones_get",
+        "parameters": [
+          {
+            "name": "texto",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Texto"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaOpcionesDeClientes"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/clientes/{cliente_id}/saldo": {
+      "get": {
+        "tags": [
+          "clientes"
+        ],
+        "summary": "Obtener Saldo De Cliente",
+        "description": "Saldo actual del cliente, desde `saldo_cuenta` (change 17, D14, aprobada por el usuario el\n2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`. Sin movimientos es `\"0.00\"` (CC-04).\n404 para un cliente de otra organización o inexistente, antes de leer el saldo (INV-21).",
+        "operationId": "obtener_saldo_de_cliente_api_v1_clientes__cliente_id__saldo_get",
+        "parameters": [
+          {
+            "name": "cliente_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Cliente Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteSaldoResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/clientes/{cliente_id}/cuenta-corriente": {
       "get": {
         "tags": [
@@ -3023,6 +3177,409 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EstadoDeCuentaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cobranzas": {
+      "post": {
+        "tags": [
+          "cobranzas"
+        ],
+        "summary": "Registrar Cobranza",
+        "description": "`POST /cobranzas` (change 17, tarea 7.3). El resultado sale de `comando.resultado`, no de\nuna relectura: un reenvío idempotente del mismo `Operation-Id` devuelve exactamente lo mismo\n(INV-06). Los importes viajan y vuelven como string (INV-03) y los errores de medio traen su\nposición desde 0 en el Problem Details (`02` §11, COB-02).",
+        "operationId": "registrar_cobranza_api_v1_cobranzas_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CobranzaRegistrarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CobranzaRegistrarResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "cobranzas"
+        ],
+        "summary": "Listar Cobranzas",
+        "description": "Cobranzas de la organización de la más reciente a la más vieja, por cursor (change 17,\ntarea 10.1; `design.md` D14, aprobada por el usuario el 2026-10-16): `REGISTRAR_COBRANZA` o\n`ANULAR_COBRANZA`, todas las de la organización. `desde` y `hasta` son fechas de negocio\ninclusivas en la zona de la organización (TR-04); un `limite` fuera de 1 a 200 o un `estado`\ndesconocido son 422, y un rango invertido o un cursor ilegible también, con su código.",
+        "operationId": "listar_cobranzas_api_v1_cobranzas_get",
+        "parameters": [
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cliente Id"
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "CONFIRMADA",
+                    "ANULADA"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Estado"
+            }
+          },
+          {
+            "name": "usuario_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Usuario Id"
+            }
+          },
+          {
+            "name": "jornada_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Jornada Id"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Desde"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hasta"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaCobranzas"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cobranzas/{cobranza_id}/anulacion": {
+      "post": {
+        "tags": [
+          "cobranzas"
+        ],
+        "summary": "Anular Cobranza",
+        "description": "`POST /cobranzas/{id}/anulacion` (change 17, tarea 9.1; COB-05). El resultado sale de\n`comando.resultado`: un reenvío idempotente del mismo `Operation-Id` devuelve lo mismo\n(INV-06). Si la cobranza ya está anulada, es de una venta o el motivo no sirve, lo decide el\nservicio con su código estable y el Problem Details (`02` §11).",
+        "operationId": "anular_cobranza_api_v1_cobranzas__cobranza_id__anulacion_post",
+        "parameters": [
+          {
+            "name": "cobranza_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Cobranza Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CobranzaAnularRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CobranzaAnularResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cobranzas/{cobranza_id}": {
+      "get": {
+        "tags": [
+          "cobranzas"
+        ],
+        "summary": "Obtener Cobranza",
+        "description": "Detalle de una cobranza: medios con nombre y referencia, jornada, observación, la anulación\nsi existe y las observaciones de sincronización (COB-02, COB-05, SYN-07). 404 si es de otra\norganización o no existe (INV-21, SEG-07).",
+        "operationId": "obtener_cobranza_api_v1_cobranzas__cobranza_id__get",
+        "parameters": [
+          {
+            "name": "cobranza_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Cobranza Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CobranzaDetalleResponse"
                 }
               }
             }
@@ -9615,6 +10172,43 @@
         "title": "ClienteModificarRequest",
         "description": "Cuerpo de `PUT /clientes/{cliente_id}` (D9). `PUT` reemplaza el estado\ncompleto de la ficha, igual que `ProveedorModificarRequest`: un opcional\nausente o `null` se guarda como `null` (salvo `lista_precio_id`). `estado` es obligatorio porque\nmodificar la ficha y cambiar el estado son la misma escritura (D7). Sin\ncampos de crédito (D3) ni de consumidor final (CLI-03). `lista_precio_id` es la\nexcepción (change 13, D11, ajuste A): ausente conserva la lista asignada, `null`\nexplícito la quita y un id la asigna; se distingue con `model_fields_set`."
       },
+      "ClienteOpcionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "codigo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Codigo"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "codigo",
+          "estado"
+        ],
+        "title": "ClienteOpcionResponse",
+        "description": "Una opción del selector de clientes de quien cobra (D14): sin crédito ni documento."
+      },
       "ClienteResponse": {
         "properties": {
           "id": {
@@ -9811,6 +10405,582 @@
         ],
         "title": "ClienteResponse",
         "description": "La fila de `cliente` tal como la expone la API.\n\nNo expone `disponible`, `exceso` ni `política aplicada`: los calcula el\nmódulo que confirma la venta resolviendo la herencia de la organización\nen el momento de evaluar (CRE-03, CRE-06, D8). Este change guarda el\ncrédito como datos y no como resultado.\n\nTampoco expone `actualizado_por_id`: no hay ninguna pantalla que lo\nconsulte hoy, y agregarlo \"porque el modelo lo tiene\" sería superficie\nsin consumidor (D9, mismo criterio que `ProveedorResponse`)."
+      },
+      "ClienteSaldoResponse": {
+        "properties": {
+          "cliente_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Cliente Id"
+          },
+          "saldo": {
+            "type": "string",
+            "title": "Saldo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cliente_id",
+          "saldo"
+        ],
+        "title": "ClienteSaldoResponse",
+        "description": "Saldo actual del cliente como string (INV-03): positivo es lo que el cliente debe y\nnegativo es saldo a favor (CC-04)."
+      },
+      "CobranzaAnulacionResponse": {
+        "properties": {
+          "motivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Motivo Id"
+          },
+          "motivo_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Nombre"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "usuario_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usuario Nombre"
+          },
+          "anulada_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Anulada En"
+          }
+        },
+        "type": "object",
+        "required": [
+          "motivo_id",
+          "motivo_nombre",
+          "observacion",
+          "usuario_id",
+          "usuario_nombre",
+          "anulada_en"
+        ],
+        "title": "CobranzaAnulacionResponse"
+      },
+      "CobranzaAnularRequest": {
+        "properties": {
+          "motivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Motivo Id"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "motivo_id"
+        ],
+        "title": "CobranzaAnularRequest",
+        "description": "`POST /cobranzas/{id}/anulacion` (COB-05). `cobranza_id` va en la ruta y la organización\nsale del token (INV-21). La observación es opcional y de hasta 500 caracteres (D7)."
+      },
+      "CobranzaAnularResponse": {
+        "properties": {
+          "cobranza_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Cobranza Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "importe": {
+            "type": "string",
+            "title": "Importe"
+          },
+          "saldo": {
+            "type": "string",
+            "title": "Saldo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cobranza_id",
+          "estado",
+          "importe",
+          "saldo"
+        ],
+        "title": "CobranzaAnularResponse",
+        "description": "Sale de `comando.resultado` (INV-06). `saldo` es el saldo del cliente después de devolver\nel importe (CC-04); los importes viajan como string (INV-03)."
+      },
+      "CobranzaDetalleResponse": {
+        "properties": {
+          "cobranza_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Cobranza Id"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "cliente_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Cliente Id"
+          },
+          "cliente_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cliente Nombre"
+          },
+          "importe": {
+            "type": "string",
+            "title": "Importe"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "origen": {
+            "type": "string",
+            "title": "Origen"
+          },
+          "venta_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venta Id"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "usuario_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usuario Nombre"
+          },
+          "jornada_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jornada Id"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Registered At"
+          },
+          "medios": {
+            "items": {
+              "$ref": "#/components/schemas/CobranzaMedioResponse"
+            },
+            "type": "array",
+            "title": "Medios"
+          },
+          "anulacion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CobranzaAnulacionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "observaciones": {
+            "items": {
+              "$ref": "#/components/schemas/CobranzaObservacionResponse"
+            },
+            "type": "array",
+            "title": "Observaciones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cobranza_id",
+          "occurred_at",
+          "cliente_id",
+          "cliente_nombre",
+          "importe",
+          "estado",
+          "origen",
+          "venta_id",
+          "usuario_id",
+          "usuario_nombre",
+          "jornada_id",
+          "observacion",
+          "registered_at",
+          "medios",
+          "anulacion",
+          "observaciones"
+        ],
+        "title": "CobranzaDetalleResponse"
+      },
+      "CobranzaMedioRequest": {
+        "properties": {
+          "medio_pago_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Medio Pago Id"
+          },
+          "importe": {
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Importe"
+          },
+          "referencia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referencia"
+          }
+        },
+        "type": "object",
+        "required": [
+          "medio_pago_id",
+          "importe"
+        ],
+        "title": "CobranzaMedioRequest",
+        "description": "Un medio de la cobranza (D2). `importe` como string estricto (INV-03)."
+      },
+      "CobranzaMedioResponse": {
+        "properties": {
+          "medio_pago_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Medio Pago Id"
+          },
+          "medio_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Medio Nombre"
+          },
+          "importe": {
+            "type": "string",
+            "title": "Importe"
+          },
+          "referencia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referencia"
+          }
+        },
+        "type": "object",
+        "required": [
+          "medio_pago_id",
+          "medio_nombre",
+          "importe",
+          "referencia"
+        ],
+        "title": "CobranzaMedioResponse"
+      },
+      "CobranzaObservacionResponse": {
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "title": "Codigo"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "detalle": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detalle"
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo",
+          "estado",
+          "detalle"
+        ],
+        "title": "CobranzaObservacionResponse",
+        "description": "Una observación de sincronización de la cobranza (SYN-07). `detalle` es el JSON del\ndetalle tal cual se guardó (línea, medio e importe en `MEDIO_INACTIVO` y\n`REFERENCIA_FALTANTE`)."
+      },
+      "CobranzaRegistrarRequest": {
+        "properties": {
+          "cobranza_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Cobranza Id"
+          },
+          "cliente_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Cliente Id"
+          },
+          "importe": {
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Importe"
+          },
+          "medios": {
+            "items": {
+              "$ref": "#/components/schemas/CobranzaMedioRequest"
+            },
+            "type": "array",
+            "title": "Medios"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cobranza_id",
+          "cliente_id",
+          "importe",
+          "medios"
+        ],
+        "title": "CobranzaRegistrarRequest",
+        "description": "`POST /cobranzas`. `organizacion_id` nunca aparece (sale del token, INV-21/TR-08).\n`cobranza_id` lo genera quien registra (UUIDv7, `02` §9). `medios` no declara `min_length`:\nuna lista vacía la rechaza el dominio con `MEDIOS_INVALIDOS` y su código estable, no un 422\ngenérico de Pydantic (D2).\n\nSin `extra=\"forbid\"`: el endpoint arma el `contenido` del comando campo por campo, así que un\ncampo extra del cuerpo se ignora y nunca llega al bus. Quien manda de verdad es\n`CobranzaRegistrarContenidoV1`, que sí lo prohíbe."
+      },
+      "CobranzaRegistrarResponse": {
+        "properties": {
+          "cobranza_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Cobranza Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "importe": {
+            "type": "string",
+            "title": "Importe"
+          },
+          "saldo": {
+            "type": "string",
+            "title": "Saldo"
+          },
+          "jornada_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jornada Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cobranza_id",
+          "estado",
+          "importe",
+          "saldo",
+          "jornada_id"
+        ],
+        "title": "CobranzaRegistrarResponse",
+        "description": "Sale de `comando.resultado`, no de una relectura: un reenvío idempotente del mismo\n`Operation-Id` devuelve exactamente lo mismo (INV-06). `saldo` es el saldo resultante del\ncliente (CC-04), que la pantalla muestra como \"saldo después de la cobranza\"; negativo es\nsaldo a favor (COB-03). `jornada_id` es la jornada que recibió la cobranza (D8)."
+      },
+      "CobranzaResumenResponse": {
+        "properties": {
+          "cobranza_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Cobranza Id"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "cliente_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Cliente Id"
+          },
+          "cliente_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cliente Nombre"
+          },
+          "importe": {
+            "type": "string",
+            "title": "Importe"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "origen": {
+            "type": "string",
+            "title": "Origen"
+          },
+          "venta_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venta Id"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "usuario_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usuario Nombre"
+          },
+          "jornada_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jornada Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cobranza_id",
+          "occurred_at",
+          "cliente_id",
+          "cliente_nombre",
+          "importe",
+          "estado",
+          "origen",
+          "venta_id",
+          "usuario_id",
+          "usuario_nombre",
+          "jornada_id"
+        ],
+        "title": "CobranzaResumenResponse",
+        "description": "Una fila del listado (D14). Los importes viajan como string (INV-03)."
       },
       "ComposicionRolRequest": {
         "properties": {
@@ -13349,6 +14519,34 @@
         "title": "PaginaClientes",
         "description": "Paginada por cursor: el listado pagina por `(nombre, id)` y devuelve\nel cursor de la próxima página, no un offset (`02` §11; el listado no\npuede traer filas a Python para(sumarlas, `CLAUDE.md` §4)."
       },
+      "PaginaCobranzas": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CobranzaResumenResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "cursor_siguiente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Siguiente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "cursor_siguiente"
+        ],
+        "title": "PaginaCobranzas"
+      },
       "PaginaCompras": {
         "properties": {
           "items": {
@@ -13550,6 +14748,34 @@
           "cursor_siguiente"
         ],
         "title": "PaginaMarcas"
+      },
+      "PaginaOpcionesDeClientes": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ClienteOpcionResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "cursor_siguiente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Siguiente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "cursor_siguiente"
+        ],
+        "title": "PaginaOpcionesDeClientes"
       },
       "PaginaPagos": {
         "properties": {

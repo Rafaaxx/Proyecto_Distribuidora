@@ -15,6 +15,7 @@ con modelos se agrega acá, en `app/main.py` y en `alembic/env.py`.
 
 from app.modules.catalogo import models as catalogo_models  # noqa: F401
 from app.modules.clientes import models as clientes_models  # noqa: F401
+from app.modules.cobranzas import models as cobranzas_models  # noqa: F401
 from app.modules.configuracion import models as configuracion_models  # noqa: F401
 from app.modules.costeo import models as costeo_models  # noqa: F401
 from app.modules.cuentas_corrientes import models as cuentas_corrientes_models  # noqa: F401

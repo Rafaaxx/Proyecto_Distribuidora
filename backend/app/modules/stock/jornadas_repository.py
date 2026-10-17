@@ -105,6 +105,44 @@ def existe_jornada(organizacion_id: UUID, sesion: Session, *, jornada_id: UUID) 
     )
 
 
+def jornada_es_de(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    jornada_id: UUID,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+) -> bool:
+    """Si la jornada existe en la organización y es de ese usuario en ese dispositivo, en
+    cualquier estado (change 17, D12). Lectura sin bloqueo: el usuario y el dispositivo de una
+    jornada no cambian (INV-05)."""
+    return (
+        sesion.scalar(
+            select(Jornada.id).where(
+                Jornada.organizacion_id == organizacion_id,
+                Jornada.id == jornada_id,
+                Jornada.usuario_id == usuario_id,
+                Jornada.dispositivo_id == dispositivo_id,
+            )
+        )
+        is not None
+    )
+
+
+def leer_jornada_compartida(
+    organizacion_id: UUID, sesion: Session, *, jornada_id: UUID
+) -> Jornada | None:
+    """La jornada de la organización leída `FOR SHARE`, o `None` (change 17, D12, D18): es el
+    nivel 5 del orden de bloqueo (`02` §7.3), el mismo que toman las operaciones que usan la
+    jornada. Una liberación o un cierre (`FOR UPDATE`) espera a la operación en curso y al
+    revés: la operación ve la jornada antes o después del cambio, nunca a medias."""
+    return sesion.scalars(
+        select(Jornada)
+        .where(Jornada.organizacion_id == organizacion_id, Jornada.id == jornada_id)
+        .with_for_update(read=True)
+    ).one_or_none()
+
+
 def bloquear_jornada(organizacion_id: UUID, sesion: Session, *, jornada_id: UUID) -> Jornada | None:
     """La jornada de la organización `FOR UPDATE`, o `None` (D9): las transiciones la toman
     así, revalidan el estado y no tocan stock ni saldos. Una jornada de otra organización no
@@ -217,6 +255,26 @@ def obtener_jornada(
         .where(Jornada.organizacion_id == organizacion_id, Jornada.id == jornada_id)
     ).one_or_none()
     return None if fila is None else (fila[0], fila[1])
+
+
+def bloquear_jornada_abierta_de(
+    organizacion_id: UUID, sesion: Session, *, usuario_id: UUID, dispositivo_id: UUID
+) -> UUID | None:
+    """El identificador de la jornada `ABIERTA` del usuario en ese dispositivo, leída `FOR SHARE`,
+    o `None` (change 17, D8, D18): es el nivel 5 del orden de bloqueo (`02` §7.3), el mismo que
+    toman los movimientos de stock sobre la jornada de su ubicación. Una liberación o un cierre
+    (`FOR UPDATE`) espera a la operación en curso y al revés. Como mucho una por usuario y
+    dispositivo (`ux_jornada__*_abierta`)."""
+    return sesion.scalar(
+        select(Jornada.id)
+        .where(
+            Jornada.organizacion_id == organizacion_id,
+            Jornada.usuario_id == usuario_id,
+            Jornada.dispositivo_id == dispositivo_id,
+            Jornada.estado == ABIERTA,
+        )
+        .with_for_update(read=True)
+    )
 
 
 def jornada_no_cerrada_de(

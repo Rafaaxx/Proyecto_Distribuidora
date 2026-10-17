@@ -28,6 +28,12 @@ from app.modules.clientes import commands as clientes_commands  # noqa: F401
 # `catalogo/api.py` y `proveedores/api.py` con los suyos).
 from app.modules.clientes import models as clientes_models  # noqa: F401
 
+# Registro de comandos y de modelos de `cobranzas` (change 17): explícito para que el handler
+# `COBRANZA_REGISTRAR` quede registrado y `Base.metadata` conozca las tablas sin depender de que
+# se cree la aplicación por el router.
+from app.modules.cobranzas import commands as cobranzas_commands  # noqa: F401
+from app.modules.cobranzas import models as cobranzas_models  # noqa: F401
+
 # Registro de modelos de `costeo` y `stock` (change 09): explícito para que
 # `Base.metadata` conozca las tablas sin depender de que existan sus `api.py`
 # (grupo 7) ni sus comandos (grupo 6).

@@ -17,7 +17,8 @@ import type { CodigoPermiso } from '../../domain/identidad/permisos'
  * - `otrosPermisos` (opcional): permisos alternativos; la sección se ofrece con `permiso`
  *   **o** con cualquiera de ellos (Compras: `REGISTRAR_COMPRA` o `ANULAR_COMPRA`, change 11
  *   D14; Pagos a proveedores: `REGISTRAR_PAGO_PROVEEDOR` o `ANULAR_PAGO_PROVEEDOR`, change 12 D7;
- *   Listas de precios: `GESTIONAR_LISTAS` o `PUBLICAR_LISTAS`, change 13 D12).
+ *   Listas de precios: `GESTIONAR_LISTAS` o `PUBLICAR_LISTAS`, change 13 D12; Cobranzas:
+ *   `REGISTRAR_COBRANZA` o `ANULAR_COBRANZA`, change 17 D14).
  *   Descuentos (change 16, grupo 15): solo `GESTIONAR_DESCUENTOS`; "Topes por rol" es una entrada
  *   de la sección que además pide `ADMIN_USUARIOS` (`areas/admin/descuentos/DescuentosArea.tsx`).
  * - `ruta` es **absoluta** (`/admin/...`), nunca relativa: la tarea 10.8
@@ -51,6 +52,12 @@ export const SECCIONES: readonly SeccionAdmin[] = [
     otrosPermisos: ['ANULAR_PAGO_PROVEEDOR'],
   },
   { ruta: '/admin/clientes', etiqueta: 'Clientes', permiso: 'GESTIONAR_CLIENTES' },
+  {
+    ruta: '/admin/cobranzas',
+    etiqueta: 'Cobranzas',
+    permiso: 'REGISTRAR_COBRANZA',
+    otrosPermisos: ['ANULAR_COBRANZA'],
+  },
   {
     ruta: '/admin/precios',
     etiqueta: 'Listas de precios',

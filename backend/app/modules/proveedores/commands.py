@@ -36,7 +36,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.commands.auditoria import DatosDeAuditoria, constancia_de_ubicacion_tomada
 from app.commands.catalogo import declarar_tipo
 from app.commands.observaciones import ObservacionProducida
-from app.commands.registro import registrar_handler
+from app.commands.registro import SesionDeHandler, registrar_handler
 from app.commands.sobre import SobreComando
 from app.core.clock import Clock
 from app.core.errors import PermisoRequeridoError
@@ -77,11 +77,15 @@ class ProveedorCrearContenidoV1(BaseModel):
 
 
 def manejar_proveedor_crear(
-    sobre: SobreComando, contenido: ProveedorCrearContenidoV1, *, sesion: object, reloj: Clock
+    sobre: SobreComando,
+    contenido: ProveedorCrearContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
 ) -> ResultadoHandler:
     proveedor = proveedores_service.crear_proveedor(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         nombre=contenido.nombre,
         cuit=contenido.cuit,
@@ -93,9 +97,7 @@ def manejar_proveedor_crear(
     return "ACEPTADO", {"proveedor_id": str(proveedor.id)}, None
 
 
-registrar_handler("PROVEEDOR_CREAR", 1, ProveedorCrearContenidoV1)(
-    manejar_proveedor_crear  # type: ignore[arg-type]
-)
+registrar_handler("PROVEEDOR_CREAR", 1, ProveedorCrearContenidoV1)(manejar_proveedor_crear)
 declarar_tipo("PROVEEDOR_CREAR", admite_online=True, admite_offline=False)
 
 
@@ -110,11 +112,15 @@ class ProveedorModificarContenidoV1(BaseModel):
 
 
 def manejar_proveedor_modificar(
-    sobre: SobreComando, contenido: ProveedorModificarContenidoV1, *, sesion: object, reloj: Clock
+    sobre: SobreComando,
+    contenido: ProveedorModificarContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
 ) -> ResultadoHandler:
     proveedor = proveedores_service.modificar_proveedor(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         proveedor_id=contenido.proveedor_id,
         nombre=contenido.nombre,
@@ -129,7 +135,7 @@ def manejar_proveedor_modificar(
 
 
 registrar_handler("PROVEEDOR_MODIFICAR", 1, ProveedorModificarContenidoV1)(
-    manejar_proveedor_modificar  # type: ignore[arg-type]
+    manejar_proveedor_modificar
 )
 declarar_tipo("PROVEEDOR_MODIFICAR", admite_online=True, admite_offline=False)
 
@@ -156,7 +162,11 @@ class CostoInformarContenidoV1(BaseModel):
 
 
 def manejar_costo_informar(
-    sobre: SobreComando, contenido: CostoInformarContenidoV1, *, sesion: object, reloj: Clock
+    sobre: SobreComando,
+    contenido: CostoInformarContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
 ) -> ResultadoHandler:
     costos = [
         CostoDelLote(
@@ -172,7 +182,7 @@ def manejar_costo_informar(
     ]
     creados = proveedores_service.informar_costos(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         proveedor_id=contenido.proveedor_id,
         costos=costos,
@@ -189,9 +199,7 @@ def manejar_costo_informar(
     )
 
 
-registrar_handler("COSTO_INFORMAR", 1, CostoInformarContenidoV1)(
-    manejar_costo_informar  # type: ignore[arg-type]
-)
+registrar_handler("COSTO_INFORMAR", 1, CostoInformarContenidoV1)(manejar_costo_informar)
 declarar_tipo("COSTO_INFORMAR", admite_online=True, admite_offline=False)
 
 
@@ -202,14 +210,14 @@ PERMISO_LIBERAR_UBICACION = "LIBERAR_UBICACION"
 _PATRON_DECIMAL = r"^-?\d+(\.\d+)?$"
 
 
-def _exigir_permiso(sobre: SobreComando, sesion: object, codigo_permiso: str) -> None:
+def _exigir_permiso(sobre: SobreComando, sesion: SesionDeHandler, codigo_permiso: str) -> None:
     """Falla con 403 `PERMISO_REQUERIDO` si el usuario del sobre no tiene el permiso
     (SEG-06). Va PRIMERO: un rechazo no puede dejar nada escrito (mismo criterio que
     `stock/commands.py`)."""
     permitidos = identidad_service.listar_permisos_del_usuario(
         sobre.organizacion_id,
         sobre.usuario_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
     )
     if codigo_permiso not in permitidos:
         raise PermisoRequeridoError(f"Falta el permiso {codigo_permiso}.")
@@ -256,7 +264,11 @@ class CompraConfirmarContenidoV1(BaseModel):
 
 
 def manejar_compra_confirmar(
-    sobre: SobreComando, contenido: CompraConfirmarContenidoV1, *, sesion: object, reloj: Clock
+    sobre: SobreComando,
+    contenido: CompraConfirmarContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
 ) -> ResultadoHandlerConAuditoria:
     """Confirma una compra (D14: `REGISTRAR_COMPRA`, también de contado). El resultado
     se guarda y se reenvía tal cual ante un doble envío (INV-06): los importes viajan
@@ -264,13 +276,13 @@ def manejar_compra_confirmar(
     permisos = identidad_service.listar_permisos_del_usuario(
         sobre.organizacion_id,
         sobre.usuario_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
     )
     if PERMISO_REGISTRAR_COMPRA not in permisos:
         raise PermisoRequeridoError(f"Falta el permiso {PERMISO_REGISTRAR_COMPRA}.")
     resultado = proveedores_service.confirmar_compra(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         proveedor_id=contenido.proveedor_id,
         fecha=contenido.fecha,
@@ -331,9 +343,7 @@ def manejar_compra_confirmar(
     )
 
 
-registrar_handler("COMPRA_CONFIRMAR", 1, CompraConfirmarContenidoV1)(
-    manejar_compra_confirmar  # type: ignore[arg-type]
-)
+registrar_handler("COMPRA_CONFIRMAR", 1, CompraConfirmarContenidoV1)(manejar_compra_confirmar)
 declarar_tipo("COMPRA_CONFIRMAR", admite_online=True, admite_offline=False)
 
 
@@ -355,7 +365,11 @@ class CompraAnularContenidoV1(BaseModel):
 
 
 def manejar_compra_anular(
-    sobre: SobreComando, contenido: CompraAnularContenidoV1, *, sesion: object, reloj: Clock
+    sobre: SobreComando,
+    contenido: CompraAnularContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
 ) -> ResultadoHandlerConAuditoria:
     """Anula una compra (D14: `ANULAR_COMPRA`; si deja stock negativo, además
     `PERMITIR_STOCK_NEGATIVO`, CMP-07). Devuelve `ANULACION_COMPRA_SIN_RECALCULO` y
@@ -363,13 +377,13 @@ def manejar_compra_anular(
     permisos = identidad_service.listar_permisos_del_usuario(
         sobre.organizacion_id,
         sobre.usuario_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
     )
     if PERMISO_ANULAR_COMPRA not in permisos:
         raise PermisoRequeridoError(f"Falta el permiso {PERMISO_ANULAR_COMPRA}.")
     resultado = proveedores_service.anular_compra(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         compra_id=contenido.compra_id,
         motivo_id=contenido.motivo_id,
@@ -404,9 +418,7 @@ def manejar_compra_anular(
     )
 
 
-registrar_handler("COMPRA_ANULAR", 1, CompraAnularContenidoV1)(
-    manejar_compra_anular  # type: ignore[arg-type]
-)
+registrar_handler("COMPRA_ANULAR", 1, CompraAnularContenidoV1)(manejar_compra_anular)
 declarar_tipo("COMPRA_ANULAR", admite_online=True, admite_offline=False)
 
 
@@ -444,7 +456,7 @@ def manejar_pago_proveedor_registrar(
     sobre: SobreComando,
     contenido: PagoProveedorRegistrarContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     """Registra un pago a proveedor (D14: `REGISTRAR_PAGO_PROVEEDOR`). El resultado se
@@ -453,7 +465,7 @@ def manejar_pago_proveedor_registrar(
     _exigir_permiso(sobre, sesion, PERMISO_REGISTRAR_PAGO_PROVEEDOR)
     resultado = proveedores_service.registrar_pago(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         proveedor_id=contenido.proveedor_id,
         fecha=contenido.fecha,
@@ -485,7 +497,7 @@ def manejar_pago_proveedor_registrar(
 
 
 registrar_handler("PAGO_PROVEEDOR_REGISTRAR", 1, PagoProveedorRegistrarContenidoV1)(
-    manejar_pago_proveedor_registrar  # type: ignore[arg-type]
+    manejar_pago_proveedor_registrar
 )
 declarar_tipo("PAGO_PROVEEDOR_REGISTRAR", admite_online=True, admite_offline=False)
 
@@ -509,7 +521,7 @@ def manejar_pago_proveedor_anular(
     sobre: SobreComando,
     contenido: PagoProveedorAnularContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     """Anula un pago a proveedor (D14: `ANULAR_PAGO_PROVEEDOR`). El resultado se guarda y
@@ -518,7 +530,7 @@ def manejar_pago_proveedor_anular(
     _exigir_permiso(sobre, sesion, PERMISO_ANULAR_PAGO_PROVEEDOR)
     resultado = proveedores_service.anular_pago(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         pago_id=contenido.pago_id,
         motivo_id=contenido.motivo_id,
@@ -539,6 +551,6 @@ def manejar_pago_proveedor_anular(
 
 
 registrar_handler("PAGO_PROVEEDOR_ANULAR", 1, PagoProveedorAnularContenidoV1)(
-    manejar_pago_proveedor_anular  # type: ignore[arg-type]
+    manejar_pago_proveedor_anular
 )
 declarar_tipo("PAGO_PROVEEDOR_ANULAR", admite_online=True, admite_offline=False)

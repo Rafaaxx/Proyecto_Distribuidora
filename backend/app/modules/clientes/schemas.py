@@ -30,7 +30,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 _PATRON_DECIMAL = r"^-?\d+(\.\d+)?$"
 
@@ -168,3 +168,27 @@ class ConsumidorFinalResponse(BaseModel):
 
     habilitado: bool
     cliente: ClienteResponse | None
+
+
+class ClienteOpcionResponse(BaseModel):
+    """Una opción del selector de clientes de quien cobra (D14): sin crédito ni documento."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    nombre: str
+    codigo: str | None
+    estado: str
+
+
+class PaginaOpcionesDeClientes(BaseModel):
+    items: list[ClienteOpcionResponse]
+    cursor_siguiente: str | None
+
+
+class ClienteSaldoResponse(BaseModel):
+    """Saldo actual del cliente como string (INV-03): positivo es lo que el cliente debe y
+    negativo es saldo a favor (CC-04)."""
+
+    cliente_id: UUID
+    saldo: str

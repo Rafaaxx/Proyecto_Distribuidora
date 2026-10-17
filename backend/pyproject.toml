@@ -171,6 +171,22 @@ ignore_imports = [
     "app.modules.descuentos.api -> sqlalchemy",
     "app.modules.descuentos.api -> app.api_v1.dependencias",
     "app.modules.descuentos.api -> app.core.autenticacion",
+    # Change 17 (`design.md` D9): `SesionDeHandler` es el tipo de la sesion que el bus
+    # entrega a los handlers (`Session`), el mismo que piden los servicios de negocio;
+    # `app/commands/registro.py` lo importa de SQLAlchemy y los modulos importan `registro`.
+    "app.commands.registro -> sqlalchemy",
+    # Change 17 (`design.md` D17, `02` §5.3): `cobranzas` es el decimo modulo de negocio.
+    # Cada grupo agrega las entradas de los archivos que crea (`models.py` en el grupo 4;
+    # `repository.py`, `service.py` y `api.py` en el 7; `queries.py` en el 10).
+    "app.modules.cobranzas.models -> app.core.db",
+    "app.modules.cobranzas.models -> sqlalchemy",
+    "app.modules.cobranzas.repository -> sqlalchemy",
+    "app.modules.cobranzas.service -> sqlalchemy",
+    "app.modules.cobranzas.queries -> sqlalchemy",
+    "app.modules.cobranzas.api -> fastapi",
+    "app.modules.cobranzas.api -> sqlalchemy",
+    "app.modules.cobranzas.api -> app.api_v1.dependencias",
+    "app.modules.cobranzas.api -> app.core.autenticacion",
 ]
 
 # `allow_indirect_imports`: descubrimiento de la tarea 9.6 (change 05, D12).
@@ -254,6 +270,7 @@ source_modules = [
     "app.modules.importacion.domain",
     "app.modules.precios.domain",
     "app.modules.descuentos.domain",
+    "app.modules.cobranzas.domain",
 ]
 forbidden_modules = ["app.commands"]
 
@@ -420,8 +437,14 @@ forbidden_modules = [
 # Grupo 10 (tarea 10.2): `proveedores/api.py` ya existe y llama a
 # `sync_service.procesar_comando` (mismo patron que `catalogo-solo-por-
 # service-ajeno`, ver ese contrato mas arriba).
+# Change 17 (`design.md` D17, tarea 5.1): la validacion pura de medios de pago vive en
+# `configuracion/domain/medios.py` y los dominios de pagos y errores de `proveedores` la
+# reexportan (la funcion y sus cuatro errores son una sola, compartida con `cobranzas`). Es el
+# unico dominio ajeno que `proveedores` alcanza, y es codigo puro sin infraestructura.
 ignore_imports = [
     "app.modules.proveedores.api -> app.modules.sync.service",
+    "app.modules.proveedores.domain.pagos -> app.modules.configuracion.domain.medios",
+    "app.modules.proveedores.domain.errores -> app.modules.configuracion.domain.medios",
 ]
 allow_indirect_imports = "true"
 
@@ -901,4 +924,113 @@ source_modules = [
     "app.modules.sync",
 ]
 forbidden_modules = ["app.modules.precios"]
+allow_indirect_imports = "true"
+
+# Change 17 (`design.md` D17, `02` SS5.3): `cobranzas` es el decimo modulo de negocio. Su `domain/`
+# es puro: ni infraestructura ni el bus.
+[[tool.importlinter.contracts]]
+id = "cobranzas-domain-no-infraestructura"
+name = "cobranzas domain no importa infraestructura ni el bus de comandos"
+type = "forbidden"
+source_modules = ["app.modules.cobranzas.domain"]
+forbidden_modules = ["fastapi", "sqlalchemy", "app.commands"]
+
+# `cobranzas -> cuentas_corrientes, clientes, configuracion, stock, identidad` (`02` SS5.3, D17),
+# solo por su `service.py`: nunca por modelos, repositorio, dominio, api ni comandos. Ningun otro
+# modulo de negocio; `sync` solo lo toca la api por `procesar_comando` (la excepcion
+# `cobranzas.api -> sync.service` se declara al crearse `api.py`). Cada grupo agrega las
+# entradas de `ignore_imports` de los archivos que crea: `import-linter` rechaza una excepcion
+# sin import real.
+[[tool.importlinter.contracts]]
+id = "cobranzas-solo-por-service-ajeno"
+name = "cobranzas solo alcanza a cuentas_corrientes, clientes, configuracion, stock e identidad por su service.py"
+type = "forbidden"
+source_modules = ["app.modules.cobranzas"]
+forbidden_modules = [
+    "app.modules.identidad.models",
+    "app.modules.identidad.repository",
+    "app.modules.identidad.domain",
+    "app.modules.identidad.api",
+    "app.modules.identidad.commands",
+    "app.modules.configuracion.models",
+    "app.modules.configuracion.repository",
+    "app.modules.configuracion.domain",
+    "app.modules.configuracion.api",
+    "app.modules.configuracion.commands",
+    "app.modules.configuracion.queries",
+    "app.modules.clientes.models",
+    "app.modules.clientes.repository",
+    "app.modules.clientes.domain",
+    "app.modules.clientes.api",
+    "app.modules.clientes.commands",
+    "app.modules.clientes.queries",
+    "app.modules.cuentas_corrientes.models",
+    "app.modules.cuentas_corrientes.repository",
+    "app.modules.cuentas_corrientes.domain",
+    "app.modules.cuentas_corrientes.api",
+    "app.modules.cuentas_corrientes.commands",
+    "app.modules.stock.models",
+    "app.modules.stock.repository",
+    "app.modules.stock.jornadas_repository",
+    "app.modules.stock.jornadas_casos",
+    "app.modules.stock.jornadas_commands",
+    "app.modules.stock.domain",
+    "app.modules.stock.api",
+    "app.modules.stock.commands",
+    "app.modules.stock.queries",
+    "app.modules.catalogo",
+    "app.modules.proveedores",
+    "app.modules.costeo",
+    "app.modules.importacion",
+    "app.modules.precios",
+    "app.modules.descuentos",
+    "app.modules.sync",
+]
+# Change 17 (`design.md` D17, tarea 6.1): el dominio de `cobranzas` usa la validacion pura de
+# medios de `configuracion/domain/medios.py`, la misma que `proveedores` (el unico dominio ajeno
+# que alcanza; codigo puro sin infraestructura).
+ignore_imports = [
+    "app.modules.cobranzas.domain.cobranza -> app.modules.configuracion.domain.medios",
+    "app.modules.cobranzas.api -> app.modules.sync.service",
+]
+allow_indirect_imports = "true"
+
+# Nadie depende de `cobranzas` salvo `sync` (el lote, por su `service.py`) y, desde el change 18a,
+# `ventas` (`design.md` D17). Los demas modulos existentes no la importan ni siquiera por su
+# `service.py`.
+[[tool.importlinter.contracts]]
+id = "nadie-importa-cobranzas"
+name = "ningun otro modulo de negocio importa cobranzas"
+type = "forbidden"
+source_modules = [
+    "app.modules.identidad",
+    "app.modules.configuracion",
+    "app.modules.catalogo",
+    "app.modules.proveedores",
+    "app.modules.clientes",
+    "app.modules.cuentas_corrientes",
+    "app.modules.costeo",
+    "app.modules.stock",
+    "app.modules.importacion",
+    "app.modules.precios",
+    "app.modules.descuentos",
+]
+forbidden_modules = ["app.modules.cobranzas"]
+
+# `sync` alcanza a `cobranzas` solo por su `service.py` (paso 4 del lote y jornada del sobre,
+# change 17 grupos 12 y 13): nunca por su modelo, repositorio, dominio, api, consultas ni
+# comandos.
+[[tool.importlinter.contracts]]
+id = "sync-hacia-cobranzas-solo-por-service"
+name = "sync alcanza a cobranzas solo por su service.py"
+type = "forbidden"
+source_modules = ["app.modules.sync"]
+forbidden_modules = [
+    "app.modules.cobranzas.models",
+    "app.modules.cobranzas.repository",
+    "app.modules.cobranzas.domain",
+    "app.modules.cobranzas.api",
+    "app.modules.cobranzas.commands",
+    "app.modules.cobranzas.queries",
+]
 allow_indirect_imports = "true"

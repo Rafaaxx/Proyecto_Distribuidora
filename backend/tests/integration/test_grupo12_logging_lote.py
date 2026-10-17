@@ -46,7 +46,7 @@ class _EsquemaPrueba(BaseModel):
 
 
 def _handler_prueba(
-    sobre: SobreComando, contenido: _EsquemaPrueba
+    sobre: SobreComando, contenido: _EsquemaPrueba, *, sesion: object, reloj: object
 ) -> tuple[str, dict[str, object] | None, str | None]:
     if contenido.resultado == "RECHAZADO":
         return "RECHAZADO", None, "RECHAZADO_DE_PRUEBA"
@@ -70,7 +70,12 @@ def _logger_sync_habilitado() -> None:
 def _catalogo_y_registro_aislados(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.commands.catalogo._CATALOGO", {})
     monkeypatch.setattr("app.commands.registro._REGISTRO", {})
-    catalogo.declarar_tipo("PRUEBA_LOTE_G12", admite_online=True, admite_offline=True)
+    catalogo.declarar_tipo(
+        "PRUEBA_LOTE_G12",
+        admite_online=True,
+        admite_offline=True,
+        permiso_offline="REGISTRAR_COBRANZA",
+    )
     registro.registrar_handler("PRUEBA_LOTE_G12", 1, _EsquemaPrueba)(_handler_prueba)
 
 

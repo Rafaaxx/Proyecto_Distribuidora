@@ -7,6 +7,7 @@ ciclo. Sin `commit`: la transacción la gestiona el bus (`CLAUDE.md` §4).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
@@ -64,6 +65,48 @@ def existe_jornada(organizacion_id: UUID, sesion: Session, jornada_id: UUID) -> 
     return repository.existe_jornada(organizacion_id, sesion, jornada_id=jornada_id)
 
 
+@dataclass(frozen=True)
+class EstadoDeJornada:
+    """Lo que un comando sin conexión necesita saber de la jornada de su sobre."""
+
+    jornada_id: UUID
+    estado: str
+    liberada_en: datetime | None
+
+
+def jornada_es_de(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    jornada_id: UUID,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+) -> bool:
+    """Si la jornada es de ese usuario en ese dispositivo (change 17, D12): la cola de un comando
+    `OFFLINE` es del usuario y del dispositivo que la generaron. Una jornada inexistente o de otra
+    organización no es de nadie (INV-21)."""
+    return repository.jornada_es_de(
+        organizacion_id,
+        sesion,
+        jornada_id=jornada_id,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+    )
+
+
+def leer_estado_de_jornada(
+    organizacion_id: UUID, sesion: Session, *, jornada_id: UUID
+) -> EstadoDeJornada | None:
+    """El estado de la jornada leída `FOR SHARE` (nivel 5, change 17, D12, D18), o `None` si no
+    existe en la organización."""
+    jornada = repository.leer_jornada_compartida(organizacion_id, sesion, jornada_id=jornada_id)
+    if jornada is None:
+        return None
+    return EstadoDeJornada(
+        jornada_id=jornada.id, estado=jornada.estado, liberada_en=jornada.liberada_en
+    )
+
+
 def tiene_jornada_no_cerrada(
     organizacion_id: UUID, sesion: Session, *, usuario_id: UUID, dispositivo_id: UUID
 ) -> bool:
@@ -74,6 +117,17 @@ def tiene_jornada_no_cerrada(
             organizacion_id, sesion, usuario_id=usuario_id, dispositivo_id=dispositivo_id
         )
         is not None
+    )
+
+
+def jornada_abierta_de(
+    organizacion_id: UUID, sesion: Session, *, usuario_id: UUID, dispositivo_id: UUID
+) -> UUID | None:
+    """El identificador de la jornada `ABIERTA` del usuario y el dispositivo, tomada `FOR SHARE`
+    (change 17, D8, D18), o `None` si no tiene ninguna abierta (una `EN_RENDICION` no cuenta).
+    Lectura filtrada por organización (INV-21)."""
+    return repository.bloquear_jornada_abierta_de(
+        organizacion_id, sesion, usuario_id=usuario_id, dispositivo_id=dispositivo_id
     )
 
 

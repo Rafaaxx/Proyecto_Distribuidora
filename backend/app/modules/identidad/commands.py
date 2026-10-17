@@ -54,7 +54,7 @@ from uuid import UUID
 from pydantic import BaseModel, SecretStr
 
 from app.commands.catalogo import declarar_tipo
-from app.commands.registro import registrar_handler
+from app.commands.registro import SesionDeHandler, registrar_handler
 from app.commands.sobre import SobreComando
 from app.core.clock import Clock
 from app.core.errors import PermisoRequeridoError
@@ -86,7 +86,7 @@ def manejar_usuario_crear(
     sobre: SobreComando,
     contenido: UsuarioCrearContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     """Handler de `USUARIO_CREAR` v1 (D7). `actor_id`/`dispositivo_id_actor`
@@ -96,7 +96,7 @@ def manejar_usuario_crear(
     `sync_service.procesar_comando` (grupo 10), no este handler."""
     usuario = identidad_service.crear_usuario(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         usuario=contenido.usuario,
         nombre=contenido.nombre,
@@ -112,9 +112,7 @@ def manejar_usuario_crear(
     return "ACEPTADO", {"usuario_id": str(usuario.id)}, None
 
 
-registrar_handler("USUARIO_CREAR", 1, UsuarioCrearContenidoV1)(
-    manejar_usuario_crear  # type: ignore[arg-type]
-)
+registrar_handler("USUARIO_CREAR", 1, UsuarioCrearContenidoV1)(manejar_usuario_crear)
 declarar_tipo("USUARIO_CREAR", admite_online=True, admite_offline=False)
 
 
@@ -129,7 +127,7 @@ def manejar_dispositivo_revocar(
     sobre: SobreComando,
     contenido: DispositivoRevocarContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     """Handler de `DISPOSITIVO_REVOCAR` v1 (D7). `dispositivo_id_actor` (el
@@ -138,7 +136,7 @@ def manejar_dispositivo_revocar(
     un dato distinto (`identidad_service.revocar_dispositivo`, docstring)."""
     dispositivo = identidad_service.revocar_dispositivo(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         dispositivo_id=contenido.dispositivo_id,
         actor_id=sobre.usuario_id,
@@ -151,7 +149,7 @@ def manejar_dispositivo_revocar(
 
 
 registrar_handler("DISPOSITIVO_REVOCAR", 1, DispositivoRevocarContenidoV1)(
-    manejar_dispositivo_revocar  # type: ignore[arg-type]
+    manejar_dispositivo_revocar
 )
 declarar_tipo("DISPOSITIVO_REVOCAR", admite_online=True, admite_offline=False)
 
@@ -185,7 +183,7 @@ def manejar_pin_autorizacion_rotar(
     sobre: SobreComando,
     contenido: PinAutorizacionRotarContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     """Handler de `PIN_AUTORIZACION_ROTAR` v1 (D7). `.get_secret_value()`
@@ -193,7 +191,7 @@ def manejar_pin_autorizacion_rotar(
     necesita -- nunca se loguea ni se incluye en el resultado devuelto."""
     usuario = identidad_service.establecer_pin_autorizacion(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         usuario_id=contenido.usuario_id,
         pin=contenido.pin.get_secret_value(),
@@ -206,7 +204,7 @@ def manejar_pin_autorizacion_rotar(
 
 
 registrar_handler("PIN_AUTORIZACION_ROTAR", 1, PinAutorizacionRotarContenidoV1)(
-    manejar_pin_autorizacion_rotar  # type: ignore[arg-type]
+    manejar_pin_autorizacion_rotar
 )
 declarar_tipo("PIN_AUTORIZACION_ROTAR", admite_online=True, admite_offline=False)
 
@@ -224,7 +222,7 @@ def manejar_rol_permisos_cambiar(
     sobre: SobreComando,
     contenido: RolPermisosCambiarContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     """Handler de `ROL_PERMISOS_CAMBIAR` v1 (grupo 14, D7). `auditar=False`
@@ -232,7 +230,7 @@ def manejar_rol_permisos_cambiar(
     `sync_service.procesar_comando`, no este handler."""
     rol = identidad_service.cambiar_composicion_rol(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         rol_id=contenido.rol_id,
         permisos_nuevos=frozenset(contenido.permisos),
@@ -246,7 +244,7 @@ def manejar_rol_permisos_cambiar(
 
 
 registrar_handler("ROL_PERMISOS_CAMBIAR", 1, RolPermisosCambiarContenidoV1)(
-    manejar_rol_permisos_cambiar  # type: ignore[arg-type]
+    manejar_rol_permisos_cambiar
 )
 declarar_tipo("ROL_PERMISOS_CAMBIAR", admite_online=True, admite_offline=False)
 
@@ -263,7 +261,7 @@ def manejar_usuario_desbloquear(
     sobre: SobreComando,
     contenido: UsuarioDesbloquearContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     """Handler de `USUARIO_DESBLOQUEAR` v1 (grupo 14, D7, `ADR-018`).
@@ -271,7 +269,7 @@ def manejar_usuario_desbloquear(
     deja `sync_service.procesar_comando`, no este handler."""
     usuario = identidad_service.desbloquear_usuario(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         usuario_id=contenido.usuario_id,
         actor_id=sobre.usuario_id,
@@ -283,7 +281,7 @@ def manejar_usuario_desbloquear(
 
 
 registrar_handler("USUARIO_DESBLOQUEAR", 1, UsuarioDesbloquearContenidoV1)(
-    manejar_usuario_desbloquear  # type: ignore[arg-type]
+    manejar_usuario_desbloquear
 )
 declarar_tipo("USUARIO_DESBLOQUEAR", admite_online=True, admite_offline=False)
 
@@ -304,7 +302,7 @@ def manejar_organizacion_condicion_iva_cambiar(
     sobre: SobreComando,
     contenido: OrganizacionCondicionIvaCambiarContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     """Handler de `ORGANIZACION_CONDICION_IVA_CAMBIAR` v1 (D7). El permiso se exige acá,
@@ -315,14 +313,14 @@ def manejar_organizacion_condicion_iva_cambiar(
     permisos = identidad_service.listar_permisos_del_usuario(
         sobre.organizacion_id,
         sobre.usuario_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
     )
     if "ADMIN_CONFIGURACION" not in permisos:
         raise PermisoRequeridoError("Falta el permiso ADMIN_CONFIGURACION.")
 
     configuracion = identidad_service.cambiar_condicion_iva(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         condicion_nueva=contenido.condicion_iva,
         actor_id=sobre.usuario_id,
@@ -345,9 +343,7 @@ def manejar_organizacion_condicion_iva_cambiar(
 
 registrar_handler(
     "ORGANIZACION_CONDICION_IVA_CAMBIAR", 1, OrganizacionCondicionIvaCambiarContenidoV1
-)(
-    manejar_organizacion_condicion_iva_cambiar  # type: ignore[arg-type]
-)
+)(manejar_organizacion_condicion_iva_cambiar)
 declarar_tipo("ORGANIZACION_CONDICION_IVA_CAMBIAR", admite_online=True, admite_offline=False)
 
 
@@ -368,7 +364,7 @@ def manejar_rol_tope_descuento_definir(
     sobre: SobreComando,
     contenido: RolTopeDescuentoDefinirContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     """Handler de `ROL_TOPE_DESCUENTO_DEFINIR` v1 (D13). El permiso se exige acá, PRIMERO
@@ -379,14 +375,14 @@ def manejar_rol_tope_descuento_definir(
     permisos = identidad_service.listar_permisos_del_usuario(
         sobre.organizacion_id,
         sobre.usuario_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
     )
     if "ADMIN_USUARIOS" not in permisos:
         raise PermisoRequeridoError("Falta el permiso ADMIN_USUARIOS.")
 
     rol = identidad_service.definir_tope_descuento_de_rol(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         rol_id=contenido.rol_id,
         tope_nuevo=contenido.tope_descuento,
@@ -409,6 +405,6 @@ def manejar_rol_tope_descuento_definir(
 
 
 registrar_handler("ROL_TOPE_DESCUENTO_DEFINIR", 1, RolTopeDescuentoDefinirContenidoV1)(
-    manejar_rol_tope_descuento_definir  # type: ignore[arg-type]
+    manejar_rol_tope_descuento_definir
 )
 declarar_tipo("ROL_TOPE_DESCUENTO_DEFINIR", admite_online=True, admite_offline=False)

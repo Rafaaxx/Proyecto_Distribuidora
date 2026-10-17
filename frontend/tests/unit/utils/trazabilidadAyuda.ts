@@ -63,7 +63,7 @@ export function clavesUsadas(codigo: string, archivo: string): UsoDeClave[] {
 /** IDs de regla (`DSC-03`) que son primera columna de una tabla de `docs/01-dominio.md`. */
 export function idsDeDominio(markdown: string): Set<string> {
   const ids = new Set<string>()
-  for (const coincidencia of markdown.matchAll(/^\|\s*([A-Z]{3}-\d{2})\s*\|/gm)) {
+  for (const coincidencia of markdown.matchAll(/^\|\s*([A-Z]{2,3}-\d{2})\s*\|/gm)) {
     ids.add(coincidencia[1])
   }
   return ids

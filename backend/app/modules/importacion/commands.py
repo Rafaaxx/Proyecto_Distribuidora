@@ -29,7 +29,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
 from app.commands.auditoria import DatosDeAuditoria, constancia_de_ubicacion_tomada
 from app.commands.catalogo import declarar_tipo
 from app.commands.observaciones import ObservacionProducida
-from app.commands.registro import registrar_handler
+from app.commands.registro import SesionDeHandler, registrar_handler
 from app.commands.sobre import SobreComando
 from app.core.clock import Clock
 from app.core.errors import PermisoRequeridoError
@@ -62,13 +62,13 @@ PERMISO_IMPORTAR = "IMPORTAR_DATOS"
 PERMISO_LIBERAR_UBICACION = "LIBERAR_UBICACION"
 
 
-def _exigir_permiso(sobre: SobreComando, sesion: object, codigo_permiso: str) -> None:
+def _exigir_permiso(sobre: SobreComando, sesion: SesionDeHandler, codigo_permiso: str) -> None:
     """Falla con 403 `PERMISO_REQUERIDO` si el usuario del sobre no tiene el permiso
     (INV-01, SEG-06). Va PRIMERO: un rechazo no puede dejar nada escrito."""
     permitidos = identidad_service.listar_permisos_del_usuario(
         sobre.organizacion_id,
         sobre.usuario_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
     )
     if codigo_permiso not in permitidos:
         raise PermisoRequeridoError(f"Falta el permiso {codigo_permiso}.")
@@ -102,13 +102,13 @@ def manejar_importacion_registrar(
     sobre: SobreComando,
     contenido: ImportacionRegistrarContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandlerConAuditoria:
     permisos = identidad_service.listar_permisos_del_usuario(
         sobre.organizacion_id,
         sobre.usuario_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
     )
     if PERMISO_IMPORTAR not in permisos:
         raise PermisoRequeridoError(f"Falta el permiso {PERMISO_IMPORTAR}.")
@@ -122,7 +122,7 @@ def manejar_importacion_registrar(
 
     contexto = ContextoDeImportacion(
         organizacion_id=sobre.organizacion_id,
-        sesion=sesion,  # type: ignore[arg-type]
+        sesion=sesion,
         reloj=reloj,
         usuario_id=sobre.usuario_id,
         dispositivo_id=sobre.dispositivo_id,
@@ -136,7 +136,7 @@ def manejar_importacion_registrar(
 
     importacion = repository.crear_importacion(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         importacion_id=nuevo_id(),
         tipo=contenido.tipo,
         archivo_nombre=contenido.archivo_nombre,
@@ -162,6 +162,6 @@ def manejar_importacion_registrar(
 
 
 registrar_handler("IMPORTACION_REGISTRAR", 1, ImportacionRegistrarContenidoV1)(
-    manejar_importacion_registrar  # type: ignore[arg-type]
+    manejar_importacion_registrar
 )
 declarar_tipo("IMPORTACION_REGISTRAR", admite_online=True, admite_offline=False)

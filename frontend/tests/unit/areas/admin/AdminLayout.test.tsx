@@ -96,11 +96,11 @@ describe('AdminLayout: el menú muestra solo las secciones permitidas (tareas 7.
     expect(screen.queryByRole('link', { name: 'Proveedores' })).not.toBeInTheDocument()
   })
 
-  it('Vendedor/Repartidor ve solo Stock (TRANSFERIR_STOCK, change 09 D3)', async () => {
+  it('Vendedor/Repartidor ve Cobranzas (REGISTRAR_COBRANZA, change 17 D14) y Stock (TRANSFERIR_STOCK, change 09 D3)', async () => {
     await montarRol('VEN')
 
     // "Ayuda" (change 16b, D6 = A) la ve todo usuario con sesión; las secciones siguen por permiso.
-    expect(screen.getAllByRole('link').map((enlace) => enlace.textContent)).toEqual(['Stock', 'Ayuda'])
+    expect(screen.getAllByRole('link').map((enlace) => enlace.textContent)).toEqual(['Cobranzas', 'Stock', 'Ayuda'])
   })
 
   it('Consulta/Dirección no ve ninguna sección', async () => {

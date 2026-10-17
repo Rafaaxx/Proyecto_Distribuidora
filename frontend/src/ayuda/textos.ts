@@ -134,6 +134,49 @@ export const TEMAS = {
       },
     ],
   },
+  'cobranzas-observaciones': {
+    titulo: 'Avisos de los pagos cargados sin señal',
+    reglas: ['SYN-05', 'SYN-07', 'SYN-10', 'RUT-09'],
+    secciones: [
+      {
+        titulo: 'Por qué el pago se toma igual',
+        parrafos: [
+          'Cuando el vendedor cobra sin señal, la plata ya se cobró. Por eso el sistema toma el pago igual y, si algo no coincide con lo que hay hoy en la oficina, deja un aviso para revisar. Cada aviso dice qué pasó y en qué medio.',
+        ],
+      },
+      {
+        titulo: 'Medio inactivo',
+        parrafos: ['Entró plata por un medio que en la oficina dieron de baja.'],
+        ejemplo: 'Ej.: $10.000 por «Billetera» después de cerrar esa cuenta.',
+      },
+      {
+        titulo: 'Falta la referencia',
+        parrafos: ['Una transferencia llegó sin número de operación, que ese medio pide.'],
+        ejemplo: 'Ej.: una transferencia de $20.000 sin número.',
+      },
+      {
+        titulo: 'Permiso revocado',
+        parrafos: ['Al vendedor le habían quitado el permiso de cobrar antes de que el pago llegara.'],
+        ejemplo: 'Ej.: Juan cobró $50.000 a las 9:00 y a las 12:00 le sacaron el permiso; el pago llegó a las 18:00.',
+      },
+      {
+        titulo: 'Jornada liberada',
+        parrafos: ['Su jornada ya se había destrabado desde la oficina cuando el pago llegó.'],
+        ejemplo: 'Ej.: la jornada de la camioneta 2 se destrabó a las 14:00 y el pago llegó a las 18:00.',
+      },
+      {
+        titulo: 'Cliente no habilitado',
+        parrafos: ['Se le cobró a «Consumidor final», que no tiene cuenta corriente.'],
+        ejemplo: 'Ej.: $5.000 cobrados a «Consumidor final».',
+      },
+      {
+        titulo: 'Qué hacer con los avisos',
+        parrafos: [
+          'Por ahora los avisos se ven en el detalle de cada cobranza, junto a la línea afectada. La bandeja para darlos por revisados llega más adelante.',
+        ],
+      },
+    ],
+  },
 } as const satisfies Record<string, TemaDeAyudaDef>
 
 export type TemaDeAyuda = keyof typeof TEMAS
@@ -343,6 +386,43 @@ export const AYUDAS = {
     texto:
       'Destraba la ubicación cuando una jornada quedó trabada (por ejemplo, se le rompió el teléfono al vendedor). No toca el stock del vehículo. Pide un motivo y queda registrado quién lo hizo. Si después llegan ventas de esa jornada desde el dispositivo, se aceptan, pero quedan marcadas para revisar.',
     reglas: ['RUT-09', 'STK-09', 'AUD-01'],
+  },
+
+  // --- Cobranzas ---
+  'cobranzas.medios': {
+    titulo: 'Medios de pago',
+    texto:
+      'Cómo te pagó el cliente. Podés repartir el total entre varios medios, y la suma tiene que dar justo lo que cobraste. Algunos medios, como la transferencia, piden el número de la operación.',
+    ejemplo: 'Ej.: Kiosco La Esquina paga $50.000: $30.000 en efectivo y $20.000 por transferencia (n.º 0042).',
+    reglas: ['COB-01', 'COB-02', 'INV-08'],
+  },
+  'cobranzas.saldoAFavor': {
+    titulo: 'Saldo después de la cobranza',
+    texto:
+      'Lo que el cliente va a deber después de este pago. El pago baja lo que debe en total, no una factura en particular. Si paga de más, le queda plata a favor y se descuenta sola de su próxima compra.',
+    ejemplo: 'Ej.: Kiosco La Esquina debe $150.000 y paga $160.000 → le quedan $10.000 a favor.',
+    reglas: ['COB-03', 'CC-04'],
+  },
+  'cobranzas.jornada': {
+    titulo: 'Jornada',
+    texto:
+      'Muestra en qué recorrido del vendedor entró este pago. Si lo cobra un vendedor con su jornada abierta, queda en esa jornada y aparece cuando rinde la plata. Lo que se carga desde la oficina no lleva jornada.',
+    ejemplo: 'Ej.: Juan cobra $50.000 en Kiosco La Esquina desde la camioneta 2 → figura en su jornada de hoy.',
+    reglas: ['RUT-07'],
+  },
+  'cobranzas.anulacion': {
+    titulo: 'Anular una cobranza',
+    texto:
+      'Deja el pago sin efecto: el cliente vuelve a deber lo mismo que antes. No se borra: queda como anulado, con el motivo y quién lo anuló. Se anula entero; si te equivocaste en un medio, anulalo y cargalo de nuevo.',
+    ejemplo: 'Ej.: un cheque de $20.000 de Almacén Don Pedro vuelve rechazado → lo anulás y su deuda sube $20.000.',
+    reglas: ['COB-05', 'CC-02'],
+  },
+  'cobranzas.observaciones': {
+    titulo: 'Avisos de una cobranza sin señal',
+    texto:
+      'Avisos para revisar en un pago que el vendedor cargó sin señal. El pago se tomó igual, porque la plata ya se cobró. Cada aviso dice qué pasó y en qué medio; tocá «Ver más» para ver qué significa cada uno.',
+    reglas: ['SYN-05', 'SYN-07', 'SYN-10', 'RUT-09'],
+    verMas: 'cobranzas-observaciones',
   },
 } as const satisfies Record<string, EntradaDeAyuda>
 

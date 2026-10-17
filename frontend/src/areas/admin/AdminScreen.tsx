@@ -20,6 +20,7 @@ const DescuentosArea = lazy(() => import('./descuentos/DescuentosArea'))
 const StockArea = lazy(() => import('./stock/StockArea'))
 const ComprasArea = lazy(() => import('./compras/ComprasArea'))
 const PagosArea = lazy(() => import('./pagos-proveedores/PagosArea'))
+const CobranzasArea = lazy(() => import('./cobranzas/CobranzasArea'))
 const ImportacionArea = lazy(() => import('./importacion/ImportacionArea'))
 const ConfiguracionArea = lazy(() => import('./configuracion/ConfiguracionArea'))
 // Ayuda contextual (change 16b, ADR-051): páginas "Ver más" sin datos ni permisos (D6 = A).
@@ -131,6 +132,14 @@ export function AdminScreen() {
             element={
               <Suspense fallback={null}>
                 <ClientesArea />
+              </Suspense>
+            }
+          />
+          <Route
+            path="cobranzas/*"
+            element={
+              <Suspense fallback={null}>
+                <CobranzasArea />
               </Suspense>
             }
           />

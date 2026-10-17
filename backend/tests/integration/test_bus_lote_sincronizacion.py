@@ -73,7 +73,7 @@ class _ErrorTransitorioSimulado(Exception):
 
 
 def _handler_prueba(
-    sobre: SobreComando, contenido: _EsquemaPrueba
+    sobre: SobreComando, contenido: _EsquemaPrueba, *, sesion: object, reloj: object
 ) -> tuple[str, dict[str, object] | None, str | None]:
     if contenido.resultado == "RECHAZADO":
         return "RECHAZADO", None, "RECHAZADO_DE_PRUEBA"
@@ -86,7 +86,9 @@ def _handler_prueba(
 def _catalogo_y_registro_aislados(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.commands.catalogo._CATALOGO", {})
     monkeypatch.setattr("app.commands.registro._REGISTRO", {})
-    catalogo.declarar_tipo("PRUEBA_LOTE", admite_online=True, admite_offline=True)
+    catalogo.declarar_tipo(
+        "PRUEBA_LOTE", admite_online=True, admite_offline=True, permiso_offline="REGISTRAR_COBRANZA"
+    )
     registro.registrar_handler("PRUEBA_LOTE", 1, _EsquemaPrueba)(_handler_prueba)
     catalogo.declarar_tipo("PRUEBA_LOTE_SOLO_ONLINE", admite_online=True, admite_offline=False)
     registro.registrar_handler("PRUEBA_LOTE_SOLO_ONLINE", 1, _EsquemaPrueba)(_handler_prueba)
@@ -453,6 +455,49 @@ class TestModoNoAdmitidoParaTipoEnElLote:
         assert resultados[0].estado == "ACEPTADO"
 
 
+class TestTipoRegistradoSinDeclararEnElCatalogo:
+    """Cierra la brecha de `_procesar_item_de_lote` (aprobado por el usuario el 2026-10-16): un
+    tipo con handler registrado pero sin declarar en el catálogo no tiene modo permitido, así que
+    se rechaza en cualquier modo, antes de reservar la idempotencia (sin fila de `comando`) y sin
+    detener el lote. Reusa `TIPO_DE_COMANDO_DESCONOCIDO` (SYN-06)."""
+
+    @pytest.fixture(autouse=True)
+    def _tipo_sin_declarar(self) -> None:
+        registro.registrar_handler("PRUEBA_SIN_DECLARAR", 1, _EsquemaPrueba)(_handler_prueba)
+
+    @pytest.mark.parametrize("modo", ["ONLINE", "OFFLINE"])
+    def test_se_rechaza_sin_dejar_comando_y_el_lote_sigue(
+        self, db_session: Session, modo: str
+    ) -> None:
+        organizacion = _crear_organizacion(db_session, slug=f"org-sin-declarar-{uuid4().hex[:8]}")
+        usuario, dispositivo = _crear_usuario_y_dispositivo(db_session, organizacion.id)
+        db_session.commit()
+        sin_declarar = _item(
+            usuario_id=usuario,
+            dispositivo_id=dispositivo,
+            secuencia=1,
+            tipo="PRUEBA_SIN_DECLARAR",
+            modo=modo,
+        )
+        declarado = _item(
+            usuario_id=usuario, dispositivo_id=dispositivo, secuencia=2, modo="ONLINE"
+        )
+
+        resultados = sync_service.procesar_lote(
+            db_session,
+            FixedClock(MOMENTO),
+            organizacion_id=organizacion.id,
+            usuario_id=usuario,
+            dispositivo_id=dispositivo,
+            items=[sin_declarar, declarado],
+        )
+
+        assert [r.estado for r in resultados] == ["RECHAZADO", "ACEPTADO"]
+        assert resultados[0].error_codigo == "TIPO_DE_COMANDO_DESCONOCIDO"
+        filas = db_session.scalar(_contar_por_operation_id(sin_declarar.operation_id))
+        assert filas == 0
+
+
 class TestPropiedadDeLaColaAnivelServicio:
     """Tarea 8.5, a nivel de servicio: un ítem declarado con otro usuario u
     otro dispositivo hace rechazar TODO el lote, sin dejar ningún efecto."""
@@ -777,6 +822,7 @@ class TestUsuarioInactivoNoSeRechazaPorRuta:
         assert respuesta.status_code == 200
         assert respuesta.json()["resultados"] == []
 
+    # Escenario: "El lote de un usuario dado de baja no se rechaza en bloque"
     def test_tipo_desconocido_de_usuario_inactivo_da_rechazado_por_item(
         self, cliente: TestClient, sesion_http: Session
     ) -> None:

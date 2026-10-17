@@ -43,7 +43,9 @@ class _Esquema(BaseModel):
     etiqueta: str | None = None
 
 
-def _handler(sobre: SobreComando, contenido: _Esquema) -> tuple[str, dict[str, object], None]:
+def _handler(
+    sobre: SobreComando, contenido: _Esquema, *, sesion: object, reloj: object
+) -> tuple[str, dict[str, object], None]:
     return "ACEPTADO", {"etiqueta": contenido.etiqueta}, None
 
 
@@ -51,7 +53,9 @@ def _handler(sobre: SobreComando, contenido: _Esquema) -> tuple[str, dict[str, o
 def _catalogo_y_registro_aislados(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.commands.catalogo._CATALOGO", {})
     monkeypatch.setattr("app.commands.registro._REGISTRO", {})
-    catalogo.declarar_tipo(TIPO, admite_online=True, admite_offline=True)
+    catalogo.declarar_tipo(
+        TIPO, admite_online=True, admite_offline=True, permiso_offline="REGISTRAR_COBRANZA"
+    )
     registro.registrar_handler(TIPO, 1, _Esquema)(_handler)
 
 

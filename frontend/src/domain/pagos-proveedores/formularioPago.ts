@@ -91,7 +91,7 @@ export function avisoDeSaldoAFavorTrasPago(saldoActual: string, importe: string)
   return aFavor === null ? null : `Queda saldo a nuestro favor de ${formatearMonto(aFavor.toFixed(2))}`
 }
 
-function esImporteValido(texto: string): boolean {
+export function esImporteValido(texto: string): boolean {
   try {
     const valor = parsearImporteDesdeApi(texto.trim())
     return texto.trim() !== '' && valor.gt(0) && valor.decimalPlaces() <= 2

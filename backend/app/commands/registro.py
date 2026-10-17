@@ -11,16 +11,20 @@ que un tipo que nunca existió: falla en el arranque de la aplicación
 un comando real (`design.md` D3, alternativa descartada de descubrimiento
 automático).
 
-No importa FastAPI ni SQLAlchemy: solo Pydantic para el esquema de
-contenido (`design.md` D3, `import_linter`: `commands-no-modulos`).
+No importa FastAPI ni módulos de negocio: Pydantic para el esquema de
+contenido y SQLAlchemy solo para el tipo de la sesión (`design.md` D3, D9,
+`import_linter`: `commands-no-modulos`).
 """
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from typing import Protocol, cast
 
 from pydantic import BaseModel, ValidationError
+from sqlalchemy.orm import Session
 
 from app.commands.errores import (
     ContenidoDeComandoInvalidoError,
@@ -28,8 +32,37 @@ from app.commands.errores import (
     VersionDeComandoSinHandlerError,
 )
 from app.commands.sobre import SobreComando
+from app.core.clock import Clock
 
-HandlerFuncion = Callable[[SobreComando, BaseModel], object]
+SesionDeHandler = Session
+"""Tipo de la sesión que el bus entrega a un handler (`design.md` D9).
+
+En ejecución es la `SesionSinCommit` de `sync/service.py`: un envoltorio que
+delega todo en la `Session` real salvo `commit`, `rollback` y `close`, que
+rechaza (`CLAUDE.md` §4: los handlers no confirman). Se tipa como `Session`
+porque los servicios de negocio, a los que el handler se la reenvía, piden
+`Session`; el envoltorio no se puede nombrar acá sin importar un módulo de
+negocio (contrato `commands-no-modulos`)."""
+
+
+class HandlerFuncion[EsquemaContenido: BaseModel](Protocol):
+    """Firma de un handler registrado (`design.md` D9): sobre y contenido ya
+    validado por posición; `sesion` y `reloj` por nombre. El bus pasa los dos
+    siempre, por REST y por el lote."""
+
+    def __call__(
+        self,
+        sobre: SobreComando,
+        contenido: EsquemaContenido,
+        *,
+        sesion: SesionDeHandler,
+        reloj: Clock,
+    ) -> object: ...
+
+
+class FirmaDeHandlerInvalidaError(TypeError):
+    """Un handler se intentó registrar sin `sesion` y `reloj` como parámetros
+    de palabra clave (error de programación, detectado al importar)."""
 
 
 @dataclass(frozen=True)
@@ -39,7 +72,7 @@ class HandlerRegistrado:
     tipo: str
     version: int
     esquema: type[BaseModel]
-    funcion: HandlerFuncion
+    funcion: HandlerFuncion[BaseModel]
 
 
 class TipoYVersionYaRegistradosError(ValueError):
@@ -54,32 +87,51 @@ class TipoYVersionYaRegistradosError(ValueError):
 _REGISTRO: dict[tuple[str, int], HandlerRegistrado] = {}
 
 
+def _exigir_firma_de_handler(tipo: str, funcion: Callable[..., object]) -> None:
+    """Falla si `funcion` no recibe `sesion` y `reloj` por nombre: el bus los
+    pasa siempre y una función de dos argumentos fallaría recién con un comando
+    real (`design.md` D9)."""
+    parametros = inspect.signature(funcion).parameters
+    faltantes = [
+        nombre
+        for nombre in ("sesion", "reloj")
+        if nombre not in parametros
+        or parametros[nombre].kind not in (inspect.Parameter.KEYWORD_ONLY,)
+    ]
+    if faltantes:
+        raise FirmaDeHandlerInvalidaError(
+            f"El handler de {tipo!r} debe declarar {', '.join(faltantes)} como "
+            "parámetros de palabra clave (`*, sesion, reloj`)."
+        )
+
+
 def registrar_handler[EsquemaContenido: BaseModel](
     tipo: str, version: int, esquema: type[EsquemaContenido]
-) -> Callable[[Callable[[SobreComando, EsquemaContenido], object]], HandlerFuncion]:
+) -> Callable[[HandlerFuncion[EsquemaContenido]], HandlerFuncion[EsquemaContenido]]:
     """Decorador que registra `funcion` como el handler de `(tipo,
     version)`, validado por `esquema`. Falla en el momento de la
-    importación (arranque) si ya había un handler para esa combinación."""
+    importación (arranque) si ya había un handler para esa combinación o si
+    la función no tiene la firma de `HandlerFuncion`."""
 
-    def decorador(funcion: Callable[[SobreComando, EsquemaContenido], object]) -> HandlerFuncion:
+    def decorador(
+        funcion: HandlerFuncion[EsquemaContenido],
+    ) -> HandlerFuncion[EsquemaContenido]:
         clave = (tipo, version)
         if clave in _REGISTRO:
             raise TipoYVersionYaRegistradosError(
                 f"Ya hay un handler registrado para {tipo!r} versión {version}."
             )
-        # El handler concreto valida un `EsquemaContenido` (subtipo de
-        # `BaseModel`); `HandlerRegistrado.funcion` lo guarda como
-        # `Callable[[SobreComando, BaseModel], object]` porque el registro
-        # es heterogéneo (cada entrada tiene su propio subtipo). El
-        # llamador siempre pasa una instancia ya validada de `esquema`
-        # (`validar_contenido`), así que el tipo real coincide en runtime.
+        _exigir_firma_de_handler(tipo, funcion)
+        # El registro es heterogéneo (cada entrada tiene su propio subtipo de
+        # `BaseModel`); `validar_contenido` siempre pasa una instancia ya
+        # validada de `esquema`, así que el tipo real coincide en ejecución.
         _REGISTRO[clave] = HandlerRegistrado(
             tipo=tipo,
             version=version,
             esquema=esquema,
-            funcion=funcion,  # type: ignore[arg-type]
+            funcion=cast(HandlerFuncion[BaseModel], funcion),
         )
-        return funcion  # type: ignore[return-value]
+        return funcion
 
     return decorador
 

@@ -125,6 +125,16 @@ function EstadoDeCuentaDeEntidad({ cuentaTipo, entidadId }: { cuentaTipo: Cuenta
                 </Link>
               </SiTienePermiso>
             )}
+            {cuentaTipo === 'CLIENTE' && estado.isSuccess && (
+              <SiTienePermiso permiso="REGISTRAR_COBRANZA">
+                <Link
+                  to={`/admin/cobranzas/nuevo?cliente=${entidadId}`}
+                  className="text-sm text-primary/70 hover:text-primary hover:underline"
+                >
+                  Registrar cobranza
+                </Link>
+              </SiTienePermiso>
+            )}
             {estado.isSuccess && (
               <SiTienePermiso permiso="IMPORTAR_DATOS">
                 <Link
@@ -218,12 +228,12 @@ function ContenidoDelEstado({
   const zona = primera.zona_horaria
   const movimientos = paginas.flatMap((pagina) => pagina.items)
 
-  // Solo la cuenta de un proveedor enlaza a la operación que originó el movimiento (change 12,
-  // D7): a pagos y compras, y solo a quien tiene permiso de leerlos.
-  const enlazaAOperaciones = cuentaTipo === 'PROVEEDOR'
+  // El movimiento enlaza a la operación que lo originó solo a quien tiene permiso de leerla: en la
+  // cuenta de un proveedor, a pagos y compras (change 12, D7); en la de un cliente, a la cobranza
+  // (change 17, D19). Las ventas no tienen pantalla todavía.
   const tipoDelMovimiento = (m: MovimientoDeCuenta) => {
     const etiqueta = etiquetaDeTipo(m.tipo)
-    const ruta = enlazaAOperaciones ? rutaDeOperacionDeMovimiento(m.tipo, m.origen_id, tiene) : null
+    const ruta = rutaDeOperacionDeMovimiento(m.tipo, m.origen_id, tiene, cuentaTipo)
     return ruta === null ? (
       etiqueta
     ) : (

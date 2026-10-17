@@ -255,3 +255,29 @@ def test_inv03_el_catalogo_incluye_la_jornada_sin_punto_flotante(
 
     assert tipos == COLUMNAS_DE_JORNADA
     assert not {tipo.lower() for tipo in tipos.values()} & set(TIPOS_PROHIBIDOS)
+
+
+COLUMNAS_DE_COBRANZAS = {
+    ("cobranza", "importe"): "numeric",
+    ("cobranza_medio", "importe"): "numeric",
+    ("cobranza", "occurred_at"): "timestamp with time zone",
+    ("cobranza", "registered_at"): "timestamp with time zone",
+    ("cobranza_anulacion", "occurred_at"): "timestamp with time zone",
+    ("cobranza_medio", "orden"): "integer",
+}
+
+
+def test_inv03_el_catalogo_incluye_las_cobranzas_sin_punto_flotante(
+    _engine_de_sesion: Engine,
+) -> None:
+    """Change 17, tarea 3.4: el importe de la cobranza y el de cada medio son `numeric` exacto
+    (INV-03), los momentos `timestamptz`, y ninguna columna de las tres tablas es de punto
+    flotante ni `money`."""
+    with _engine_de_sesion.connect() as conexion:
+        filas = conexion.execute(_CONSULTA_CATALOGO).all()
+    tipos = {(tabla, columna): tipo for tabla, columna, tipo in filas}
+    de_cobranzas = {tipo.lower() for tabla, _, tipo in filas if tabla.startswith("cobranza")}
+
+    for columna, esperado in COLUMNAS_DE_COBRANZAS.items():
+        assert tipos.get(columna) == esperado, columna
+    assert not de_cobranzas & set(TIPOS_PROHIBIDOS)

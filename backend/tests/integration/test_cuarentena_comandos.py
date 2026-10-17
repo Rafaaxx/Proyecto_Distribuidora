@@ -35,7 +35,7 @@ class _EsquemaPrueba(BaseModel):
 
 
 def _handler_prueba(
-    sobre: object, contenido: _EsquemaPrueba
+    sobre: object, contenido: _EsquemaPrueba, *, sesion: object, reloj: object
 ) -> tuple[str, dict[str, object] | None, str | None]:
     return "ACEPTADO", {}, None
 
@@ -44,7 +44,12 @@ def _handler_prueba(
 def _catalogo_y_registro_aislados(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.commands.catalogo._CATALOGO", {})
     monkeypatch.setattr("app.commands.registro._REGISTRO", {})
-    catalogo.declarar_tipo("PRUEBA_CUARENTENA", admite_online=True, admite_offline=True)
+    catalogo.declarar_tipo(
+        "PRUEBA_CUARENTENA",
+        admite_online=True,
+        admite_offline=True,
+        permiso_offline="REGISTRAR_COBRANZA",
+    )
     registro.registrar_handler("PRUEBA_CUARENTENA", 1, _EsquemaPrueba)(_handler_prueba)
 
 

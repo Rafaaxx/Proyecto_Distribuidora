@@ -9,6 +9,22 @@ from __future__ import annotations
 
 from app.core.errors import DomainError
 
+# Change 17 (`design.md` D17): la validación de medios se movió a `configuracion/domain/medios.py`
+# con sus cuatro errores. Se reexportan: la clase es una sola, así que quien ya las nombra desde
+# acá (pruebas, `compras.py`, `pagos.py`) sigue valiendo.
+from app.modules.configuracion.domain.medios import (
+    ImporteInvalidoError as ImporteInvalidoError,
+)
+from app.modules.configuracion.domain.medios import (
+    MediosInvalidosError as MediosInvalidosError,
+)
+from app.modules.configuracion.domain.medios import (
+    MediosNoSumanImporteError as MediosNoSumanImporteError,
+)
+from app.modules.configuracion.domain.medios import (
+    ReferenciaObligatoriaError as ReferenciaObligatoriaError,
+)
+
 
 class RecursoNoEncontradoError(DomainError):
     """Un proveedor, producto o presentación que no existe en la
@@ -143,42 +159,11 @@ class IncluyeIvaNoAplicaError(DomainError):
     status_http = 422
 
 
-class ImporteInvalidoError(DomainError):
-    """Importe (total de factura, importe de un medio, total neto) no positivo, con más
-    de 2 decimales o fuera de `numeric(14,2)` (TR-01, D1)."""
-
-    codigo = "IMPORTE_INVALIDO"
-    status_http = 422
-
-
 class CondicionInvalidaError(DomainError):
     """Condición fuera de `CONTADO`/`CREDITO`, o medios de pago en una compra a crédito
     (CMP-01, D2)."""
 
     codigo = "CONDICION_INVALIDA"
-    status_http = 422
-
-
-class MediosNoSumanImporteError(DomainError):
-    """INV-08: los medios de un pago no suman su importe."""
-
-    codigo = "MEDIOS_NO_SUMAN_IMPORTE"
-    status_http = 422
-
-
-class MediosInvalidosError(DomainError):
-    """Change 12, `design.md` D6: un pago a proveedor lleva de 1 a 20 medios; fuera de ese
-    rango se rechaza antes de mirar importes (el pago de contado de una compra no tiene
-    este límite, CMP-03)."""
-
-    codigo = "MEDIOS_INVALIDOS"
-    status_http = 422
-
-
-class ReferenciaObligatoriaError(DomainError):
-    """Un medio de pago que exige referencia llegó sin ella (`01` §4)."""
-
-    codigo = "REFERENCIA_OBLIGATORIA"
     status_http = 422
 
 

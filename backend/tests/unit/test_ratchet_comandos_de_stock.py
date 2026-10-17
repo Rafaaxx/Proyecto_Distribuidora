@@ -38,7 +38,13 @@ TIPOS_NUEVOS = (
     "STOCK_AJUSTE_ANULAR",
 )
 TIPOS_CON_MOTIVO_DE_AUDITORIA = frozenset(
-    {"STOCK_AJUSTAR", "STOCK_TRANSFERENCIA_ANULAR", "STOCK_AJUSTE_ANULAR", "JORNADA_LIBERAR"}
+    {
+        "STOCK_AJUSTAR",
+        "STOCK_TRANSFERENCIA_ANULAR",
+        "STOCK_AJUSTE_ANULAR",
+        "JORNADA_LIBERAR",
+        "COBRANZA_ANULAR",
+    }
 )
 NOMBRE_DEL_DATO = "DatosDeAuditoria"
 
@@ -70,7 +76,9 @@ def tipos_que_devuelven_motivo_de_auditoria() -> frozenset[str]:
     )
 
 
-def test_exactamente_cuatro_comandos_devuelven_el_motivo_para_la_auditoria() -> None:
+def test_exactamente_cinco_comandos_devuelven_el_motivo_para_la_auditoria() -> None:
+    """Change 17, tarea 10.2 (D15, AUD-02): el ratchet pasa de cuatro a cinco con
+    `COBRANZA_ANULAR`; `COBRANZA_REGISTRAR` queda auditado solo por la fila del bus."""
     assert tipos_que_devuelven_motivo_de_auditoria() == TIPOS_CON_MOTIVO_DE_AUDITORIA
 
 
@@ -106,7 +114,13 @@ def test_exactamente_ocho_comandos_pueden_devolver_la_constancia_de_ubicacion_to
 
 @pytest.mark.parametrize(
     "tipo",
-    ["STOCK_TRANSFERIR", "COMPRA_ANULAR", "PAGO_PROVEEDOR_ANULAR", "STOCK_INICIAL_REGISTRAR"],
+    [
+        "STOCK_TRANSFERIR",
+        "COMPRA_ANULAR",
+        "PAGO_PROVEEDOR_ANULAR",
+        "STOCK_INICIAL_REGISTRAR",
+        "COBRANZA_REGISTRAR",
+    ],
 )
 def test_la_deuda_nominada_y_los_demas_comandos_siguen_sin_motivo(tipo: str) -> None:
     """D10: `COMPRA_ANULAR` y `PAGO_PROVEEDOR_ANULAR` quedan fuera del alcance aprobado."""

@@ -202,7 +202,7 @@ El catálogo de `permiso` se sincroniza por migración con `01` §19. Permisos p
 | `medio_pago` | `id`, `organizacion_id`, `nombre`, `requiere_referencia` `boolean`, `activo` |
 | `motivo` | `id`, `organizacion_id`, `ambito` (`AJUSTE_STOCK`, `ANULACION_VENTA`, `ANULACION_COMPRA`, `ANULACION_COBRANZA`, `ANULACION_PAGO`, `ANULACION_TRANSFERENCIA`, `ANULACION_AJUSTE`, `DESCUENTO_MANUAL`, `LISTA_ANTERIOR`, `LIBERACION_JORNADA`), `nombre`, `activo` |
 
-Las organizaciones nuevas nacen con tres motivos del ámbito `ANULACION_COMPRA` ("Error de carga", "Devolución al proveedor" y "Otro") y tres del ámbito `ANULACION_PAGO` ("Error de carga", "Pago rechazado o devuelto" y "Otro"); la migración del change 11 agrega los primeros y la del change 12 (`d1e2f3a4b5c6`) los segundos, de forma idempotente, a las organizaciones existentes que no tengan ninguno de ese ámbito. Los medios de pago y los motivos activos se leen por API (`GET /configuracion/medios-pago` y `GET /configuracion/motivos?ambito=`) (ADR-043). Las organizaciones nuevas nacen también con dos motivos del ámbito `ANULACION_TRANSFERENCIA` ("Error de carga" y "Otro") y dos del ámbito `ANULACION_AJUSTE` ("Error de carga" y "Otro"); la migración del change 14 (`f3a4b5c6d7e8`) los agrega, de forma idempotente, a las organizaciones existentes que no tengan ninguno de ese ámbito (ADR-048). El catálogo de `permiso` (§4, `rol_permiso`) suma `ANULAR_TRANSFERENCIA`, que la misma migración asigna a las plantillas Administrador y Administración. Las organizaciones nuevas nacen también con tres motivos del ámbito `LIBERACION_JORNADA` ("Dispositivo perdido o averiado", "Vendedor ausente" y "Otro"); la migración del change 15 (`a4b5c6d7e8f9`) los agrega, de forma idempotente, a las organizaciones existentes que no tengan ninguno de ese ámbito (ADR-049).
+Las organizaciones nuevas nacen con tres motivos del ámbito `ANULACION_COMPRA` ("Error de carga", "Devolución al proveedor" y "Otro") y tres del ámbito `ANULACION_PAGO` ("Error de carga", "Pago rechazado o devuelto" y "Otro"); la migración del change 11 agrega los primeros y la del change 12 (`d1e2f3a4b5c6`) los segundos, de forma idempotente, a las organizaciones existentes que no tengan ninguno de ese ámbito. Los medios de pago y los motivos activos se leen por API (`GET /configuracion/medios-pago` y `GET /configuracion/motivos?ambito=`) (ADR-043). Las organizaciones nuevas nacen también con dos motivos del ámbito `ANULACION_TRANSFERENCIA` ("Error de carga" y "Otro") y dos del ámbito `ANULACION_AJUSTE` ("Error de carga" y "Otro"); la migración del change 14 (`f3a4b5c6d7e8`) los agrega, de forma idempotente, a las organizaciones existentes que no tengan ninguno de ese ámbito (ADR-048). El catálogo de `permiso` (§4, `rol_permiso`) suma `ANULAR_TRANSFERENCIA`, que la misma migración asigna a las plantillas Administrador y Administración. Las organizaciones nuevas nacen también con tres motivos del ámbito `LIBERACION_JORNADA` ("Dispositivo perdido o averiado", "Vendedor ausente" y "Otro"); la migración del change 15 (`a4b5c6d7e8f9`) los agrega, de forma idempotente, a las organizaciones existentes que no tengan ninguno de ese ámbito (ADR-049). Las organizaciones nuevas nacen también con tres motivos del ámbito `ANULACION_COBRANZA` ("Error de carga", "Pago rechazado o no acreditado" y "Otro"); la migración del change 17 los agrega, de forma idempotente, a las organizaciones existentes que no tengan ninguno de ese ámbito (ADR-052).
 
 ## 5. Catálogo
 
@@ -515,9 +515,11 @@ ALTER TABLE venta ADD CONSTRAINT ck_venta__jornada
 
 | Tabla | Columnas |
 | --- | --- |
-| `cobranza` | `id`, `organizacion_id`, `cliente_id`, `venta_id` (nulo si independiente), `origen` (`VENTA`, `INDEPENDIENTE`), `importe` `CHECK (> 0)`, `estado`, `jornada_id`, columnas de operación |
-| `cobranza_medio` | `id`, `organizacion_id`, `cobranza_id`, `medio_pago_id`, `importe`, `referencia` |
-| `cobranza_anulacion` | `id`, `organizacion_id`, `cobranza_id` (único), `motivo_id`, columnas de operación |
+| `cobranza` | `id` (generado por quien origina), `organizacion_id`, `cliente_id`, `venta_id` (nulo si independiente; sin FK hasta el change 18a), `origen` (`VENTA`, `INDEPENDIENTE`, coherente con `venta_id`), `importe` `numeric(14,2)` `CHECK (> 0)`, `estado` (`CONFIRMADA`, `ANULADA`), `jornada_id`, `observacion` (opcional, hasta 500), columnas de operación |
+| `cobranza_medio` | `id`, `organizacion_id`, `cobranza_id`, `orden` `CHECK (>= 0)` (posición de la línea en el pedido, única por cobranza; D16), `medio_pago_id`, `importe` `CHECK (> 0)`, `referencia` |
+| `cobranza_anulacion` | `id`, `organizacion_id`, `cobranza_id` (único), `motivo_id`, `observacion` (opcional, hasta 500), columnas de operación |
+
+FK compuestas a `cliente`, `jornada`, `usuario`, `dispositivo`, `medio_pago` y `motivo`. Índices `(organizacion_id, occurred_at DESC, id DESC)`, `(organizacion_id, cliente_id, occurred_at DESC, id DESC)` y `(organizacion_id, jornada_id)`. `app_runtime` tiene `SELECT, INSERT` en las tres, `UPDATE` solo de `cobranza.estado` y nunca `DELETE` (INV-05). INV-08 se valida en el servicio y se cubre con una propiedad que suma con SQL (ADR-052).
 
 ### `cuenta_movimiento`
 
@@ -574,7 +576,7 @@ El índice único es el mecanismo de idempotencia (`02` §6.3). El contenido com
 
 ### `observacion`
 
-`id`, `organizacion_id`, `comando_id`, `operacion_tipo`, `operacion_id`, `codigo` (SYN-07), `detalle` `jsonb`, `estado` (`PENDIENTE`, `RESUELTA`), `resuelto_por_id`, `resuelto_en`, `comentario`.
+`id`, `organizacion_id`, `comando_id`, `operacion_tipo`, `operacion_id`, `codigo` (SYN-07; `CHECK` `ck_observacion__codigo` con el catálogo, que el change 17 amplía con `MEDIO_INACTIVO` y `REFERENCIA_FALTANTE`), `detalle` `jsonb`, `estado` (`PENDIENTE`, `RESUELTA`), `resuelto_por_id`, `resuelto_en`, `comentario`. En las observaciones de un medio de cobranza, `detalle` lleva `medio` (posición de la línea), `medio_pago_id`, `nombre` e `importe` (ADR-052).
 
 Índice parcial `(organizacion_id, codigo) WHERE estado = 'PENDIENTE'`.
 
@@ -626,7 +628,7 @@ El débito de IVA en modalidad CLIENTE es un `cuenta_movimiento` de tipo `IVA_FA
 | INV-02 | `organizacion_id` obligatorio y claves foráneas compuestas |
 | INV-03 | Tipos `numeric`; prueba que recorre el catálogo de columnas |
 | INV-04 | `integer` en cantidades base |
-| INV-05 | Permisos del usuario de aplicación sobre tablas de libro y sobre las líneas y cabeceras de transferencias y ajustes (`UPDATE` acotado por columna en las cabeceras), de jornadas (`UPDATE` acotado por columna) y de reglas de descuento (sin `DELETE` en `regla_descuento`; sin `UPDATE` en `regla_descuento_alcance`) |
+| INV-05 | Permisos del usuario de aplicación sobre tablas de libro y sobre las líneas y cabeceras de transferencias y ajustes (`UPDATE` acotado por columna en las cabeceras), de jornadas (`UPDATE` acotado por columna) y de reglas de descuento (sin `DELETE` en `regla_descuento`; sin `UPDATE` en `regla_descuento_alcance`) y de cobranzas (`UPDATE` solo del estado; anulación única por `cobranza_anulacion.cobranza_id`) |
 | INV-06 | `UNIQUE (organizacion_id, operation_id)` en `comando` |
 | DSC-01 a DSC-04 | `CHECK` de catálogo, de dominio y de coherencia en `regla_descuento` (una sola columna de acción, la que corresponde al tipo; vigencia ordenada; vigencia desde obligatoria si la regla no es borrador) |
 | INV-09 | `CHECK` en `venta.importe_facturado` |

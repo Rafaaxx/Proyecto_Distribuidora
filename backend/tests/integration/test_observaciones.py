@@ -599,7 +599,7 @@ class _EsquemaPruebaObservacion(BaseModel):
 
 
 def _handler_prueba_observacion(
-    sobre: SobreComando, contenido: _EsquemaPruebaObservacion
+    sobre: SobreComando, contenido: _EsquemaPruebaObservacion, *, sesion: object, reloj: object
 ) -> sync_service.ResultadoHandler | sync_service.ResultadoHandlerConObservaciones:
     observaciones: tuple[ObservacionProducida, ...] = ()
     if contenido.produce_observacion:
@@ -622,7 +622,12 @@ def _handler_prueba_observacion(
 def _catalogo_y_registro_aislados(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.commands.catalogo._CATALOGO", {})
     monkeypatch.setattr("app.commands.registro._REGISTRO", {})
-    catalogo.declarar_tipo("PRUEBA_OBSERVACION", admite_online=True, admite_offline=True)
+    catalogo.declarar_tipo(
+        "PRUEBA_OBSERVACION",
+        admite_online=True,
+        admite_offline=True,
+        permiso_offline="REGISTRAR_COBRANZA",
+    )
     registro.registrar_handler("PRUEBA_OBSERVACION", 1, _EsquemaPruebaObservacion)(
         _handler_prueba_observacion
     )

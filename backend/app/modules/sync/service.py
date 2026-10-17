@@ -46,6 +46,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -55,8 +56,11 @@ from app.commands.auditoria import DatosDeAuditoria as DatosDeAuditoria
 from app.commands.errores import (
     CodigoDeObservacionInvalidoError,
     ComandoInconsistenteError,
+    JornadaAjenaError,
     JornadaInexistenteError,
+    JornadaRequeridaError,
     ModoNoAdmitidoParaTipoError,
+    TipoDeComandoDesconocidoError,
 )
 from app.commands.huella import ContenidoComando, calcular_huella
 from app.commands.observaciones import ObservacionProducida as ObservacionProducida
@@ -300,16 +304,105 @@ def _espera_para_intento(intento: int, config: ConfiguracionReintentos) -> float
 
 
 def _validar_jornada_del_sobre(sesion: Session, sobre: SobreComando) -> None:
-    """Change 15, `design.md` D12: antes de reservar, si el sobre trae `jornada_id`, esa
-    jornada tiene que existir en la organización (SYN-06, INV-21); si no, `JORNADA_INEXISTENTE`
-    y no queda fila de `comando`. NO evalúa el dueño ni el estado de la jornada: eso es regla de
-    cada comando de ruta. Sin `jornada_id` no consulta nada."""
+    """Change 15 y 17, `design.md` D12: antes de reservar, valida la jornada del sobre.
+
+    - Si el sobre trae `jornada_id`, esa jornada tiene que existir en la organización (SYN-06,
+      INV-21); si no, `JORNADA_INEXISTENTE`.
+    - En modo `OFFLINE` la jornada es obligatoria (`JORNADA_REQUERIDA`) y tiene que ser del
+      usuario y del dispositivo de la sesión (`JORNADA_AJENA`): la cola es de quien la generó.
+      No se mira el estado de la jornada: eso lo resuelve el handler (RUT-09).
+    - Con conexión no evalúa el dueño ni el estado: es regla de cada comando de ruta.
+
+    Nunca deja fila de `comando`: el rechazo es reintentable con el sobre corregido."""
     if sobre.jornada_id is None:
+        if sobre.modo == "OFFLINE":
+            raise JornadaRequeridaError(
+                "Un comando sin conexión tiene que traer la jornada de su sobre."
+            )
         return
     if not stock_service.existe_jornada(sobre.organizacion_id, sesion, sobre.jornada_id):
         raise JornadaInexistenteError(
             f"La jornada {sobre.jornada_id} no existe en esta organización."
         )
+    if sobre.modo == "OFFLINE" and not stock_service.jornada_es_de(
+        sobre.organizacion_id,
+        sesion,
+        jornada_id=sobre.jornada_id,
+        usuario_id=sobre.usuario_id,
+        dispositivo_id=sobre.dispositivo_id,
+    ):
+        raise JornadaAjenaError(
+            f"La jornada {sobre.jornada_id} no es de este usuario y dispositivo."
+        )
+
+
+@dataclass(frozen=True)
+class _PermisoRevocado:
+    """El veredicto del paso 4 sin conexión: el permiso que el tipo exige y por qué el usuario
+    no lo tiene hoy (`PERMISO_QUITADO`, `USUARIO_INACTIVO` o `ROL_INACTIVO`)."""
+
+    permiso: str
+    motivo: str
+
+
+def _evaluar_permiso_offline(sesion: Session, sobre: SobreComando) -> _PermisoRevocado | None:
+    """Paso 4 de `02` §6.3 en modo `OFFLINE` (change 17, `design.md` D10, D11; SYN-05, SYN-10):
+    compara con los permisos que el usuario tiene AL SINCRONIZAR (sin foto en el servidor). Un
+    usuario o rol inactivo se evalúa sin permisos. Nunca rechaza: el comando sigue y el llamador
+    anota `PERMISO_REVOCADO`. Con conexión no hace nada: valida el handler (403). Un tipo que no
+    declaró permiso `OFFLINE` (solo ocurre en pruebas con catálogo propio) tampoco se evalúa."""
+    if sobre.modo != "OFFLINE":
+        return None
+    declarado = catalogo.tipo_declarado(sobre.tipo)
+    if declarado is None or declarado.permiso_offline is None:
+        return None
+    motivo = identidad_service.motivo_de_permiso_faltante(
+        sobre.organizacion_id, sobre.usuario_id, declarado.permiso_offline, sesion
+    )
+    if motivo is None:
+        return None
+    return _PermisoRevocado(permiso=declarado.permiso_offline, motivo=motivo)
+
+
+def _operacion_para_observar(
+    sesion: Session, sobre: SobreComando, resultado: dict[str, object] | None
+) -> tuple[str, UUID]:
+    """La operación sobre la que el bus anota sus observaciones: la que el tipo declaró
+    (`operacion_offline`, por ejemplo la cobranza que el handler creó) o, si no declaró ninguna,
+    el comando mismo."""
+    declarado = catalogo.tipo_declarado(sobre.tipo)
+    operacion = None if declarado is None else declarado.operacion_offline
+    if operacion is not None and resultado is not None:
+        valor = resultado.get(operacion.clave_en_resultado)
+        if isinstance(valor, str):
+            return operacion.tipo, UUID(valor)
+    comando_actual = repository.obtener_comando_por_operation_id(
+        sesion, sobre.organizacion_id, sobre.operation_id
+    )
+    assert comando_actual is not None  # ya reservado antes de llegar acá.
+    return "COMANDO", comando_actual.id
+
+
+def _con_permiso_revocado(
+    sesion: Session, sobre: SobreComando, resultado_bruto: object, revocado: _PermisoRevocado
+) -> object:
+    """Suma `PERMISO_REVOCADO` (SYN-07) a lo que devolvió el handler, primera de sus
+    observaciones. Un resultado rechazado no deja observaciones (SYN-04): se devuelve igual."""
+    assert isinstance(resultado_bruto, tuple) and len(resultado_bruto) in (3, 4, 5), (
+        "Un handler registrado DEBE devolver una tupla de 3, 4 o 5 elementos."
+    )
+    estado, resultado = resultado_bruto[0], resultado_bruto[1]
+    if not str(estado).startswith("ACEPTADO"):
+        return resultado_bruto
+    operacion_tipo, operacion_id = _operacion_para_observar(sesion, sobre, resultado)
+    observacion = ObservacionProducida(
+        codigo="PERMISO_REVOCADO",
+        operacion_tipo=operacion_tipo,
+        operacion_id=operacion_id,
+        detalle={"permiso": revocado.permiso, "motivo": revocado.motivo},
+    )
+    propias = resultado_bruto[3] if len(resultado_bruto) >= 4 else ()
+    return (*resultado_bruto[:3], (observacion, *propias), *resultado_bruto[4:])
 
 
 def procesar_comando(
@@ -319,7 +412,7 @@ def procesar_comando(
     sobre: SobreComando,
     huella: str,
     ejecutar_handler: Callable[
-        [object],
+        [registro.SesionDeHandler],
         ResultadoHandler | ResultadoHandlerConObservaciones | ResultadoHandlerConAuditoria,
     ],
     verificar_permiso: Callable[[], None] = lambda: None,
@@ -362,9 +455,16 @@ def procesar_comando(
     def _paso_permiso_y_handler() -> ResultadoHandler:
         nonlocal se_ejecuto_el_handler, datos_de_auditoria
         verificar_permiso()
+        # Paso 4 de `02` §6.3 sin conexión (change 17, D10): no rechaza, observa.
+        permiso_revocado = _evaluar_permiso_offline(sesion, sobre)
         se_ejecuto_el_handler = True
+        resultado_bruto: object = ejecutar_handler(cast(registro.SesionDeHandler, sesion_protegida))
+        if permiso_revocado is not None:
+            resultado_bruto = _con_permiso_revocado(
+                sesion, sobre, resultado_bruto, permiso_revocado
+            )
         resultado, datos_de_auditoria = resolver_resultado_del_handler(
-            sesion, sobre, ejecutar_handler(sesion_protegida)
+            sesion, sobre, resultado_bruto
         )
         return resultado
 
@@ -657,23 +757,30 @@ def _procesar_item_de_lote(
     mismo criterio que un handler que lanza, tarea 6.2)."""
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     declarado = catalogo.tipo_declarado(sobre.tipo)
-    if declarado is not None:
-        admite_el_modo = (
-            declarado.admite_online if sobre.modo == "ONLINE" else declarado.admite_offline
+    if declarado is None:
+        # Un tipo con handler pero sin declarar en el catálogo no tiene modo permitido: se
+        # rechaza en cualquier modo (aprobado 2026-10-16, ADR-052).
+        raise TipoDeComandoDesconocidoError(
+            f"El tipo {sobre.tipo!r} no está declarado en el catálogo de tipos (`02` §6.5)."
         )
-        if not admite_el_modo:
-            raise ModoNoAdmitidoParaTipoError(
-                f"El tipo {sobre.tipo!r} no admite el modo {sobre.modo!r} (`02` §6.5)."
-            )
+    admite_el_modo = declarado.admite_online if sobre.modo == "ONLINE" else declarado.admite_offline
+    if not admite_el_modo:
+        raise ModoNoAdmitidoParaTipoError(
+            f"El tipo {sobre.tipo!r} no admite el modo {sobre.modo!r} (`02` §6.5)."
+        )
     contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
     huella = calcular_huella(sobre.contenido)
 
     def _ejecutar_handler(
-        _sesion_protegida: object,
+        sesion_protegida: registro.SesionDeHandler,
     ) -> ResultadoHandler | ResultadoHandlerConObservaciones | ResultadoHandlerConAuditoria:
+        # Igual que por REST (`design.md` D9): el handler recibe la sesión protegida que
+        # entrega `procesar_comando` (sin `commit`) y el mismo reloj del bus.
         # Sin resolver acá: `procesar_comando` normaliza el resultado y conserva el dato de
         # auditoría (D10.1); resolverlo dos veces lo descartaría en este paso.
-        return handler_registrado.funcion(sobre, contenido_validado)  # type: ignore[return-value]
+        return handler_registrado.funcion(  # type: ignore[return-value]
+            sobre, contenido_validado, sesion=sesion_protegida, reloj=reloj
+        )
 
     return procesar_comando(
         sesion,
@@ -804,3 +911,13 @@ def procesar_lote(
                 )
             )
     return resultados
+
+
+def listar_observaciones_de_operacion(
+    organizacion_id: UUID, sesion: Session, *, operacion_tipo: str, operacion_id: UUID
+) -> list[Observacion]:
+    """Lectura pública de las observaciones de una operación (change 17: el detalle de una
+    cobranza las muestra junto a su línea). Nunca devuelve las de otra organización."""
+    return repository.listar_observaciones_de_operacion(
+        sesion, organizacion_id, operacion_tipo, operacion_id
+    )

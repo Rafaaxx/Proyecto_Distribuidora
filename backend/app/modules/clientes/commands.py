@@ -48,7 +48,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 from app.commands.catalogo import declarar_tipo
-from app.commands.registro import registrar_handler
+from app.commands.registro import SesionDeHandler, registrar_handler
 from app.commands.sobre import SobreComando
 from app.core.clock import Clock
 from app.core.errors import PermisoRequeridoError
@@ -61,7 +61,7 @@ ResultadoHandler = tuple[str, dict[str, object] | None, str | None]
 `catalogo/commands.py` para la justificación de no importarla de `sync`)."""
 
 
-def _exigir_permiso(sobre: SobreComando, sesion: object, codigo_permiso: str) -> None:
+def _exigir_permiso(sobre: SobreComando, sesion: SesionDeHandler, codigo_permiso: str) -> None:
     """Falla con 403 `PERMISO_REQUERIDO` si el usuario del sobre no tiene el
     permiso (INV-01, `docs/01-dominio.md` §permisos).
 
@@ -71,7 +71,7 @@ def _exigir_permiso(sobre: SobreComando, sesion: object, codigo_permiso: str) ->
     permitidos = identidad_service.listar_permisos_del_usuario(
         sobre.organizacion_id,
         sobre.usuario_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
     )
     if codigo_permiso not in permitidos:
         raise PermisoRequeridoError(f"Falta el permiso {codigo_permiso}.")
@@ -116,12 +116,16 @@ class ClienteCrearContenidoV1(ContenidoClienteV1):
 
 
 def manejar_cliente_crear(
-    sobre: SobreComando, contenido: ClienteCrearContenidoV1, *, sesion: object, reloj: Clock
+    sobre: SobreComando,
+    contenido: ClienteCrearContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
 ) -> ResultadoHandler:
     _exigir_permiso(sobre, sesion, "GESTIONAR_CLIENTES")
     cliente = clientes_service.crear_cliente(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         nombre=contenido.nombre,
         direccion=contenido.direccion,
@@ -139,9 +143,7 @@ def manejar_cliente_crear(
     return "ACEPTADO", {"cliente_id": str(cliente.id)}, None
 
 
-registrar_handler("CLIENTE_CREAR", 1, ClienteCrearContenidoV1)(
-    manejar_cliente_crear  # type: ignore[arg-type]
-)
+registrar_handler("CLIENTE_CREAR", 1, ClienteCrearContenidoV1)(manejar_cliente_crear)
 declarar_tipo("CLIENTE_CREAR", admite_online=True, admite_offline=False)
 
 
@@ -175,12 +177,16 @@ class ClienteModificarContenidoV1(ContenidoClienteV1):
 
 
 def manejar_cliente_modificar(
-    sobre: SobreComando, contenido: ClienteModificarContenidoV1, *, sesion: object, reloj: Clock
+    sobre: SobreComando,
+    contenido: ClienteModificarContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
 ) -> ResultadoHandler:
     _exigir_permiso(sobre, sesion, "GESTIONAR_CLIENTES")
     cliente = clientes_service.modificar_cliente(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         cliente_id=contenido.cliente_id,
         nombre=contenido.nombre,
@@ -206,7 +212,7 @@ def manejar_cliente_modificar(
         # servicio, con la fila del cliente ya bloqueada.
         verificar_operaciones=lambda: cuentas_corrientes_service.cuenta_tiene_movimientos(
             sobre.organizacion_id,
-            sesion,  # type: ignore[arg-type]
+            sesion,
             cuenta_tipo="CLIENTE",
             entidad_id=contenido.cliente_id,
         ),
@@ -214,9 +220,7 @@ def manejar_cliente_modificar(
     return "ACEPTADO", {"cliente_id": str(cliente.id)}, None
 
 
-registrar_handler("CLIENTE_MODIFICAR", 1, ClienteModificarContenidoV1)(
-    manejar_cliente_modificar  # type: ignore[arg-type]
-)
+registrar_handler("CLIENTE_MODIFICAR", 1, ClienteModificarContenidoV1)(manejar_cliente_modificar)
 declarar_tipo("CLIENTE_MODIFICAR", admite_online=True, admite_offline=False)
 
 
@@ -246,13 +250,13 @@ def manejar_cliente_credito_modificar(
     sobre: SobreComando,
     contenido: ClienteCreditoModificarContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     _exigir_permiso(sobre, sesion, "GESTIONAR_CREDITO")
     cliente = clientes_service.modificar_credito_cliente(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         cliente_id=contenido.cliente_id,
         limite_credito=contenido.limite_credito,
@@ -267,7 +271,7 @@ def manejar_cliente_credito_modificar(
 
 
 registrar_handler("CLIENTE_CREDITO_MODIFICAR", 1, ClienteCreditoModificarContenidoV1)(
-    manejar_cliente_credito_modificar  # type: ignore[arg-type]
+    manejar_cliente_credito_modificar
 )
 declarar_tipo("CLIENTE_CREDITO_MODIFICAR", admite_online=True, admite_offline=False)
 
@@ -291,7 +295,7 @@ def manejar_cliente_consumidor_final_configurar(
     sobre: SobreComando,
     contenido: ClienteConsumidorFinalConfigurarContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     # D4: `ADMIN_CONFIGURACION` y no `GESTIONAR_CLIENTES` porque este comando
@@ -301,7 +305,7 @@ def manejar_cliente_consumidor_final_configurar(
     _exigir_permiso(sobre, sesion, "ADMIN_CONFIGURACION")
     cliente = clientes_service.configurar_consumidor_final(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         nombre=contenido.nombre,
         actor_id=sobre.usuario_id,
@@ -311,7 +315,5 @@ def manejar_cliente_consumidor_final_configurar(
 
 registrar_handler(
     "CLIENTE_CONSUMIDOR_FINAL_CONFIGURAR", 1, ClienteConsumidorFinalConfigurarContenidoV1
-)(
-    manejar_cliente_consumidor_final_configurar  # type: ignore[arg-type]
-)
+)(manejar_cliente_consumidor_final_configurar)
 declarar_tipo("CLIENTE_CONSUMIDOR_FINAL_CONFIGURAR", admite_online=True, admite_offline=False)

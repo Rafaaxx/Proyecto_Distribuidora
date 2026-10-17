@@ -15,7 +15,6 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
-from app.commands.auditoria import DatosDeAuditoria
 from cuentas_corrientes_utiles import crear_organizacion, crear_usuario_y_dispositivo
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -23,6 +22,7 @@ from sqlalchemy.orm import Session
 from stock_utiles import crear_motivo_sql
 
 from app.commands import catalogo, registro
+from app.commands.auditoria import DatosDeAuditoria
 from app.commands.huella import calcular_huella
 from app.commands.observaciones import ObservacionProducida
 from app.commands.sobre import SobreComando
@@ -220,9 +220,16 @@ def test_aud02_el_lote_tambien_copia_el_motivo_del_handler(
     auditoría no se puede perder en ese paso."""
     monkeypatch.setattr("app.commands.catalogo._CATALOGO", {})
     monkeypatch.setattr("app.commands.registro._REGISTRO", {})
-    catalogo.declarar_tipo("PRUEBA_MOTIVO", admite_online=True, admite_offline=True)
+    catalogo.declarar_tipo(
+        "PRUEBA_MOTIVO",
+        admite_online=True,
+        admite_offline=True,
+        permiso_offline="REGISTRAR_COBRANZA",
+    )
 
-    def _handler(sobre: SobreComando, contenido: _EsquemaVacio) -> object:
+    def _handler(
+        sobre: SobreComando, contenido: _EsquemaVacio, *, sesion: object, reloj: object
+    ) -> object:
         if contenido.con_motivo:
             return ("ACEPTADO", None, None, (), DatosDeAuditoria(motivo_id=entorno.motivo_id))
         return ("ACEPTADO", None, None)

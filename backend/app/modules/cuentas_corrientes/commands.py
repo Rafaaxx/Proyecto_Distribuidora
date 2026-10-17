@@ -27,7 +27,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 from app.commands.catalogo import declarar_tipo
-from app.commands.registro import registrar_handler
+from app.commands.registro import SesionDeHandler, registrar_handler
 from app.commands.sobre import SobreComando
 from app.core.clock import Clock
 from app.core.errors import PermisoRequeridoError
@@ -41,14 +41,14 @@ ResultadoHandler = tuple[str, dict[str, object] | None, str | None]
 PERMISO_SALDO_INICIAL = "IMPORTAR_DATOS"
 
 
-def _exigir_permiso(sobre: SobreComando, sesion: object, codigo_permiso: str) -> None:
+def _exigir_permiso(sobre: SobreComando, sesion: SesionDeHandler, codigo_permiso: str) -> None:
     """Falla con 403 `PERMISO_REQUERIDO` si el usuario del sobre no tiene el
     permiso (INV-01, SEG-06). Va PRIMERO: un rechazo no puede dejar nada
     escrito."""
     permitidos = identidad_service.listar_permisos_del_usuario(
         sobre.organizacion_id,
         sobre.usuario_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
     )
     if codigo_permiso not in permitidos:
         raise PermisoRequeridoError(f"Falta el permiso {codigo_permiso}.")
@@ -78,13 +78,13 @@ def manejar_saldo_inicial_registrar(
     sobre: SobreComando,
     contenido: SaldoInicialRegistrarContenidoV1,
     *,
-    sesion: object,
+    sesion: SesionDeHandler,
     reloj: Clock,
 ) -> ResultadoHandler:
     _exigir_permiso(sobre, sesion, PERMISO_SALDO_INICIAL)
     resultado = cuentas_corrientes_service.registrar_saldo_inicial(
         sobre.organizacion_id,
-        sesion,  # type: ignore[arg-type]
+        sesion,
         reloj,
         cuenta_tipo=contenido.cuenta_tipo,
         entidad_id=contenido.entidad_id,
@@ -103,6 +103,6 @@ def manejar_saldo_inicial_registrar(
 
 
 registrar_handler("SALDO_INICIAL_REGISTRAR", 1, SaldoInicialRegistrarContenidoV1)(
-    manejar_saldo_inicial_registrar  # type: ignore[arg-type]
+    manejar_saldo_inicial_registrar
 )
 declarar_tipo("SALDO_INICIAL_REGISTRAR", admite_online=True, admite_offline=False)

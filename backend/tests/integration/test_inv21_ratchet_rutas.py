@@ -365,6 +365,20 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("put", "/api/v1/descuentos/reglas/{regla_id}"),
         ("post", "/api/v1/descuentos/reglas/{regla_id}/activacion"),
         ("post", "/api/v1/descuentos/reglas/{regla_id}/pausa"),
+        # Change 17, tarea 8.1: `POST /cobranzas` (`COBRANZA_REGISTRAR`). Prueba real de
+        # aislamiento en `test_cobranzas_api.py::test_inv21_*` (login real de dos
+        # organizaciones; el cliente o el medio de otra organización responde 404 sin efectos).
+        ("post", "/api/v1/cobranzas"),
+        # Change 17, tareas 9.1, 10.1 y 11.1: la anulación, el listado y el detalle de cobranzas
+        # y el selector y el saldo de clientes. Pruebas reales de aislamiento (login de dos
+        # organizaciones; lo ajeno responde 404 o no aparece) en `test_cobranzas_api.py`
+        # (`test_inv21_anular_*`), `test_cobranzas_consultas_api.py` (`test_inv21_*`) y
+        # `test_clientes_opciones_y_saldo_api.py` (`test_inv21_*`).
+        ("post", "/api/v1/cobranzas/{cobranza_id}/anulacion"),
+        ("get", "/api/v1/cobranzas"),
+        ("get", "/api/v1/cobranzas/{cobranza_id}"),
+        ("get", "/api/v1/clientes/opciones"),
+        ("get", "/api/v1/clientes/{cliente_id}/saldo"),
     }
 )
 

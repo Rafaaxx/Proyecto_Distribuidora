@@ -34,6 +34,7 @@ from app.modules.stock.domain.kardex import DiferenciaDeStock
 
 STOCK_INICIAL = "STOCK_INICIAL"
 ANULACION_COMPRA = "ANULACION_COMPRA"
+VENTA = "VENTA"
 
 TIPOS_DE_MOVIMIENTO = frozenset(
     {
@@ -190,12 +191,20 @@ def validar_lineas_de_movimiento(
     return list(lineas)
 
 
-def puede_quedar_negativo(linea: LineaDeMovimiento, *, permitir_negativo: bool) -> bool:
+def puede_quedar_negativo(
+    linea: LineaDeMovimiento, *, permitir_negativo: bool, negativo_sin_condicion: bool = False
+) -> bool:
     """Con `PERMITIR_STOCK_NEGATIVO` pueden dejar el saldo negativo: el egreso
     `ANULACION_COMPRA` (CMP-07, D10), la salida de una transferencia (change 14, D1) --
-    también la inversa de una anulación -- y el inverso de la anulación de un ajuste
-    (D5 punto 6). Un `AJUSTE` que no es ese inverso NUNCA lo deja (D1 = B), tampoco con
-    permiso; cualquier otro egreso exige saldo suficiente (STK-05, STK-10)."""
+    también la inversa de una anulación --, el inverso de la anulación de un ajuste
+    (D5 punto 6) y, desde el change 18a (D11), el egreso `VENTA` (STK-05). Un `AJUSTE` que no
+    es ese inverso NUNCA lo deja (D1 = B), tampoco con permiso; cualquier otro egreso exige
+    saldo suficiente (STK-05, STK-10).
+
+    `negativo_sin_condicion` es el modo de una venta recibida sin conexión (STK-06, SYN-05,
+    INV-17): el egreso `VENTA` se aplica siempre, con o sin permiso, y solo ese tipo."""
+    if linea.tipo == VENTA and (permitir_negativo or negativo_sin_condicion):
+        return True
     if not permitir_negativo:
         return False
     return linea.tipo in {ANULACION_COMPRA, TRANSFERENCIA_SALIDA} or (
@@ -203,11 +212,18 @@ def puede_quedar_negativo(linea: LineaDeMovimiento, *, permitir_negativo: bool) 
     )
 
 
-def productos_que_exigen_estar_activos(lineas: Iterable[LineaDeMovimiento]) -> set[UUID]:
+def productos_que_exigen_estar_activos(
+    lineas: Iterable[LineaDeMovimiento], *, venta_sin_conexion: bool = False
+) -> set[UUID]:
     """CAT-05, D11: un producto cuyas líneas son todas `ANULACION_COMPRA` puede
     estar inactivo (revertir no es una operación nueva); si tiene alguna línea de
-    otro tipo debe estar activo."""
-    return {linea.producto_id for linea in lineas if linea.tipo != ANULACION_COMPRA}
+    otro tipo debe estar activo.
+
+    Change 18a (tarea 11.2, D1 punto 5, SYN-05, INV-17): con `venta_sin_conexion` el egreso
+    `VENTA` tampoco lo exige. La mercadería de una venta recibida sin conexión ya se entregó;
+    un producto desactivado después del bootstrap no la rechaza."""
+    exentos = {ANULACION_COMPRA, VENTA} if venta_sin_conexion else {ANULACION_COMPRA}
+    return {linea.producto_id for linea in lineas if linea.tipo not in exentos}
 
 
 def validar_lineas_de_stock_inicial(

@@ -11,8 +11,8 @@ const claves = Object.keys(AYUDAS) as ClaveDeAyuda[]
 const temas = Object.keys(TEMAS) as TemaDeAyuda[]
 
 describe('AYUDAS: cada entrada tiene título, texto y regla citada', () => {
-  it('tiene las 37 claves aprobadas (27 del 16b, 5 de cobranzas y 5 de medios de pago y roles; la de "Operador" se eliminó)', () => {
-    expect(claves).toHaveLength(37)
+  it('tiene las 46 claves aprobadas (27 del 16b, 5 de cobranzas, 5 de medios de pago y roles y 9 de ventas; la de "Operador" se eliminó)', () => {
+    expect(claves).toHaveLength(46)
     expect(claves).not.toContain('descuentos.operador')
   })
 
@@ -45,8 +45,8 @@ describe('AYUDAS: cada entrada tiene título, texto y regla citada', () => {
 })
 
 describe('TEMAS: páginas "Ver más"', () => {
-  it('son exactamente cobranzas-observaciones, descuentos, topes y precio', () => {
-    expect([...temas].sort()).toEqual(['cobranzas-observaciones', 'descuentos', 'precio', 'topes'])
+  it('son exactamente cobranzas-observaciones, descuentos, topes, precio y ventas-observaciones', () => {
+    expect([...temas].sort()).toEqual(['cobranzas-observaciones', 'descuentos', 'precio', 'topes', 'ventas-observaciones'])
   })
 
   it.each(temas)('%s: título, al menos una sección con párrafos y al menos un ID', (tema) => {
@@ -111,6 +111,72 @@ describe('ayuda de cobranzas (change 17, D20; variante 5b)', () => {
       expect(marca.ejemplo?.startsWith('Ej.:')).toBe(true)
     }
     expect(tema.secciones.flatMap((seccion) => seccion.parrafos).join(' ')).toContain('La bandeja para darlos por revisados llega más adelante')
+  })
+})
+
+describe('ayuda de ventas (change 18a, D22; textos aprobados el 2026-10-17 y el 2026-10-19)', () => {
+  const reglasAprobadas = [
+    ['ventas.cajasYUnidades', ['CAT-07', 'CAT-08', 'VTA-02', 'PRC-22']],
+    ['ventas.precio', ['PRC-20', 'PRC-22', 'PRC-23']],
+    ['ventas.listaAnterior', ['PRC-21', 'AUD-01']],
+    ['ventas.cobranza', ['VTA-11', 'CC-05', 'COB-02']],
+    ['ventas.consumidorFinal', ['CLI-03', 'ADR-054']],
+    ['ventas.stock', ['STK-05', 'STK-01', 'ADR-054']],
+    ['ventas.numero', ['VTA-06', 'ADR-008']],
+    ['ventas.costo', ['VTA-05', 'INV-10']],
+    ['ventas.observaciones', ['SYN-05', 'SYN-07', 'STK-06', 'ADR-054']],
+  ] as const
+
+  it('las nueve claves existen y citan las reglas aprobadas', () => {
+    expect(reglasAprobadas.map(([clave]) => [clave, [...AYUDAS[clave].reglas]])).toEqual(
+      reglasAprobadas.map(([clave, reglas]) => [clave, [...reglas]]),
+    )
+  })
+
+  it.each([
+    ['ventas.cajasYUnidades', 'Cargá cuántas cajas y cuántas unidades sueltas lleva el cliente.', '2 cajas + 3 botellas de Vino A (caja x6 a $12.500) = 15 botellas → $31.250.'],
+    ['ventas.precio', 'Queda guardado en la venta: si mañana cambia la lista, esta venta no cambia.', 'Kiosco La Esquina usa la lista General: Vino A a $12.500 la caja.'],
+    ['ventas.listaAnterior', 'pide un motivo y queda registrado quién lo hizo.', '«Precio acordado con el cliente»'],
+    ['ventas.cobranza', 'Si paga de más, le queda saldo a favor.', 'queda debiendo $210.000.'],
+    ['ventas.consumidorFinal', 'el pago tiene que ser igual al total.', 'Venta de $4.300 → cobrás $4.300.'],
+    ['ventas.stock', 'salvo que tengas permiso para dejar el stock en negativo', 'Quedan 48 botellas y vendés 50 → queda en −2 y se marca.'],
+    ['ventas.numero', 'No se repite nunca en la organización.', 'V03-000142 es la venta 142 del teléfono V03.'],
+    ['ventas.costo', 'Queda fijo: si después el producto sube, esta venta no cambia.', '72 botellas a $1.050 de promedio → costo $75.600.'],
+    ['ventas.observaciones', 'La venta se tomó igual porque la mercadería ya se entregó.', ''],
+  ] as const)('%s trae el texto y el ejemplo aprobados', (clave, fragmentoDelTexto, fragmentoDelEjemplo) => {
+    const entrada: { texto: string; ejemplo?: string } = AYUDAS[clave]
+    expect(entrada.texto).toContain(fragmentoDelTexto)
+    if (fragmentoDelEjemplo !== '') expect(entrada.ejemplo).toContain(fragmentoDelEjemplo)
+  })
+
+  it('las observaciones llevan a "Ver más" (tema ventas-observaciones) con una explicación por cada uno de los diez avisos aprobados el 2026-10-20', () => {
+    const entrada: { verMas?: string } = AYUDAS['ventas.observaciones']
+    expect(entrada.verMas).toBe('ventas-observaciones')
+    const secciones = TEMAS['ventas-observaciones'].secciones
+    const avisos: readonly (readonly [string, string])[] = [
+      ['Stock negativo', 'Se vendió más de lo que figuraba en la ubicación. El stock quedó por debajo de cero hasta que se corrija con un ajuste o una transferencia.'],
+      ['Lista no vigente', 'El teléfono usó precios de una versión de lista que ya no regía al momento de la venta. La venta quedó con esos precios.'],
+      ['Cliente no habilitado', 'El cliente estaba suspendido o inactivo cuando se hizo la venta.'],
+      ['Consumidor final con deuda', 'Al consumidor final se le cobró un importe distinto del total. Su cuenta quedó con un saldo que no se puede cobrar después.'],
+      ['Permiso revocado', 'Al vendedor le habían quitado el permiso de vender antes de que la venta llegara.'],
+      ['Jornada liberada', 'Un supervisor liberó la jornada del vendedor antes de que la venta llegara.'],
+      ['Ubicación tomada al sincronizar', 'Cuando la venta llegó, la ubicación estaba tomada por otra jornada o en rendición. El stock se descontó igual.'],
+      ['Vendido sin costo', 'El producto no tenía costo cargado. La venta quedó sin costo y hay que revisarlo.'],
+      ['Medio inactivo', 'Se cobró con un medio de pago que estaba desactivado.'],
+      ['Falta la referencia', 'Se cobró con un medio que exige referencia, por ejemplo el número de transferencia, y no se cargó.'],
+    ]
+    for (const [nombre, explicacion] of avisos) {
+      const seccion = secciones.find((s) => s.titulo === nombre)
+      expect(seccion, nombre).toBeDefined()
+      expect(seccion?.parrafos).toEqual([explicacion])
+    }
+    expect(secciones.map((s) => s.titulo)).not.toContain('Los avisos posibles')
+    expect(secciones[0]?.titulo).toBe('Por qué la venta se toma igual')
+    expect(secciones[0]?.parrafos).toEqual(['La venta se tomó igual porque la mercadería ya se entregó.'])
+  })
+
+  it('no se revisó la clave de cobranzas que se reutiliza para los medios', () => {
+    expect(AYUDAS['cobranzas.medios'].texto).toContain('Podés repartir el total entre varios medios')
   })
 })
 

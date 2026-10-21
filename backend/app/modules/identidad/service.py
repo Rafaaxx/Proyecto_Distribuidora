@@ -836,6 +836,45 @@ def avanzar_correlativo_dispositivo(
     return propuesto
 
 
+@dataclass(frozen=True)
+class NumeracionDeDispositivo:
+    """El prefijo y el último correlativo de un dispositivo (VTA-06, ADR-008): con ellos el
+    cliente propone el número de la próxima venta."""
+
+    prefijo: str
+    ultimo_correlativo: int
+
+
+def obtener_numeracion_de_dispositivo(
+    organizacion_id: UUID, sesion: Session, *, dispositivo_id: UUID
+) -> NumeracionDeDispositivo | None:
+    """La numeración del dispositivo de la sesión (change 18a, D4). `None` si el dispositivo no
+    existe en la organización (INV-21). Solo lectura."""
+    dispositivo = repository.obtener_dispositivo_por_id(organizacion_id, dispositivo_id, sesion)
+    if dispositivo is None:
+        return None
+    return NumeracionDeDispositivo(
+        prefijo=dispositivo.prefijo, ultimo_correlativo=dispositivo.ultimo_correlativo
+    )
+
+
+def registrar_correlativo_maximo(
+    organizacion_id: UUID, sesion: Session, *, dispositivo_id: UUID, propuesto: int
+) -> int:
+    """`ultimo_correlativo = max(actual, propuesto)` del dispositivo (change 18a, D4 y D17
+    nivel 6): nunca retrocede y, a diferencia de `avanzar_correlativo_dispositivo`, no exige que
+    el propuesto supere al actual (una venta sin conexión más vieja no se rechaza). Devuelve el
+    último correlativo resultante. La sentencia toma el candado de la fila del dispositivo, el
+    último de la transacción de la venta. Un dispositivo inexistente en la organización es un
+    error de programación (la sesión autenticada lo garantiza)."""
+    ultimo = repository.avanzar_correlativo_al_maximo(
+        organizacion_id, dispositivo_id, propuesto, sesion
+    )
+    if ultimo is None:
+        raise ValueError(f"Dispositivo {dispositivo_id} no encontrado en {organizacion_id}.")
+    return ultimo
+
+
 def listar_dispositivos(organizacion_id: UUID, sesion: Session) -> list[Dispositivo]:
     """Incluye los revocados (tarea 8.10: "El listado incluye los
     revocados")."""

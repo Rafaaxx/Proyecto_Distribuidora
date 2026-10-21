@@ -31,3 +31,8 @@ El redondeo usa `ROUND_HALF_UP` explícito en ambos lados (`core/money.py` y `li
 
 - **Calcular solo en el servidor:** requiere conexión para mostrar totales. Incompatible con offline.
 - **Un servicio compartido (WASM o microservicio):** complejidad desproporcionada para el volumen.
+
+
+## Enmienda del change 18a (ADR-054)
+
+El motor de totales de la venta (bruto de línea, descuentos y totales VTA-04, modo impositivo A) vive en `backend/app/modules/ventas/domain/calculo.py` y `frontend/src/domain/calculo.ts`, como orquestador puro que recibe por línea los valores ya resueltos. Para no depender de infraestructura, `ventas.domain` importa solo `precios.domain.bruto_de_linea` y `descuentos.domain.*`, las dos `ignore_imports` documentadas en `backend/pyproject.toml` (ADR-054 punto 23). Los casos compartidos están en `shared/fixtures/calculo/vta-04-totales.json` (`"motor": "vta04"`); los de crédito se agregan en el change 18b.

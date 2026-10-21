@@ -104,3 +104,8 @@ Lo que `docs/` no resolvía y este ADR fija: qué cierre entrega el change sin l
 - **También las jornadas `LIBERADA` en la renovación, con ventana o sin plazo (B y C de D18):** descartadas: con la primera el inactivo conserva una sesión viva después de que el supervisor quiso cortarlo y hay que elegir un plazo; con la segunda la sesión nunca muere en ese dispositivo.
 - **`identidad` importa `stock`, o lee `jornada` con SQL directo (B y C de D19):** descartadas: la primera invierte `02` §5.3 y crea un ciclo; la segunda viola `02` §5.2.
 - **Guardar los permisos al abrir desde ahora, construir el evaluador de `JORNADA_LIBERADA` ya, o adelantar la firma de los handlers (B de D20, D21 y D22):** descartadas: serían columnas y reglas sin lector, definidas antes de conocer a su consumidor, y un cambio en unos cincuenta handlers que el 15 no necesita.
+
+
+## Enmienda del change 18a (ADR-054)
+
+El texto fijo de la constancia del punto 9(b) pasa de `STK-09: ubicación tomada por la jornada <id>` a `ubicación tomada por la jornada <id>` (con varias jornadas, `<id1>, <id2>`), para todos los comandos que la devuelven; las filas ya guardadas conservan el texto anterior (AUD-03) y no hay migración de datos. `VENTA_CONFIRMAR` se suma a los comandos que pueden devolverla (el ratchet pasa de ocho a nueve comandos) y a los que llevan motivo en la fila del bus (de cinco a seis). Una venta recibida sin conexión sobre una ubicación tomada al sincronizar no se rechaza con `UBICACION_TOMADA`: se acepta con la observación `UBICACION_TOMADA_AL_SINCRONIZAR`, aunque el usuario tenga `LIBERAR_UBICACION`, y la constancia nombra la jornada que tiene la ubicación (STK-09, SYN-05, INV-17; ADR-054 puntos 26 y 29).

@@ -434,6 +434,36 @@ def obtener_version(
     return sesion.scalars(consulta).one_or_none()
 
 
+def obtener_version_por_id(
+    organizacion_id: UUID, version_id: UUID, sesion: Session
+) -> ListaVersion | None:
+    """Una versión por su identificador, de la organización (INV-21), sin conocer su lista.
+    Solo lectura: una versión publicada no cambia (INV-11)."""
+    consulta = select(ListaVersion).where(
+        ListaVersion.organizacion_id == organizacion_id, ListaVersion.id == version_id
+    )
+    return sesion.scalars(consulta).one_or_none()
+
+
+def datos_de_versiones(
+    organizacion_id: UUID, version_ids: Collection[UUID], sesion: Session
+) -> list[tuple[UUID, UUID, str, int]]:
+    """`(version_id, lista_id, nombre_de_la_lista, numero)` de las versiones de la organización
+    entre `version_ids`, en una consulta (las de otra organización no aparecen, INV-21)."""
+    if not version_ids:
+        return []
+    consulta = (
+        select(ListaVersion.id, ListaVersion.lista_id, ListaPrecio.nombre, ListaVersion.numero)
+        .join(
+            ListaPrecio,
+            (ListaPrecio.organizacion_id == ListaVersion.organizacion_id)
+            & (ListaPrecio.id == ListaVersion.lista_id),
+        )
+        .where(ListaVersion.organizacion_id == organizacion_id, ListaVersion.id.in_(version_ids))
+    )
+    return [(fila[0], fila[1], fila[2], fila[3]) for fila in sesion.execute(consulta)]
+
+
 def listar_versiones(organizacion_id: UUID, lista_id: UUID, sesion: Session) -> list[ListaVersion]:
     """Las versiones de la lista, de la más nueva (mayor número) a la más antigua."""
     consulta = (

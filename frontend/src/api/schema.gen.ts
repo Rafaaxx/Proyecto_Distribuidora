@@ -746,9 +746,12 @@ export interface paths {
         /**
          * Listar Opciones De Clientes
          * @description Selector liviano de clientes para quien cobra (change 17, `design.md` D14, tabla de
-         *     permisos aprobada por el usuario el 2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`.
-         *     Devuelve identificador, nombre, código y estado, sin crédito ni documento; solo clientes
-         *     `ACTIVO` y `SUSPENDIDO` y no el consumidor final. Se declara antes de `/{cliente_id}`.
+         *     permisos aprobada por el usuario el 2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`;
+         *     desde el change 18a (D19, aprobada el 2026-10-20), también `VENDER`, solo lectura.
+         *     Devuelve identificador, nombre, código, estado y la marca `es_consumidor_final`, sin crédito
+         *     ni documento; solo clientes `ACTIVO` y `SUSPENDIDO`, y el consumidor final únicamente con
+         *     `incluir_consumidor_final=true` (la pantalla de venta, CLI-03; aprobado el 2026-10-20).
+         *     Se declara antes de `/{cliente_id}`.
          */
         get: operations["listar_opciones_de_clientes_api_v1_clientes_opciones_get"];
         put?: never;
@@ -769,7 +772,8 @@ export interface paths {
         /**
          * Obtener Saldo De Cliente
          * @description Saldo actual del cliente, desde `saldo_cuenta` (change 17, D14, aprobada por el usuario el
-         *     2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`. Sin movimientos es `"0.00"` (CC-04).
+         *     2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`; desde el change 18a (D19, aprobada
+         *     el 2026-10-20), también `VENDER`, solo lectura. Sin movimientos es `"0.00"` (CC-04).
          *     404 para un cliente de otra organización o inexistente, antes de leer el saldo (INV-21).
          */
         get: operations["obtener_saldo_de_cliente_api_v1_clientes__cliente_id__saldo_get"];
@@ -1175,7 +1179,8 @@ export interface paths {
         /**
          * Listar Opciones De Listas
          * @description Lectura reducida de las listas activas (identificador y nombre) para los selectores
-         *     de la ficha del cliente y de la configuración (`design.md` D12).
+         *     de la ficha del cliente y de la configuración (`design.md` D12) y, desde el change 18a (D19,
+         *     aprobada por el usuario el 2026-10-20), para quien vende (`VENDER`, solo lectura).
          */
         get: operations["listar_opciones_de_listas_api_v1_precios_listas_opciones_get"];
         put?: never;
@@ -1721,6 +1726,12 @@ export interface paths {
          * Listar Ubicaciones
          * @description Ubicaciones de la organización, con filtro opcional por estado, paginadas
          *     por cursor (spec `ubicaciones`, escenario "Listar ubicaciones").
+         *
+         *     Change 18a (D19, aprobada por el usuario el 2026-10-20): también `VENDER`, solo lectura.
+         *     Quien llega SOLO por `VENDER` (sin `TRANSFERIR_STOCK` ni `REGISTRAR_COMPRA`) recibe siempre
+         *     únicamente las ubicaciones activas: `activo=false` o `activo` ausente se filtran en silencio,
+         *     sin error, decidido acá con los permisos del token. La toma de cada ubicación sigue visible.
+         *     Quien tiene alguno de los dos permisos de siempre conserva el comportamiento anterior.
          */
         get: operations["listar_ubicaciones_api_v1_stock_ubicaciones_get"];
         put?: never;
@@ -2127,6 +2138,131 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ventas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Ventas
+         * @description Ventas de la organización de la más reciente a la más vieja, por cursor (D19, aprobada
+         *     por el usuario el 2026-10-20): `VENDER` o `ANULAR_VENTA`, todas las de la organización.
+         *     `desde` y `hasta` son fechas de negocio inclusivas en la zona de la organización (TR-04); un
+         *     `limite` fuera de 1 a 200 es 422, y un rango invertido o un cursor ilegible también, con su
+         *     código.
+         */
+        get: operations["listar_ventas_api_v1_ventas_get"];
+        put?: never;
+        /**
+         * Confirmar Venta
+         * @description `POST /ventas` (VTA-12). El resultado sale de `comando.resultado`, no de una relectura
+         *     (INV-06); los importes viajan y vuelven como string (INV-03).
+         */
+        post: operations["confirmar_venta_api_v1_ventas_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ventas/precios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Precios Para Vender
+         * @description Lo que la pantalla de venta lee (D19): una página de productos activos con el precio de la
+         *     versión, sus presentaciones de venta y, con `ubicacion_id`, el stock de esa ubicación; los
+         *     productos sin precio, marcados. `VENDER`. NUNCA costos, ni siquiera con `VER_COSTOS`.
+         *
+         *     `q` busca en nombre o código sin distinguir mayúsculas; `producto_id` trae uno; `cursor` y
+         *     `limite` (1 a 200, por defecto 50) paginan por código; el precio y el stock se calculan solo
+         *     para la página (ajuste aprobado el 2026-10-20). Sin `USAR_LISTA_ANTERIOR` solo se consulta la
+         *     versión vigente de la lista que la venta usaría para ese cliente: otra lista u otra versión
+         *     es 403 `PERMISO_REQUERIDO` (D6). Una ubicación inactiva es `UBICACION_INACTIVA` (409); lo
+         *     ajeno, 404.
+         */
+        get: operations["obtener_precios_para_vender_api_v1_ventas_precios_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ventas/numeracion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Numeracion
+         * @description Prefijo, último correlativo y número que sigue del dispositivo de la sesión (VTA-06, D4).
+         *     `VENDER`. No recibe parámetros: el dispositivo sale del token.
+         */
+        get: operations["obtener_numeracion_api_v1_ventas_numeracion_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ventas/versiones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Versiones Elegibles
+         * @description Las versiones de la lista que una venta puede elegir (PRC-21, D6): la vigente y las
+         *     históricas, de la más nueva a la más vieja. `USAR_LISTA_ANTERIOR` (403 sin él). Lista ajena,
+         *     404.
+         */
+        get: operations["listar_versiones_elegibles_api_v1_ventas_versiones_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ventas/{venta_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Venta
+         * @description Detalle de una venta (D19): líneas en su presentación, totales, cobranza enlazada, lista
+         *     y versión con el motivo, y las observaciones de sincronización (SYN-07). `VENDER` o
+         *     `ANULAR_VENTA`; el costo de cada línea solo con `VER_COSTOS` (nulo sin él; no hay utilidad,
+         *     REP-04).
+         *     404 si es de otra organización o no existe (INV-21, SEG-07).
+         */
+        get: operations["obtener_venta_api_v1_ventas__venta_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2501,6 +2637,8 @@ export interface components {
             codigo: string | null;
             /** Estado */
             estado: string;
+            /** Es Consumidor Final */
+            es_consumidor_final: boolean;
         };
         /**
          * ClienteResponse
@@ -4436,6 +4574,18 @@ export interface components {
             /** Saldo Acumulado */
             saldo_acumulado: string;
         };
+        /**
+         * NumeracionResponse
+         * @description Prefijo del dispositivo de la sesión, último correlativo y el número que sigue (D4).
+         */
+        NumeracionResponse: {
+            /** Prefijo */
+            prefijo: string;
+            /** Ultimo Correlativo */
+            ultimo_correlativo: number;
+            /** Siguiente Numero */
+            siguiente_numero: string;
+        };
         /** OrganizacionYoResponse */
         OrganizacionYoResponse: {
             /**
@@ -4576,6 +4726,13 @@ export interface components {
         PaginaUbicaciones: {
             /** Items */
             items: components["schemas"]["UbicacionResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
+        /** PaginaVentas */
+        PaginaVentas: {
+            /** Items */
+            items: components["schemas"]["VentaResumenResponse"][];
             /** Cursor Siguiente */
             cursor_siguiente: string | null;
         };
@@ -4898,6 +5055,29 @@ export interface components {
             /** Siguiente Cursor */
             siguiente_cursor: string | null;
         };
+        /** PreciosParaVenderResponse */
+        PreciosParaVenderResponse: {
+            /**
+             * Lista Id
+             * Format: uuid
+             */
+            lista_id: string;
+            /** Lista Nombre */
+            lista_nombre: string;
+            /**
+             * Version Id
+             * Format: uuid
+             */
+            version_id: string;
+            /** Version Numero */
+            version_numero: number;
+            /** Ubicacion Id */
+            ubicacion_id: string | null;
+            /** Items */
+            items: components["schemas"]["ProductoParaVenderResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
         /**
          * PreciosVigentesResponse
          * @description `GET /precios/listas/{id}/vigente`: la versión vigente a un momento y los precios
@@ -4976,6 +5156,20 @@ export interface components {
             usar_en_compra: boolean;
             /** Activo */
             activo: boolean;
+        };
+        /** PresentacionParaVenderResponse */
+        PresentacionParaVenderResponse: {
+            /**
+             * Presentacion Id
+             * Format: uuid
+             */
+            presentacion_id: string;
+            /** Nombre */
+            nombre: string;
+            /** Unidades Base */
+            unidades_base: number;
+            /** Es Referencia */
+            es_referencia: boolean;
         };
         /** PresentacionReferenciaCambiarRequest */
         PresentacionReferenciaCambiarRequest: {
@@ -5122,6 +5316,32 @@ export interface components {
             alicuota_id: string;
             /** Activo */
             activo: boolean;
+        };
+        /**
+         * ProductoParaVenderResponse
+         * @description Un producto activo con su precio en la versión (nulo y `sin_precio` si no tiene, D7) y el
+         *     stock de la ubicación pedida (nulo si no se pidió). Nunca lleva costos ni márgenes.
+         */
+        ProductoParaVenderResponse: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Codigo */
+            codigo: string;
+            /** Nombre */
+            nombre: string;
+            /** Precio Referencia */
+            precio_referencia: string | null;
+            /** Unidades Referencia */
+            unidades_referencia: number | null;
+            /** Sin Precio */
+            sin_precio: boolean;
+            /** Stock Base */
+            stock_base: number | null;
+            /** Presentaciones */
+            presentaciones: components["schemas"]["PresentacionParaVenderResponse"][];
         };
         /**
          * ProductoResponse
@@ -6043,6 +6263,369 @@ export interface components {
             ctx?: Record<string, never>;
         };
         /**
+         * VentaCobranzaMedioRequest
+         * @description Un medio de la cobranza en el acto (D12).
+         */
+        VentaCobranzaMedioRequest: {
+            /**
+             * Medio Pago Id
+             * Format: uuid
+             */
+            medio_pago_id: string;
+            /** Importe */
+            importe: string;
+            /** Referencia */
+            referencia?: string | null;
+        };
+        /**
+         * VentaCobranzaRequest
+         * @description La cobranza en el acto; su importe es la suma de los medios (INV-08).
+         */
+        VentaCobranzaRequest: {
+            /**
+             * Cobranza Id
+             * Format: uuid
+             */
+            cobranza_id: string;
+            /** Medios */
+            medios: components["schemas"]["VentaCobranzaMedioRequest"][];
+            /** Observacion */
+            observacion?: string | null;
+        };
+        /** VentaCobranzaResponse */
+        VentaCobranzaResponse: {
+            /**
+             * Cobranza Id
+             * Format: uuid
+             */
+            cobranza_id: string;
+            /** Importe */
+            importe: string;
+            /** Estado */
+            estado: string;
+        };
+        /**
+         * VentaConfirmarRequest
+         * @description `POST /ventas`. `venta_id` y `numero` los genera quien origina la venta (`02` §9, D4).
+         */
+        VentaConfirmarRequest: {
+            /**
+             * Venta Id
+             * Format: uuid
+             */
+            venta_id: string;
+            /** Numero */
+            numero: string;
+            /**
+             * Cliente Id
+             * Format: uuid
+             */
+            cliente_id: string;
+            /** Ubicacion Id */
+            ubicacion_id?: string | null;
+            /** Lista Id */
+            lista_id?: string | null;
+            /** Lista Version Id */
+            lista_version_id?: string | null;
+            /** Motivo Lista Id */
+            motivo_lista_id?: string | null;
+            /** Lineas */
+            lineas: components["schemas"]["VentaLineaRequest"][];
+            /** Total */
+            total: string;
+            cobranza?: components["schemas"]["VentaCobranzaRequest"] | null;
+        };
+        /**
+         * VentaConfirmarResponse
+         * @description Sale de `comando.resultado`, no de una relectura: un reenvío idempotente del mismo
+         *     `Operation-Id` devuelve exactamente lo mismo (INV-06). `saldo` es el saldo resultante del
+         *     cliente, con la cobranza en el acto ya aplicada; negativo es saldo a favor.
+         */
+        VentaConfirmarResponse: {
+            /**
+             * Venta Id
+             * Format: uuid
+             */
+            venta_id: string;
+            /** Numero */
+            numero: string;
+            /** Estado */
+            estado: string;
+            /** Total */
+            total: string;
+            /** Saldo */
+            saldo: string;
+            /** Cobranza Id */
+            cobranza_id: string | null;
+        };
+        /**
+         * VentaDetalleResponse
+         * @description La venta como quedó congelada (VTA-03, VTA-12).
+         */
+        VentaDetalleResponse: {
+            /**
+             * Venta Id
+             * Format: uuid
+             */
+            venta_id: string;
+            /** Numero */
+            numero: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * Cliente Id
+             * Format: uuid
+             */
+            cliente_id: string;
+            /** Cliente Nombre */
+            cliente_nombre: string | null;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /** Usuario Nombre */
+            usuario_nombre: string | null;
+            /**
+             * Ubicacion Id
+             * Format: uuid
+             */
+            ubicacion_id: string;
+            /** Ubicacion Nombre */
+            ubicacion_nombre: string | null;
+            /** Jornada Id */
+            jornada_id: string | null;
+            /** Total */
+            total: string;
+            /** Estado */
+            estado: string;
+            /** Estado Facturacion */
+            estado_facturacion: string;
+            /** Modo Confirmacion */
+            modo_confirmacion: string;
+            /**
+             * Registered At
+             * Format: date-time
+             */
+            registered_at: string;
+            /**
+             * Dispositivo Id
+             * Format: uuid
+             */
+            dispositivo_id: string;
+            /**
+             * Lista Id
+             * Format: uuid
+             */
+            lista_id: string;
+            /** Lista Nombre */
+            lista_nombre: string | null;
+            /**
+             * Version Id
+             * Format: uuid
+             */
+            version_id: string;
+            /** Version Numero */
+            version_numero: number | null;
+            motivo_lista: components["schemas"]["VentaMotivoResponse"] | null;
+            /** Modo Impositivo */
+            modo_impositivo: string;
+            /** Total Neto */
+            total_neto: string;
+            /** Total Iva */
+            total_iva: string;
+            /** Importe Facturado */
+            importe_facturado: string;
+            cobranza: components["schemas"]["VentaCobranzaResponse"] | null;
+            /** Lineas */
+            lineas: components["schemas"]["VentaLineaResponse"][];
+            /** Observaciones */
+            observaciones: components["schemas"]["VentaObservacionResponse"][];
+        };
+        /**
+         * VentaLineaRequest
+         * @description Una línea con lo que vio el usuario (D2).
+         */
+        VentaLineaRequest: {
+            /**
+             * Linea Id
+             * Format: uuid
+             */
+            linea_id: string;
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /**
+             * Presentacion Id
+             * Format: uuid
+             */
+            presentacion_id: string;
+            /** Cantidad */
+            cantidad: number;
+            /**
+             * Lista Version Id
+             * Format: uuid
+             */
+            lista_version_id: string;
+            /** Precio Referencia */
+            precio_referencia: string;
+            /** Unidades Referencia */
+            unidades_referencia: number;
+            /** Importe Bruto */
+            importe_bruto: string;
+        };
+        /**
+         * VentaLineaResponse
+         * @description Una línea congelada. `costo_unitario` y `costo_total` van en nulo sin `VER_COSTOS`
+         *     (VTA-05, `01` §19). Sin utilidad: es de los reportes (REP-04).
+         */
+        VentaLineaResponse: {
+            /**
+             * Linea Id
+             * Format: uuid
+             */
+            linea_id: string;
+            /** Orden */
+            orden: number;
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Producto Nombre */
+            producto_nombre: string | null;
+            /**
+             * Presentacion Id
+             * Format: uuid
+             */
+            presentacion_id: string;
+            /** Presentacion Nombre */
+            presentacion_nombre: string | null;
+            /**
+             * Lista Version Id
+             * Format: uuid
+             */
+            lista_version_id: string;
+            /** Unidades Presentacion */
+            unidades_presentacion: number;
+            /** Cantidad */
+            cantidad: number;
+            /** Cantidad Base */
+            cantidad_base: number;
+            /** Precio Referencia */
+            precio_referencia: string;
+            /** Unidades Referencia */
+            unidades_referencia: number;
+            /** Importe Bruto */
+            importe_bruto: string;
+            /** Importe Descuento */
+            importe_descuento: string;
+            /** Importe Neto */
+            importe_neto: string;
+            /** Alicuota */
+            alicuota: string;
+            /** Importe Iva */
+            importe_iva: string;
+            /** Costo Unitario */
+            costo_unitario: string | null;
+            /** Costo Total */
+            costo_total: string | null;
+        };
+        /** VentaMotivoResponse */
+        VentaMotivoResponse: {
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+            /** Nombre */
+            nombre: string | null;
+        };
+        /** VentaObservacionResponse */
+        VentaObservacionResponse: {
+            /** Codigo */
+            codigo: string;
+            /** Estado */
+            estado: string;
+            /** Detalle */
+            detalle: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * VentaResumenResponse
+         * @description Una venta del listado. Los importes viajan como string (INV-03).
+         */
+        VentaResumenResponse: {
+            /**
+             * Venta Id
+             * Format: uuid
+             */
+            venta_id: string;
+            /** Numero */
+            numero: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * Cliente Id
+             * Format: uuid
+             */
+            cliente_id: string;
+            /** Cliente Nombre */
+            cliente_nombre: string | null;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /** Usuario Nombre */
+            usuario_nombre: string | null;
+            /**
+             * Ubicacion Id
+             * Format: uuid
+             */
+            ubicacion_id: string;
+            /** Ubicacion Nombre */
+            ubicacion_nombre: string | null;
+            /** Jornada Id */
+            jornada_id: string | null;
+            /** Total */
+            total: string;
+            /** Estado */
+            estado: string;
+            /** Estado Facturacion */
+            estado_facturacion: string;
+            /** Modo Confirmacion */
+            modo_confirmacion: string;
+        };
+        /** VersionElegibleResponse */
+        VersionElegibleResponse: {
+            /**
+             * Version Id
+             * Format: uuid
+             */
+            version_id: string;
+            /** Numero */
+            numero: number;
+            /** Estado */
+            estado: string;
+            /**
+             * Vigencia Desde
+             * Format: date-time
+             */
+            vigencia_desde: string;
+            /** Vigencia Hasta */
+            vigencia_hasta: string | null;
+        };
+        /**
          * VersionResponse
          * @description Una versión de lista con su estado almacenado (`BORRADOR`, `PUBLICADA`, `ANULADA`) y,
          *     si está publicada, el derivado de las fechas (`PROGRAMADA`, `VIGENTE`, `HISTORICA`; PRC-03).
@@ -6104,6 +6687,11 @@ export interface components {
             version: string;
             /** App Version Minima */
             app_version_minima?: string | null;
+        };
+        /** VersionesElegiblesResponse */
+        VersionesElegiblesResponse: {
+            /** Items */
+            items: components["schemas"]["VersionElegibleResponse"][];
         };
         /**
          * VersionesResponse
@@ -7580,6 +8168,7 @@ export interface operations {
                 texto?: string | null;
                 cursor?: string | null;
                 limite?: number;
+                incluir_consumidor_final?: boolean;
             };
             header?: {
                 authorization?: string | null;
@@ -10406,6 +10995,219 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LoteComandosResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_ventas_api_v1_ventas_get: {
+        parameters: {
+            query?: {
+                cliente_id?: string | null;
+                usuario_id?: string | null;
+                jornada_id?: string | null;
+                ubicacion_id?: string | null;
+                desde?: string | null;
+                hasta?: string | null;
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaVentas"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirmar_venta_api_v1_ventas_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VentaConfirmarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VentaConfirmarResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_precios_para_vender_api_v1_ventas_precios_get: {
+        parameters: {
+            query?: {
+                cliente_id?: string | null;
+                lista_id?: string | null;
+                version_id?: string | null;
+                ubicacion_id?: string | null;
+                q?: string | null;
+                producto_id?: string | null;
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreciosParaVenderResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_numeracion_api_v1_ventas_numeracion_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NumeracionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_versiones_elegibles_api_v1_ventas_versiones_get: {
+        parameters: {
+            query: {
+                lista_id: string;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionesElegiblesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_venta_api_v1_ventas__venta_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                venta_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VentaDetalleResponse"];
                 };
             };
             /** @description Validation Error */

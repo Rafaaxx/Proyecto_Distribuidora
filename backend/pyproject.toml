@@ -187,6 +187,19 @@ ignore_imports = [
     "app.modules.cobranzas.api -> sqlalchemy",
     "app.modules.cobranzas.api -> app.api_v1.dependencias",
     "app.modules.cobranzas.api -> app.core.autenticacion",
+    # Change 18a (`design.md` D17, `02` SS5.3): `ventas` es el undecimo modulo de negocio. Cada
+    # grupo agrega las entradas de los archivos que crea (`models.py`, `repository.py` y
+    # `service.py` en el grupo 4; `api.py` y `queries.py` mas adelante): `import-linter` rechaza
+    # una excepcion sin import real.
+    "app.modules.ventas.models -> app.core.db",
+    "app.modules.ventas.models -> sqlalchemy",
+    "app.modules.ventas.repository -> sqlalchemy",
+    "app.modules.ventas.service -> sqlalchemy",
+    "app.modules.ventas.queries -> sqlalchemy",
+    "app.modules.ventas.api -> fastapi",
+    "app.modules.ventas.api -> sqlalchemy",
+    "app.modules.ventas.api -> app.api_v1.dependencias",
+    "app.modules.ventas.api -> app.core.autenticacion",
 ]
 
 # `allow_indirect_imports`: descubrimiento de la tarea 9.6 (change 05, D12).
@@ -271,6 +284,7 @@ source_modules = [
     "app.modules.precios.domain",
     "app.modules.descuentos.domain",
     "app.modules.cobranzas.domain",
+    "app.modules.ventas.domain",
 ]
 forbidden_modules = ["app.commands"]
 
@@ -1032,5 +1046,177 @@ forbidden_modules = [
     "app.modules.cobranzas.api",
     "app.modules.cobranzas.commands",
     "app.modules.cobranzas.queries",
+]
+allow_indirect_imports = "true"
+
+# Change 18a (`design.md` D14, tarea 2.3): `ventas` es el undecimo modulo de negocio. Su `domain/`
+# (el motor de calculo de la venta) es puro: ni infraestructura, ni el bus, ni las capas de
+# infraestructura de su propio modulo.
+[[tool.importlinter.contracts]]
+id = "ventas-domain-no-infraestructura"
+name = "ventas domain no importa infraestructura, el bus de comandos ni su service.py"
+type = "forbidden"
+source_modules = ["app.modules.ventas.domain"]
+forbidden_modules = [
+    "fastapi",
+    "sqlalchemy",
+    "app.commands",
+    "app.modules.ventas.models",
+    "app.modules.ventas.repository",
+    "app.modules.ventas.service",
+    "app.modules.ventas.api",
+    "app.modules.ventas.commands",
+    "app.modules.ventas.queries",
+]
+
+# `ventas.domain` no alcanza a ningun otro modulo de negocio salvo las dos funciones puras que el
+# motor orquesta (ADR-016, ADR-050, ADR-054 D14): el bruto de linea de `precios` (PRC-22) y el
+# motor de `descuentos` (DSC-05). Son DOS excepciones documentadas, ambas desde `calculo.py`; el
+# resto de `precios` y `descuentos` (service, modelos, repositorio...) sigue prohibido. Precedente:
+# `cobranzas.domain.cobranza -> configuracion.domain.medios` (ADR-052 D17).
+[[tool.importlinter.contracts]]
+id = "ventas-domain-solo-dominio-puro-ajeno"
+name = "ventas domain solo alcanza precios.domain.bruto_de_linea y descuentos.domain"
+type = "forbidden"
+source_modules = ["app.modules.ventas.domain"]
+forbidden_modules = [
+    "app.modules.identidad",
+    "app.modules.configuracion",
+    "app.modules.catalogo",
+    "app.modules.proveedores",
+    "app.modules.clientes",
+    "app.modules.cuentas_corrientes",
+    "app.modules.costeo",
+    "app.modules.stock",
+    "app.modules.importacion",
+    "app.modules.cobranzas",
+    "app.modules.precios",
+    "app.modules.descuentos",
+    "app.modules.sync",
+]
+ignore_imports = [
+    "app.modules.ventas.domain.calculo -> app.modules.precios.domain.bruto_de_linea",
+    "app.modules.ventas.domain.calculo -> app.modules.descuentos.domain.*",
+]
+allow_indirect_imports = "true"
+
+# Change 18a (`design.md` D17, tarea 4.2, `02` SS5.3): `ventas -> precios, descuentos, clientes,
+# stock, costeo, cuentas_corrientes, cobranzas, catalogo, configuracion, identidad`, solo por su
+# `service.py`: nunca por modelos, repositorio, dominio, api, comandos ni consultas. Ningun otro
+# modulo de negocio (`proveedores`, `importacion`) ni `sync` (la api de ventas llama a
+# `sync_service.procesar_comando`: la excepcion `ventas.api -> sync.service` se declara al crearse
+# `api.py`, grupo 7). Las dos excepciones de `ignore_imports` son las funciones puras que el motor
+# de calculo orquesta (D14, ADR-054): `precios.domain.bruto_de_linea` (PRC-22) y
+# `descuentos.domain` (DSC-05); ninguna otra, ni desde otro archivo de `ventas`.
+[[tool.importlinter.contracts]]
+id = "ventas-solo-por-service-ajeno"
+name = "ventas solo alcanza a sus dependencias por su service.py"
+type = "forbidden"
+source_modules = ["app.modules.ventas"]
+forbidden_modules = [
+    "app.modules.identidad.models",
+    "app.modules.identidad.repository",
+    "app.modules.identidad.domain",
+    "app.modules.identidad.api",
+    "app.modules.identidad.commands",
+    "app.modules.configuracion.models",
+    "app.modules.configuracion.repository",
+    "app.modules.configuracion.domain",
+    "app.modules.configuracion.api",
+    "app.modules.configuracion.commands",
+    "app.modules.configuracion.queries",
+    "app.modules.catalogo.models",
+    "app.modules.catalogo.repository",
+    "app.modules.catalogo.domain",
+    "app.modules.catalogo.api",
+    "app.modules.catalogo.commands",
+    "app.modules.clientes.models",
+    "app.modules.clientes.repository",
+    "app.modules.clientes.domain",
+    "app.modules.clientes.api",
+    "app.modules.clientes.commands",
+    "app.modules.clientes.queries",
+    "app.modules.cuentas_corrientes.models",
+    "app.modules.cuentas_corrientes.repository",
+    "app.modules.cuentas_corrientes.domain",
+    "app.modules.cuentas_corrientes.api",
+    "app.modules.cuentas_corrientes.commands",
+    "app.modules.costeo.models",
+    "app.modules.costeo.repository",
+    "app.modules.costeo.domain",
+    "app.modules.stock.models",
+    "app.modules.stock.repository",
+    "app.modules.stock.jornadas_repository",
+    "app.modules.stock.jornadas_casos",
+    "app.modules.stock.jornadas_commands",
+    "app.modules.stock.domain",
+    "app.modules.stock.api",
+    "app.modules.stock.commands",
+    "app.modules.stock.queries",
+    "app.modules.precios.models",
+    "app.modules.precios.repository",
+    "app.modules.precios.domain",
+    "app.modules.precios.api",
+    "app.modules.precios.commands",
+    "app.modules.precios.queries",
+    "app.modules.descuentos.models",
+    "app.modules.descuentos.repository",
+    "app.modules.descuentos.domain",
+    "app.modules.descuentos.api",
+    "app.modules.descuentos.commands",
+    "app.modules.descuentos.queries",
+    "app.modules.cobranzas.models",
+    "app.modules.cobranzas.repository",
+    "app.modules.cobranzas.domain",
+    "app.modules.cobranzas.api",
+    "app.modules.cobranzas.commands",
+    "app.modules.cobranzas.queries",
+    "app.modules.proveedores",
+    "app.modules.importacion",
+    "app.modules.sync",
+]
+ignore_imports = [
+    "app.modules.ventas.domain.calculo -> app.modules.precios.domain.bruto_de_linea",
+    "app.modules.ventas.domain.calculo -> app.modules.descuentos.domain.*",
+    "app.modules.ventas.api -> app.modules.sync.service",
+]
+allow_indirect_imports = "true"
+
+# Nadie depende de `ventas` salvo `sync` (el lote, por su `service.py`, change 18a grupo 11):
+# ningun otro modulo de negocio la importa, ni siquiera por su `service.py`.
+[[tool.importlinter.contracts]]
+id = "nadie-importa-ventas"
+name = "ningun otro modulo de negocio importa ventas"
+type = "forbidden"
+source_modules = [
+    "app.modules.identidad",
+    "app.modules.configuracion",
+    "app.modules.catalogo",
+    "app.modules.proveedores",
+    "app.modules.clientes",
+    "app.modules.cuentas_corrientes",
+    "app.modules.costeo",
+    "app.modules.stock",
+    "app.modules.importacion",
+    "app.modules.precios",
+    "app.modules.descuentos",
+    "app.modules.cobranzas",
+]
+forbidden_modules = ["app.modules.ventas"]
+
+# `sync` alcanza a `ventas` solo por su `service.py` (paso 4 del lote y jornada del sobre,
+# change 18a grupo 11): nunca por su modelo, repositorio, dominio, api, consultas ni comandos.
+[[tool.importlinter.contracts]]
+id = "sync-hacia-ventas-solo-por-service"
+name = "sync alcanza a ventas solo por su service.py"
+type = "forbidden"
+source_modules = ["app.modules.sync"]
+forbidden_modules = [
+    "app.modules.ventas.models",
+    "app.modules.ventas.repository",
+    "app.modules.ventas.domain",
+    "app.modules.ventas.api",
+    "app.modules.ventas.commands",
+    "app.modules.ventas.queries",
 ]
 allow_indirect_imports = "true"

@@ -16,8 +16,9 @@ misma (no a través de un auxiliar): es lo que el ratchet de cobertura del bus i
 
 Permisos (`01` §19, `design.md` D12): las escrituras exigen `GESTIONAR_LISTAS`; las lecturas
 de listas, detalle y reglas, `GESTIONAR_LISTAS` o `PUBLICAR_LISTAS`; la lectura reducida de
-listas activas (`/precios/listas/opciones`), además `GESTIONAR_CLIENTES` o
-`ADMIN_CONFIGURACION`. **`/listas/opciones` se declara ANTES que `/listas/{lista_id}`**: si no,
+listas activas (`/precios/listas/opciones`), además `GESTIONAR_CLIENTES`,
+`ADMIN_CONFIGURACION` o, desde el change 18a (D19), `VENDER`. **`/listas/opciones` se declara
+ANTES que `/listas/{lista_id}`**: si no,
 FastAPI intenta interpretar `opciones` como un UUID y responde 422 (mismo criterio que
 `/proveedores/opciones`).
 
@@ -79,6 +80,7 @@ PERMISO_GESTIONAR_LISTAS = "GESTIONAR_LISTAS"
 PERMISO_PUBLICAR_LISTAS = "PUBLICAR_LISTAS"
 PERMISO_GESTIONAR_CLIENTES = "GESTIONAR_CLIENTES"
 PERMISO_ADMIN_CONFIGURACION = "ADMIN_CONFIGURACION"
+PERMISO_VENDER = "VENDER"
 PERMISO_VER_COSTOS = "VER_COSTOS"
 
 router = APIRouter(prefix="/precios", tags=["precios"])
@@ -350,13 +352,15 @@ def listar_opciones_de_listas(
                 PERMISO_PUBLICAR_LISTAS,
                 PERMISO_GESTIONAR_CLIENTES,
                 PERMISO_ADMIN_CONFIGURACION,
+                PERMISO_VENDER,
             )
         ),
     ],
     sesion: Annotated[Session, Depends(get_session)],
 ) -> ListaOpcionesResponse:
     """Lectura reducida de las listas activas (identificador y nombre) para los selectores
-    de la ficha del cliente y de la configuración (`design.md` D12)."""
+    de la ficha del cliente y de la configuración (`design.md` D12) y, desde el change 18a (D19,
+    aprobada por el usuario el 2026-10-20), para quien vende (`VENDER`, solo lectura)."""
     return queries.listar_opciones_de_listas(contexto.organizacion_id, sesion)
 
 

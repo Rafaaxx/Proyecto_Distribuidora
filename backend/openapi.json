@@ -2978,7 +2978,7 @@
           "clientes"
         ],
         "summary": "Listar Opciones De Clientes",
-        "description": "Selector liviano de clientes para quien cobra (change 17, `design.md` D14, tabla de\npermisos aprobada por el usuario el 2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`.\nDevuelve identificador, nombre, código y estado, sin crédito ni documento; solo clientes\n`ACTIVO` y `SUSPENDIDO` y no el consumidor final. Se declara antes de `/{cliente_id}`.",
+        "description": "Selector liviano de clientes para quien cobra (change 17, `design.md` D14, tabla de\npermisos aprobada por el usuario el 2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`;\ndesde el change 18a (D19, aprobada el 2026-10-20), también `VENDER`, solo lectura.\nDevuelve identificador, nombre, código, estado y la marca `es_consumidor_final`, sin crédito\nni documento; solo clientes `ACTIVO` y `SUSPENDIDO`, y el consumidor final únicamente con\n`incluir_consumidor_final=true` (la pantalla de venta, CLI-03; aprobado el 2026-10-20).\nSe declara antes de `/{cliente_id}`.",
         "operationId": "listar_opciones_de_clientes_api_v1_clientes_opciones_get",
         "parameters": [
           {
@@ -3023,6 +3023,16 @@
               "minimum": 1,
               "default": 50,
               "title": "Limite"
+            }
+          },
+          {
+            "name": "incluir_consumidor_final",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Incluir Consumidor Final"
             }
           },
           {
@@ -3072,7 +3082,7 @@
           "clientes"
         ],
         "summary": "Obtener Saldo De Cliente",
-        "description": "Saldo actual del cliente, desde `saldo_cuenta` (change 17, D14, aprobada por el usuario el\n2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`. Sin movimientos es `\"0.00\"` (CC-04).\n404 para un cliente de otra organización o inexistente, antes de leer el saldo (INV-21).",
+        "description": "Saldo actual del cliente, desde `saldo_cuenta` (change 17, D14, aprobada por el usuario el\n2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`; desde el change 18a (D19, aprobada\nel 2026-10-20), también `VENDER`, solo lectura. Sin movimientos es `\"0.00\"` (CC-04).\n404 para un cliente de otra organización o inexistente, antes de leer el saldo (INV-21).",
         "operationId": "obtener_saldo_de_cliente_api_v1_clientes__cliente_id__saldo_get",
         "parameters": [
           {
@@ -5186,7 +5196,7 @@
           "precios"
         ],
         "summary": "Listar Opciones De Listas",
-        "description": "Lectura reducida de las listas activas (identificador y nombre) para los selectores\nde la ficha del cliente y de la configuración (`design.md` D12).",
+        "description": "Lectura reducida de las listas activas (identificador y nombre) para los selectores\nde la ficha del cliente y de la configuración (`design.md` D12) y, desde el change 18a (D19,\naprobada por el usuario el 2026-10-20), para quien vende (`VENDER`, solo lectura).",
         "operationId": "listar_opciones_de_listas_api_v1_precios_listas_opciones_get",
         "parameters": [
           {
@@ -7793,7 +7803,7 @@
           "stock"
         ],
         "summary": "Listar Ubicaciones",
-        "description": "Ubicaciones de la organización, con filtro opcional por estado, paginadas\npor cursor (spec `ubicaciones`, escenario \"Listar ubicaciones\").",
+        "description": "Ubicaciones de la organización, con filtro opcional por estado, paginadas\npor cursor (spec `ubicaciones`, escenario \"Listar ubicaciones\").\n\nChange 18a (D19, aprobada por el usuario el 2026-10-20): también `VENDER`, solo lectura.\nQuien llega SOLO por `VENDER` (sin `TRANSFERIR_STOCK` ni `REGISTRAR_COMPRA`) recibe siempre\núnicamente las ubicaciones activas: `activo=false` o `activo` ausente se filtran en silencio,\nsin error, decidido acá con los permisos del token. La toma de cada ubicación sigue visible.\nQuien tiene alguno de los dos permisos de siempre conserva el comportamiento anterior.",
         "operationId": "listar_ubicaciones_api_v1_stock_ubicaciones_get",
         "parameters": [
           {
@@ -9625,6 +9635,610 @@
           }
         }
       }
+    },
+    "/api/v1/ventas": {
+      "post": {
+        "tags": [
+          "ventas"
+        ],
+        "summary": "Confirmar Venta",
+        "description": "`POST /ventas` (VTA-12). El resultado sale de `comando.resultado`, no de una relectura\n(INV-06); los importes viajan y vuelven como string (INV-03).",
+        "operationId": "confirmar_venta_api_v1_ventas_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VentaConfirmarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VentaConfirmarResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "ventas"
+        ],
+        "summary": "Listar Ventas",
+        "description": "Ventas de la organización de la más reciente a la más vieja, por cursor (D19, aprobada\npor el usuario el 2026-10-20): `VENDER` o `ANULAR_VENTA`, todas las de la organización.\n`desde` y `hasta` son fechas de negocio inclusivas en la zona de la organización (TR-04); un\n`limite` fuera de 1 a 200 es 422, y un rango invertido o un cursor ilegible también, con su\ncódigo.",
+        "operationId": "listar_ventas_api_v1_ventas_get",
+        "parameters": [
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cliente Id"
+            }
+          },
+          {
+            "name": "usuario_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Usuario Id"
+            }
+          },
+          {
+            "name": "jornada_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Jornada Id"
+            }
+          },
+          {
+            "name": "ubicacion_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ubicacion Id"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Desde"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hasta"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaVentas"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ventas/precios": {
+      "get": {
+        "tags": [
+          "ventas"
+        ],
+        "summary": "Obtener Precios Para Vender",
+        "description": "Lo que la pantalla de venta lee (D19): una página de productos activos con el precio de la\nversión, sus presentaciones de venta y, con `ubicacion_id`, el stock de esa ubicación; los\nproductos sin precio, marcados. `VENDER`. NUNCA costos, ni siquiera con `VER_COSTOS`.\n\n`q` busca en nombre o código sin distinguir mayúsculas; `producto_id` trae uno; `cursor` y\n`limite` (1 a 200, por defecto 50) paginan por código; el precio y el stock se calculan solo\npara la página (ajuste aprobado el 2026-10-20). Sin `USAR_LISTA_ANTERIOR` solo se consulta la\nversión vigente de la lista que la venta usaría para ese cliente: otra lista u otra versión\nes 403 `PERMISO_REQUERIDO` (D6). Una ubicación inactiva es `UBICACION_INACTIVA` (409); lo\najeno, 404.",
+        "operationId": "obtener_precios_para_vender_api_v1_ventas_precios_get",
+        "parameters": [
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cliente Id"
+            }
+          },
+          {
+            "name": "lista_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lista Id"
+            }
+          },
+          {
+            "name": "version_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version Id"
+            }
+          },
+          {
+            "name": "ubicacion_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ubicacion Id"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "producto_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Producto Id"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreciosParaVenderResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ventas/numeracion": {
+      "get": {
+        "tags": [
+          "ventas"
+        ],
+        "summary": "Obtener Numeracion",
+        "description": "Prefijo, último correlativo y número que sigue del dispositivo de la sesión (VTA-06, D4).\n`VENDER`. No recibe parámetros: el dispositivo sale del token.",
+        "operationId": "obtener_numeracion_api_v1_ventas_numeracion_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NumeracionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ventas/versiones": {
+      "get": {
+        "tags": [
+          "ventas"
+        ],
+        "summary": "Listar Versiones Elegibles",
+        "description": "Las versiones de la lista que una venta puede elegir (PRC-21, D6): la vigente y las\nhistóricas, de la más nueva a la más vieja. `USAR_LISTA_ANTERIOR` (403 sin él). Lista ajena,\n404.",
+        "operationId": "listar_versiones_elegibles_api_v1_ventas_versiones_get",
+        "parameters": [
+          {
+            "name": "lista_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lista Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionesElegiblesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ventas/{venta_id}": {
+      "get": {
+        "tags": [
+          "ventas"
+        ],
+        "summary": "Obtener Venta",
+        "description": "Detalle de una venta (D19): líneas en su presentación, totales, cobranza enlazada, lista\ny versión con el motivo, y las observaciones de sincronización (SYN-07). `VENDER` o\n`ANULAR_VENTA`; el costo de cada línea solo con `VER_COSTOS` (nulo sin él; no hay utilidad,\nREP-04).\n404 si es de otra organización o no existe (INV-21, SEG-07).",
+        "operationId": "obtener_venta_api_v1_ventas__venta_id__get",
+        "parameters": [
+          {
+            "name": "venta_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Venta Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VentaDetalleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -10458,6 +11072,10 @@
           "estado": {
             "type": "string",
             "title": "Estado"
+          },
+          "es_consumidor_final": {
+            "type": "boolean",
+            "title": "Es Consumidor Final"
           }
         },
         "type": "object",
@@ -10465,7 +11083,8 @@
           "id",
           "nombre",
           "codigo",
-          "estado"
+          "estado",
+          "es_consumidor_final"
         ],
         "title": "ClienteOpcionResponse",
         "description": "Una opción del selector de clientes de quien cobra (D14): sin crédito ni documento."
@@ -14773,6 +15392,30 @@
         "title": "MovimientoEstadoDeCuentaResponse",
         "description": "Un movimiento del estado de cuenta con su saldo acumulado real (CC-07)."
       },
+      "NumeracionResponse": {
+        "properties": {
+          "prefijo": {
+            "type": "string",
+            "title": "Prefijo"
+          },
+          "ultimo_correlativo": {
+            "type": "integer",
+            "title": "Ultimo Correlativo"
+          },
+          "siguiente_numero": {
+            "type": "string",
+            "title": "Siguiente Numero"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prefijo",
+          "ultimo_correlativo",
+          "siguiente_numero"
+        ],
+        "title": "NumeracionResponse",
+        "description": "Prefijo del dispositivo de la sesión, último correlativo y el número que sigue (D4)."
+      },
       "OrganizacionYoResponse": {
         "properties": {
           "id": {
@@ -15275,6 +15918,34 @@
           "cursor_siguiente"
         ],
         "title": "PaginaUbicaciones"
+      },
+      "PaginaVentas": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VentaResumenResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "cursor_siguiente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Siguiente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "cursor_siguiente"
+        ],
+        "title": "PaginaVentas"
       },
       "PagoAnulacionResponse": {
         "properties": {
@@ -15950,6 +16621,69 @@
         "title": "PreciosDeVersionResponse",
         "description": "Los precios de una versión paginados por cursor (`siguiente_cursor` es nulo en la\núltima página)."
       },
+      "PreciosParaVenderResponse": {
+        "properties": {
+          "lista_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Lista Id"
+          },
+          "lista_nombre": {
+            "type": "string",
+            "title": "Lista Nombre"
+          },
+          "version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Version Id"
+          },
+          "version_numero": {
+            "type": "integer",
+            "title": "Version Numero"
+          },
+          "ubicacion_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ubicacion Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProductoParaVenderResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "cursor_siguiente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Siguiente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lista_id",
+          "lista_nombre",
+          "version_id",
+          "version_numero",
+          "ubicacion_id",
+          "items",
+          "cursor_siguiente"
+        ],
+        "title": "PreciosParaVenderResponse"
+      },
       "PreciosVigentesResponse": {
         "properties": {
           "version_id": {
@@ -16119,6 +16853,35 @@
           "activo"
         ],
         "title": "PresentacionModificarRequest"
+      },
+      "PresentacionParaVenderResponse": {
+        "properties": {
+          "presentacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Presentacion Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "unidades_base": {
+            "type": "integer",
+            "title": "Unidades Base"
+          },
+          "es_referencia": {
+            "type": "boolean",
+            "title": "Es Referencia"
+          }
+        },
+        "type": "object",
+        "required": [
+          "presentacion_id",
+          "nombre",
+          "unidades_base",
+          "es_referencia"
+        ],
+        "title": "PresentacionParaVenderResponse"
       },
       "PresentacionReferenciaCambiarRequest": {
         "properties": {
@@ -16404,6 +17167,80 @@
           "activo"
         ],
         "title": "ProductoModificarRequest"
+      },
+      "ProductoParaVenderResponse": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "codigo": {
+            "type": "string",
+            "title": "Codigo"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "precio_referencia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precio Referencia"
+          },
+          "unidades_referencia": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unidades Referencia"
+          },
+          "sin_precio": {
+            "type": "boolean",
+            "title": "Sin Precio"
+          },
+          "stock_base": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stock Base"
+          },
+          "presentaciones": {
+            "items": {
+              "$ref": "#/components/schemas/PresentacionParaVenderResponse"
+            },
+            "type": "array",
+            "title": "Presentaciones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto_id",
+          "codigo",
+          "nombre",
+          "precio_referencia",
+          "unidades_referencia",
+          "sin_precio",
+          "stock_base",
+          "presentaciones"
+        ],
+        "title": "ProductoParaVenderResponse",
+        "description": "Un producto activo con su precio en la versión (nulo y `sin_precio` si no tiene, D7) y el\nstock de la ubicación pedida (nulo si no se pidió). Nunca lleva costos ni márgenes."
       },
       "ProductoResponse": {
         "properties": {
@@ -18471,6 +19308,858 @@
         ],
         "title": "ValidationError"
       },
+      "VentaCobranzaMedioRequest": {
+        "properties": {
+          "medio_pago_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Medio Pago Id"
+          },
+          "importe": {
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Importe"
+          },
+          "referencia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referencia"
+          }
+        },
+        "type": "object",
+        "required": [
+          "medio_pago_id",
+          "importe"
+        ],
+        "title": "VentaCobranzaMedioRequest",
+        "description": "Un medio de la cobranza en el acto (D12)."
+      },
+      "VentaCobranzaRequest": {
+        "properties": {
+          "cobranza_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Cobranza Id"
+          },
+          "medios": {
+            "items": {
+              "$ref": "#/components/schemas/VentaCobranzaMedioRequest"
+            },
+            "type": "array",
+            "title": "Medios"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cobranza_id",
+          "medios"
+        ],
+        "title": "VentaCobranzaRequest",
+        "description": "La cobranza en el acto; su importe es la suma de los medios (INV-08)."
+      },
+      "VentaCobranzaResponse": {
+        "properties": {
+          "cobranza_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Cobranza Id"
+          },
+          "importe": {
+            "type": "string",
+            "title": "Importe"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cobranza_id",
+          "importe",
+          "estado"
+        ],
+        "title": "VentaCobranzaResponse"
+      },
+      "VentaConfirmarRequest": {
+        "properties": {
+          "venta_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Venta Id"
+          },
+          "numero": {
+            "type": "string",
+            "title": "Numero"
+          },
+          "cliente_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Cliente Id"
+          },
+          "ubicacion_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ubicacion Id"
+          },
+          "lista_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lista Id"
+          },
+          "lista_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lista Version Id"
+          },
+          "motivo_lista_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Lista Id"
+          },
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/VentaLineaRequest"
+            },
+            "type": "array",
+            "title": "Lineas"
+          },
+          "total": {
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Total"
+          },
+          "cobranza": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VentaCobranzaRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "venta_id",
+          "numero",
+          "cliente_id",
+          "lineas",
+          "total"
+        ],
+        "title": "VentaConfirmarRequest",
+        "description": "`POST /ventas`. `venta_id` y `numero` los genera quien origina la venta (`02` §9, D4)."
+      },
+      "VentaConfirmarResponse": {
+        "properties": {
+          "venta_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Venta Id"
+          },
+          "numero": {
+            "type": "string",
+            "title": "Numero"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "total": {
+            "type": "string",
+            "title": "Total"
+          },
+          "saldo": {
+            "type": "string",
+            "title": "Saldo"
+          },
+          "cobranza_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cobranza Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "venta_id",
+          "numero",
+          "estado",
+          "total",
+          "saldo",
+          "cobranza_id"
+        ],
+        "title": "VentaConfirmarResponse",
+        "description": "Sale de `comando.resultado`, no de una relectura: un reenvío idempotente del mismo\n`Operation-Id` devuelve exactamente lo mismo (INV-06). `saldo` es el saldo resultante del\ncliente, con la cobranza en el acto ya aplicada; negativo es saldo a favor."
+      },
+      "VentaDetalleResponse": {
+        "properties": {
+          "venta_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Venta Id"
+          },
+          "numero": {
+            "type": "string",
+            "title": "Numero"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "cliente_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Cliente Id"
+          },
+          "cliente_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cliente Nombre"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "usuario_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usuario Nombre"
+          },
+          "ubicacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Id"
+          },
+          "ubicacion_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ubicacion Nombre"
+          },
+          "jornada_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jornada Id"
+          },
+          "total": {
+            "type": "string",
+            "title": "Total"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "estado_facturacion": {
+            "type": "string",
+            "title": "Estado Facturacion"
+          },
+          "modo_confirmacion": {
+            "type": "string",
+            "title": "Modo Confirmacion"
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Registered At"
+          },
+          "dispositivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Dispositivo Id"
+          },
+          "lista_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Lista Id"
+          },
+          "lista_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lista Nombre"
+          },
+          "version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Version Id"
+          },
+          "version_numero": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Numero"
+          },
+          "motivo_lista": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VentaMotivoResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "modo_impositivo": {
+            "type": "string",
+            "title": "Modo Impositivo"
+          },
+          "total_neto": {
+            "type": "string",
+            "title": "Total Neto"
+          },
+          "total_iva": {
+            "type": "string",
+            "title": "Total Iva"
+          },
+          "importe_facturado": {
+            "type": "string",
+            "title": "Importe Facturado"
+          },
+          "cobranza": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VentaCobranzaResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/VentaLineaResponse"
+            },
+            "type": "array",
+            "title": "Lineas"
+          },
+          "observaciones": {
+            "items": {
+              "$ref": "#/components/schemas/VentaObservacionResponse"
+            },
+            "type": "array",
+            "title": "Observaciones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "venta_id",
+          "numero",
+          "occurred_at",
+          "cliente_id",
+          "cliente_nombre",
+          "usuario_id",
+          "usuario_nombre",
+          "ubicacion_id",
+          "ubicacion_nombre",
+          "jornada_id",
+          "total",
+          "estado",
+          "estado_facturacion",
+          "modo_confirmacion",
+          "registered_at",
+          "dispositivo_id",
+          "lista_id",
+          "lista_nombre",
+          "version_id",
+          "version_numero",
+          "motivo_lista",
+          "modo_impositivo",
+          "total_neto",
+          "total_iva",
+          "importe_facturado",
+          "cobranza",
+          "lineas",
+          "observaciones"
+        ],
+        "title": "VentaDetalleResponse",
+        "description": "La venta como quedó congelada (VTA-03, VTA-12)."
+      },
+      "VentaLineaRequest": {
+        "properties": {
+          "linea_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Linea Id"
+          },
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "presentacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Presentacion Id"
+          },
+          "cantidad": {
+            "type": "integer",
+            "title": "Cantidad"
+          },
+          "lista_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Lista Version Id"
+          },
+          "precio_referencia": {
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Precio Referencia"
+          },
+          "unidades_referencia": {
+            "type": "integer",
+            "title": "Unidades Referencia"
+          },
+          "importe_bruto": {
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Importe Bruto"
+          }
+        },
+        "type": "object",
+        "required": [
+          "linea_id",
+          "producto_id",
+          "presentacion_id",
+          "cantidad",
+          "lista_version_id",
+          "precio_referencia",
+          "unidades_referencia",
+          "importe_bruto"
+        ],
+        "title": "VentaLineaRequest",
+        "description": "Una línea con lo que vio el usuario (D2)."
+      },
+      "VentaLineaResponse": {
+        "properties": {
+          "linea_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Linea Id"
+          },
+          "orden": {
+            "type": "integer",
+            "title": "Orden"
+          },
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "producto_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Producto Nombre"
+          },
+          "presentacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Presentacion Id"
+          },
+          "presentacion_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presentacion Nombre"
+          },
+          "lista_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Lista Version Id"
+          },
+          "unidades_presentacion": {
+            "type": "integer",
+            "title": "Unidades Presentacion"
+          },
+          "cantidad": {
+            "type": "integer",
+            "title": "Cantidad"
+          },
+          "cantidad_base": {
+            "type": "integer",
+            "title": "Cantidad Base"
+          },
+          "precio_referencia": {
+            "type": "string",
+            "title": "Precio Referencia"
+          },
+          "unidades_referencia": {
+            "type": "integer",
+            "title": "Unidades Referencia"
+          },
+          "importe_bruto": {
+            "type": "string",
+            "title": "Importe Bruto"
+          },
+          "importe_descuento": {
+            "type": "string",
+            "title": "Importe Descuento"
+          },
+          "importe_neto": {
+            "type": "string",
+            "title": "Importe Neto"
+          },
+          "alicuota": {
+            "type": "string",
+            "title": "Alicuota"
+          },
+          "importe_iva": {
+            "type": "string",
+            "title": "Importe Iva"
+          },
+          "costo_unitario": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Costo Unitario"
+          },
+          "costo_total": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Costo Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "linea_id",
+          "orden",
+          "producto_id",
+          "producto_nombre",
+          "presentacion_id",
+          "presentacion_nombre",
+          "lista_version_id",
+          "unidades_presentacion",
+          "cantidad",
+          "cantidad_base",
+          "precio_referencia",
+          "unidades_referencia",
+          "importe_bruto",
+          "importe_descuento",
+          "importe_neto",
+          "alicuota",
+          "importe_iva",
+          "costo_unitario",
+          "costo_total"
+        ],
+        "title": "VentaLineaResponse",
+        "description": "Una línea congelada. `costo_unitario` y `costo_total` van en nulo sin `VER_COSTOS`\n(VTA-05, `01` §19). Sin utilidad: es de los reportes (REP-04)."
+      },
+      "VentaMotivoResponse": {
+        "properties": {
+          "motivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Motivo Id"
+          },
+          "nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "motivo_id",
+          "nombre"
+        ],
+        "title": "VentaMotivoResponse"
+      },
+      "VentaObservacionResponse": {
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "title": "Codigo"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "detalle": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Detalle"
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo",
+          "estado",
+          "detalle"
+        ],
+        "title": "VentaObservacionResponse"
+      },
+      "VentaResumenResponse": {
+        "properties": {
+          "venta_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Venta Id"
+          },
+          "numero": {
+            "type": "string",
+            "title": "Numero"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "cliente_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Cliente Id"
+          },
+          "cliente_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cliente Nombre"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "usuario_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usuario Nombre"
+          },
+          "ubicacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Id"
+          },
+          "ubicacion_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ubicacion Nombre"
+          },
+          "jornada_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jornada Id"
+          },
+          "total": {
+            "type": "string",
+            "title": "Total"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "estado_facturacion": {
+            "type": "string",
+            "title": "Estado Facturacion"
+          },
+          "modo_confirmacion": {
+            "type": "string",
+            "title": "Modo Confirmacion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "venta_id",
+          "numero",
+          "occurred_at",
+          "cliente_id",
+          "cliente_nombre",
+          "usuario_id",
+          "usuario_nombre",
+          "ubicacion_id",
+          "ubicacion_nombre",
+          "jornada_id",
+          "total",
+          "estado",
+          "estado_facturacion",
+          "modo_confirmacion"
+        ],
+        "title": "VentaResumenResponse",
+        "description": "Una venta del listado. Los importes viajan como string (INV-03)."
+      },
+      "VersionElegibleResponse": {
+        "properties": {
+          "version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Version Id"
+          },
+          "numero": {
+            "type": "integer",
+            "title": "Numero"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "vigencia_desde": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Vigencia Desde"
+          },
+          "vigencia_hasta": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vigencia Hasta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version_id",
+          "numero",
+          "estado",
+          "vigencia_desde",
+          "vigencia_hasta"
+        ],
+        "title": "VersionElegibleResponse"
+      },
       "VersionResponse": {
         "properties": {
           "id": {
@@ -18689,6 +20378,22 @@
           "version"
         ],
         "title": "VersionRespuesta"
+      },
+      "VersionesElegiblesResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VersionElegibleResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "VersionesElegiblesResponse"
       },
       "VersionesResponse": {
         "properties": {

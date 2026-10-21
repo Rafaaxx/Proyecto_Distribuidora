@@ -164,6 +164,40 @@ def listar_ubicaciones(
     return list(sesion.scalars(consulta.order_by(Ubicacion.id).limit(limite)).all())
 
 
+def nombres_de_ubicaciones(
+    organizacion_id: UUID, sesion: Session, ubicacion_ids: Collection[UUID]
+) -> dict[UUID, str]:
+    """`{id: nombre}` de las ubicaciones de la organización entre `ubicacion_ids`, activas o
+    no, en una consulta (las de otra organización no aparecen, INV-21)."""
+    if not ubicacion_ids:
+        return {}
+    consulta = select(Ubicacion.id, Ubicacion.nombre).where(
+        Ubicacion.organizacion_id == organizacion_id, Ubicacion.id.in_(ubicacion_ids)
+    )
+    return {fila.id: fila.nombre for fila in sesion.execute(consulta)}
+
+
+def saldos_distintos_de_cero_de_ubicacion(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    ubicacion_id: UUID,
+    producto_ids: Collection[UUID] | None = None,
+) -> dict[UUID, int]:
+    """`{producto_id: cantidad_base}` de los saldos distintos de cero de la ubicación, en una
+    consulta y sin bloquear; con `producto_ids`, solo los de esos productos."""
+    if producto_ids is not None and not producto_ids:
+        return {}
+    consulta = select(StockSaldo.producto_id, StockSaldo.cantidad_base).where(
+        StockSaldo.organizacion_id == organizacion_id,
+        StockSaldo.ubicacion_id == ubicacion_id,
+        StockSaldo.cantidad_base != 0,
+    )
+    if producto_ids is not None:
+        consulta = consulta.where(StockSaldo.producto_id.in_(producto_ids))
+    return {producto_id: cantidad for producto_id, cantidad in sesion.execute(consulta).all()}
+
+
 def buscar_ubicaciones_por_nombre(
     organizacion_id: UUID, sesion: Session, *, nombre: str
 ) -> list[Ubicacion]:

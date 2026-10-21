@@ -81,3 +81,8 @@ Lo que `docs/` decía: COB-01 a COB-05 describen la cobranza pero no su contenid
 3. **Al change 23 (`/ruta`):** la pantalla de cobranza del vendedor y su cola local.
 4. **Al change 24 (rendición de jornada):** decidir si RUT-05 necesita un código de observación para una cobranza que llega con la jornada `EN_RENDICION` o `CERRADA`; mostrar la cobranza anulada en el resumen.
 5. **Pendiente de la bandeja de observaciones:** resolverlas (`PENDIENTE` a `RESUELTA`); hoy solo se ven.
+
+
+## Enmienda del change 18a (ADR-054)
+
+(1) El change 18a cumple los puntos 2 y 16: `registrar_cobranza` se llama con origen `VENTA` y `venta_id` dentro de la transacción de la venta, después del débito, con a lo sumo una cobranza por venta y de 1 a 20 medios cuya suma es su importe; `cobranza.venta_id` pasa a FK compuesta `(organizacion_id, venta_id)` a `venta` (la migración aborta si hay cobranzas con `venta_id` no nulo). `COBRANZA_REGISTRAR` sigue sin admitir una venta. (2) `VENTA_CONFIRMAR` declara `permiso_offline = VENDER` (punto 8) y en modo `OFFLINE` emite `MEDIO_INACTIVO` y `REFERENCIA_FALTANTE` sobre la cobranza de la venta; `JORNADA_LIBERADA` va una sola vez, sobre la venta. (3) El punto 79, anular las cobranzas de una venta con la venta (VTA-22), no corresponde al 18a: pasa al change 19. (4) El consumidor final de contado no recibe la cobranza independiente (`CONSUMIDOR_FINAL_SIN_CUENTA`) pero sí la de su propia venta.

@@ -316,6 +316,35 @@ def test_sembrar_dos_veces_no_duplica_los_motivos_de_anulacion_de_cobranza(
     assert cantidad == 3
 
 
+def test_la_siembra_deja_los_tres_motivos_de_lista_anterior(db_session: Session) -> None:
+    """Change 18a, tarea 4.1 (PRC-21, `design.md` D6): una organización nueva queda con los tres
+    nombres que siembra la migración `a2b3c4d5e6f7`; sin ellos no se podría vender con otra lista
+    o con una versión anterior cuando la configuración exige motivo."""
+    organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+    assert organizacion is not None
+
+    motivos = configuracion_service.listar_motivos_por_ambito(
+        organizacion.id, db_session, "LISTA_ANTERIOR"
+    )
+
+    assert sorted(motivo.nombre for motivo in motivos) == [
+        "Error en la lista vigente",
+        "Otro",
+        "Precio acordado con el cliente",
+    ]
+    assert all(motivo.ambito == "LISTA_ANTERIOR" and motivo.activo for motivo in motivos)
+
+
+def test_sembrar_dos_veces_no_duplica_los_motivos_de_lista_anterior(db_session: Session) -> None:
+    sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+    assert sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA) is None
+
+    cantidad = db_session.execute(
+        text("SELECT count(*) FROM motivo WHERE ambito = 'LISTA_ANTERIOR'")
+    ).scalar_one()
+    assert cantidad == 3
+
+
 def test_solo_administrador_y_administracion_reciben_anular_transferencia(
     db_session: Session,
 ) -> None:

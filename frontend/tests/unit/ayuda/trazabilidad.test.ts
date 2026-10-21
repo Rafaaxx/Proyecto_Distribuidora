@@ -42,6 +42,7 @@ function idsInexistentes(reglas: readonly string[], dominio: Set<string>, adr: S
 }
 
 describe('claves usadas en src', () => {
+  // Escenario: "Trazabilidad"
   it('cada clave de <Ayuda clave> y de ayuda= existe en AYUDAS (nombra archivo y clave si no)', () => {
     const base = raizObligatoria()
     const usos = archivosTsx(`${base}/frontend/src`).flatMap((archivo) =>
@@ -74,6 +75,7 @@ describe('claves usadas en src', () => {
 })
 
 describe('IDs de regla citados', () => {
+  // Escenario: "Trazabilidad"
   it('cada ID de AYUDAS y de TEMAS existe en docs/01-dominio.md o como ADR en docs/adr', () => {
     const base = raizObligatoria()
     const dominio = idsDeDominio(leerDominio(base))

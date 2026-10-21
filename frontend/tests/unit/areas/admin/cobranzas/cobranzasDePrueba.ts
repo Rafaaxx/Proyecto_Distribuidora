@@ -91,8 +91,8 @@ export function reglasBase(saldo = '150000.00'): ReglaDeApi[] {
         status: 200,
         cuerpo: {
           items: [
-            { id: CLIENTE_ID, nombre: 'Kiosco La Esquina', codigo: 'C-001', estado: 'ACTIVO' },
-            { id: OTRO_CLIENTE_ID, nombre: 'Almacén Don Pedro', codigo: 'C-002', estado: 'SUSPENDIDO' },
+            { id: CLIENTE_ID, nombre: 'Kiosco La Esquina', codigo: 'C-001', estado: 'ACTIVO', es_consumidor_final: false },
+            { id: OTRO_CLIENTE_ID, nombre: 'Almacén Don Pedro', codigo: 'C-002', estado: 'SUSPENDIDO', es_consumidor_final: false },
           ],
           cursor_siguiente: null,
         },

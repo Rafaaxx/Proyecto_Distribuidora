@@ -196,7 +196,9 @@ def test_con_permiso_y_saldo_suficiente_no_marca_negativo(entorno: Entorno) -> N
     assert (resultado.saldo, resultado.saldo_negativo) == (0, False)
 
 
-@pytest.mark.parametrize("tipo", ["VENTA", "AJUSTE"])
+# Desde el change 18a (D11, STK-05) el egreso `VENTA` SÍ admite stock negativo con permiso; lo
+# prueba `test_stock_egreso_venta.py`.
+@pytest.mark.parametrize("tipo", ["AJUSTE"])
 def test_el_permiso_no_alcanza_a_los_egresos_de_otro_tipo(entorno: Entorno, tipo: str) -> None:
     entorno.mover(entorno.ingreso(10, "100"))
 

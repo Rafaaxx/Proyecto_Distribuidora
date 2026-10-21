@@ -795,3 +795,103 @@ def presentaciones_de_venta_de_productos(
         .order_by(Presentacion.producto_id, Presentacion.unidades_base, Presentacion.nombre)
     )
     return [(fila[0], fila[1], fila[2]) for fila in sesion.execute(consulta)]
+
+
+_ESCAPE_LIKE = "\\"
+
+
+def _patron_literal(texto: str) -> str:
+    """Patrón de `ILIKE` que busca `texto` tal cual: `%`, `_` y la barra no son comodines."""
+    escapado = (
+        texto.replace(_ESCAPE_LIKE, _ESCAPE_LIKE * 2)
+        .replace("%", _ESCAPE_LIKE + "%")
+        .replace("_", _ESCAPE_LIKE + "_")
+    )
+    return f"%{escapado}%"
+
+
+def listar_productos_activos_para_vender(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    texto: str | None = None,
+    producto_id: UUID | None = None,
+    despues_de_codigo: str | None = None,
+    limite: int,
+) -> tuple[list[tuple[UUID, str, str]], bool]:
+    """`((producto_id, codigo, nombre), hay_mas)` de los productos activos de la organización
+    ordenados por código, filtrados en SQL (CAT-05: un producto inactivo no se vende). `texto`
+    busca sin distinguir mayúsculas en nombre o código, como texto literal; `producto_id` trae
+    uno solo; `despues_de_codigo` es el cursor (el código es único por organización, CAT-01).
+    Se pide una fila de más para saber si hay otra página."""
+    consulta = select(Producto.id, Producto.codigo, Producto.nombre).where(
+        Producto.organizacion_id == organizacion_id, Producto.activo.is_(True)
+    )
+    if producto_id is not None:
+        consulta = consulta.where(Producto.id == producto_id)
+    if texto is not None:
+        patron = _patron_literal(texto)
+        consulta = consulta.where(
+            Producto.codigo.ilike(patron, escape=_ESCAPE_LIKE)
+            | Producto.nombre.ilike(patron, escape=_ESCAPE_LIKE)
+        )
+    if despues_de_codigo is not None:
+        consulta = consulta.where(Producto.codigo > despues_de_codigo)
+    consulta = consulta.order_by(Producto.codigo, Producto.id).limit(limite + 1)
+    filas = [(fila[0], fila[1], fila[2]) for fila in sesion.execute(consulta)]
+    return filas[:limite], len(filas) > limite
+
+
+def presentaciones_vendibles_de_productos_activos(
+    organizacion_id: UUID, producto_ids: Collection[UUID], sesion: Session
+) -> list[tuple[UUID, UUID, str, int, bool]]:
+    """`(producto_id, presentacion_id, nombre, unidades_base, es_referencia)` de las
+    presentaciones activas y de venta de esos productos (si están activos), en una consulta, de
+    menos unidades a más dentro de cada producto. Sin bloqueos: es una lectura de pantalla."""
+    if not producto_ids:
+        return []
+    consulta = (
+        select(
+            Presentacion.producto_id,
+            Presentacion.id,
+            Presentacion.nombre,
+            Presentacion.unidades_base,
+            Presentacion.es_referencia,
+        )
+        .join(
+            Producto,
+            (Producto.organizacion_id == Presentacion.organizacion_id)
+            & (Producto.id == Presentacion.producto_id),
+        )
+        .where(
+            Presentacion.organizacion_id == organizacion_id,
+            Presentacion.producto_id.in_(producto_ids),
+            Producto.activo.is_(True),
+            Presentacion.activo.is_(True),
+            Presentacion.usar_en_venta.is_(True),
+        )
+        .order_by(Presentacion.producto_id, Presentacion.unidades_base, Presentacion.nombre)
+    )
+    return [(fila[0], fila[1], fila[2], fila[3], fila[4]) for fila in sesion.execute(consulta)]
+
+
+def presentaciones_de_productos_para_compartir(
+    organizacion_id: UUID, producto_ids: Collection[UUID], sesion: Session
+) -> list[Presentacion]:
+    """Todas las presentaciones de `producto_ids` (activas o no, de venta o no), leídas con
+    `SELECT ... FOR KEY SHARE` (change 18a, D17/D18): la venta las lee con los productos ya
+    tomados en modo compartido y, además, ninguna presentación puede borrarse ni cambiar de
+    clave mientras la venta congela sus unidades. En orden estable por producto y unidades."""
+    if not producto_ids:
+        return []
+    consulta = (
+        select(Presentacion)
+        .where(
+            Presentacion.organizacion_id == organizacion_id,
+            Presentacion.producto_id.in_(producto_ids),
+        )
+        .order_by(Presentacion.producto_id, Presentacion.unidades_base, Presentacion.nombre)
+        .with_for_update(key_share=True, read=True)
+        .execution_options(populate_existing=True)
+    )
+    return list(sesion.scalars(consulta).all())

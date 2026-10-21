@@ -179,6 +179,7 @@ class ClienteOpcionResponse(BaseModel):
     nombre: str
     codigo: str | None
     estado: str
+    es_consumidor_final: bool
 
 
 class PaginaOpcionesDeClientes(BaseModel):

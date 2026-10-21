@@ -794,3 +794,123 @@ def presentaciones_de_venta_de_productos(
     ):
         por_producto.setdefault(producto_id, []).append(PresentacionDeVenta(nombre, unidades))
     return por_producto
+
+
+@dataclass(frozen=True)
+class PresentacionVendible:
+    """Una presentación activa de venta tal como la elige la pantalla de venta (change 18a,
+    D19): su identificador, nombre y unidades base. No lleva costos ni precios."""
+
+    presentacion_id: UUID
+    nombre: str
+    unidades_base: int
+    es_referencia: bool
+
+
+@dataclass(frozen=True)
+class ProductoParaVender:
+    """Un producto activo con sus presentaciones de venta, de menos unidades a más. Un
+    producto sin presentaciones de venta lleva la tupla vacía."""
+
+    producto_id: UUID
+    codigo: str
+    nombre: str
+    presentaciones: tuple[PresentacionVendible, ...]
+
+
+@dataclass(frozen=True)
+class PaginaDeProductosParaVender:
+    """Una página de productos para vender; `hay_mas` dice si existe otra después."""
+
+    items: list[ProductoParaVender]
+    hay_mas: bool
+
+
+def productos_activos_para_vender(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    limite: int,
+    texto: str | None = None,
+    producto_id: UUID | None = None,
+    despues_de_codigo: str | None = None,
+) -> PaginaDeProductosParaVender:
+    """Una página de los productos activos de la organización (por código) con sus presentaciones
+    activas de venta, filtrada y paginada en SQL (CAT-05, CAT-02; `design.md` D19 del change
+    18a, ajuste del 2026-10-20). `texto` busca en nombre o código sin distinguir mayúsculas;
+    `producto_id` trae uno; `despues_de_codigo` es el cursor. Solo lectura, sin bloquear: es la
+    lectura de la pantalla, no la de la confirmación (`presentaciones_para_venta` es la que
+    bloquea)."""
+    filas, hay_mas = repository.listar_productos_activos_para_vender(
+        organizacion_id,
+        sesion,
+        texto=texto,
+        producto_id=producto_id,
+        despues_de_codigo=despues_de_codigo,
+        limite=limite,
+    )
+    vendibles: dict[UUID, list[PresentacionVendible]] = {}
+    for (
+        id_producto,
+        presentacion_id,
+        nombre,
+        unidades,
+        es_referencia,
+    ) in repository.presentaciones_vendibles_de_productos_activos(
+        organizacion_id, [fila[0] for fila in filas], sesion
+    ):
+        vendibles.setdefault(id_producto, []).append(
+            PresentacionVendible(presentacion_id, nombre, unidades, es_referencia)
+        )
+    return PaginaDeProductosParaVender(
+        items=[
+            ProductoParaVender(
+                producto_id=id_producto,
+                codigo=codigo,
+                nombre=nombre,
+                presentaciones=tuple(vendibles.get(id_producto, [])),
+            )
+            for id_producto, codigo, nombre in filas
+        ],
+        hay_mas=hay_mas,
+    )
+
+
+@dataclass(frozen=True)
+class PresentacionParaVenta:
+    """Una presentación tal como la lee la venta (change 18a, D17): sus unidades base (que la
+    línea congela, INV-18) y las marcas con que la venta decide si es vendible (CAT-02, CAT-05)."""
+
+    presentacion_id: UUID
+    producto_id: UUID
+    nombre: str
+    unidades_base: int
+    activo: bool
+    usar_en_venta: bool
+    es_referencia: bool
+
+
+def presentaciones_para_venta(
+    organizacion_id: UUID, producto_ids: Collection[UUID], sesion: Session
+) -> dict[UUID, list[PresentacionParaVenta]]:
+    """`{producto_id: presentaciones}` de TODAS las presentaciones de los productos, con
+    `FOR KEY SHARE` (INV-18, ADR-023, `design.md` D17 y D18 del change 18a). Se llama con los
+    productos ya tomados `FOR SHARE`: como `PRESENTACION_MODIFICAR` toma el producto `FOR UPDATE`
+    antes de decidir, una modificación simultánea espera o la venta ve las unidades nuevas. Un
+    producto de otra organización no aparece (INV-21)."""
+    por_producto: dict[UUID, list[PresentacionParaVenta]] = {}
+    for presentacion in repository.presentaciones_de_productos_para_compartir(
+        organizacion_id, producto_ids, sesion
+    ):
+        por_producto.setdefault(presentacion.producto_id, []).append(
+            PresentacionParaVenta(
+                presentacion_id=presentacion.id,
+                producto_id=presentacion.producto_id,
+                nombre=presentacion.nombre,
+                unidades_base=presentacion.unidades_base,
+                activo=presentacion.activo,
+                usar_en_venta=presentacion.usar_en_venta,
+                es_referencia=presentacion.es_referencia,
+            )
+        )
+    return por_producto

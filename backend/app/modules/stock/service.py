@@ -57,6 +57,7 @@ from app.modules.stock.domain.errores import (
     ProductoSinCostoError,
     RecursoNoEncontradoError,
     StockInsuficienteError,
+    UbicacionInactivaError,
     UbicacionTomadaError,
 )
 from app.modules.stock.domain.jornadas import (
@@ -286,6 +287,38 @@ def buscar_ubicaciones_por_nombre(
     return repository.buscar_ubicaciones_por_nombre(organizacion_id, sesion, nombre=nombre)
 
 
+def nombres_de_ubicaciones(
+    organizacion_id: UUID, sesion: Session, ubicacion_ids: Collection[UUID]
+) -> dict[UUID, str]:
+    """`{id: nombre}` de las ubicaciones de la organización, activas o no (change 18a, D19: el
+    listado y el detalle de ventas muestran la ubicación histórica aunque hoy esté inactiva).
+    Una ubicación de otra organización no aparece (INV-21). Solo lectura."""
+    return repository.nombres_de_ubicaciones(organizacion_id, sesion, ubicacion_ids)
+
+
+def stock_de_ubicacion_para_vender(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    ubicacion_id: UUID,
+    producto_ids: Collection[UUID] | None = None,
+) -> dict[UUID, int]:
+    """`{producto_id: cantidad_base}` de la ubicación, para la pantalla de venta (change 18a,
+    D19, precisión 3 del 2026-10-20): una ubicación ajena o inexistente es
+    `RecursoNoEncontradoError` (404, INV-21) y una inactiva, `UbicacionInactivaError` (409): no
+    se vende desde ella (D8). Los productos sin saldo no aparecen (STK-04: es cero). Con
+    `producto_ids` solo se leen los saldos de esos productos (la página que se muestra); la
+    ubicación se valida igual aunque la lista esté vacía. Sin costos. Solo lectura."""
+    ubicacion = repository.obtener_ubicacion(organizacion_id, sesion, ubicacion_id=ubicacion_id)
+    if ubicacion is None:
+        raise RecursoNoEncontradoError("La ubicación no existe en esta organización.")
+    if not ubicacion.activo:
+        raise UbicacionInactivaError(f"La ubicación {ubicacion.nombre!r} está inactiva.")
+    return repository.saldos_distintos_de_cero_de_ubicacion(
+        organizacion_id, sesion, ubicacion_id=ubicacion_id, producto_ids=producto_ids
+    )
+
+
 def modificar_ubicacion(
     organizacion_id: UUID,
     sesion: Session,
@@ -367,6 +400,7 @@ def _preparar(
     usuario_id: UUID,
     dispositivo_id: UUID,
     puede_operar_ubicacion_tomada: bool = False,
+    venta_sin_conexion: bool = False,
 ) -> tuple[list[LineaDeMovimiento], dict[UUID, UUID]]:
     """Valida las líneas contra la base y toma los bloqueos en el orden global.
 
@@ -381,7 +415,9 @@ def _preparar(
        (nivel 5, change 15, D9). Con ella se aplica STK-09 por ubicación (D6, D7): libre,
        de la jornada (la línea queda con su `jornada_id`) o por excepción de
        `puede_operar_ubicacion_tomada` (sin `jornada_id`); cualquier otro caso es
-       `UBICACION_TOMADA`. Falla cerrado: el parámetro es `False` por defecto.
+       `UBICACION_TOMADA`. Falla cerrado: el parámetro es `False` por defecto. Excepción
+       (decisión del usuario, 2026-10-20; SYN-05, INV-17): `venta_sin_conexion` equivale a ese
+       permiso, porque la mercadería ya se entregó.
 
     Devuelve las líneas con el costo validado y la jornada de cada ubicación que pasó por
     excepción (`ubicacion_id -> jornada_id`). NO escribe ningún movimiento."""
@@ -397,7 +433,9 @@ def _preparar(
         validar_ubicacion_activa(activo=ubicacion.activo)
 
     productos = sorted({linea.producto_id for linea in validadas})
-    exigen_activo = productos_que_exigen_estar_activos(validadas)
+    exigen_activo = productos_que_exigen_estar_activos(
+        validadas, venta_sin_conexion=venta_sin_conexion
+    )
     for producto_id in productos:
         producto = catalogo_service.obtener_producto_para_compartir(
             organizacion_id, producto_id, sesion
@@ -435,7 +473,9 @@ def _preparar(
         validadas,
         usuario_id=usuario_id,
         dispositivo_id=dispositivo_id,
-        puede_operar_ubicacion_tomada=puede_operar_ubicacion_tomada,
+        # SYN-05, INV-17: una venta recibida sin conexion ya entrego la mercaderia, asi que la
+        # toma nunca la rechaza; pasa por la excepcion y `ventas` la observa (change 18a, 11.2).
+        puede_operar_ubicacion_tomada=puede_operar_ubicacion_tomada or venta_sin_conexion,
     )
 
 
@@ -505,6 +545,7 @@ def _aplicar(
     occurred_at: datetime,
     jornadas_tomadas: Mapping[UUID, UUID],
     permitir_negativo: bool = False,
+    negativo_sin_condicion: bool = False,
 ) -> list[ResultadoDeMovimiento]:
     """Aplica las líneas, en el orden recibido, con todos los bloqueos tomados por
     `_preparar`: cada una actualiza `costo_producto` (vía `costeo`) y
@@ -574,7 +615,11 @@ def _aplicar(
                 ubicacion_id=linea.ubicacion_id,
                 cantidad=magnitud,
                 momento=ahora,
-                permitir_negativo=puede_quedar_negativo(linea, permitir_negativo=permitir_negativo),
+                permitir_negativo=puede_quedar_negativo(
+                    linea,
+                    permitir_negativo=permitir_negativo,
+                    negativo_sin_condicion=negativo_sin_condicion,
+                ),
             )
             if nuevo_saldo is None:
                 actual = repository.obtener_saldo(
@@ -663,7 +708,9 @@ def registrar_movimientos(
     operation_id: UUID,
     occurred_at: datetime,
     permitir_negativo: bool = False,
+    negativo_sin_condicion: bool = False,
     puede_operar_ubicacion_tomada: bool = False,
+    venta_sin_conexion: bool = False,
 ) -> list[ResultadoDeMovimiento]:
     """Registra movimientos de stock con todas las filas bloqueadas en el orden
     global (`02` §7.3), todo en la transacción de quien llama (INV-01, INV-12).
@@ -687,6 +734,13 @@ def registrar_movimientos(
     `PERMITIR_STOCK_NEGATIVO`, CMP-07), puede dejar el saldo negativo, que el
     resultado marca (D10). `permitir_negativo` no alcanza a otros tipos.
 
+    Change 18a (D11, STK-05, STK-06): el egreso `VENTA` se valoriza al promedio vigente (nulo
+    si el producto no tiene) y, con `permitir_negativo`, puede dejar el saldo negativo, que el
+    resultado marca. `negativo_sin_condicion` (una venta recibida sin conexión) lo aplica
+    siempre; solo alcanza al egreso `VENTA`. `venta_sin_conexion` también acepta la venta sobre
+    una ubicación tomada por una jornada (la propia en `EN_RENDICION` o la de otro vendedor): pasa
+    por la excepción de STK-09 y el resultado nombra la jornada (decisión del 2026-10-20).
+
     Change 15, STK-09 (D6, D7): una ubicación con jornada `ABIERTA` o `EN_RENDICION` solo
     la mueve la jornada (usuario y dispositivo de la jornada `ABIERTA`; la línea queda con
     su `jornada_id`) o, con `puede_operar_ubicacion_tomada` (el permiso `LIBERAR_UBICACION`
@@ -702,6 +756,7 @@ def registrar_movimientos(
         usuario_id=usuario_id,
         dispositivo_id=dispositivo_id,
         puede_operar_ubicacion_tomada=puede_operar_ubicacion_tomada,
+        venta_sin_conexion=venta_sin_conexion,
     )
     return _aplicar(
         organizacion_id,
@@ -714,6 +769,7 @@ def registrar_movimientos(
         occurred_at=occurred_at,
         jornadas_tomadas=jornadas_tomadas,
         permitir_negativo=permitir_negativo,
+        negativo_sin_condicion=negativo_sin_condicion,
     )
 
 
@@ -1542,6 +1598,17 @@ def existe_jornada(organizacion_id: UUID, sesion: Session, jornada_id: UUID) -> 
     return jornadas_casos.existe_jornada(organizacion_id, sesion, jornada_id)
 
 
+def ubicacion_de_jornada(
+    organizacion_id: UUID, sesion: Session, *, jornada_id: UUID
+) -> UUID | None:
+    """La ubicación que tomó la jornada, en cualquier estado, leída SIN bloquear (change 18a,
+    tarea 11.2, D3, D17), o `None` si la jornada no existe en la organización. La venta sin
+    conexión la usa para saber de qué ubicación sale antes de pedir los bloqueos del orden
+    global; la jornada `FOR SHARE` (nivel 5) la toma después el movimiento de stock. Ver
+    `jornadas_casos.ubicacion_de_jornada`."""
+    return jornadas_casos.ubicacion_de_jornada(organizacion_id, sesion, jornada_id=jornada_id)
+
+
 EstadoDeJornada = jornadas_casos.EstadoDeJornada
 """Lo que un comando sin conexión necesita saber de la jornada de su sobre (change 17, D12)."""
 
@@ -1593,6 +1660,21 @@ def jornada_abierta_de(
     (nivel 5 del orden de bloqueo), o `None`. La consulta de la cobranza con conexión (change 17,
     D8, D18). Ver `jornadas_casos.jornada_abierta_de`."""
     return jornadas_casos.jornada_abierta_de(
+        organizacion_id, sesion, usuario_id=usuario_id, dispositivo_id=dispositivo_id
+    )
+
+
+JornadaAbierta = jornadas_casos.JornadaAbierta
+
+
+def jornada_abierta_con_ubicacion_de(
+    organizacion_id: UUID, sesion: Session, *, usuario_id: UUID, dispositivo_id: UUID
+) -> JornadaAbierta | None:
+    """La jornada `ABIERTA` del usuario y el dispositivo y su ubicación, leída SIN bloquear
+    (change 18a, D3, D17): la venta la usa para saber a qué ubicación va antes de pedir los
+    bloqueos del orden global; el nivel 5 (la jornada `FOR SHARE`) lo toma después el movimiento
+    de stock. Ver `jornadas_casos.jornada_abierta_con_ubicacion_de`."""
+    return jornadas_casos.jornada_abierta_con_ubicacion_de(
         organizacion_id, sesion, usuario_id=usuario_id, dispositivo_id=dispositivo_id
     )
 

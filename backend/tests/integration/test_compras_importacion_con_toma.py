@@ -247,7 +247,7 @@ def test_aud02_la_compra_y_su_anulacion_por_excepcion_dejan_la_constancia(
     entorno = EntornoDeCompras(db_session, permisos=ADMINISTRADOR)
     camioneta = _camioneta(entorno)
     jornada_id = _tomar(entorno, camioneta)
-    esperado = f"STK-09: ubicación tomada por la jornada {jornada_id}"
+    esperado = f"ubicación tomada por la jornada {jornada_id}"
 
     compra = entorno.enviar(entorno.contenido(ubicacion_id=str(camioneta)))
     assert compra.resultado is not None
@@ -280,7 +280,7 @@ def test_aud02_la_importacion_por_excepcion_deja_la_constancia(db_session: Sessi
     )
 
     assert _observaciones(entorno, operation_id) == [
-        f"STK-09: ubicación tomada por la jornada {mundo.jornada_id}"
+        f"ubicación tomada por la jornada {mundo.jornada_id}"
     ]
 
 

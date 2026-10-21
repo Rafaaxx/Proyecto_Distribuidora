@@ -87,9 +87,9 @@ describe('entrada de menú "Cobranzas" por permiso (D14, D19)', () => {
     expect(seccionesCon('GESTIONAR_CLIENTES')).not.toContain('Cobranzas')
   })
 
-  it('queda a continuación de Clientes', () => {
+  it('queda a continuación de Ventas (que sigue a Clientes, change 18a)', () => {
     const etiquetas = SECCIONES.map((s) => s.etiqueta)
 
-    expect(etiquetas.indexOf('Cobranzas')).toBe(etiquetas.indexOf('Clientes') + 1)
+    expect(etiquetas.indexOf('Cobranzas')).toBe(etiquetas.indexOf('Ventas') + 1)
   })
 })

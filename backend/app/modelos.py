@@ -25,3 +25,4 @@ from app.modules.precios import models as precios_models  # noqa: F401
 from app.modules.proveedores import models as proveedores_models  # noqa: F401
 from app.modules.stock import models as stock_models  # noqa: F401
 from app.modules.sync import models as sync_models  # noqa: F401
+from app.modules.ventas import models as ventas_models  # noqa: F401

@@ -635,13 +635,39 @@ def test_un_egreso_de_otro_tipo_con_costo_sigue_rechazado(tipo: str) -> None:
         validar_lineas_de_movimiento([_movimiento(-5, "5", tipo=tipo)])
 
 
-def test_solo_anulacion_compra_puede_dejar_negativo_con_permiso_d10() -> None:
+def test_solo_anulacion_compra_y_venta_pueden_dejar_negativo_con_permiso_d10() -> None:
+    """D10 (change 11) y D11 (change 18a): la anulación de compra y la venta, con permiso; el
+    resto de los tipos de egreso sigue sin poder (un ajuste, STK-10)."""
     reversion = _movimiento(-60, "1100", tipo="ANULACION_COMPRA")
     venta = _movimiento(-60, None, tipo="VENTA")
+    ajuste = _movimiento(-60, None, tipo="AJUSTE", origen_tipo="AJUSTE_STOCK")
 
     assert puede_quedar_negativo(reversion, permitir_negativo=True) is True
     assert puede_quedar_negativo(reversion, permitir_negativo=False) is False
-    assert puede_quedar_negativo(venta, permitir_negativo=True) is False
+    assert puede_quedar_negativo(venta, permitir_negativo=True) is True
+    assert puede_quedar_negativo(venta, permitir_negativo=False) is False
+    assert puede_quedar_negativo(ajuste, permitir_negativo=True) is False
+
+
+@pytest.mark.parametrize(
+    ("tipo", "origen", "esperado"),
+    [
+        ("VENTA", "VENTA", True),  # STK-06: sin conexión se aplica sin condición
+        ("AJUSTE", "AJUSTE_STOCK", False),
+        ("TRANSFERENCIA_SALIDA", "TRANSFERENCIA", False),
+        ("ANULACION_COMPRA", "ANULACION_COMPRA", False),
+    ],
+)
+def test_el_modo_sin_condicion_solo_alcanza_al_egreso_de_venta(
+    tipo: str, origen: str, esperado: bool
+) -> None:
+    linea = _movimiento(
+        -5, "1" if tipo == "ANULACION_COMPRA" else None, tipo=tipo, origen_tipo=origen
+    )
+
+    resultado = puede_quedar_negativo(linea, permitir_negativo=False, negativo_sin_condicion=True)
+
+    assert resultado is esperado
 
 
 def test_solo_anulacion_compra_admite_producto_inactivo_d11() -> None:
@@ -654,6 +680,23 @@ def test_solo_anulacion_compra_admite_producto_inactivo_d11() -> None:
     ]
 
     assert productos_que_exigen_estar_activos(lineas) == {producto_mixto, producto_compra}
+
+
+def test_una_venta_sin_conexion_admite_producto_inactivo_pero_otros_tipos_no() -> None:
+    """Change 18a, tarea 11.2 (D1 punto 5, SYN-05, INV-17): con `venta_sin_conexion` el egreso
+    `VENTA` no exige el producto activo; una compra del mismo producto sí, y sin la bandera
+    (con conexión) la venta lo sigue exigiendo."""
+    vendido, vendido_y_comprado = uuid4(), uuid4()
+    lineas = [
+        _movimiento(-1, None, tipo="VENTA", producto_id=vendido),
+        _movimiento(-1, None, tipo="VENTA", producto_id=vendido_y_comprado),
+        _movimiento(1, "5", tipo="COMPRA", producto_id=vendido_y_comprado),
+    ]
+
+    assert productos_que_exigen_estar_activos(lineas, venta_sin_conexion=True) == {
+        vendido_y_comprado
+    }
+    assert productos_que_exigen_estar_activos(lineas) == {vendido, vendido_y_comprado}
 
 
 # --- transferencias y ajustes (change 14, D1, D3, D4, D5.2, D9) ---------------------
@@ -738,7 +781,7 @@ def test_con_cualquier_otro_origen_el_costo_sigue_siendo_invalido(
         ("AJUSTE", "ANULACION_AJUSTE_STOCK", True),
         ("AJUSTE", "AJUSTE_STOCK", False),  # D1 = B: un ajuste nunca deja negativo
         ("STOCK_INICIAL", "STOCK_INICIAL", False),  # STK-10
-        ("VENTA", "VENTA", False),
+        ("VENTA", "VENTA", True),  # change 18a (D11, STK-05): la venta, con permiso
     ],
 )
 def test_puede_quedar_negativo_solo_en_los_tipos_y_origenes_previstos(

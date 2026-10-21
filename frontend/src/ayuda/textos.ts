@@ -177,6 +177,56 @@ export const TEMAS = {
       },
     ],
   },
+  'ventas-observaciones': {
+    titulo: 'Avisos de las ventas cargadas sin señal',
+    reglas: ['SYN-05', 'SYN-07', 'STK-06', 'ADR-054'],
+    secciones: [
+      {
+        titulo: 'Por qué la venta se toma igual',
+        parrafos: ['La venta se tomó igual porque la mercadería ya se entregó.'],
+      },
+      {
+        titulo: 'Stock negativo',
+        parrafos: ['Se vendió más de lo que figuraba en la ubicación. El stock quedó por debajo de cero hasta que se corrija con un ajuste o una transferencia.'],
+      },
+      {
+        titulo: 'Lista no vigente',
+        parrafos: ['El teléfono usó precios de una versión de lista que ya no regía al momento de la venta. La venta quedó con esos precios.'],
+      },
+      {
+        titulo: 'Cliente no habilitado',
+        parrafos: ['El cliente estaba suspendido o inactivo cuando se hizo la venta.'],
+      },
+      {
+        titulo: 'Consumidor final con deuda',
+        parrafos: ['Al consumidor final se le cobró un importe distinto del total. Su cuenta quedó con un saldo que no se puede cobrar después.'],
+      },
+      {
+        titulo: 'Permiso revocado',
+        parrafos: ['Al vendedor le habían quitado el permiso de vender antes de que la venta llegara.'],
+      },
+      {
+        titulo: 'Jornada liberada',
+        parrafos: ['Un supervisor liberó la jornada del vendedor antes de que la venta llegara.'],
+      },
+      {
+        titulo: 'Ubicación tomada al sincronizar',
+        parrafos: ['Cuando la venta llegó, la ubicación estaba tomada por otra jornada o en rendición. El stock se descontó igual.'],
+      },
+      {
+        titulo: 'Vendido sin costo',
+        parrafos: ['El producto no tenía costo cargado. La venta quedó sin costo y hay que revisarlo.'],
+      },
+      {
+        titulo: 'Medio inactivo',
+        parrafos: ['Se cobró con un medio de pago que estaba desactivado.'],
+      },
+      {
+        titulo: 'Falta la referencia',
+        parrafos: ['Se cobró con un medio que exige referencia, por ejemplo el número de transferencia, y no se cargó.'],
+      },
+    ],
+  },
 } as const satisfies Record<string, TemaDeAyudaDef>
 
 export type TemaDeAyuda = keyof typeof TEMAS
@@ -460,6 +510,70 @@ export const AYUDAS = {
     ejemplo:
       'Ej.: le sacás «Autorizar descuentos» y «Vender con exceso de crédito» al Supervisor → el PIN de Ana deja de servir.',
     reglas: ['ADR-011'],
+  },
+  // --- Ventas (change 18a, textos aprobados por el usuario el 2026-10-17 y el 2026-10-19; D22) ---
+  'ventas.cajasYUnidades': {
+    titulo: 'Cajas y unidades',
+    texto:
+      'Cargá cuántas cajas y cuántas unidades sueltas lleva el cliente. Se cobra en proporción al precio de la caja, aunque lleve botellas sueltas. Si el producto no tiene presentación de una unidad, solo se vende por caja.',
+    ejemplo: 'Ej.: 2 cajas + 3 botellas de Vino A (caja x6 a $12.500) = 15 botellas → $31.250.',
+    reglas: ['CAT-07', 'CAT-08', 'VTA-02', 'PRC-22'],
+  },
+  'ventas.precio': {
+    titulo: 'Precio',
+    texto:
+      'El precio sale de la lista del cliente (o la general, si no tiene una) vigente en el momento de la venta. Queda guardado en la venta: si mañana cambia la lista, esta venta no cambia.',
+    ejemplo: 'Ej.: Kiosco La Esquina usa la lista General: Vino A a $12.500 la caja.',
+    reglas: ['PRC-20', 'PRC-22', 'PRC-23'],
+  },
+  'ventas.listaAnterior': {
+    titulo: 'Lista o versión anterior',
+    texto:
+      'Sirve para respetar un precio de otra lista o de una versión anterior. Solo lo puede hacer quien tiene permiso, pide un motivo y queda registrado quién lo hizo.',
+    ejemplo:
+      'Ej.: Almacén Don Pedro tenía Vino A a $8.600 la semana pasada → elegís esa versión con el motivo «Precio acordado con el cliente».',
+    reglas: ['PRC-21', 'AUD-01'],
+  },
+  'ventas.cobranza': {
+    titulo: 'Cobranza en el acto',
+    texto:
+      'Lo que el cliente te paga ahora. Puede ser nada, una parte, todo o más: la venta suma el total a su cuenta y el pago lo baja. Si paga de más, le queda saldo a favor.',
+    ejemplo: 'Ej.: Venta de $80.000 con $20.000 en efectivo y un saldo de $150.000 → queda debiendo $210.000.',
+    reglas: ['VTA-11', 'CC-05', 'COB-02'],
+  },
+  'ventas.consumidorFinal': {
+    titulo: 'Consumidor final',
+    texto: 'Al cliente sin nombre se le vende solo de contado: el pago tiene que ser igual al total.',
+    ejemplo: 'Ej.: Venta de $4.300 → cobrás $4.300.',
+    reglas: ['CLI-03', 'ADR-054'],
+  },
+  'ventas.stock': {
+    titulo: 'Stock',
+    texto:
+      'Muestra cuánto queda en la ubicación de la venta. Si no alcanza, la venta no se confirma, salvo que tengas permiso para dejar el stock en negativo; en ese caso queda marcada para revisar.',
+    ejemplo: 'Ej.: Quedan 48 botellas y vendés 50 → queda en −2 y se marca.',
+    reglas: ['STK-05', 'STK-01', 'ADR-054'],
+  },
+  'ventas.numero': {
+    titulo: 'Número de venta',
+    texto:
+      'Es el número de la nota de venta: las letras son de este dispositivo y el número sube de a uno. No se repite nunca en la organización.',
+    ejemplo: 'Ej.: V03-000142 es la venta 142 del teléfono V03.',
+    reglas: ['VTA-06', 'ADR-008'],
+  },
+  'ventas.costo': {
+    titulo: 'Costo',
+    texto:
+      'Lo que costó la mercadería vendida, al costo promedio del momento de la venta. Queda fijo: si después el producto sube, esta venta no cambia.',
+    ejemplo: 'Ej.: 72 botellas a $1.050 de promedio → costo $75.600.',
+    reglas: ['VTA-05', 'INV-10'],
+  },
+  'ventas.observaciones': {
+    titulo: 'Avisos de una venta',
+    texto:
+      'Avisos para revisar en una venta. La venta se tomó igual porque la mercadería ya se entregó. Tocá «Ver más» para ver qué significa cada aviso.',
+    reglas: ['SYN-05', 'SYN-07', 'STK-06', 'ADR-054'],
+    verMas: 'ventas-observaciones',
   },
 } as const satisfies Record<string, EntradaDeAyuda>
 

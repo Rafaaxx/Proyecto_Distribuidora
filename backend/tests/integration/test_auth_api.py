@@ -385,7 +385,12 @@ class TestDependenciaDePermisos:
             kid="1",
             emitido_en=FixedClock(MOMENTO).now(),
         )
-        token_con_firma_alterada = token_valido[:-1] + ("A" if token_valido[-1] != "A" else "B")
+        # Se altera el PRIMER carácter de la firma (no el último: el último de una firma HS256 en
+        # base64url solo aporta 4 bits útiles y cambiarlo a veces no altera los bytes decodificados,
+        # lo que volvía intermitente esta prueba).
+        encabezado, carga, firma = token_valido.split(".")
+        firma_alterada = ("A" if firma[0] != "A" else "B") + firma[1:]
+        token_con_firma_alterada = ".".join((encabezado, carga, firma_alterada))
 
         respuesta = cliente.get(
             "/api/v1/identidad/dispositivos",

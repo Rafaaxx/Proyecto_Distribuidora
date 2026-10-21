@@ -1,0 +1,387 @@
+[
+  {
+    "id": "VTA04-una-linea-modo-a-quince-botellas",
+    "reglas": [
+      "VTA-04",
+      "PRC-22",
+      "INV-14",
+      "TR-03"
+    ],
+    "comentario": "15 botellas de una caja x6 a 12500.00: 12500.00 x 15 / 6 = 31250.00. Modo A: IVA 0.00 aunque la alicuota sea 0.21; total = total_neto + total_iva.",
+    "entrada": {
+      "motor": "vta04",
+      "modo_impositivo": "A",
+      "lineas": [
+        {
+          "id": "l-1",
+          "precio_referencia": "12500.00",
+          "unidades_referencia": 6,
+          "cantidad_base": 15,
+          "alicuota": "0.210000",
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-1",
+          "bruto": "31250.00",
+          "descuento_total": "0.00",
+          "neto": "31250.00",
+          "alicuota": "0.210000",
+          "iva": "0.00"
+        }
+      ],
+      "total_neto": "31250.00",
+      "total_iva": "0.00",
+      "total": "31250.00"
+    }
+  },
+  {
+    "id": "VTA04-varias-lineas-suma-de-brutos-redondeados",
+    "reglas": [
+      "VTA-04",
+      "PRC-22",
+      "INV-14",
+      "TR-03"
+    ],
+    "comentario": "25000.00 + 6250.00 + 1433.33 (8600.00 / 6 = 1433.333.. redondeado una vez por linea) = 32683.33.",
+    "entrada": {
+      "motor": "vta04",
+      "modo_impositivo": "A",
+      "lineas": [
+        {
+          "id": "l-1",
+          "precio_referencia": "12500.00",
+          "unidades_referencia": 6,
+          "cantidad_base": 12,
+          "alicuota": "0.210000",
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-2",
+          "precio_referencia": "12500.00",
+          "unidades_referencia": 6,
+          "cantidad_base": 3,
+          "alicuota": "0.210000",
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-3",
+          "precio_referencia": "8600.00",
+          "unidades_referencia": 6,
+          "cantidad_base": 1,
+          "alicuota": "0.210000",
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-1",
+          "bruto": "25000.00",
+          "descuento_total": "0.00",
+          "neto": "25000.00",
+          "alicuota": "0.210000",
+          "iva": "0.00"
+        },
+        {
+          "id": "l-2",
+          "bruto": "6250.00",
+          "descuento_total": "0.00",
+          "neto": "6250.00",
+          "alicuota": "0.210000",
+          "iva": "0.00"
+        },
+        {
+          "id": "l-3",
+          "bruto": "1433.33",
+          "descuento_total": "0.00",
+          "neto": "1433.33",
+          "alicuota": "0.210000",
+          "iva": "0.00"
+        }
+      ],
+      "total_neto": "32683.33",
+      "total_iva": "0.00",
+      "total": "32683.33"
+    }
+  },
+  {
+    "id": "VTA04-medio-exacto-redondea-una-sola-vez-por-linea",
+    "reglas": [
+      "VTA-04",
+      "PRC-22",
+      "TR-03",
+      "INV-14"
+    ],
+    "comentario": "1.00 x 1 / 8 = 0.125 exacto: ROUND_HALF_UP lo sube a 0.13 en cada linea; el total es la suma de brutos ya redondeados (0.26), no el redondeo de 0.25.",
+    "entrada": {
+      "motor": "vta04",
+      "modo_impositivo": "A",
+      "lineas": [
+        {
+          "id": "l-1",
+          "precio_referencia": "1.00",
+          "unidades_referencia": 8,
+          "cantidad_base": 1,
+          "alicuota": "0.210000",
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-2",
+          "precio_referencia": "1.00",
+          "unidades_referencia": 8,
+          "cantidad_base": 1,
+          "alicuota": "0.210000",
+          "producto_id": "prod-vino-b",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-1",
+          "bruto": "0.13",
+          "descuento_total": "0.00",
+          "neto": "0.13",
+          "alicuota": "0.210000",
+          "iva": "0.00"
+        },
+        {
+          "id": "l-2",
+          "bruto": "0.13",
+          "descuento_total": "0.00",
+          "neto": "0.13",
+          "alicuota": "0.210000",
+          "iva": "0.00"
+        }
+      ],
+      "total_neto": "0.26",
+      "total_iva": "0.00",
+      "total": "0.26"
+    }
+  },
+  {
+    "id": "VTA04-regla-de-cinco-por-ciento-pasa-por-el-motor-de-descuentos",
+    "reglas": [
+      "VTA-04",
+      "DSC-05",
+      "PRC-22",
+      "INV-14"
+    ],
+    "comentario": "15 botellas / 6 = 2.5 cajas >= 2: la regla del 5% descuenta 1562.50 sobre 31250.00; neto 29687.50; el IVA sigue en 0.00 y el total es el neto.",
+    "entrada": {
+      "motor": "vta04",
+      "modo_impositivo": "A",
+      "lineas": [
+        {
+          "id": "l-1",
+          "precio_referencia": "12500.00",
+          "unidades_referencia": 6,
+          "cantidad_base": 15,
+          "alicuota": "0.210000",
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "2",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-1",
+          "bruto": "31250.00",
+          "descuento_total": "1562.50",
+          "neto": "29687.50",
+          "alicuota": "0.210000",
+          "iva": "0.00"
+        }
+      ],
+      "total_neto": "29687.50",
+      "total_iva": "0.00",
+      "total": "29687.50"
+    }
+  },
+  {
+    "id": "VTA04-alicuotas-distintas-por-linea-con-iva-cero",
+    "reglas": [
+      "VTA-04",
+      "INV-14"
+    ],
+    "comentario": "Alicuotas 0.21, 0.105 y 0.00 se conservan por linea (se congelan para la facturacion, FAC-08) pero en modo A el IVA de cada linea es 0.00.",
+    "entrada": {
+      "motor": "vta04",
+      "modo_impositivo": "A",
+      "lineas": [
+        {
+          "id": "l-1",
+          "precio_referencia": "1000.00",
+          "unidades_referencia": 1,
+          "cantidad_base": 3,
+          "alicuota": "0.210000",
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-2",
+          "precio_referencia": "2000.00",
+          "unidades_referencia": 1,
+          "cantidad_base": 1,
+          "alicuota": "0.105000",
+          "producto_id": "prod-agua",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        },
+        {
+          "id": "l-3",
+          "precio_referencia": "500.00",
+          "unidades_referencia": 1,
+          "cantidad_base": 2,
+          "alicuota": "0.000000",
+          "producto_id": "prod-pan",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-1",
+          "bruto": "3000.00",
+          "descuento_total": "0.00",
+          "neto": "3000.00",
+          "alicuota": "0.210000",
+          "iva": "0.00"
+        },
+        {
+          "id": "l-2",
+          "bruto": "2000.00",
+          "descuento_total": "0.00",
+          "neto": "2000.00",
+          "alicuota": "0.105000",
+          "iva": "0.00"
+        },
+        {
+          "id": "l-3",
+          "bruto": "1000.00",
+          "descuento_total": "0.00",
+          "neto": "1000.00",
+          "alicuota": "0.000000",
+          "iva": "0.00"
+        }
+      ],
+      "total_neto": "6000.00",
+      "total_iva": "0.00",
+      "total": "6000.00"
+    }
+  },
+  {
+    "id": "VTA04-modo-b-no-soportado",
+    "reglas": [
+      "VTA-04"
+    ],
+    "comentario": "Modo B es de la etapa 4: se rechaza.",
+    "entrada": {
+      "motor": "vta04",
+      "modo_impositivo": "B",
+      "lineas": [
+        {
+          "id": "l-1",
+          "precio_referencia": "12500.00",
+          "unidades_referencia": 6,
+          "cantidad_base": 15,
+          "alicuota": "0.210000",
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "error": "MODO_IMPOSITIVO_NO_SOPORTADO"
+    }
+  },
+  {
+    "id": "VTA04-modo-c-no-soportado",
+    "reglas": [
+      "VTA-04"
+    ],
+    "comentario": "Modo C es de la etapa 4: se rechaza.",
+    "entrada": {
+      "motor": "vta04",
+      "modo_impositivo": "C",
+      "lineas": [
+        {
+          "id": "l-1",
+          "precio_referencia": "12500.00",
+          "unidades_referencia": 6,
+          "cantidad_base": 15,
+          "alicuota": "0.210000",
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "error": "MODO_IMPOSITIVO_NO_SOPORTADO"
+    }
+  }
+]

@@ -40,3 +40,8 @@
 - **Crear la fila de costo al dar de alta el producto, con migración para los existentes:** descartada: acopla `catalogo` a `costeo` (prohibido por `02` §5.3) o exige puertos.
 - **`stock_saldo` y `costo_producto` con `id` y `UNIQUE (organizacion_id, producto_id, ...)`:** descartada: un `id` que nadie referencia y un índice más.
 - **Seguir `03` §9 al pie de la letra sin `dispositivo_id`:** descartada: inconsistente con `cuenta_movimiento` y pierde la trazabilidad del dispositivo cuando lleguen las ventas de ruta.
+
+
+## Enmienda del change 18a (ADR-054)
+
+El punto 6 dejó para el change 18a cómo costea una venta un producto sin costo promedio. Se resuelve así (ADR-054, D10): con conexión, la venta se rechaza con `PRODUCTO_SIN_COSTO` (409), aun con `PERMITIR_STOCK_NEGATIVO`; sin conexión se acepta con `costo_unitario` y `costo_total` nulos en la línea y una observación `VENTA_SIN_COSTO` por línea. "Sin costo" sigue siendo distinguible de "costo cero". Las columnas de costo de `venta_linea` son nulables juntas; los reportes de utilidad (change 26) deben mostrar esas líneas aparte. Una venta sobre saldo negativo se costea al promedio vigente (ADR-054, D11).

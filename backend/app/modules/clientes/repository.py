@@ -422,15 +422,18 @@ def listar_opciones_paginado(
     limite: int = LIMITE_PAGINA_DEFAULT,
     cursor: str | None = None,
     texto: str | None = None,
+    incluir_consumidor_final: bool = False,
 ) -> tuple[list[Cliente], str | None]:
-    """Clientes `ACTIVO` y `SUSPENDIDO` que no son el consumidor final, por cursor `(nombre, id)`.
-    `texto` busca por nombre o código. Mismo orden y cursor que `listar_clientes_paginado`."""
+    """Clientes `ACTIVO` y `SUSPENDIDO` por cursor `(nombre, id)`; el consumidor final solo si
+    `incluir_consumidor_final` (CLI-03; lo pide la pantalla de venta). `texto` busca por nombre o
+    código. Mismo orden y cursor que `listar_clientes_paginado`."""
     limite_efectivo = min(max(limite, 1), LIMITE_PAGINA_MAXIMO)
     consulta = select(Cliente).where(
         Cliente.organizacion_id == organizacion_id,
         Cliente.estado.in_(ESTADOS_DEL_SELECTOR),
-        Cliente.es_consumidor_final.is_(False),
     )
+    if not incluir_consumidor_final:
+        consulta = consulta.where(Cliente.es_consumidor_final.is_(False))
     if cursor is not None:
         try:
             nombre_cursor, id_cursor = _decodificar_cursor(cursor)

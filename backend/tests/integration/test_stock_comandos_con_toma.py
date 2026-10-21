@@ -493,7 +493,7 @@ def _filas_de_auditoria(entorno: Entorno, comando: Comando) -> list[Auditoria]:
 
 
 def _constancia(jornada_id: UUID) -> str:
-    return f"STK-09: ubicación tomada por la jornada {jornada_id}"
+    return f"ubicación tomada por la jornada {jornada_id}"
 
 
 def test_aud02_la_transferencia_por_excepcion_deja_la_constancia_en_la_unica_fila(

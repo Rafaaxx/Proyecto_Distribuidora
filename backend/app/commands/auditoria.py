@@ -30,13 +30,14 @@ class DatosDeAuditoria:
 
 
 def observacion_de_ubicacion_tomada(jornadas: Iterable[UUID | None]) -> str | None:
-    """La constancia de STK-09 para la fila de auditoría: nombra la regla y la jornada (o las
-    jornadas, si el comando tocó más de una ubicación tomada). `None` si ninguna ubicación
-    estaba tomada: un movimiento sin excepción no lleva constancia."""
+    """La constancia de STK-09 para la fila de auditoría: `ubicación tomada por la jornada <id>`
+    (con varias, `<id1>, <id2>`, sin repetir y en orden). Sin el prefijo `STK-09: ` desde el
+    2026-10-20 (change 18a, D20); las filas ya guardadas conservan el texto anterior (AUD-03).
+    `None` si ninguna ubicación estaba tomada: un movimiento sin excepción no lleva constancia."""
     ids = sorted({str(jornada) for jornada in jornadas if jornada is not None})
     if not ids:
         return None
-    return f"STK-09: ubicación tomada por la jornada {', '.join(ids)}"
+    return f"ubicación tomada por la jornada {', '.join(ids)}"
 
 
 def constancia_de_ubicacion_tomada(jornadas: Iterable[UUID | None]) -> DatosDeAuditoria:
@@ -44,3 +45,14 @@ def constancia_de_ubicacion_tomada(jornadas: Iterable[UUID | None]) -> DatosDeAu
     Los comandos que además llevan motivo construyen `DatosDeAuditoria(motivo_id=...)` ellos
     mismos: así el ratchet del motivo y el de la constancia cuentan cosas distintas."""
     return DatosDeAuditoria(observacion=observacion_de_ubicacion_tomada(jornadas))
+
+
+SEPARADOR_DE_OBSERVACIONES = "; "
+
+
+def unir_observaciones(*textos: str | None) -> str | None:
+    """Une los textos que un comando deja en la única observación de su fila de auditoría
+    (por ejemplo, la lista usada y la constancia de STK-09), uno después del otro y separados
+    por `; `. Omite los vacíos; `None` si no queda ninguno."""
+    presentes = [texto for texto in textos if texto]
+    return SEPARADOR_DE_OBSERVACIONES.join(presentes) if presentes else None

@@ -88,11 +88,11 @@ describe('etiquetaDeModulo', () => {
 })
 
 describe('llegaMasAdelante', () => {
-  it.each(['ventas', 'facturacion', 'reportes'])('el módulo %s todavía no tiene funciones', (modulo) => {
+  it.each(['facturacion', 'reportes'])('el módulo %s todavía no tiene funciones', (modulo) => {
     expect(llegaMasAdelante(modulo)).toBe(true)
   })
 
-  it.each(['cobranzas', 'stock', 'identidad'])('el módulo %s ya existe', (modulo) => {
+  it.each(['ventas', 'cobranzas', 'stock', 'identidad'])('el módulo %s ya existe', (modulo) => {
     expect(llegaMasAdelante(modulo)).toBe(false)
   })
 })

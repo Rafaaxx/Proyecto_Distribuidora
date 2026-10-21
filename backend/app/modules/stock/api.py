@@ -108,6 +108,7 @@ PERMISO_RENDIR_JORNADA = "RENDIR_JORNADA"
 PERMISO_LIBERAR_UBICACION = "LIBERAR_UBICACION"
 PERMISO_REGISTRAR_COMPRA = "REGISTRAR_COMPRA"  # D18: el formulario de compra lista ubicaciones
 PERMISO_VER_COSTOS = "VER_COSTOS"
+PERMISO_VENDER = "VENDER"  # change 18a, D19: la pantalla de venta lista ubicaciones activas
 
 router = APIRouter(prefix="/stock", tags=["stock"])
 
@@ -792,7 +793,7 @@ def anular_ajuste(
 def listar_ubicaciones(
     contexto: Annotated[
         ContextoAutenticado,
-        Depends(requiere_algun_permiso(PERMISO_LECTURA, PERMISO_REGISTRAR_COMPRA)),
+        Depends(requiere_algun_permiso(PERMISO_LECTURA, PERMISO_REGISTRAR_COMPRA, PERMISO_VENDER)),
     ],
     sesion: Annotated[Session, Depends(get_session)],
     activo: bool | None = None,
@@ -800,7 +801,18 @@ def listar_ubicaciones(
     limite: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> PaginaUbicaciones:
     """Ubicaciones de la organización, con filtro opcional por estado, paginadas
-    por cursor (spec `ubicaciones`, escenario "Listar ubicaciones")."""
+    por cursor (spec `ubicaciones`, escenario "Listar ubicaciones").
+
+    Change 18a (D19, aprobada por el usuario el 2026-10-20): también `VENDER`, solo lectura.
+    Quien llega SOLO por `VENDER` (sin `TRANSFERIR_STOCK` ni `REGISTRAR_COMPRA`) recibe siempre
+    únicamente las ubicaciones activas: `activo=false` o `activo` ausente se filtran en silencio,
+    sin error, decidido acá con los permisos del token. La toma de cada ubicación sigue visible.
+    Quien tiene alguno de los dos permisos de siempre conserva el comportamiento anterior."""
+    permisos = identidad_service.listar_permisos_del_usuario(
+        contexto.organizacion_id, contexto.usuario_id, sesion
+    )
+    if not {PERMISO_LECTURA, PERMISO_REGISTRAR_COMPRA} & set(permisos):
+        activo = True
     pagina = stock_service.listar_ubicaciones(
         contexto.organizacion_id, sesion, activo=activo, cursor=cursor, limite=limite
     )

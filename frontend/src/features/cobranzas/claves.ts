@@ -27,5 +27,6 @@ export const clavesSaldoCliente = {
 
 export const clavesOpcionesDeClientes = {
   raiz: () => ['clientes-opciones'] as const,
-  texto: (texto: string) => ['clientes-opciones', texto] as const,
+  texto: (texto: string, incluirConsumidorFinal = false) =>
+    incluirConsumidorFinal ? (['clientes-opciones', texto, 'con-consumidor-final'] as const) : (['clientes-opciones', texto] as const),
 }

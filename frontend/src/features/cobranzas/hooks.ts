@@ -41,10 +41,11 @@ export function useCobranza(cobranzaId: string | undefined) {
 }
 
 /** Selector de clientes de quien cobra; `texto` filtra por nombre o código (`GET /clientes/opciones`). */
-export function useOpcionesDeClientes(texto = '') {
+export function useOpcionesDeClientes(texto = '', incluirConsumidorFinal = false) {
   return useInfiniteQuery({
-    queryKey: clavesOpcionesDeClientes.texto(texto),
-    queryFn: ({ pageParam }: { pageParam: string | undefined }) => listarOpcionesDeClientes(texto, pageParam),
+    queryKey: clavesOpcionesDeClientes.texto(texto, incluirConsumidorFinal),
+    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
+      listarOpcionesDeClientes(texto, pageParam, undefined, incluirConsumidorFinal),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (ultimaPagina) => ultimaPagina.cursor_siguiente ?? undefined,
   })

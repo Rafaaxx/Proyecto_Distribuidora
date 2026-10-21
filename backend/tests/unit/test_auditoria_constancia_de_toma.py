@@ -1,4 +1,5 @@
-"""Change 15, tarea 8.5 (D8): el texto de la constancia de STK-09 en la auditoría.
+"""Change 15, tarea 8.5 (D8): el texto de la constancia de STK-09 en la auditoría. Change 18a,
+tarea 10.1 (decisión del 2026-10-20): el texto ya no lleva el prefijo `STK-09: `.
 
 Reglas citadas: STK-09, AUD-02.
 """
@@ -14,12 +15,11 @@ from app.commands.auditoria import (
 )
 
 
-def test_una_jornada_nombra_la_regla_y_la_jornada() -> None:
+def test_una_jornada_se_nombra_sin_prefijo_de_regla() -> None:
     jornada = uuid4()
 
     assert (
-        observacion_de_ubicacion_tomada([jornada])
-        == f"STK-09: ubicación tomada por la jornada {jornada}"
+        observacion_de_ubicacion_tomada([jornada]) == f"ubicación tomada por la jornada {jornada}"
     )
 
 
@@ -33,7 +33,7 @@ def test_varias_jornadas_se_nombran_sin_repetir_y_en_orden() -> None:
 
     texto = observacion_de_ubicacion_tomada([b, a, b, None])
 
-    assert texto == f"STK-09: ubicación tomada por la jornada {a}, {b}"
+    assert texto == f"ubicación tomada por la jornada {a}, {b}"
 
 
 def test_la_constancia_no_lleva_motivo() -> None:

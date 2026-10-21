@@ -541,6 +541,23 @@ def obtener_dispositivo_por_id(
     return sesion.get(Dispositivo, (organizacion_id, dispositivo_id))
 
 
+def avanzar_correlativo_al_maximo(
+    organizacion_id: UUID, dispositivo_id: UUID, propuesto: int, sesion: Session
+) -> int | None:
+    """`UPDATE ... SET ultimo_correlativo = GREATEST(ultimo_correlativo, :propuesto)` de la fila
+    del dispositivo, en una sola sentencia (nivel 6 del orden de bloqueo, change 18a D17): el
+    `UPDATE` toma el candado de la fila y el correlativo nunca retrocede. Devuelve el valor
+    resultante, o `None` si el dispositivo no existe en la organización (INV-21)."""
+    resultado = sesion.execute(
+        update(Dispositivo)
+        .where(Dispositivo.organizacion_id == organizacion_id, Dispositivo.id == dispositivo_id)
+        .values(ultimo_correlativo=func.greatest(Dispositivo.ultimo_correlativo, propuesto))
+        .returning(Dispositivo.ultimo_correlativo)
+        .execution_options(synchronize_session="fetch")
+    ).scalar_one_or_none()
+    return None if resultado is None else int(resultado)
+
+
 def obtener_dispositivo_por_prefijo(
     organizacion_id: UUID, prefijo: str, sesion: Session
 ) -> Dispositivo | None:

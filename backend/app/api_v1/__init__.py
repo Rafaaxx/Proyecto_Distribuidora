@@ -19,6 +19,7 @@ from app.modules.precios import api as precios_api
 from app.modules.proveedores import api as proveedores_api
 from app.modules.stock import api as stock_api
 from app.modules.sync import api as sync_api
+from app.modules.ventas import api as ventas_api
 
 router = APIRouter()
 router.include_router(sistema.router)
@@ -37,3 +38,4 @@ router.include_router(precios_api.router)
 router.include_router(proveedores_api.router)
 router.include_router(stock_api.router)
 router.include_router(sync_api.router)
+router.include_router(ventas_api.router)

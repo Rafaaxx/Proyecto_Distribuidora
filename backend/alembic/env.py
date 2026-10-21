@@ -28,6 +28,7 @@ from app.modules.precios import models as precios_models  # noqa: E402,F401
 from app.modules.proveedores import models as proveedores_models  # noqa: E402,F401
 from app.modules.stock import models as stock_models  # noqa: E402,F401
 from app.modules.sync import models as sync_models  # noqa: E402,F401
+from app.modules.ventas import models as ventas_models  # noqa: E402,F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

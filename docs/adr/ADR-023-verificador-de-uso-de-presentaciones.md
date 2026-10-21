@@ -39,3 +39,8 @@ La ventana de carrera entre "se empieza a usar una presentación" y "se modifica
 
 - **Columna `presentacion.usada_desde timestamptz`** marcada por cada operación vía `catalogo/service.py`, con un trigger que impida cambiar `unidades_base` si no es nula. Descartada: agrega una columna que `03` no define (requeriría este mismo ADR y además actualizar `03`), y obliga a cada venta a escribir la fila de la presentación dentro de su propia transacción (contención adicional, un nivel más en el orden de bloqueo de `02` §7.3), incluso para ventas offline sincronizadas.
 - **El catálogo consulta por SQL directo las tablas de los otros módulos.** Descartada de entrada: viola `02` §5.2 (la única excepción documentada es `reportes`).
+
+
+## Enmienda del change 18a (ADR-054)
+
+Con el change 18a, `ventas/service.py` registra el verificador de `venta_linea`: una presentación con líneas de venta responde `UNIDADES_CONGELADAS` a `PRESENTACION_MODIFICAR` (INV-18). Además, la venta lee las presentaciones con el producto ya tomado `FOR SHARE` y la presentación `FOR KEY SHARE` (`catalogo/service.py::presentaciones_para_venta`), de modo que una `PRESENTACION_MODIFICAR` simultánea, que toma el producto `FOR UPDATE`, espera o se ve; el riesgo nominado de que un módulo olvide registrar su verificador queda cubierto para ventas por una prueba que cita INV-18 (ADR-054 punto 19).

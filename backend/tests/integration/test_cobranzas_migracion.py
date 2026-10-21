@@ -36,6 +36,7 @@ from sqlalchemy import Engine, text
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.orm import Session
 from stock_utiles import crear_jornada_sql, crear_ubicacion_sql
+from ventas_utiles import sembrar_venta_sql
 
 REVISION = "d7e8f9a0b1c2"
 REVISION_ANTERIOR = "b5c6d7e8f9a0"  # `reglas_de_descuento`, la previa a este change.
@@ -64,6 +65,7 @@ FKS_ESPERADAS = {
     "cobranza": {
         "fk_cobranza__cliente": ("cliente_id", "cliente"),
         "fk_cobranza__jornada": ("jornada_id", "jornada"),
+        "fk_cobranza__venta": ("venta_id", "venta"),
         "fk_cobranza__usuario": ("usuario_id", "usuario"),
         "fk_cobranza__dispositivo": ("dispositivo_id", "dispositivo"),
     },
@@ -193,13 +195,16 @@ def test_inv02_las_claves_foraneas_son_compuestas_con_la_organizacion(
         )
 
 
-def test_la_venta_de_la_cobranza_es_nulable_y_no_tiene_clave_foranea(
+def test_la_venta_de_la_cobranza_es_nulable_y_tiene_clave_foranea_compuesta(
     _engine_de_sesion: Engine,
 ) -> None:
-    """D16: `venta_id` nulable y sin FK hasta el change 18a (la tabla `venta` no existe)."""
+    """D16, change 18a (D12): `venta_id` sigue nulable (cobranza independiente) y desde la
+    revisión `a2b3c4d5e6f7` tiene FK compuesta a `venta`."""
     assert _columnas(_engine_de_sesion, "cobranza")["venta_id"][1] is True
     foraneas = _restricciones(_engine_de_sesion, "cobranza", "f")
-    assert not any("venta_id" in definicion for definicion in foraneas.values())
+    assert foraneas["fk_cobranza__venta"] == (
+        "FOREIGN KEY (organizacion_id, venta_id) REFERENCES venta(organizacion_id, id)"
+    )
 
 
 def test_inv02_una_cobranza_no_referencia_un_cliente_de_otra_organizacion(
@@ -316,8 +321,15 @@ def test_el_estado_de_la_cobranza_es_del_catalogo(db_session: Session) -> None:
 def test_el_origen_es_coherente_con_la_venta(db_session: Session) -> None:
     """COB-01, D16: `VENTA` exige `venta_id`; `INDEPENDIENTE` no lo admite."""
     entorno = _armar(db_session)
+    venta = sembrar_venta_sql(
+        db_session,
+        entorno.organizacion_id,
+        cliente_id=entorno.cliente_id,
+        usuario_id=entorno.usuario_id,
+        dispositivo_id=entorno.dispositivo_id,
+    )
     _insertar(db_session, "cobranza", _cobranza(entorno))
-    _insertar(db_session, "cobranza", _cobranza(entorno, origen="VENTA", venta_id=uuid4()))
+    _insertar(db_session, "cobranza", _cobranza(entorno, origen="VENTA", venta_id=venta.venta_id))
 
     _rechaza(
         db_session,

@@ -6,13 +6,16 @@ import type { CodigoPermiso } from '../identidad/permisos'
  * quien tiene permiso de lectura de esa operación: pagos con `REGISTRAR_PAGO_PROVEEDOR` o
  * `ANULAR_PAGO_PROVEEDOR`, compras con `REGISTRAR_COMPRA` o `ANULAR_COMPRA`. Devuelve
  * `null` cuando no hay enlace (sin permiso o un tipo sin pantalla de detalle). Cobranzas
- * (change 17): `REGISTRAR_COBRANZA` o `ANULAR_COBRANZA`.
+ * (change 17): `REGISTRAR_COBRANZA` o `ANULAR_COBRANZA`. Ventas (change 18a, D21): el movimiento
+ * `VENTA` de la cuenta de un cliente enlaza con `VENDER` o `ANULAR_VENTA` (la anulación de venta no
+ * tiene pantalla todavía).
  */
 type TienePermiso = (permiso: CodigoPermiso) => boolean
 
 const LECTURA_DE_PAGOS: readonly CodigoPermiso[] = ['REGISTRAR_PAGO_PROVEEDOR', 'ANULAR_PAGO_PROVEEDOR']
 const LECTURA_DE_COMPRAS: readonly CodigoPermiso[] = ['REGISTRAR_COMPRA', 'ANULAR_COMPRA']
 const LECTURA_DE_COBRANZAS: readonly CodigoPermiso[] = ['REGISTRAR_COBRANZA', 'ANULAR_COBRANZA']
+const LECTURA_DE_VENTAS: readonly CodigoPermiso[] = ['VENDER', 'ANULAR_VENTA']
 
 /**
  * Con `cuentaTipo` (change 17, D19) solo enlazan los tipos de esa cuenta: pagos y compras en la de
@@ -34,6 +37,9 @@ export function rutaDeOperacionDeMovimiento(
   }
   if (deCliente && (tipo === 'COBRANZA' || tipo === 'ANULACION_COBRANZA')) {
     return LECTURA_DE_COBRANZAS.some(tiene) ? `/admin/cobranzas/${origenId}` : null
+  }
+  if (deCliente && tipo === 'VENTA') {
+    return LECTURA_DE_VENTAS.some(tiene) ? `/admin/ventas/${origenId}` : null
   }
   return null
 }

@@ -40,8 +40,8 @@ def _fk(tabla: str, nombre: str, columna: str, destino: str) -> ForeignKeyConstr
 
 class Cobranza(Base):
     """Cobranza a un cliente (COB-01). Nace `CONFIRMADA` y solo cambia su `estado` a `ANULADA`
-    (TR-06, INV-05: `app_runtime` tiene `UPDATE` solo de esa columna). `venta_id` queda nulable
-    y sin FK hasta el change 18a (D16)."""
+    (TR-06, INV-05: `app_runtime` tiene `UPDATE` solo de esa columna). `venta_id` es nulable y,
+    desde el change 18a (migración `a2b3c4d5e6f7`, D12), tiene FK compuesta a `venta`."""
 
     __tablename__ = "cobranza"
     __table_args__ = (
@@ -50,6 +50,7 @@ class Cobranza(Base):
         ),
         _fk("cobranza", "cliente", "cliente_id", "cliente"),
         _fk("cobranza", "jornada", "jornada_id", "jornada"),
+        _fk("cobranza", "venta", "venta_id", "venta"),
         _fk("cobranza", "usuario", "usuario_id", "usuario"),
         _fk("cobranza", "dispositivo", "dispositivo_id", "dispositivo"),
         UniqueConstraint("organizacion_id", "id", name="ux_cobranza__org_id"),

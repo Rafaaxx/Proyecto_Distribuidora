@@ -56,9 +56,15 @@ export async function obtenerCobranza(cobranzaId: string): Promise<CobranzaDetal
 }
 
 /** Selector de clientes de quien cobra (D14): ACTIVO y SUSPENDIDO, sin crédito ni documento. */
-export async function listarOpcionesDeClientes(texto: string, cursor?: string, limite = 50): Promise<PaginaOpcionesDeClientes> {
+export async function listarOpcionesDeClientes(
+  texto: string,
+  cursor?: string,
+  limite = 50,
+  incluirConsumidorFinal = false,
+): Promise<PaginaOpcionesDeClientes> {
   const params = new URLSearchParams()
   params.set('limite', String(limite))
+  if (incluirConsumidorFinal) params.set('incluir_consumidor_final', 'true')
   if (texto.trim() !== '') params.set('texto', texto.trim())
   if (cursor) params.set('cursor', cursor)
   const respuesta = await apiFetch(`/clientes/opciones?${params.toString()}`)

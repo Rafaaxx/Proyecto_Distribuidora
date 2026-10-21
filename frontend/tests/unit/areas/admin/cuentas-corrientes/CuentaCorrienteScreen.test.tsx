@@ -507,3 +507,53 @@ describe('CuentaCorrienteScreen: cobranzas del cliente (change 17, tarea 14.4)',
     expect(within(tabla).queryAllByRole('link')).toHaveLength(0)
   })
 })
+
+describe('CuentaCorrienteScreen: enlace del movimiento VENTA al detalle (change 18a, tarea 12.4, CC-07)', () => {
+  const VENTA_MOV = movimiento('v1', {
+    tipo: 'VENTA',
+    sentido: 'AUMENTA',
+    importe: '31250.00',
+    saldo_acumulado: '181250.00',
+    occurred_at: '2026-10-20T15:00:00Z',
+  })
+  const COBRANZA_DE_VENTA = movimiento('k9', {
+    tipo: 'COBRANZA',
+    sentido: 'REDUCE',
+    importe: '20000.00',
+    saldo_acumulado: '161250.00',
+    occurred_at: '2026-10-20T15:00:00Z',
+  })
+
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+    apiFetchMock.mockResolvedValue(respuesta(200, estado([SALDO_INICIAL_150, VENTA_MOV, COBRANZA_DE_VENTA])))
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // Escenario: "Enlace a la venta"
+  it('el débito VENTA lleva al detalle de la venta y el crédito COBRANZA al de la cobranza', async () => {
+    renderCuenta('CLIENTE', queryClientConYo('SUP'))
+
+    expect(await screen.findByRole('link', { name: 'Venta' })).toHaveAttribute('href', '/admin/ventas/v1')
+    expect(screen.getByRole('link', { name: 'Cobranza' })).toHaveAttribute('href', '/admin/cobranzas/k9')
+  })
+
+  it('con solo ANULAR_VENTA también enlaza', async () => {
+    renderCuenta('CLIENTE', queryClientConYo('GES', { permisos: ['GESTIONAR_CLIENTES', 'ANULAR_VENTA'] }))
+
+    expect(await screen.findByRole('link', { name: 'Venta' })).toHaveAttribute('href', '/admin/ventas/v1')
+  })
+
+  // Escenario: "Sin permiso de ventas"
+  it('con GESTIONAR_CLIENTES y sin VENDER ni ANULAR_VENTA el débito se muestra sin enlace', async () => {
+    renderCuenta('CLIENTE', queryClientConYo('GES', { permisos: ['GESTIONAR_CLIENTES'] }))
+
+    const tabla = await screen.findByRole('table')
+
+    expect(within(tabla).getByText('Venta')).toBeInTheDocument()
+    expect(within(tabla).queryByRole('link', { name: 'Venta' })).not.toBeInTheDocument()
+  })
+})

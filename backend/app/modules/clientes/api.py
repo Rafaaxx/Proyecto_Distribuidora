@@ -85,6 +85,7 @@ PERMISO = "GESTIONAR_CLIENTES"
 PERMISO_CREDITO = "GESTIONAR_CREDITO"
 PERMISO_CONFIGURACION = "ADMIN_CONFIGURACION"
 PERMISO_REGISTRAR_COBRANZA = "REGISTRAR_COBRANZA"
+PERMISO_VENDER = "VENDER"
 
 router = APIRouter(prefix="/clientes", tags=["clientes"])
 
@@ -345,19 +346,28 @@ def listar_clientes(
 def listar_opciones_de_clientes(
     contexto: Annotated[
         ContextoAutenticado,
-        Depends(requiere_algun_permiso(PERMISO, PERMISO_REGISTRAR_COBRANZA)),
+        Depends(requiere_algun_permiso(PERMISO, PERMISO_REGISTRAR_COBRANZA, PERMISO_VENDER)),
     ],
     sesion: Annotated[Session, Depends(get_session)],
     texto: str | None = None,
     cursor: str | None = None,
     limite: Annotated[int, Query(ge=1, le=100)] = LIMITE_PAGINA_DEFAULT,
+    incluir_consumidor_final: bool = False,
 ) -> PaginaOpcionesDeClientes:
     """Selector liviano de clientes para quien cobra (change 17, `design.md` D14, tabla de
-    permisos aprobada por el usuario el 2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`.
-    Devuelve identificador, nombre, código y estado, sin crédito ni documento; solo clientes
-    `ACTIVO` y `SUSPENDIDO` y no el consumidor final. Se declara antes de `/{cliente_id}`."""
+    permisos aprobada por el usuario el 2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`;
+    desde el change 18a (D19, aprobada el 2026-10-20), también `VENDER`, solo lectura.
+    Devuelve identificador, nombre, código, estado y la marca `es_consumidor_final`, sin crédito
+    ni documento; solo clientes `ACTIVO` y `SUSPENDIDO`, y el consumidor final únicamente con
+    `incluir_consumidor_final=true` (la pantalla de venta, CLI-03; aprobado el 2026-10-20).
+    Se declara antes de `/{cliente_id}`."""
     items, cursor_siguiente = clientes_service.listar_opciones(
-        contexto.organizacion_id, sesion, limite=limite, cursor=cursor, texto=texto
+        contexto.organizacion_id,
+        sesion,
+        limite=limite,
+        cursor=cursor,
+        texto=texto,
+        incluir_consumidor_final=incluir_consumidor_final,
     )
     return PaginaOpcionesDeClientes(
         items=[ClienteOpcionResponse.model_validate(item) for item in items],
@@ -414,12 +424,13 @@ def obtener_saldo_de_cliente(
     cliente_id: UUID,
     contexto: Annotated[
         ContextoAutenticado,
-        Depends(requiere_algun_permiso(PERMISO, PERMISO_REGISTRAR_COBRANZA)),
+        Depends(requiere_algun_permiso(PERMISO, PERMISO_REGISTRAR_COBRANZA, PERMISO_VENDER)),
     ],
     sesion: Annotated[Session, Depends(get_session)],
 ) -> ClienteSaldoResponse:
     """Saldo actual del cliente, desde `saldo_cuenta` (change 17, D14, aprobada por el usuario el
-    2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`. Sin movimientos es `"0.00"` (CC-04).
+    2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`; desde el change 18a (D19, aprobada
+    el 2026-10-20), también `VENDER`, solo lectura. Sin movimientos es `"0.00"` (CC-04).
     404 para un cliente de otra organización o inexistente, antes de leer el saldo (INV-21)."""
     cliente = clientes_service.obtener_cliente_por_id(contexto.organizacion_id, cliente_id, sesion)
     if cliente is None:

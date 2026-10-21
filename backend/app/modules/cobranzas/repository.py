@@ -156,6 +156,18 @@ def obtener_cobranza(organizacion_id: UUID, cobranza_id: UUID, sesion: Session) 
     )
 
 
+def obtener_cobranza_de_venta(
+    organizacion_id: UUID, venta_id: UUID, sesion: Session
+) -> Cobranza | None:
+    """La cobranza en el acto de una venta (origen `VENTA`), sin bloquearla, o `None`. A lo
+    sumo una por venta (VTA-11); una de otra organización no se devuelve (INV-21)."""
+    return sesion.scalar(
+        select(Cobranza).where(
+            Cobranza.organizacion_id == organizacion_id, Cobranza.venta_id == venta_id
+        )
+    )
+
+
 def obtener_cobranza_para_actualizar(
     organizacion_id: UUID, cobranza_id: UUID, sesion: Session
 ) -> Cobranza | None:

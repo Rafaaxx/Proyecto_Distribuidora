@@ -74,6 +74,34 @@ class EstadoDeJornada:
     liberada_en: datetime | None
 
 
+@dataclass(frozen=True)
+class JornadaAbierta:
+    """La jornada `ABIERTA` de un usuario y un dispositivo y la ubicación que tomó (RUT-04)."""
+
+    jornada_id: UUID
+    ubicacion_id: UUID
+
+
+def jornada_abierta_con_ubicacion_de(
+    organizacion_id: UUID, sesion: Session, *, usuario_id: UUID, dispositivo_id: UUID
+) -> JornadaAbierta | None:
+    """La jornada `ABIERTA` del usuario y el dispositivo con su ubicación, leída SIN bloquear
+    (change 18a, D3, D17), o `None`. Lectura filtrada por organización (INV-21)."""
+    fila = repository.leer_jornada_abierta_de(
+        organizacion_id, sesion, usuario_id=usuario_id, dispositivo_id=dispositivo_id
+    )
+    return None if fila is None else JornadaAbierta(jornada_id=fila[0], ubicacion_id=fila[1])
+
+
+def ubicacion_de_jornada(
+    organizacion_id: UUID, sesion: Session, *, jornada_id: UUID
+) -> UUID | None:
+    """La ubicación de la jornada en cualquier estado, leída SIN bloquear (change 18a, tarea 11.2,
+    D3, D17), o `None` si no existe en la organización (INV-21). La ubicación de una jornada no
+    cambia (INV-05)."""
+    return repository.leer_ubicacion_de_jornada(organizacion_id, sesion, jornada_id=jornada_id)
+
+
 def jornada_es_de(
     organizacion_id: UUID,
     sesion: Session,

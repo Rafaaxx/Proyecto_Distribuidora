@@ -29,6 +29,7 @@ from app.modules.cobranzas import repository
 from app.modules.cobranzas.domain.cobranza import (
     CODIGO_JORNADA_LIBERADA,
     ORIGEN_INDEPENDIENTE,
+    ORIGEN_VENTA,
     MedioResuelto,
     ObservacionDeCobranza,
     evaluar_cobranza_offline,
@@ -192,6 +193,8 @@ def registrar_cobranza(
     dispositivo_id: UUID,
     occurred_at: datetime,
     modo: str = "ONLINE",
+    origen: str = ORIGEN_INDEPENDIENTE,
+    venta_id: UUID | None = None,
 ) -> ResultadoDeCobranza:
     """`COBRANZA_REGISTRAR` con conexión (`design.md` D1 a D5, D8, D18; COB-01 a COB-03, CC-05,
     CC-08, INV-01, INV-08, INV-13, INV-21, TR-09).
@@ -211,7 +214,20 @@ def registrar_cobranza(
     3) reglas puras; 4) saldo del cliente bloqueado `FOR UPDATE`, que serializa dos cobranzas
     simultáneas al mismo cliente; 5) jornada; 6) una sola escritura de la cobranza, sus medios y
     el movimiento (INV-01).
+
+    Change 18a (D12, ADR-052 punto 2): `ventas` registra la cobranza en el acto de su venta con
+    `origen="VENTA"` y `venta_id`, dentro de la transacción de la venta; el comando
+    `COBRANZA_REGISTRAR` nunca los envía. Sin ellos nada cambia (`INDEPENDIENTE`).
     """
+    if (origen, venta_id is not None) not in {
+        (ORIGEN_INDEPENDIENTE, False),
+        (ORIGEN_VENTA, True),
+    }:
+        raise ValueError(
+            f"El origen {origen!r} no es coherente con la venta {venta_id!r}: `origen` es "
+            f"{ORIGEN_VENTA} si y solo si hay `venta_id` (COB-01)."
+        )
+
     # 1) El identificador lo genera quien origina la cobranza; uno ya usado se rechaza.
     if repository.existe_cobranza(organizacion_id, sesion, cobranza_id=cobranza_id):
         raise CobranzaDuplicadaError(
@@ -225,7 +241,10 @@ def registrar_cobranza(
     if cliente is None:
         raise RecursoNoEncontradoError(f"El cliente {cliente_id} no existe en esta organización.")
 
-    # 3) Reglas puras, antes de tomar ningún bloqueo (INV-01).
+    # 3) Reglas puras, antes de tomar ningún bloqueo (INV-01). La restricción del consumidor
+    # final (COB-01, CC-08) es de la cobranza independiente: la de una venta de contado
+    # (`origen="VENTA"`, change 18a, D5) la admite, y la regla del contado la evalúa `ventas`.
+    es_consumidor_final = cliente.es_consumidor_final and origen == ORIGEN_INDEPENDIENTE
     observaciones: list[ObservacionDeCobranza] = []
     if sin_conexion:
         evaluacion = evaluar_cobranza_offline(
@@ -233,14 +252,14 @@ def registrar_cobranza(
             resueltos,
             observacion,
             cliente_id=cliente_id,
-            es_consumidor_final=cliente.es_consumidor_final,
+            es_consumidor_final=es_consumidor_final,
         )
         observacion_a_guardar = evaluacion.observacion
         referencias = evaluacion.referencias
         observaciones.extend(evaluacion.observaciones)
     else:
         observacion_a_guardar = validar_cobranza(
-            importe, resueltos, observacion, es_consumidor_final=cliente.es_consumidor_final
+            importe, resueltos, observacion, es_consumidor_final=es_consumidor_final
         )
         referencias = referencias_a_guardar(resueltos)
 
@@ -274,8 +293,8 @@ def registrar_cobranza(
         cobranza=repository.DatosDeCobranza(
             id=cobranza_id,
             cliente_id=cliente_id,
-            venta_id=None,
-            origen=ORIGEN_INDEPENDIENTE,
+            venta_id=venta_id,
+            origen=origen,
             importe=importe_a_guardar,
             jornada_id=jornada_id,
             observacion=observacion_a_guardar,
@@ -321,6 +340,27 @@ class ResultadoDeAnulacion:
 
     cobranza: Cobranza
     saldo: Decimal
+
+
+@dataclass(frozen=True)
+class CobranzaDeVenta:
+    """La cobranza en el acto de una venta, como la muestra el detalle de la venta (change 18a,
+    D19): identificador, importe y estado."""
+
+    cobranza_id: UUID
+    importe: Decimal
+    estado: str
+
+
+def cobranza_de_venta(
+    organizacion_id: UUID, sesion: Session, *, venta_id: UUID
+) -> CobranzaDeVenta | None:
+    """La cobranza de origen `VENTA` de la venta, o `None` si se vendió sin cobrar (VTA-11). Solo
+    lectura; una venta de otra organización no tiene cobranza visible (INV-21)."""
+    cobranza = repository.obtener_cobranza_de_venta(organizacion_id, venta_id, sesion)
+    if cobranza is None:
+        return None
+    return CobranzaDeVenta(cobranza.id, cobranza.importe, cobranza.estado)
 
 
 def _validar_motivo_de_anulacion(organizacion_id: UUID, sesion: Session, motivo_id: UUID) -> None:

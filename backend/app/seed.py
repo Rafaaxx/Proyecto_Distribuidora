@@ -112,6 +112,17 @@ siembra los mismos nombres en las organizaciones existentes. Sin alguno de estos
 organización no podría anular una cobranza (`COBRANZA_ANULAR` exige uno)."""
 
 
+MOTIVOS_LISTA_ANTERIOR_INICIALES = (
+    "Precio acordado con el cliente",
+    "Error en la lista vigente",
+    "Otro",
+)
+"""Change 18a (PRC-21, `design.md` D6, aprobados el 2026-10-17). La migración `a2b3c4d5e6f7`
+siembra los mismos nombres en las organizaciones existentes. Sin alguno de estos motivos la
+organización no podría vender con otra lista o con una versión anterior cuando la configuración
+exige motivo."""
+
+
 class BaseSinMigrarError(RuntimeError):
     """La siembra corrió contra una base sin las migraciones de este change
     aplicadas (tarea 8.1: "Sembrar sobre una base sin migrar falla
@@ -232,6 +243,11 @@ def sembrar(sesion: Session, reloj: Clock, *, password_administrador: str) -> Or
     for nombre in MOTIVOS_ANULACION_COBRANZA_INICIALES:
         configuracion_service.crear_motivo(
             organizacion.id, sesion, reloj, ambito="ANULACION_COBRANZA", nombre=nombre
+        )
+
+    for nombre in MOTIVOS_LISTA_ANTERIOR_INICIALES:
+        configuracion_service.crear_motivo(
+            organizacion.id, sesion, reloj, ambito="LISTA_ANTERIOR", nombre=nombre
         )
 
     roles = identidad_service.crear_plantillas_de_rol_iniciales(organizacion.id, sesion, reloj)

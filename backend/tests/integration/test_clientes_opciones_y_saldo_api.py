@@ -49,6 +49,7 @@ def test_el_vendedor_elige_cliente_sin_credito_ni_documento(
         "nombre": "Kiosco La Esquina",
         "codigo": None,
         "estado": "ACTIVO",
+        "es_consumidor_final": False,
     }
 
 
@@ -81,6 +82,26 @@ def test_el_selector_ofrece_activos_y_suspendidos_y_no_inactivos_ni_consumidor_f
         ("Bar El Sol", "SUSPENDIDO"),
         ("Kiosco La Esquina", "ACTIVO"),
     ]
+
+
+def test_con_incluir_consumidor_final_este_aparece_marcado_y_los_demas_no(
+    cliente_http: TestClient, sesion: Session
+) -> None:
+    """CLI-03 y `design.md` D5/D21 (aprobado el 2026-10-20): la pantalla de venta pide el
+    consumidor final con `incluir_consumidor_final=true` y lo reconoce por la marca; el selector
+    de cobranzas, sin el parámetro, sigue sin ofrecerlo."""
+    entorno = Entorno(sesion, permisos=frozenset({"VENDER"}))
+    crear_cliente(sesion, entorno.org, nombre="Consumidor final", es_consumidor_final=True)
+    headers = entorno.entrar(cliente_http)
+
+    con = cliente_http.get(f"{URL}/opciones?incluir_consumidor_final=true", headers=headers).json()
+    sin = cliente_http.get(f"{URL}/opciones", headers=headers).json()
+
+    assert [(i["nombre"], i["es_consumidor_final"]) for i in con["items"]] == [
+        ("Consumidor final", True),
+        ("Kiosco La Esquina", False),
+    ]
+    assert [i["nombre"] for i in sin["items"]] == ["Kiosco La Esquina"]
 
 
 def test_las_opciones_se_buscan_por_texto_y_se_paginan(

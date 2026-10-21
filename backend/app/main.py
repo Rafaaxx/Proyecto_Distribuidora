@@ -68,6 +68,13 @@ from app.modules.stock import commands as stock_commands  # noqa: F401
 from app.modules.stock import jornadas_commands as stock_jornadas_commands  # noqa: F401
 from app.modules.stock import models as stock_models  # noqa: F401
 
+# Registro de modelos, del verificador de uso de presentaciones de `ventas` (change 18a, D18:
+# importar `ventas.service` registra `venta_linea` en el puerto del catalogo, INV-18) y del
+# handler `VENTA_CONFIRMAR` (grupo 7).
+from app.modules.ventas import commands as ventas_commands  # noqa: F401
+from app.modules.ventas import models as ventas_models  # noqa: F401
+from app.modules.ventas import service as ventas_service  # noqa: F401
+
 
 def _domain_error_a_problem_details(request: Request, exc: Exception) -> JSONResponse:
     """Traduce cualquier `DomainError` a Problem Details (RFC 9457, `02`

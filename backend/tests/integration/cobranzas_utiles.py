@@ -20,6 +20,7 @@ from cuentas_corrientes_utiles import (
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 from stock_utiles import crear_jornada_sql, crear_ubicacion_sql
+from ventas_utiles import sembrar_venta_sql
 
 from app.commands import registro
 from app.commands.huella import calcular_huella
@@ -258,7 +259,15 @@ class Entorno:
         return self.enviar(contenido, operation_id=operation_id, tipo=ANULAR)
 
     def sembrar_cobranza_de_venta(self, importe: str = "10000.00") -> UUID:
-        """Una cobranza de origen `VENTA` escrita por SQL (la venta llega en el change 18a)."""
+        """Una cobranza de origen `VENTA` escrita por SQL, sobre una venta sembrada por SQL
+        (`ventas_utiles.sembrar_venta_sql`; la clave foránea de `cobranza.venta_id` es del 18a)."""
+        venta = sembrar_venta_sql(
+            self.sesion,
+            self.org,
+            cliente_id=self.cliente_id,
+            usuario_id=self.usuario_id,
+            dispositivo_id=self.dispositivo_id,
+        )
         cobranza_id = uuid4()
         self.sesion.execute(
             text(
@@ -271,7 +280,7 @@ class Entorno:
                 "id": cobranza_id,
                 "org": self.org,
                 "cli": self.cliente_id,
-                "venta": uuid4(),
+                "venta": venta.venta_id,
                 "imp": importe,
                 "op": uuid4(),
                 "usu": self.usuario_id,

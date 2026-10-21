@@ -391,6 +391,21 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("get", "/api/v1/cobranzas/{cobranza_id}"),
         ("get", "/api/v1/clientes/opciones"),
         ("get", "/api/v1/clientes/{cliente_id}/saldo"),
+        # Change 18a, tarea 8.1: `POST /ventas` (`VENTA_CONFIRMAR`). Prueba real de aislamiento
+        # en `test_ventas_api.py::test_inv21_*` (login real de dos organizaciones; el cliente de
+        # otra organización responde 404 sin efectos) y en `test_ventas_confirmar.py`.
+        ("post", "/api/v1/ventas"),
+        # Change 18a, tareas 9.1 y 9.2: las lecturas de `ventas`. Pruebas reales de aislamiento
+        # (login real de dos organizaciones; lo ajeno responde 404 o no aparece) en
+        # `test_ventas_consultas_api.py` (`test_inv21_*`, listado y detalle) y
+        # `test_ventas_lecturas_de_apoyo_api.py` (`test_inv21_*`: precios con ubicacion, cliente
+        # o lista ajenos; versiones de una lista ajena). La numeracion sale solo del dispositivo
+        # de la sesion, sin parametros de organizacion ni de recurso.
+        ("get", "/api/v1/ventas"),
+        ("get", "/api/v1/ventas/{venta_id}"),
+        ("get", "/api/v1/ventas/precios"),
+        ("get", "/api/v1/ventas/numeracion"),
+        ("get", "/api/v1/ventas/versiones"),
     }
 )
 

@@ -108,6 +108,8 @@ ESCRITURAS_QUE_DEBEN_IR_POR_EL_BUS: frozenset[tuple[str, str]] = frozenset(
         ("POST", "/api/v1/cobranzas"),
         # Change 17, tarea 9.1: `COBRANZA_ANULAR` (dedicada, `cobranzas/api.py`).
         ("POST", "/api/v1/cobranzas/{cobranza_id}/anulacion"),
+        # Change 18a, tarea 8.1: `VENTA_CONFIRMAR` (dedicada, `ventas/api.py`).
+        ("POST", "/api/v1/ventas"),
     }
 )
 

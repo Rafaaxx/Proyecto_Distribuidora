@@ -192,6 +192,7 @@ def test_anular_dos_veces_se_rechaza_y_no_hay_un_segundo_movimiento(entorno: Ent
 
 
 def test_una_cobranza_de_venta_se_rechaza(entorno: Entorno) -> None:
+    # Escenario: "No se anula sola"
     """Escenario de `COBRANZA_DE_VENTA` (VTA-22, D7), con la fila sembrada por SQL."""
     cobranza_id = entorno.sembrar_cobranza_de_venta()
 

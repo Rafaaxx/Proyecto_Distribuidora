@@ -81,3 +81,27 @@ def test_todos_los_tipos_del_catalogo_real_que_admiten_offline_declaran_su_permi
     offline = [t for t in reales.values() if t.admite_offline]
     assert offline, "se esperaba al menos un tipo OFFLINE (COBRANZA_REGISTRAR)"
     assert all(t.permiso_offline for t in offline)
+
+
+def test_venta_confirmar_declara_su_permiso_offline_y_su_operacion_observable() -> None:
+    """Change 18a, tarea 11.1 (`design.md` D1; spec `sync/lote-de-comandos`): `VENTA_CONFIRMAR`
+    admite `ONLINE` y `OFFLINE`, el bus compara `VENDER` al sincronizar (SYN-10, INV-17) y anota
+    sus observaciones sobre la venta (`VENTA` / `venta_id`)."""
+    declarado = _CATALOGO_REAL["VENTA_CONFIRMAR"]
+
+    assert declarado.admite_online is True
+    assert declarado.admite_offline is True
+    assert declarado.permiso_offline == "VENDER"
+    assert declarado.operacion_offline is not None
+    assert declarado.operacion_offline.tipo == "VENTA"
+    assert declarado.operacion_offline.clave_en_resultado == "venta_id"
+
+
+def test_cobranza_registrar_sigue_declarando_su_operacion_observable_triangulacion() -> None:
+    """Triangulación de 11.1: el precedente del change 17 no cambia."""
+    declarado = _CATALOGO_REAL["COBRANZA_REGISTRAR"]
+
+    assert declarado.permiso_offline == "REGISTRAR_COBRANZA"
+    assert declarado.operacion_offline is not None
+    assert declarado.operacion_offline.tipo == "COBRANZA"
+    assert declarado.operacion_offline.clave_en_resultado == "cobranza_id"

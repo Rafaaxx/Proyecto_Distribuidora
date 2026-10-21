@@ -24,11 +24,11 @@ import { textoDeSaldo } from '../../../domain/cuentas-corrientes/presentacion'
 import type { CobranzaRegistrarResultado } from '../../../features/cobranzas/api'
 import { campoDelError, ErrorDeCobranzas, PermisoRequeridoCobranzasError, type CampoDelFormulario } from '../../../features/cobranzas/errores'
 import { useOpcionesDeClientes, useRegistrarCobranza, useSaldoDelCliente } from '../../../features/cobranzas/hooks'
-import type { MedioPago } from '../../../features/compras/api'
 import { useMediosPago } from '../../../features/compras/hooks'
 import { useOperationIdPorContenido } from '../../../features/compras/useOperationIdPorContenido'
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { generarOperationId } from '../../../lib/api/operationId'
+import { MediosDeCobranza } from './MediosDeCobranza'
 
 /**
  * Alta de cobranza (change 17, tarea 14.2; spec `administracion-de-cobranzas`). Solo con
@@ -88,7 +88,6 @@ function CobranzaFormulario() {
   const opciones = clientes.data?.pages.flatMap((pagina) => pagina.items) ?? []
   // Un cliente que no figura en el selector (inactivo, o fuera de la búsqueda) se ofrece igual si vino precargado.
   const faltaPrecargado = precargado !== '' && !opciones.some((c) => c.id === precargado)
-  const medioDePago = (id: string): MedioPago | undefined => mediosPago.data?.items.find((m) => m.id === id)
   const contexto = {
     mediosQueRequierenReferencia: new Set((mediosPago.data?.items ?? []).filter((m) => m.requiere_referencia).map((m) => m.id)),
   }
@@ -243,51 +242,20 @@ function CobranzaFormulario() {
           </Card>
         )}
 
-        <Card className="flex flex-col gap-3">
-          <div className="flex items-center gap-1">
-            <h2 className="text-base font-semibold text-primary">Medios de pago</h2>
-            <Ayuda clave="cobranzas.medios" />
-          </div>
-          {mediosField.fields.map((campo, indice) => {
-            const requiereReferencia = medioDePago(formulario.medios[indice]?.medioPagoId ?? '')?.requiere_referencia === true
-            return (
-              <div key={campo.id} data-testid={`medio-${indice}`} className="flex flex-col gap-2">
-                <div className="flex flex-wrap items-end gap-3">
-                  <Campo id={`medios.${indice}.medioPagoId`} etiqueta="Medio de pago">
-                    <select id={`medios.${indice}.medioPagoId`} className={CLASE_CONTROL} {...register(`medios.${indice}.medioPagoId` as const)}>
-                      <option value="">Elegí un medio</option>
-                      {(mediosPago.data?.items ?? []).map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  </Campo>
-                  <Campo id={`medios.${indice}.importe`} etiqueta="Importe del medio">
-                    <input id={`medios.${indice}.importe`} className={`${CLASE_CONTROL} w-32`} inputMode="decimal" {...register(`medios.${indice}.importe` as const)} />
-                  </Campo>
-                  {requiereReferencia && (
-                    <Campo id={`medios.${indice}.referencia`} etiqueta="Referencia (obligatoria)">
-                      <input id={`medios.${indice}.referencia`} required className={CLASE_CONTROL} {...register(`medios.${indice}.referencia` as const)} />
-                    </Campo>
-                  )}
-                  {mediosField.fields.length > 1 && (
-                    <Boton variante="peligro" onClick={() => mediosField.remove(indice)}>
-                      Quitar medio
-                    </Boton>
-                  )}
-                </div>
-                {erroresDeMedio[indice] && <Alert>{erroresDeMedio[indice]}</Alert>}
-              </div>
-            )
-          })}
-          <Boton variante="secundario" className="self-start" onClick={() => mediosField.append(MEDIO_VACIO)}>
-            Agregar medio
-          </Boton>
-          <p className="text-sm text-primary" data-testid="diferencia-medios">
-            {etiquetaDeFaltante(faltante)}
-          </p>
-        </Card>
+        <MediosDeCobranza
+          idsDeFilas={mediosField.fields.map((campo) => campo.id)}
+          medios={formulario.medios}
+          mediosDePago={mediosPago.data?.items ?? []}
+          registrar={(indice, campo) => register(`medios.${indice}.${campo}` as const)}
+          alAgregar={() => mediosField.append(MEDIO_VACIO)}
+          alQuitar={(indice) => mediosField.remove(indice)}
+          erroresDeMedio={erroresDeMedio}
+          pie={
+            <p className="text-sm text-primary" data-testid="diferencia-medios">
+              {etiquetaDeFaltante(faltante)}
+            </p>
+          }
+        />
 
         <div className="flex gap-2">
           <Boton type="submit" disabled={!habilitado || registrar.isPending || esperandoSaldo}>

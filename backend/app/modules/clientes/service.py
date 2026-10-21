@@ -533,9 +533,15 @@ def listar_opciones(
     limite: int = repository.LIMITE_PAGINA_DEFAULT,
     cursor: str | None = None,
     texto: str | None = None,
+    incluir_consumidor_final: bool = False,
 ) -> tuple[list[Cliente], str | None]:
     """Selector de clientes de quien cobra (change 17, D14): `ACTIVO` y `SUSPENDIDO`, sin el
-    consumidor final."""
+    consumidor final salvo que se pida (change 18a, D5/D21)."""
     return repository.listar_opciones_paginado(
-        organizacion_id, sesion, limite=limite, cursor=cursor, texto=texto
+        organizacion_id,
+        sesion,
+        limite=limite,
+        cursor=cursor,
+        texto=texto,
+        incluir_consumidor_final=incluir_consumidor_final,
     )

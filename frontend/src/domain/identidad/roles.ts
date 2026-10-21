@@ -23,8 +23,8 @@ export const PERMISOS_DE_AUTORIZACION: readonly string[] = [
   'USAR_LISTA_ANTERIOR',
 ]
 
-/** Módulos cuyas funciones todavía no existen en la aplicación (D9: venta, facturación, reportes). */
-const MODULOS_QUE_LLEGAN_MAS_ADELANTE: readonly string[] = ['ventas', 'facturacion', 'reportes']
+/** Módulos cuyas funciones todavía no existen en la aplicación (facturación y reportes; ventas existe desde el change 18a). */
+const MODULOS_QUE_LLEGAN_MAS_ADELANTE: readonly string[] = ['facturacion', 'reportes']
 
 const ETIQUETAS_DE_MODULO: Record<string, string> = {
   identidad: 'Usuarios y organización',

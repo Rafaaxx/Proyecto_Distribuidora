@@ -54,7 +54,10 @@ from app.modules.precios.domain.precio import (
 from app.modules.precios.domain.redondeo import Redondeo, redondeo_aplicable, validar_redondeo
 from app.modules.precios.domain.reglas import ProductoDeRegla, Regla, resolver_regla, validar_regla
 from app.modules.precios.domain.versiones import (
+    HISTORICA,
+    VIGENTE,
     VersionDeLista,
+    estados_derivados,
     validar_anulacion,
     validar_publicacion,
     version_vigente,
@@ -1073,16 +1076,132 @@ def resolver_precios(
     )
 
 
-def validar_lista_asignable(organizacion_id: UUID, sesion: Session, *, lista_id: UUID) -> None:
+@dataclass(frozen=True)
+class VersionElegible:
+    """Una versión que la venta puede elegir (PRC-21): `VIGENTE` o `HISTORICA`."""
+
+    version_id: UUID
+    numero: int
+    estado: str
+    vigencia_desde: datetime
+    vigencia_hasta: datetime | None
+
+
+def versiones_elegibles(
+    organizacion_id: UUID, sesion: Session, *, lista_id: UUID, momento: datetime
+) -> tuple[VersionElegible, ...]:
+    """Las versiones de la lista que una venta puede elegir a `momento` (PRC-21, `design.md` D6
+    del change 18a): las `PUBLICADA` no anuladas cuya vigencia desde no es posterior al momento,
+    la vigente y las históricas, de la más nueva a la más vieja. Las programadas, las anuladas y
+    los borradores no figuran. Lista inexistente o ajena, 404 (INV-21). Solo lectura, sin
+    bloquear (INV-11)."""
+    if momento.tzinfo is None:
+        raise ValueError("El momento de la consulta debe tener zona horaria (timestamptz).")
+    if repository.obtener_lista(organizacion_id, lista_id, sesion) is None:
+        raise RecursoNoEncontradoError(f"La lista {lista_id} no existe en esta organización.")
+    versiones = repository.listar_versiones(organizacion_id, lista_id, sesion)
+    estados = estados_derivados([_como_version_de_lista(version) for version in versiones], momento)
+    return tuple(
+        VersionElegible(
+            version_id=version.id,
+            numero=version.numero,
+            estado=estados[version.id] or "",
+            vigencia_desde=version.vigencia_desde,
+            vigencia_hasta=version.vigencia_hasta,
+        )
+        for version in versiones
+        if estados[version.id] in {VIGENTE, HISTORICA} and version.vigencia_desde is not None
+    )
+
+
+@dataclass(frozen=True)
+class PreciosDeVersion:
+    """Los precios pedidos de una versión elegida (PRC-21). Un producto pedido sin precio en la
+    versión va en `productos_sin_precio`: nunca se le inventa uno (PRC-10)."""
+
+    version_id: UUID
+    lista_id: UUID
+    numero: int
+    precios: dict[UUID, PrecioResuelto]
+    productos_sin_precio: tuple[UUID, ...]
+
+
+def resolver_precios_de_version(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    version_id: UUID,
+    producto_ids: Collection[UUID] | None,
+) -> PreciosDeVersion:
+    """Los precios de `producto_ids` (todos los de la versión si es `None`) en la versión
+    elegida, sin bloquear (PRC-21, PRC-10, `design.md` D6 del change 18a). Una versión de otra
+    organización responde como inexistente (INV-21). Que la versión sea elegible para la venta
+    (`versiones_elegibles`) lo decide quien vende."""
+    version = repository.obtener_version_por_id(organizacion_id, version_id, sesion)
+    if version is None:
+        raise RecursoNoEncontradoError(f"La versión {version_id} no existe en esta organización.")
+    if producto_ids is None:
+        filas = repository.listar_precios_de_version(organizacion_id, version.id, sesion)
+    else:
+        filas = repository.listar_precios_de_productos(
+            organizacion_id, version.id, producto_ids, sesion
+        )
+    precios = {
+        fila.producto_id: PrecioResuelto(
+            precio_final=fila.precio_final, unidades_referencia=fila.unidades_referencia
+        )
+        for fila in filas
+    }
+    sin_precio = (
+        ()
+        if producto_ids is None
+        else tuple(dict.fromkeys(id_ for id_ in producto_ids if id_ not in precios))
+    )
+    return PreciosDeVersion(
+        version_id=version.id,
+        lista_id=version.lista_id,
+        numero=version.numero,
+        precios=precios,
+        productos_sin_precio=sin_precio,
+    )
+
+
+@dataclass(frozen=True)
+class DatosDeVersion:
+    """La lista y el número de una versión, para mostrar de dónde salió un precio (change 18a,
+    D19)."""
+
+    version_id: UUID
+    lista_id: UUID
+    lista_nombre: str
+    numero: int
+
+
+def datos_de_versiones(
+    organizacion_id: UUID, sesion: Session, version_ids: Collection[UUID]
+) -> dict[UUID, DatosDeVersion]:
+    """`{version_id: DatosDeVersion}` por lote. Una versión de otra organización o inexistente
+    no aparece (INV-21). Solo lectura."""
+    return {
+        version_id: DatosDeVersion(version_id, lista_id, nombre, numero)
+        for version_id, lista_id, nombre, numero in repository.datos_de_versiones(
+            organizacion_id, version_ids, sesion
+        )
+    }
+
+
+def validar_lista_asignable(organizacion_id: UUID, sesion: Session, *, lista_id: UUID) -> str:
     """Valida la lista que `clientes` asigna a un cliente (CLI-01, D11 punto 1): una lista que
     no existe en la organización del token responde como inexistente (404, INV-21) y una
     inactiva se rechaza con `LISTA_INACTIVA`. La lee `FOR SHARE` (D14): desactivarla y
-    asignarla a la vez no deja nunca un cliente activo con una lista inactiva."""
+    asignarla a la vez no deja nunca un cliente activo con una lista inactiva. Devuelve el
+    nombre de la lista (la venta lo nombra en su auditoría, change 18a D20)."""
     lista = repository.obtener_lista_para_compartir(organizacion_id, lista_id, sesion)
     if lista is None:
         raise RecursoNoEncontradoError(f"La lista {lista_id} no existe en esta organización.")
     if not lista.activo:
         raise ListaInactivaError(f"La lista {lista.nombre!r} está inactiva (PRC-01).")
+    return lista.nombre
 
 
 def definir_lista_predeterminada(

@@ -153,8 +153,16 @@ PERMISOS_ESPERADOS_POR_RUTA: dict[tuple[str, str], frozenset[str]] = {
     ("GET", "/api/v1/precios/listas/{lista_id}/reglas"): frozenset(
         {"GESTIONAR_LISTAS", "PUBLICAR_LISTAS"}
     ),
+    # Change 18a, tarea 9.3 (D19, tabla aprobada el 2026-10-20): las opciones se abren,
+    # ademas, a `VENDER` (solo lectura).
     ("GET", "/api/v1/precios/listas/opciones"): frozenset(
-        {"GESTIONAR_LISTAS", "PUBLICAR_LISTAS", "GESTIONAR_CLIENTES", "ADMIN_CONFIGURACION"}
+        {
+            "GESTIONAR_LISTAS",
+            "PUBLICAR_LISTAS",
+            "GESTIONAR_CLIENTES",
+            "ADMIN_CONFIGURACION",
+            "VENDER",
+        }
     ),
     # Change 13, grupo 7 (tarea 7.6): generar el borrador y fijar un precio exigen
     # `GESTIONAR_LISTAS`; consultar el borrador, cualquiera de los dos permisos de listas.
@@ -232,11 +240,30 @@ PERMISOS_ESPERADOS_POR_RUTA: dict[tuple[str, str], frozenset[str]] = {
     ("GET", "/api/v1/cobranzas/{cobranza_id}"): frozenset(
         {"REGISTRAR_COBRANZA", "ANULAR_COBRANZA"}
     ),
-    ("GET", "/api/v1/clientes/opciones"): frozenset({"GESTIONAR_CLIENTES", "REGISTRAR_COBRANZA"}),
+    # Change 18a, tarea 9.3 (D19, tabla aprobada el 2026-10-20): el selector, el saldo y las
+    # ubicaciones se abren, ademas, a `VENDER` (solo lectura).
+    ("GET", "/api/v1/clientes/opciones"): frozenset(
+        {"GESTIONAR_CLIENTES", "REGISTRAR_COBRANZA", "VENDER"}
+    ),
     ("GET", "/api/v1/clientes/{cliente_id}/saldo"): frozenset(
-        {"GESTIONAR_CLIENTES", "REGISTRAR_COBRANZA"}
+        {"GESTIONAR_CLIENTES", "REGISTRAR_COBRANZA", "VENDER"}
+    ),
+    ("GET", "/api/v1/stock/ubicaciones"): frozenset(
+        {"TRANSFERIR_STOCK", "REGISTRAR_COMPRA", "VENDER"}
     ),
     ("GET", "/api/v1/clientes/{cliente_id}/cuenta-corriente"): frozenset({"GESTIONAR_CLIENTES"}),
+    # Change 18a, tarea 8.1 (`01` §19): confirmar una venta exige `VENDER`.
+    ("POST", "/api/v1/ventas"): frozenset({"VENDER"}),
+    # Change 18a, tareas 9.1 y 9.2 (D19, tabla aprobada el 2026-10-20): leer ventas, con
+    # cualquiera de los dos permisos; los precios y la numeracion, `VENDER` (los precios sin
+    # `USAR_LISTA_ANTERIOR` solo de la vigente de la lista aplicable: 403 en la prueba de
+    # `test_ventas_lecturas_de_apoyo_api.py`, D6); las versiones
+    # elegibles, `USAR_LISTA_ANTERIOR`.
+    ("GET", "/api/v1/ventas"): frozenset({"VENDER", "ANULAR_VENTA"}),
+    ("GET", "/api/v1/ventas/{venta_id}"): frozenset({"VENDER", "ANULAR_VENTA"}),
+    ("GET", "/api/v1/ventas/precios"): frozenset({"VENDER"}),
+    ("GET", "/api/v1/ventas/numeracion"): frozenset({"VENDER"}),
+    ("GET", "/api/v1/ventas/versiones"): frozenset({"USAR_LISTA_ANTERIOR"}),
 }
 
 

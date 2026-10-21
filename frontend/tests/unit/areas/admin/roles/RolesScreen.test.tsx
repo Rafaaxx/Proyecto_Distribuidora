@@ -170,7 +170,7 @@ describe('pantalla Roles y permisos (tarea 9.1)', () => {
       expect(within(panel).getByLabelText('Confirmar ventas')).not.toBeChecked()
     })
 
-    it('marca "llega más adelante" solo en los permisos de funciones que todavía no existen', async () => {
+    it('marca "llega más adelante" solo en los permisos de módulos que todavía no existen (reportes, no ventas)', async () => {
       servidor()
       const usuario = userEvent.setup()
       montar()
@@ -178,7 +178,7 @@ describe('pantalla Roles y permisos (tarea 9.1)', () => {
       const panel = await elegir(usuario, 'Supervisor comercial')
 
       const ventas = within(within(panel).getByRole('group', { name: 'Ventas' }))
-      expect(ventas.getAllByText(/llega más adelante/i)).toHaveLength(3)
+      expect(ventas.queryByText(/llega más adelante/i)).not.toBeInTheDocument()
       expect(within(within(panel).getByRole('group', { name: 'Reportes' })).getByText(/llega más adelante/i)).toBeInTheDocument()
       expect(within(within(panel).getByRole('group', { name: 'Cobranzas' })).queryByText(/llega más adelante/i)).not.toBeInTheDocument()
     })

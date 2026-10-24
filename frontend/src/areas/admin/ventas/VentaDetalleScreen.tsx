@@ -12,9 +12,12 @@ import {
   etiquetaDeEstadoDeVenta,
   etiquetaDeModoDeConfirmacion,
   etiquetaDeObservacionDeVenta,
+  etiquetaDePoliticaDeCredito,
+  etiquetaDeResolucionDeCredito,
   observacionesDeLineaDeVenta,
   observacionesGeneralesDeVenta,
   textoDeCantidadDeLinea,
+  textoDeDescuentoCongelado,
   type ObservacionDeVenta,
 } from '../../../domain/ventas/presentacion'
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
@@ -127,6 +130,11 @@ function VentaCompleta({ datos }: { datos: VentaDetalle }) {
               {linea.unidades_referencia === 1 ? 'unidad' : 'unidades'} · Bruto {formatearMonto(linea.importe_bruto)}
               {parsearImporteDesdeApi(linea.importe_descuento).isZero() ? '' : ` · Descuento ${formatearMonto(linea.importe_descuento)}`}
             </p>
+            {linea.descuentos.map((descuento, indice) => (
+              <p key={`${descuento.origen}-${String(indice)}`} data-testid={`descuento-${linea.linea_id}-${String(indice)}`}>
+                {textoDeDescuentoCongelado(descuento)}
+              </p>
+            ))}
             {veCostos &&
               (linea.costo_unitario !== null && linea.costo_total !== null ? (
                 <p>
@@ -151,6 +159,28 @@ function VentaCompleta({ datos }: { datos: VentaDetalle }) {
           Total: {formatearMonto(datos.total)}
         </p>
       </Card>
+
+      {datos.credito != null && (
+        <Card data-testid="credito-de-la-venta" className="flex flex-col gap-1 text-sm text-primary">
+          <div className="flex items-center gap-1">
+            <h2 className="text-base font-semibold">Crédito del cliente al vender</h2>
+            <Ayuda clave="ventas.credito" />
+          </div>
+          <p>
+            Límite {datos.credito.limite === null ? 'sin límite' : formatearMonto(datos.credito.limite)} · Debía{' '}
+            {datos.credito.saldo_considerado === null ? '—' : formatearMonto(datos.credito.saldo_considerado)} · Disponible{' '}
+            {datos.credito.disponible === null ? '—' : formatearMonto(datos.credito.disponible)}
+          </p>
+          <p>
+            Exceso {datos.credito.exceso === null ? '—' : formatearMonto(datos.credito.exceso)} · Política{' '}
+            {datos.credito.politica === null ? '—' : etiquetaDePoliticaDeCredito(datos.credito.politica)}
+          </p>
+          <p data-testid="credito-resolucion">
+            {etiquetaDeResolucionDeCredito(datos.credito.resolucion)}
+            {datos.credito.autorizador_nombre ? ` · autorizó ${datos.credito.autorizador_nombre}` : ''}
+          </p>
+        </Card>
+      )}
 
       <Card data-testid="cobranza-de-la-venta" className="flex flex-col gap-1 text-sm text-primary">
         <h2 className="text-base font-semibold">Cobranza en el acto</h2>

@@ -173,4 +173,65 @@ describe('VentaDetalleScreen (tarea 12.3)', () => {
     expect(screen.getByText(/no ten[eé]s permiso para ver las ventas/i)).toBeInTheDocument()
     expect(apiFetchMock).not.toHaveBeenCalled()
   })
+
+  // Escenario: "Detalle de una venta autorizada"
+  it('muestra los descuentos de cada línea (origen, regla, porcentaje, importe, motivo y autorizador) y el snapshot de crédito con su autorizador (DSC-08, CRE-10)', async () => {
+    montarApi(apiFetchMock, [
+      detalle({
+        lineas: [
+          {
+            ...LINEA_CAJAS,
+            importe_descuento: '3625.00',
+            importe_neto: '21375.00',
+            descuentos: [
+              { origen: 'AUTOMATICO', regla_id: 'r1', regla_nombre: 'Volumen vinos', porcentaje: '0.050000', importe: '1250.00', motivo_id: null, motivo_nombre: null, autorizador_id: null, autorizador_nombre: null },
+              { origen: 'MANUAL', regla_id: null, regla_nombre: null, porcentaje: '0.100000', importe: '2375.00', motivo_id: 'm1', motivo_nombre: 'Cliente frecuente', autorizador_id: 'u1', autorizador_nombre: 'Marta' },
+            ],
+          },
+          LINEA_BOTELLAS,
+        ],
+        credito: {
+          limite: '160000.00',
+          saldo_considerado: '150000.00',
+          disponible: '10000.00',
+          exceso: '21250.00',
+          politica: 'AUTORIZAR',
+          resolucion: 'PIN_SUPERVISOR',
+          autorizador_id: 'u1',
+          autorizador_nombre: 'Marta',
+        },
+      }),
+    ])
+    renderPantalla('SUP')
+
+    const linea = await screen.findByTestId('linea-l1')
+    expect(linea).toHaveTextContent('Descuento automático «Volumen vinos» 5 %: −$ 1.250,00')
+    expect(linea).toHaveTextContent('Descuento manual 10 % (motivo: Cliente frecuente; autorizó Marta): −$ 2.375,00')
+    const credito = screen.getByTestId('credito-de-la-venta')
+    expect(credito).toHaveTextContent('Límite $ 160.000,00')
+    expect(credito).toHaveTextContent('Debía $ 150.000,00')
+    expect(credito).toHaveTextContent('Disponible $ 10.000,00')
+    expect(credito).toHaveTextContent('Exceso $ 21.250,00')
+    expect(credito).toHaveTextContent('Política Autorizar')
+    expect(screen.getByTestId('credito-resolucion')).toHaveTextContent('Autorizado con el PIN de un supervisor · autorizó Marta')
+  })
+
+  // Escenario: "Venta del change anterior"
+  it('una venta anterior al change (sin snapshot de crédito ni descuentos) se muestra sin esa tarjeta y sin fallar (CRE-10)', async () => {
+    montarApi(apiFetchMock, [detalle({ credito: null })])
+    renderPantalla('SUP')
+
+    expect(await screen.findByTestId('linea-l1')).toBeInTheDocument()
+    expect(screen.queryByTestId('credito-de-la-venta')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('descuento-l1-0')).not.toBeInTheDocument()
+  })
+
+  it('un exceso advertido figura entre las observaciones con su título', async () => {
+    montarApi(apiFetchMock, [
+      detalle({ observaciones: [{ codigo: 'EXCESO_CREDITO_ADVERTIDO', estado: 'PENDIENTE', detalle: { exceso: '21250.00' } }] }),
+    ])
+    renderPantalla('SUP')
+
+    expect(await screen.findByTestId('observaciones-generales')).toHaveTextContent('Exceso de crédito advertido')
+  })
 })

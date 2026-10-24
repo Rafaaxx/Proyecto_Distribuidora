@@ -20,11 +20,12 @@ from app.core.ids import nuevo_id
 from app.core.seguridad import hashear_password
 from app.modules.identidad import repository
 from app.modules.identidad import service as identidad_service
+from app.modules.identidad.domain.clave_intento import clave_de_intento_login
 from app.modules.identidad.domain.usuarios import (
     CredencialesInvalidasError,
     LoginBloqueadoPorIntentosError,
 )
-from app.modules.identidad.models import Auditoria, Organizacion
+from app.modules.identidad.models import Auditoria, IntentoLogin, Organizacion
 
 MOMENTO = datetime(2026, 1, 1, tzinfo=UTC)
 PASSWORD = "una-contrasena-larga-123"
@@ -208,3 +209,100 @@ class TestDesbloqueoManual:
         assert len(auditorias) == 1
         assert auditorias[0].entidad_id == usuario.id
         assert auditorias[0].usuario_id == actor.id
+
+
+class TestDesbloqueoPorClave:
+    """ADR-057 punto 6 (tarea 24.5, AUD-01): el marcador lleva la clave del par del usuario y
+    neutraliza solo los fallos de esa clave; el límite por IP no cambia."""
+
+    def test_el_marcador_lleva_la_clave_del_par_del_usuario_y_su_usuario_id(
+        self, db_session: Session
+    ) -> None:
+        organizacion = _crear_organizacion(db_session, "org-desb-5")
+        usuario = _crear_usuario(db_session, organizacion.id, "vendedor1")
+        actor = _crear_usuario(db_session, organizacion.id, "admin1")
+
+        identidad_service.desbloquear_usuario(
+            organizacion.id, db_session, RELOJ, usuario_id=usuario.id, actor_id=actor.id
+        )
+
+        marcador = db_session.query(IntentoLogin).filter_by(exito=True).one()
+        assert marcador.usuario_id == usuario.id
+        assert marcador.clave_intento == clave_de_intento_login("org-desb-5", "vendedor1")
+
+    def test_el_usuario_entra_despues_del_desbloqueo_y_el_limite_por_ip_no_cambia(
+        self, db_session: Session
+    ) -> None:
+        organizacion = _crear_organizacion(db_session, "org-desb-6")
+        usuario = _crear_usuario(db_session, organizacion.id, "vendedor1")
+        actor = _crear_usuario(db_session, organizacion.id, "admin1")
+        _bloquear_usuario(db_session, organizacion, usuario, ip="10.6.0.1")
+        with pytest.raises(LoginBloqueadoPorIntentosError):
+            _login(
+                db_session,
+                organizacion_slug=organizacion.slug,
+                nombre_usuario=usuario.usuario,
+                password=PASSWORD,
+                ip="10.6.0.1",
+            )
+        fallos_por_ip = db_session.query(IntentoLogin).filter_by(ip="10.6.0.1", exito=False).count()
+
+        identidad_service.desbloquear_usuario(
+            organizacion.id, db_session, RELOJ, usuario_id=usuario.id, actor_id=actor.id
+        )
+
+        assert (
+            _login(
+                db_session,
+                organizacion_slug=organizacion.slug,
+                nombre_usuario=usuario.usuario,
+                password=PASSWORD,
+                ip="10.6.0.1",
+            ).usuario_id
+            == usuario.id
+        )
+        assert (
+            db_session.query(IntentoLogin).filter_by(ip="10.6.0.1", exito=False).count()
+            == fallos_por_ip
+        )
+
+    def test_desbloquear_a_un_usuario_no_neutraliza_los_fallos_de_otro_par(
+        self, db_session: Session
+    ) -> None:
+        organizacion = _crear_organizacion(db_session, "org-desb-7")
+        usuario = _crear_usuario(db_session, organizacion.id, "vendedor1")
+        _crear_usuario(db_session, organizacion.id, "vendedor2")
+        actor = _crear_usuario(db_session, organizacion.id, "admin1")
+        for nombre, ip in (("vendedor1", "10.7.0.1"), ("vendedor2", "10.7.0.2")):
+            for _ in range(5):
+                with pytest.raises(CredencialesInvalidasError):
+                    _login(
+                        db_session,
+                        organizacion_slug=organizacion.slug,
+                        nombre_usuario=nombre,
+                        password="mal",
+                        ip=ip,
+                    )
+
+        identidad_service.desbloquear_usuario(
+            organizacion.id, db_session, RELOJ, usuario_id=usuario.id, actor_id=actor.id
+        )
+
+        with pytest.raises(LoginBloqueadoPorIntentosError):
+            _login(
+                db_session,
+                organizacion_slug=organizacion.slug,
+                nombre_usuario="vendedor2",
+                password=PASSWORD,
+                ip="10.7.0.2",
+            )
+        assert (
+            _login(
+                db_session,
+                organizacion_slug=organizacion.slug,
+                nombre_usuario="vendedor1",
+                password=PASSWORD,
+                ip="10.7.0.1",
+            ).usuario_id
+            == usuario.id
+        )

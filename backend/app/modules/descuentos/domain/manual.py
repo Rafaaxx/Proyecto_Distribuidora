@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
 
-from app.core.errors import PermisoRequeridoError
+from app.core.errors import DomainError, PermisoRequeridoError
 from app.modules.descuentos.domain.errores import (
     AutorizacionRequeridaError,
     AutorizadorSinPermisoError,
@@ -54,6 +54,55 @@ class ResultadoManual:
     autorizador_id: str | None
 
 
+def rechazos_del_descuento_manual(
+    *,
+    descuento_manual_habilitado: bool,
+    motivo_obligatorio: bool | None,
+    permisos_usuario: Collection[str],
+    tope_rol: Decimal,
+    tope_propio: Decimal | None,
+    porcentaje_maximo: Decimal,
+    motivo: str | None,
+    autorizador: Autorizador | None,
+) -> list[DomainError]:
+    """TODOS los rechazos que el descuento manual tendría hoy, en el orden de D12
+    (deshabilitado, permiso, motivo, tope/autorización), sin lanzar ninguno. Es la base de la
+    venta sin conexión (change 18b, D10 punto 4, SYN-05, INV-17): cada rechazo es una causa de
+    `DESCUENTO_DIFIERE` y todas se informan. Un porcentaje fuera de dominio sigue siendo
+    excepción (es malformado, no una diferencia). Un autorizador enviado sin permiso da solo
+    `AUTORIZADOR_SIN_PERMISO` (el tope ya está cubierto por esa causa)."""
+    validar_porcentaje_manual(porcentaje_maximo, "El mayor porcentaje manual de la venta")
+
+    rechazos: list[DomainError] = []
+    if not descuento_manual_habilitado:
+        rechazos.append(
+            DescuentoManualDeshabilitadoError(
+                "La organización no tiene habilitado el descuento manual."
+            )
+        )
+    if PERMISO_DESCUENTO_MANUAL not in permisos_usuario:
+        rechazos.append(PermisoRequeridoError(f"Falta el permiso {PERMISO_DESCUENTO_MANUAL}."))
+    if motivo_obligatorio is True and not (motivo and motivo.strip()):
+        rechazos.append(
+            MotivoRequeridoError("La organización exige un motivo para el descuento manual.")
+        )
+
+    tope = tope_rol if tope_propio is None else tope_propio
+    if porcentaje_maximo <= tope or PERMISO_AUTORIZAR_DESCUENTO in permisos_usuario:
+        return rechazos
+    if autorizador is None:
+        rechazos.append(
+            AutorizacionRequeridaError(
+                "El descuento manual supera el tope y hace falta una autorización."
+            )
+        )
+    elif PERMISO_AUTORIZAR_DESCUENTO not in autorizador.permisos:
+        rechazos.append(
+            AutorizadorSinPermisoError("El autorizador no tiene el permiso AUTORIZAR_DESCUENTO.")
+        )
+    return rechazos
+
+
 def evaluar_descuento_manual(
     *,
     usuario_id: str,
@@ -66,27 +115,23 @@ def evaluar_descuento_manual(
     motivo: str | None,
     autorizador: Autorizador | None,
 ) -> ResultadoManual:
-    validar_porcentaje_manual(porcentaje_maximo, "El mayor porcentaje manual de la venta")
-
-    if not descuento_manual_habilitado:
-        raise DescuentoManualDeshabilitadoError(
-            "La organización no tiene habilitado el descuento manual."
-        )
-    if PERMISO_DESCUENTO_MANUAL not in permisos_usuario:
-        raise PermisoRequeridoError(f"Falta el permiso {PERMISO_DESCUENTO_MANUAL}.")
-    if motivo_obligatorio is True and not (motivo and motivo.strip()):
-        raise MotivoRequeridoError("La organización exige un motivo para el descuento manual.")
+    rechazos = rechazos_del_descuento_manual(
+        descuento_manual_habilitado=descuento_manual_habilitado,
+        motivo_obligatorio=motivo_obligatorio,
+        permisos_usuario=permisos_usuario,
+        tope_rol=tope_rol,
+        tope_propio=tope_propio,
+        porcentaje_maximo=porcentaje_maximo,
+        motivo=motivo,
+        autorizador=autorizador,
+    )
+    if rechazos:
+        raise rechazos[0]
 
     tope = tope_rol if tope_propio is None else tope_propio
     if porcentaje_maximo <= tope:
         return ResultadoManual(tope, False, "DENTRO_DEL_TOPE", None)
-
     if PERMISO_AUTORIZAR_DESCUENTO in permisos_usuario:
         return ResultadoManual(tope, True, "PERMISO_PROPIO", usuario_id)
-    if autorizador is None:
-        raise AutorizacionRequeridaError(
-            "El descuento manual supera el tope y hace falta una autorización."
-        )
-    if PERMISO_AUTORIZAR_DESCUENTO not in autorizador.permisos:
-        raise AutorizadorSinPermisoError("El autorizador no tiene el permiso AUTORIZAR_DESCUENTO.")
+    assert autorizador is not None  # sin autorizador ya hubo rechazo
     return ResultadoManual(tope, True, "AUTORIZADO_POR_SUPERVISOR", autorizador.usuario_id)

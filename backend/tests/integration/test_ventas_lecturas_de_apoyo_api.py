@@ -101,6 +101,36 @@ def test_prc22_los_precios_para_vender_traen_precio_presentaciones_y_stock_sin_c
     )
 
 
+def test_dsc05_los_precios_para_vender_traen_categoria_y_marca_del_producto(
+    cliente_http: TestClient, sesion: Session
+) -> None:
+    """La pantalla calcula los descuentos con la gemela del motor, que resuelve los alcances
+    `CATEGORIA` y `MARCA` (ADR-050): necesita la categoría y la marca de cada producto. Marca
+    nula (producto sin marca) viaja como `null`."""
+    s = Sesion(sesion)
+    categoria, marca = sesion.execute(
+        text("SELECT categoria_id, marca_id FROM producto WHERE id = :p"),
+        {"p": s.entorno.vino_id},
+    ).one()
+    headers = s.entrar(cliente_http)
+
+    cuerpo = cliente_http.get(
+        URL_PRECIOS, params={"cliente_id": str(s.entorno.cliente_id)}, headers=headers
+    ).json()
+
+    vino = _item(cuerpo, s.entorno.vino_id)
+    assert vino["categoria_id"] == str(categoria)
+    assert vino["marca_id"] == (None if marca is None else str(marca))
+    sesion.execute(
+        text("UPDATE producto SET marca_id = NULL WHERE id = :p"), {"p": s.entorno.vino_id}
+    )
+    sesion.commit()
+    cuerpo = cliente_http.get(
+        URL_PRECIOS, params={"cliente_id": str(s.entorno.cliente_id)}, headers=headers
+    ).json()
+    assert _item(cuerpo, s.entorno.vino_id)["marca_id"] is None
+
+
 def test_los_precios_nunca_llevan_costos_ni_con_ver_costos(
     cliente_http: TestClient, sesion: Session
 ) -> None:

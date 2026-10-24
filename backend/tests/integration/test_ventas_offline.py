@@ -122,6 +122,8 @@ class Ruta:
 
     def contenido(self, *lineas: dict[str, Any], **cambios: object) -> dict[str, Any]:
         cambios.setdefault("ubicacion_id", None)  # sin conexión la ubicación es la de la jornada
+        # Change 18b, D7: sin conexión el `credito` del dispositivo es obligatorio.
+        cambios.setdefault("credito", self.entorno.credito_offline())
         return self.entorno.contenido(*lineas, **cambios)
 
     def item(

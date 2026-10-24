@@ -180,7 +180,7 @@ class _Mundo:
             occurred_at=MOMENTO_VENTA,
             secuencia=1,
             app_version="1.0.0",
-            contenido=contenido,
+            contenido={**contenido, "credito": e.credito_offline()},  # D7: obligatorio
             jornada_id=self.jornada_id,
         )
         (resultado,) = sync_service.procesar_lote(

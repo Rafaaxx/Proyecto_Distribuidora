@@ -49,9 +49,10 @@ esto de raíz -- no se ajusta acá, fuera del alcance de este grupo.
 
 from __future__ import annotations
 
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, ConfigDict, SecretStr, StrictBool
 
 from app.commands.catalogo import declarar_tipo
 from app.commands.registro import SesionDeHandler, registrar_handler
@@ -59,6 +60,7 @@ from app.commands.sobre import SobreComando
 from app.core.clock import Clock
 from app.core.errors import PermisoRequeridoError
 from app.modules.identidad import service as identidad_service
+from app.modules.identidad.domain.usuarios import PERMISOS_AUTORIZACION_EXCEPCION
 from app.modules.identidad.domain.valores import computa_credito_fiscal
 
 ResultadoHandler = tuple[str, dict[str, object] | None, str | None]
@@ -75,10 +77,18 @@ un tipo interno de `sync` por una tupla de 3 elementos)."""
 
 
 class UsuarioCrearContenidoV1(BaseModel):
+    """Los datos del alta, SIN la contraseña (change 18b, `design.md` D2 y D23, ADR-056): la ruta
+    la separa del cuerpo antes de armar el contenido y la huella y la entrega al handler por
+    clausura como `SecretStr`. Así no entra a la huella (recuperable por fuerza bruta si
+    estuviera), a `comando`, a `comando_cuarentena`, a la auditoría, al resultado ni al `input` de
+    un error de validación. `extra="forbid"`: un contenido con `password` adentro (cliente viejo)
+    es malformado."""
+
+    model_config = ConfigDict(extra="forbid")
+
     usuario: str
     nombre: str
     email: str | None = None
-    password: str
     rol_id: UUID
 
 
@@ -88,11 +98,13 @@ def manejar_usuario_crear(
     *,
     sesion: SesionDeHandler,
     reloj: Clock,
+    password: SecretStr,
 ) -> ResultadoHandler:
     """Handler de `USUARIO_CREAR` v1 (D7). `actor_id`/`dispositivo_id_actor`
     salen del sobre (contexto del token), nunca del contenido -- el
-    contenido solo trae los datos propios del alta. `auditar=False`
-    (ADR-022): la única fila de auditoría de este comando la deja
+    contenido solo trae los datos propios del alta. `password` es el dato efímero de D2: llega por
+    clausura desde la ruta y `.get_secret_value()` se llama UNA sola vez, donde el servicio lo
+    deriva. `auditar=False` (ADR-022): la única fila de auditoría de este comando la deja
     `sync_service.procesar_comando` (grupo 10), no este handler."""
     usuario = identidad_service.crear_usuario(
         sobre.organizacion_id,
@@ -101,7 +113,7 @@ def manejar_usuario_crear(
         usuario=contenido.usuario,
         nombre=contenido.nombre,
         email=contenido.email,
-        password=contenido.password,
+        password=password.get_secret_value(),
         rol_id=contenido.rol_id,
         actor_id=sobre.usuario_id,
         dispositivo_id_actor=sobre.dispositivo_id,
@@ -112,8 +124,18 @@ def manejar_usuario_crear(
     return "ACEPTADO", {"usuario_id": str(usuario.id)}, None
 
 
-registrar_handler("USUARIO_CREAR", 1, UsuarioCrearContenidoV1)(manejar_usuario_crear)
-declarar_tipo("USUARIO_CREAR", admite_online=True, admite_offline=False)
+# `password` es un parámetro más que `HandlerFuncion` no modela (dato efímero por clausura, D2): el
+# lote nunca invoca este handler porque el tipo se declara `exige_credenciales_efimeras`.
+registrar_handler("USUARIO_CREAR", 1, UsuarioCrearContenidoV1)(
+    manejar_usuario_crear  # type: ignore[arg-type]
+)
+declarar_tipo(
+    "USUARIO_CREAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("ADMIN_USUARIOS",),
+    exige_credenciales_efimeras=True,
+)
 
 
 # --- DISPOSITIVO_REVOCAR (D7, envuelve `identidad_service.revocar_dispositivo`) --
@@ -151,32 +173,30 @@ def manejar_dispositivo_revocar(
 registrar_handler("DISPOSITIVO_REVOCAR", 1, DispositivoRevocarContenidoV1)(
     manejar_dispositivo_revocar
 )
-declarar_tipo("DISPOSITIVO_REVOCAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "DISPOSITIVO_REVOCAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("GESTIONAR_DISPOSITIVOS",),
+)
 
 
 # --- PIN_AUTORIZACION_ROTAR (D7, envuelve `establecer_pin_autorizacion`) ----
 
 
 class PinAutorizacionRotarContenidoV1(BaseModel):
-    """`pin: SecretStr`, sin ningún validador de formato/longitud a este
-    nivel (riesgo señalado del change: un `field_validator` que rechace un
-    PIN inválido reintroduce la fuga, porque Pydantic reporta el
-    `input_value` CRUDO -- previo al envoltorio `SecretStr` -- dentro del
-    mensaje de `ValidationError`, sin importar el tipo anotado del campo;
-    confirmado empíricamente antes de escribir este esquema. La validación
-    de formato (longitud mínima, solo dígitos) queda, como ya estaba,
-    exclusivamente en `identidad/domain/usuarios.py::
-    validar_formato_pin_autorizacion`, invocada dentro de
-    `establecer_pin_autorizacion` -- esa función nunca incluye el valor del
-    PIN en su mensaje de error (confirmado, código existente, sin tocar).
-    Consecuencia de este diseño: un PIN de longitud incorrecta pasa la
-    validación de ESTE esquema (cualquier `str` es un `SecretStr` válido) y
-    se rechaza más abajo, en el servicio, con un error de dominio que no
-    lo expone -- nunca llega a `registro.py::validar_contenido`, que es
-    donde estaba el riesgo real de fuga."""
+    """El contenido lleva solo `usuario_id`. El PIN NO está acá (change 18b, `design.md` D2 y
+    D21): la ruta lo separa del cuerpo antes de armar el contenido y la huella y lo entrega al
+    handler por clausura como `SecretStr`. Así no entra a la huella (recuperable por fuerza bruta
+    si estuviera), a `comando`, a `comando_cuarentena`, a la auditoría, al resultado ni al
+    `input` de un error de validación. `extra="forbid"`: un contenido con `pin` adentro (cliente
+    viejo) es malformado. La validación de formato del PIN (longitud, solo dígitos, no trivial)
+    vive en `identidad/domain/usuarios.py::validar_formato_pin_autorizacion` y nunca incluye el
+    valor en su mensaje; ningún `field_validator` sobre el secreto (lección del change 04)."""
+
+    model_config = ConfigDict(extra="forbid")
 
     usuario_id: UUID
-    pin: SecretStr
 
 
 def manejar_pin_autorizacion_rotar(
@@ -185,16 +205,17 @@ def manejar_pin_autorizacion_rotar(
     *,
     sesion: SesionDeHandler,
     reloj: Clock,
+    pin: SecretStr,
 ) -> ResultadoHandler:
-    """Handler de `PIN_AUTORIZACION_ROTAR` v1 (D7). `.get_secret_value()`
-    se llama UNA sola vez, en el punto exacto en que el servicio lo
-    necesita -- nunca se loguea ni se incluye en el resultado devuelto."""
+    """Handler de `PIN_AUTORIZACION_ROTAR` v1 (D7). `pin` es el dato efímero de D2: llega por
+    clausura desde la ruta, `.get_secret_value()` se llama UNA sola vez, en el punto exacto en
+    que el servicio lo necesita, y nunca se loguea ni se incluye en el resultado."""
     usuario = identidad_service.establecer_pin_autorizacion(
         sobre.organizacion_id,
         sesion,
         reloj,
         usuario_id=contenido.usuario_id,
-        pin=contenido.pin.get_secret_value(),
+        pin=pin.get_secret_value(),
         actor_id=sobre.usuario_id,
         auditar=False,
     )
@@ -203,10 +224,71 @@ def manejar_pin_autorizacion_rotar(
     return "ACEPTADO", {"usuario_id": str(usuario.id)}, None
 
 
+# `pin` es un parámetro más que `HandlerFuncion` no modela (dato efímero por clausura, D2): el
+# lote nunca invoca este handler porque el tipo se declara `exige_credenciales_efimeras`.
 registrar_handler("PIN_AUTORIZACION_ROTAR", 1, PinAutorizacionRotarContenidoV1)(
-    manejar_pin_autorizacion_rotar
+    manejar_pin_autorizacion_rotar  # type: ignore[arg-type]
 )
-declarar_tipo("PIN_AUTORIZACION_ROTAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "PIN_AUTORIZACION_ROTAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("ADMIN_USUARIOS",),
+    exige_credenciales_efimeras=True,
+)
+
+
+# --- PIN_AUTORIZACION_PROPIO_DEFINIR ("Mi PIN", change 18b, D21 parte B) ---------------------
+
+
+class PinAutorizacionPropioDefinirContenidoV1(BaseModel):
+    """Contenido VACÍO (`extra="forbid"`): el usuario sale del token, nunca del cuerpo, y el PIN y
+    la contraseña actual viajan como dato efímero por clausura (D2, D21 punto 3), así que no
+    están en la huella, `comando`, la auditoría, el resultado ni los registros. Ningún
+    `field_validator` sobre los secretos (lección del change 04)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+def manejar_pin_autorizacion_propio_definir(
+    sobre: SobreComando,
+    contenido: PinAutorizacionPropioDefinirContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+    password_actual: SecretStr,
+    pin: SecretStr,
+    ip: str,
+) -> ResultadoHandler:
+    """Handler de `PIN_AUTORIZACION_PROPIO_DEFINIR` v1. `password_actual`, `pin` e `ip` llegan por
+    clausura desde la ruta (`POST /api/v1/yo/pin-autorizacion`). El servicio verifica la
+    contraseña con el límite del login, valida el PIN y lo deriva; todo rechazo lanza una
+    excepción de dominio (nunca devuelve `RECHAZADO`). El resultado no lleva secretos."""
+    usuario = identidad_service.definir_pin_propio(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        usuario_id=sobre.usuario_id,
+        password_actual=password_actual.get_secret_value(),
+        pin=pin.get_secret_value(),
+        ip=ip,
+        dispositivo_id=sobre.dispositivo_id,
+    )
+    return "ACEPTADO", {"usuario_id": str(usuario.id)}, None
+
+
+# Como `PIN_AUTORIZACION_ROTAR`: parámetros efímeros que `HandlerFuncion` no modela; el lote
+# rechaza el tipo (`exige_credenciales_efimeras`). Solo `ONLINE`.
+registrar_handler("PIN_AUTORIZACION_PROPIO_DEFINIR", 1, PinAutorizacionPropioDefinirContenidoV1)(
+    manejar_pin_autorizacion_propio_definir  # type: ignore[arg-type]
+)
+declarar_tipo(
+    "PIN_AUTORIZACION_PROPIO_DEFINIR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=tuple(sorted(PERMISOS_AUTORIZACION_EXCEPCION)),
+    exige_credenciales_efimeras=True,
+)
 
 
 # --- ROL_PERMISOS_CAMBIAR (grupo 14, envuelve
@@ -246,7 +328,9 @@ def manejar_rol_permisos_cambiar(
 registrar_handler("ROL_PERMISOS_CAMBIAR", 1, RolPermisosCambiarContenidoV1)(
     manejar_rol_permisos_cambiar
 )
-declarar_tipo("ROL_PERMISOS_CAMBIAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "ROL_PERMISOS_CAMBIAR", admite_online=True, admite_offline=False, permisos=("ADMIN_USUARIOS",)
+)
 
 
 # --- USUARIO_DESBLOQUEAR (grupo 14, envuelve
@@ -283,7 +367,9 @@ def manejar_usuario_desbloquear(
 registrar_handler("USUARIO_DESBLOQUEAR", 1, UsuarioDesbloquearContenidoV1)(
     manejar_usuario_desbloquear
 )
-declarar_tipo("USUARIO_DESBLOQUEAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "USUARIO_DESBLOQUEAR", admite_online=True, admite_offline=False, permisos=("ADMIN_USUARIOS",)
+)
 
 
 # --- ORGANIZACION_CONDICION_IVA_CAMBIAR (11b, D7, CST-06, envuelve
@@ -344,7 +430,12 @@ def manejar_organizacion_condicion_iva_cambiar(
 registrar_handler(
     "ORGANIZACION_CONDICION_IVA_CAMBIAR", 1, OrganizacionCondicionIvaCambiarContenidoV1
 )(manejar_organizacion_condicion_iva_cambiar)
-declarar_tipo("ORGANIZACION_CONDICION_IVA_CAMBIAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "ORGANIZACION_CONDICION_IVA_CAMBIAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("ADMIN_CONFIGURACION",),
+)
 
 
 # --- ROL_TOPE_DESCUENTO_DEFINIR (change 16, D13, DSC-06, envuelve
@@ -407,4 +498,142 @@ def manejar_rol_tope_descuento_definir(
 registrar_handler("ROL_TOPE_DESCUENTO_DEFINIR", 1, RolTopeDescuentoDefinirContenidoV1)(
     manejar_rol_tope_descuento_definir
 )
-declarar_tipo("ROL_TOPE_DESCUENTO_DEFINIR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "ROL_TOPE_DESCUENTO_DEFINIR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("ADMIN_USUARIOS",),
+)
+
+
+# --- DESCUENTO_MANUAL_CONFIGURAR (change 18b, D13, DSC-06, envuelve
+# `identidad_service.configurar_descuento_manual`) ---------------------------
+
+
+class DescuentoManualConfigurarContenidoV1(BaseModel):
+    """Los dos booleanos, obligatorios y estrictos: un texto, un número o un nulo no son un
+    booleano (DSC-06). `organizacion_id` sale del sobre (token), nunca del contenido, y
+    `extra="forbid"` rechaza cualquier campo que el comando no define."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    habilitado: StrictBool
+    motivo_obligatorio: StrictBool
+
+
+def manejar_descuento_manual_configurar(
+    sobre: SobreComando,
+    contenido: DescuentoManualConfigurarContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+) -> ResultadoHandler:
+    """Handler de `DESCUENTO_MANUAL_CONFIGURAR` v1 (D13). El permiso se exige acá, PRIMERO
+    (`ADMIN_CONFIGURACION`, SEG-06). La auditoría con valor anterior y nuevo es la del servicio.
+    El resultado lleva lo que quedó: un reenvío idempotente devuelve exactamente esto (INV-06)."""
+    permisos = identidad_service.listar_permisos_del_usuario(
+        sobre.organizacion_id, sobre.usuario_id, sesion
+    )
+    if "ADMIN_CONFIGURACION" not in permisos:
+        raise PermisoRequeridoError("Falta el permiso ADMIN_CONFIGURACION.")
+
+    configuracion = identidad_service.configurar_descuento_manual(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        habilitado=contenido.habilitado,
+        motivo_obligatorio=contenido.motivo_obligatorio,
+        actor_id=sobre.usuario_id,
+        dispositivo_id_actor=sobre.dispositivo_id,
+        operation_id=sobre.operation_id,
+    )
+    if configuracion is None:
+        return "RECHAZADO", None, "ORGANIZACION_NO_ENCONTRADA"
+    return (
+        "ACEPTADO",
+        {
+            "habilitado": configuracion.descuento_manual_habilitado,
+            "motivo_obligatorio": bool(configuracion.motivo_obligatorio_descuento),
+        },
+        None,
+    )
+
+
+registrar_handler("DESCUENTO_MANUAL_CONFIGURAR", 1, DescuentoManualConfigurarContenidoV1)(
+    manejar_descuento_manual_configurar
+)
+declarar_tipo(
+    "DESCUENTO_MANUAL_CONFIGURAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("ADMIN_CONFIGURACION",),
+)
+
+
+# --- CREDITO_ORGANIZACION_CONFIGURAR (change 18b, D14, CRE-03, CRE-06, envuelve
+# `identidad_service.configurar_credito_organizacion`) -----------------------
+
+
+class CreditoOrganizacionConfigurarContenidoV1(BaseModel):
+    """Política por defecto y tolerancia sin conexión de la organización. Los tres campos son
+    obligatorios (la tolerancia vacía se expresa con `null` en los dos): así un comando nunca
+    borra la tolerancia por omisión. El valor viaja como texto (INV-03); la política y el tipo
+    fuera del catálogo se rechazan como contenido inválido, y la pareja a medias o el valor
+    inválido, en el dominio con `TOLERANCIA_OFFLINE_INVALIDA`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    politica: Literal["ADVERTIR", "AUTORIZAR", "BLOQUEAR"]
+    tolerancia_tipo: Literal["IMPORTE", "PORCENTAJE"] | None
+    tolerancia_valor: str | None
+
+
+def manejar_credito_organizacion_configurar(
+    sobre: SobreComando,
+    contenido: CreditoOrganizacionConfigurarContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+) -> ResultadoHandler:
+    """Handler de `CREDITO_ORGANIZACION_CONFIGURAR` v1 (D14). Permiso `ADMIN_CONFIGURACION`
+    primero (SEG-06). El resultado lleva la configuración vigente tras el cambio (INV-06)."""
+    permisos = identidad_service.listar_permisos_del_usuario(
+        sobre.organizacion_id, sobre.usuario_id, sesion
+    )
+    if "ADMIN_CONFIGURACION" not in permisos:
+        raise PermisoRequeridoError("Falta el permiso ADMIN_CONFIGURACION.")
+
+    configuracion = identidad_service.configurar_credito_organizacion(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        politica=contenido.politica,
+        tolerancia_tipo=contenido.tolerancia_tipo,
+        tolerancia_valor=contenido.tolerancia_valor,
+        actor_id=sobre.usuario_id,
+        dispositivo_id_actor=sobre.dispositivo_id,
+        operation_id=sobre.operation_id,
+    )
+    if configuracion is None:
+        return "RECHAZADO", None, "ORGANIZACION_NO_ENCONTRADA"
+    valor = configuracion.tolerancia_offline_valor
+    return (
+        "ACEPTADO",
+        {
+            "politica": configuracion.politica_credito_default,
+            "tolerancia_tipo": configuracion.tolerancia_offline_tipo,
+            "tolerancia_valor": None if valor is None else f"{valor:.2f}",
+        },
+        None,
+    )
+
+
+registrar_handler("CREDITO_ORGANIZACION_CONFIGURAR", 1, CreditoOrganizacionConfigurarContenidoV1)(
+    manejar_credito_organizacion_configurar
+)
+declarar_tipo(
+    "CREDITO_ORGANIZACION_CONFIGURAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("ADMIN_CONFIGURACION",),
+)

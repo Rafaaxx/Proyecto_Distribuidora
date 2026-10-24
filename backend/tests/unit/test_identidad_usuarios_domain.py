@@ -158,7 +158,7 @@ class TestValidarFormatoPinAutorizacion:
         assert validar_formato_pin_autorizacion("482913") == "482913"
 
     def test_acepta_mas_de_seis_digitos(self) -> None:
-        assert validar_formato_pin_autorizacion("12345678") == "12345678"
+        assert validar_formato_pin_autorizacion("48291357") == "48291357"
 
     def test_rechaza_menos_de_seis_digitos(self) -> None:
         with pytest.raises(PinAutorizacionInvalidoError) as exc_info:

@@ -345,6 +345,37 @@ def test_sembrar_dos_veces_no_duplica_los_motivos_de_lista_anterior(db_session: 
     assert cantidad == 3
 
 
+def test_la_siembra_deja_los_cinco_motivos_de_descuento_manual(db_session: Session) -> None:
+    """Change 18b, tarea 4.1 (DSC-06, `design.md` D13): una organización nueva queda con los
+    nombres que siembra la migración `b6c7d8e9f0a1`; sin ellos no habría motivo que elegir
+    cuando la configuración exige motivo en el descuento manual."""
+    organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+    assert organizacion is not None
+
+    motivos = configuracion_service.listar_motivos_por_ambito(
+        organizacion.id, db_session, "DESCUENTO_MANUAL"
+    )
+
+    assert sorted(motivo.nombre for motivo in motivos) == [
+        "Cliente frecuente",
+        "Compensación por reclamo",
+        "Negociación por volumen",
+        "Otro",
+        "Producto próximo a vencer",
+    ]
+    assert all(motivo.ambito == "DESCUENTO_MANUAL" and motivo.activo for motivo in motivos)
+
+
+def test_sembrar_dos_veces_no_duplica_los_motivos_de_descuento_manual(db_session: Session) -> None:
+    sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+    assert sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA) is None
+
+    cantidad = db_session.execute(
+        text("SELECT count(*) FROM motivo WHERE ambito = 'DESCUENTO_MANUAL'")
+    ).scalar_one()
+    assert cantidad == 5
+
+
 def test_solo_administrador_y_administracion_reciben_anular_transferencia(
     db_session: Session,
 ) -> None:

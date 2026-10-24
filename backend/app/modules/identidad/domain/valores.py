@@ -11,6 +11,7 @@ con código estable si no.
 from __future__ import annotations
 
 import re
+from decimal import Decimal, InvalidOperation
 
 from app.core.errors import DomainError
 
@@ -66,6 +67,17 @@ class PoliticaCreditoInvalidaError(DomainError):
 
 class ToleranciaOfflineTipoInvalidoError(DomainError):
     codigo = "IDENTIDAD_TOLERANCIA_OFFLINE_TIPO_INVALIDO"
+
+
+class ToleranciaOfflineInvalidaError(DomainError):
+    """Tolerancia sin conexión de la organización a medias (tipo sin valor o valor sin tipo), con
+    tipo fuera del catálogo o con un valor que no es un importe exacto, negativo o con más de dos
+    decimales (CRE-06, change 18b D14). Mismo código estable que el de la tolerancia del cliente
+    (`clientes/domain/errores.py`): `identidad` es la raíz de dependencias y no puede importar de
+    `clientes`."""
+
+    codigo = "TOLERANCIA_OFFLINE_INVALIDA"
+    status_http = 422
 
 
 class RedondeoDireccionInvalidaError(DomainError):
@@ -125,6 +137,44 @@ def validar_tolerancia_offline_tipo(valor: str) -> str:
             f"Valores válidos: {TOLERANCIAS_OFFLINE_TIPO}."
         )
     return valor
+
+
+def validar_tolerancia_offline_de_organizacion(
+    tipo: str | None, valor: str | None
+) -> tuple[str | None, Decimal | None]:
+    """Valida el par de tolerancia sin conexión de la organización y lo devuelve normalizado
+    (CRE-06, ADR-032, change 18b D14): tipo y valor van JUNTOS o los dos vacíos; el tipo está en
+    el catálogo; el valor es un importe exacto (texto, INV-03) no negativo y de a lo sumo dos
+    decimales -- se rechaza, no se redondea. Nunca se acepta un valor sin tipo ni al revés."""
+    if tipo is None and valor is None:
+        return None, None
+    if tipo is None or valor is None:
+        raise ToleranciaOfflineInvalidaError(
+            "La tolerancia sin conexión se informa en pareja: o van tipo y valor, o ninguno "
+            "(CRE-06)."
+        )
+    if tipo not in TOLERANCIAS_OFFLINE_TIPO:
+        raise ToleranciaOfflineInvalidaError(
+            f"El tipo de tolerancia {tipo!r} no está en el catálogo {TOLERANCIAS_OFFLINE_TIPO} "
+            "(CRE-06)."
+        )
+    try:
+        importe = Decimal(valor)
+    except InvalidOperation as error:
+        raise ToleranciaOfflineInvalidaError(
+            "El valor de la tolerancia no es un número exacto (CRE-06, INV-03)."
+        ) from error
+    if not importe.is_finite():
+        raise ToleranciaOfflineInvalidaError(
+            "El valor de la tolerancia no es un número finito (CRE-06)."
+        )
+    if importe < 0:
+        raise ToleranciaOfflineInvalidaError("El valor de la tolerancia no puede ser negativo.")
+    if importe != importe.quantize(Decimal("0.01")):
+        raise ToleranciaOfflineInvalidaError(
+            "El valor de la tolerancia no puede tener más de 2 decimales; no se redondea (INV-03)."
+        )
+    return tipo, importe.quantize(Decimal("0.01"))
 
 
 def validar_redondeo_direccion(valor: str) -> str:

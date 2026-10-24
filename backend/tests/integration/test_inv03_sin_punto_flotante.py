@@ -281,3 +281,38 @@ def test_inv03_el_catalogo_incluye_las_cobranzas_sin_punto_flotante(
     for columna, esperado in COLUMNAS_DE_COBRANZAS.items():
         assert tipos.get(columna) == esperado, columna
     assert not de_cobranzas & set(TIPOS_PROHIBIDOS)
+
+
+COLUMNAS_DE_VENTAS_18B = {
+    ("venta", "credito_limite"): "numeric",
+    ("venta", "credito_saldo_considerado"): "numeric",
+    ("venta", "credito_disponible"): "numeric",
+    ("venta", "credito_exceso"): "numeric",
+    ("venta_linea_descuento", "importe"): "numeric",
+    ("venta_linea_descuento", "porcentaje"): "numeric",
+    ("venta_linea_descuento", "orden"): "integer",
+    ("intento_pin_autorizacion", "autorizador_id"): "uuid",
+    ("intento_pin_autorizacion", "intentante_id"): "uuid",
+    ("intento_pin_autorizacion", "exito"): "boolean",
+    ("intento_pin_autorizacion", "creado_en"): "timestamp with time zone",
+}
+
+
+def test_inv03_el_catalogo_incluye_el_credito_y_los_descuentos_de_la_venta_sin_punto_flotante(
+    _engine_de_sesion: Engine,
+) -> None:
+    """Change 18b, tarea 3.5 (CRE-10, DSC-08): el snapshot de crédito y los descuentos por línea
+    son `numeric` exacto, y ninguna columna de `venta_linea_descuento` ni
+    `intento_pin_autorizacion` es de punto flotante ni `money`."""
+    with _engine_de_sesion.connect() as conexion:
+        filas = conexion.execute(_CONSULTA_CATALOGO).all()
+    tipos = {(tabla, columna): tipo for tabla, columna, tipo in filas}
+    de_las_tablas_nuevas = {
+        tipo.lower()
+        for tabla, _, tipo in filas
+        if tabla in {"venta_linea_descuento", "intento_pin_autorizacion"}
+    }
+
+    for columna, esperado in COLUMNAS_DE_VENTAS_18B.items():
+        assert tipos.get(columna) == esperado, columna
+    assert not de_las_tablas_nuevas & set(TIPOS_PROHIBIDOS)

@@ -25,6 +25,8 @@ const VentasArea = lazy(() => import('./ventas/VentasArea'))
 const ImportacionArea = lazy(() => import('./importacion/ImportacionArea'))
 const ConfiguracionArea = lazy(() => import('./configuracion/ConfiguracionArea'))
 const RolesArea = lazy(() => import('./roles/RolesArea'))
+// "Mi PIN" (change 18b, D21 parte B): cada supervisor define el suyo.
+const MiPinScreen = lazy(() => import('./cuenta/MiPinScreen'))
 // Ayuda contextual (change 16b, ADR-051): páginas "Ver más" sin datos ni permisos (D6 = A).
 const AyudaArea = lazy(() => import('./AyudaArea'))
 
@@ -206,6 +208,14 @@ export function AdminScreen() {
             element={
               <Suspense fallback={null}>
                 <RolesArea />
+              </Suspense>
+            }
+          />
+          <Route
+            path="mi-pin"
+            element={
+              <Suspense fallback={null}>
+                <MiPinScreen />
               </Suspense>
             }
           />

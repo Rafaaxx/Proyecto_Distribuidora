@@ -476,3 +476,34 @@ def test_inv02_las_tablas_de_cobranzas_estan_cubiertas(database_url: str) -> Non
         tabla_destino, columnas = _fks_agrupadas(engine, tabla)[nombre]
         assert tabla_destino == destino, nombre
         assert sorted(set(columnas)) == sorted([columna, "organizacion_id"]), nombre
+
+
+def test_inv02_las_tablas_del_18b_estan_entre_las_recorridas_y_cumplen(
+    database_url: str,
+) -> None:
+    """Change 18b, tarea 3.5 (INV-02): `venta_linea_descuento` e `intento_pin_autorizacion` son
+    tablas de negocio (no exentas), el recorrido las incluye y cumplen `organizacion_id`
+    obligatoria, `UNIQUE (organizacion_id, id)` y claves foráneas compuestas; la nueva FK de
+    `venta` al autorizador del crédito también lleva la organización."""
+    aplicar_migraciones(database_url)
+    engine = crear_engine(database_url)
+
+    recorridas = set(_tablas_de_negocio(engine))
+    nuevas = {"venta_linea_descuento", "intento_pin_autorizacion"}
+
+    assert nuevas <= recorridas
+    for tabla in nuevas:
+        assert _tabla_declara_organizacion_id_obligatoria(engine, tabla) is None
+        assert _fk_simple_entre_negocio(engine, tabla) == []
+    tabla_destino, columnas = _fks_agrupadas(engine, "venta")["fk_venta__credito_autorizador"]
+    assert tabla_destino == "usuario"
+    assert {"organizacion_id", "credito_autorizador_id"} <= set(columnas)
+    # D3 revisada (tarea 3.6): el autorizador y quien intenta son usuarios de la organización.
+    fks_intento = _fks_agrupadas(engine, "intento_pin_autorizacion")
+    for nombre, columna in (
+        ("fk_intento_pin_autorizacion__autorizador", "autorizador_id"),
+        ("fk_intento_pin_autorizacion__intentante", "intentante_id"),
+    ):
+        tabla_destino, columnas = fks_intento[nombre]
+        assert tabla_destino == "usuario", nombre
+        assert sorted(set(columnas)) == sorted([columna, "organizacion_id"]), nombre

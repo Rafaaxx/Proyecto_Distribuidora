@@ -27,19 +27,19 @@ def test_cobranza_registrar_admite_offline_y_declara_su_permiso() -> None:
     assert declarado is not None, "COBRANZA_REGISTRAR no está declarado en el catálogo."
     assert declarado.admite_online is True
     assert declarado.admite_offline is True
-    assert declarado.permiso_offline == "REGISTRAR_COBRANZA"
+    assert declarado.permisos == ("REGISTRAR_COBRANZA",)
     assert declarado.operacion_offline == catalogo_bus.OperacionObservable(
         "COBRANZA", "cobranza_id"
     )
 
 
-def test_cobranza_anular_sigue_solo_online_y_sin_permiso_offline() -> None:
+def test_cobranza_anular_sigue_solo_online_y_declara_su_permiso() -> None:
     """Triangulación: los tipos solo `ONLINE` no se tocan (D10)."""
     declarado = catalogo_bus.tipo_declarado("COBRANZA_ANULAR")
 
     assert declarado is not None
     assert (declarado.admite_online, declarado.admite_offline) == (True, False)
-    assert declarado.permiso_offline is None
+    assert declarado.permisos == ("ANULAR_COBRANZA",)
 
 
 def test_cobranza_registrar_tiene_handler_registrado_en_version_1() -> None:

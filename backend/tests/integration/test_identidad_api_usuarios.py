@@ -25,11 +25,17 @@ from app.core.ids import nuevo_id
 from app.core.seguridad import hashear_password
 from app.main import crear_app
 from app.modules.identidad import repository
+from app.modules.identidad import service as identidad_service
 from app.modules.identidad.models import Organizacion
 
 MOMENTO = datetime(2026, 1, 1, tzinfo=UTC)
 PASSWORD = "una-contrasena-larga-123"
 JWT_SECRET = "secreto-de-prueba-usuarios"
+
+
+class _Reloj:
+    def now(self) -> datetime:
+        return MOMENTO
 
 
 @pytest.fixture(autouse=True)
@@ -236,6 +242,83 @@ class TestListarUsuarios:
 
         assert respuesta.status_code == 403
 
+    def test_adr011_cada_usuario_dice_si_tiene_pin_de_autorizacion_sin_exponer_la_derivacion(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """Tarea 11.4 (change 18b, D21; cita ADR-011): `tiene_pin_autorizacion` es un booleano; la
+        derivación, la sal y las iteraciones siguen sin salir."""
+        organizacion = _crear_organizacion(sesion, "org-usr-pin-1")
+        _crear_usuario(
+            sesion, organizacion.id, permisos=frozenset({"ADMIN_USUARIOS"}), nombre_usuario="admin1"
+        )
+        marta, _ = _crear_usuario(
+            sesion,
+            organizacion.id,
+            permisos=frozenset({"AUTORIZAR_DESCUENTO"}),
+            nombre_usuario="marta",
+        )
+        _crear_usuario(
+            sesion,
+            organizacion.id,
+            permisos=frozenset({"AUTORIZAR_DESCUENTO"}),
+            nombre_usuario="luis",
+        )
+        identidad_service.establecer_pin_autorizacion(
+            organizacion.id, sesion, _Reloj(), usuario_id=marta.id, pin="482913", actor_id=marta.id
+        )
+        sesion.commit()
+        access_token = _login(cliente, "org-usr-pin-1", "admin1")
+
+        respuesta = cliente.get(
+            "/api/v1/identidad/usuarios", headers={"Authorization": f"Bearer {access_token}"}
+        )
+
+        assert respuesta.status_code == 200
+        por_usuario = {fila["usuario"]: fila for fila in respuesta.json()}
+        assert por_usuario["marta"]["tiene_pin_autorizacion"] is True
+        assert por_usuario["luis"]["tiene_pin_autorizacion"] is False
+        assert por_usuario["admin1"]["tiene_pin_autorizacion"] is False
+        for fila in por_usuario.values():
+            assert "pin_autorizacion_hash" not in fila
+            assert "pin_autorizacion_sal" not in fila
+            assert "pin_autorizacion_iteraciones" not in fila
+        assert "482913" not in respuesta.text
+
+    def test_adr011_un_pin_invalidado_por_perder_el_permiso_deja_de_figurar_como_definido(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """Triangulación: sin hash guardado (el rol perdió su último permiso de autorización) el
+        booleano vuelve a `false`."""
+        organizacion = _crear_organizacion(sesion, "org-usr-pin-2")
+        _crear_usuario(
+            sesion, organizacion.id, permisos=frozenset({"ADMIN_USUARIOS"}), nombre_usuario="admin1"
+        )
+        marta, _ = _crear_usuario(
+            sesion,
+            organizacion.id,
+            permisos=frozenset({"AUTORIZAR_DESCUENTO"}),
+            nombre_usuario="marta",
+        )
+        identidad_service.establecer_pin_autorizacion(
+            organizacion.id, sesion, _Reloj(), usuario_id=marta.id, pin="482913", actor_id=marta.id
+        )
+        sesion.execute(
+            text(
+                "UPDATE usuario SET pin_autorizacion_hash = NULL, pin_autorizacion_sal = NULL,"
+                " pin_autorizacion_iteraciones = NULL WHERE id = :u"
+            ),
+            {"u": marta.id},
+        )
+        sesion.commit()
+        access_token = _login(cliente, "org-usr-pin-2", "admin1")
+
+        respuesta = cliente.get(
+            "/api/v1/identidad/usuarios", headers={"Authorization": f"Bearer {access_token}"}
+        )
+
+        por_usuario = {fila["usuario"]: fila for fila in respuesta.json()}
+        assert por_usuario["marta"]["tiene_pin_autorizacion"] is False
+
 
 class TestComposicionDeRol:
     def test_cambiar_la_composicion_de_un_rol(self, cliente: TestClient, sesion: Session) -> None:
@@ -326,12 +409,12 @@ class TestRotacionDePin:
 
         respuesta = cliente.post(
             f"/api/v1/identidad/usuarios/{usuario_supervisor.id}/pin",
-            json={"pin": "654321"},
+            json={"pin": "735194"},
             headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
         )
 
         assert respuesta.status_code == 204
-        assert "654321" not in respuesta.text
+        assert "735194" not in respuesta.text
 
     def test_rotar_el_pin_sin_el_permiso_se_rechaza(
         self, cliente: TestClient, sesion: Session
@@ -351,7 +434,7 @@ class TestRotacionDePin:
 
         respuesta = cliente.post(
             f"/api/v1/identidad/usuarios/{usuario_supervisor.id}/pin",
-            json={"pin": "654321"},
+            json={"pin": "735194"},
             headers={"Authorization": f"Bearer {access_token}"},
         )
 
@@ -376,7 +459,7 @@ class TestRotacionDePin:
 
         respuesta = cliente.post(
             f"/api/v1/identidad/usuarios/{usuario_supervisor_a.id}/pin",
-            json={"pin": "654321"},
+            json={"pin": "735194"},
             headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
         )
 

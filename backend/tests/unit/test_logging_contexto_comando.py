@@ -52,7 +52,7 @@ class _ErrorDeBaseFalso(Exception):
 def _sobre(**kwargs: object) -> SobreComando:
     base = dict(
         operation_id=uuid4(),
-        tipo="USUARIO_CREAR",
+        tipo="PRUEBA_UNITARIA_SIN_CATALOGO",
         version=1,
         modo="ONLINE",
         organizacion_id=uuid4(),

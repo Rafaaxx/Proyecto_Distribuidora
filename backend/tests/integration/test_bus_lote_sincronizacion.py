@@ -87,10 +87,15 @@ def _catalogo_y_registro_aislados(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.commands.catalogo._CATALOGO", {})
     monkeypatch.setattr("app.commands.registro._REGISTRO", {})
     catalogo.declarar_tipo(
-        "PRUEBA_LOTE", admite_online=True, admite_offline=True, permiso_offline="REGISTRAR_COBRANZA"
+        "PRUEBA_LOTE", admite_online=True, admite_offline=True, permisos=("REGISTRAR_COBRANZA",)
     )
     registro.registrar_handler("PRUEBA_LOTE", 1, _EsquemaPrueba)(_handler_prueba)
-    catalogo.declarar_tipo("PRUEBA_LOTE_SOLO_ONLINE", admite_online=True, admite_offline=False)
+    catalogo.declarar_tipo(
+        "PRUEBA_LOTE_SOLO_ONLINE",
+        admite_online=True,
+        admite_offline=False,
+        sin_permiso="tipo de prueba",
+    )
     registro.registrar_handler("PRUEBA_LOTE_SOLO_ONLINE", 1, _EsquemaPrueba)(_handler_prueba)
 
 
@@ -123,6 +128,10 @@ def _crear_usuario_y_dispositivo(
         tope_descuento=Decimal("0"),
         activo=True,
         momento=MOMENTO,
+    )
+    # El tipo de prueba declara `REGISTRAR_COBRANZA` (ADR-056): el bus lo exige en todo camino.
+    identidad_repository.asignar_permiso_a_rol(
+        organizacion_id, sesion, rol_id=rol.id, permiso_codigo="REGISTRAR_COBRANZA"
     )
     usuario = identidad_repository.crear_usuario(
         organizacion_id,

@@ -158,6 +158,16 @@ def resolver_handler(tipo: str, version: int) -> HandlerRegistrado:
     return _REGISTRO[clave]
 
 
+def _resumen_sin_valores(error: ValidationError) -> str:
+    """Campo y tipo de cada error de validación, NUNCA el valor recibido ni el mensaje de
+    Pydantic (que puede citarlo): un PIN o una contraseña mal ubicados no deben llegar a un
+    título de error ni a un registro (`02` §17, change 18b D2 punto 3)."""
+    return "; ".join(
+        f"{'.'.join(str(parte) for parte in detalle['loc']) or '(contenido)'} ({detalle['type']})"
+        for detalle in error.errors(include_input=False, include_context=False, include_url=False)
+    )
+
+
 def validar_contenido(handler: HandlerRegistrado, contenido: Mapping[str, object]) -> BaseModel:
     """Valida `contenido` contra el esquema de `handler`. Un dato
     obligatorio faltante (o cualquier otra violación del esquema) se
@@ -175,5 +185,5 @@ def validar_contenido(handler: HandlerRegistrado, contenido: Mapping[str, object
     except ValidationError as error:
         raise ContenidoDeComandoInvalidoError(
             f"El contenido no cumple el esquema de {handler.tipo!r} "
-            f"versión {handler.version}: {error}"
-        ) from error
+            f"versión {handler.version}: {_resumen_sin_valores(error)}"
+        ) from None

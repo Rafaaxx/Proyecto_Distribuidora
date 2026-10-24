@@ -105,4 +105,9 @@ def manejar_saldo_inicial_registrar(
 registrar_handler("SALDO_INICIAL_REGISTRAR", 1, SaldoInicialRegistrarContenidoV1)(
     manejar_saldo_inicial_registrar
 )
-declarar_tipo("SALDO_INICIAL_REGISTRAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "SALDO_INICIAL_REGISTRAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("IMPORTAR_DATOS",),
+)

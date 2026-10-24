@@ -11,8 +11,8 @@ const claves = Object.keys(AYUDAS) as ClaveDeAyuda[]
 const temas = Object.keys(TEMAS) as TemaDeAyuda[]
 
 describe('AYUDAS: cada entrada tiene título, texto y regla citada', () => {
-  it('tiene las 46 claves aprobadas (27 del 16b, 5 de cobranzas, 5 de medios de pago y roles y 9 de ventas; la de "Operador" se eliminó)', () => {
-    expect(claves).toHaveLength(46)
+  it('tiene las 58 claves aprobadas (27 del 16b, 5 de cobranzas, 5 de medios de pago y roles, 9 de ventas y 12 del 18b; la de "Operador" se eliminó)', () => {
+    expect(claves).toHaveLength(58)
     expect(claves).not.toContain('descuentos.operador')
   })
 
@@ -45,8 +45,15 @@ describe('AYUDAS: cada entrada tiene título, texto y regla citada', () => {
 })
 
 describe('TEMAS: páginas "Ver más"', () => {
-  it('son exactamente cobranzas-observaciones, descuentos, topes, precio y ventas-observaciones', () => {
-    expect([...temas].sort()).toEqual(['cobranzas-observaciones', 'descuentos', 'precio', 'topes', 'ventas-observaciones'])
+  it('son exactamente cobranzas-observaciones, credito, descuentos, topes, precio y ventas-observaciones', () => {
+    expect([...temas].sort()).toEqual([
+      'cobranzas-observaciones',
+      'credito',
+      'descuentos',
+      'precio',
+      'topes',
+      'ventas-observaciones',
+    ])
   })
 
   it.each(temas)('%s: título, al menos una sección con párrafos y al menos un ID', (tema) => {
@@ -177,6 +184,99 @@ describe('ayuda de ventas (change 18a, D22; textos aprobados el 2026-10-17 y el 
 
   it('no se revisó la clave de cobranzas que se reutiliza para los medios', () => {
     expect(AYUDAS['cobranzas.medios'].texto).toContain('Podés repartir el total entre varios medios')
+  })
+})
+
+describe('ayuda de descuentos, crédito y PIN (change 18b, D22; textos corregidos por el usuario el 2026-10-21)', () => {
+  const reglasAprobadas = [
+    ['ventas.descuentoGeneral', ['DSC-05', 'DSC-06']],
+    ['ventas.descuentoPropio', ['DSC-05', 'DSC-08', 'ADR-050']],
+    ['ventas.topeDescuento', ['DSC-06']],
+    ['ventas.autorizacion', ['DSC-06', 'CRE-05', 'SEG-05']],
+    ['ventas.motivoDescuento', ['DSC-06', 'DSC-08']],
+    ['ventas.descuentosAutomaticos', ['DSC-05', 'DSC-09']],
+    ['ventas.credito', ['CRE-01', 'CRE-02']],
+    ['ventas.politicaCredito', ['CRE-03', 'CRE-04', 'CRE-05', 'CRE-07']],
+    ['configuracion.descuentoManual', ['DSC-06']],
+    ['configuracion.credito', ['CRE-03', 'CRE-06', 'ADR-032']],
+    ['roles.pinAutorizacion', ['SEG-05', 'ADR-011', 'ADR-019']],
+    ['cuenta.miPin', ['SEG-05', 'ADR-011', 'ADR-019']],
+  ] as const
+
+  it('las doce claves existen y citan las reglas aprobadas', () => {
+    expect(reglasAprobadas.map(([clave]) => [clave, [...AYUDAS[clave].reglas]])).toEqual(
+      reglasAprobadas.map(([clave, reglas]) => [clave, [...reglas]]),
+    )
+  })
+
+  it.each([
+    ['ventas.descuentoGeneral', 'ese reemplaza al general en esa línea: no se suman.', '$1.484,38 menos.'],
+    ['ventas.descuentoPropio', 'No se puede poner 0 % para dejar una línea sin el general.', 'el vino lleva 10 % y el resto 5 %.'],
+    ['ventas.topeDescuento', 'los descuentos automáticos no cuentan.', '5 % general y 8 % en un producto pide autorización.'],
+    ['ventas.autorizacion', 'el PIN no se guarda y queda registrado quién autorizó.', 'la venta queda con Marta como autorizadora.'],
+    ['ventas.credito', 'límite cero es solo de contado.', 'queda debiendo $210.000: se pasa $10.000.'],
+    ['configuracion.credito', 'sin tolerancia, todo exceso sin señal pide permiso o PIN.', 'con $5.000 pide permiso o PIN.'],
+  ] as const)('%s trae su texto y su ejemplo aprobados', (clave, fragmentoDelTexto, fragmentoDelEjemplo) => {
+    const entrada: { texto: string; ejemplo?: string } = AYUDAS[clave]
+    expect(entrada.texto).toContain(fragmentoDelTexto)
+    expect(entrada.ejemplo).toContain(fragmentoDelEjemplo)
+  })
+
+  it.each([
+    ['ventas.motivoDescuento', 'uno solo por venta, que queda guardado en cada producto con descuento manual.'],
+    ['ventas.descuentosAutomaticos', 'la venta no se confirma y se muestran los nuevos.'],
+    ['ventas.politicaCredito', 'Bloquear: no se confirma; podés cobrar más o sacar productos.'],
+    ['configuracion.descuentoManual', 'Exigir motivo: cada venta con descuento manual pide elegir un motivo.'],
+    ['roles.pinAutorizacion', 'aprueba, en la pantalla de otro, un descuento o un exceso de crédito.'],
+    ['cuenta.miPin', 'Cuando lo cambiás, el anterior deja de servir.'],
+  ] as const)('%s trae su texto aprobado', (clave, fragmento) => {
+    expect(AYUDAS[clave].texto).toContain(fragmento)
+  })
+
+  it('"Mi PIN" no lleva ejemplo (tal como lo aprobó el usuario)', () => {
+    expect('ejemplo' in AYUDAS['cuenta.miPin']).toBe(false)
+  })
+
+  it('los "Ver más" apuntan a los temas aprobados: topes para el tope y el general, crédito para el crédito', () => {
+    const verMas = (clave: ClaveDeAyuda): string | undefined => {
+      const entrada: { verMas?: string } = AYUDAS[clave]
+      return entrada.verMas
+    }
+    expect(verMas('ventas.descuentoGeneral')).toBe('topes')
+    expect(verMas('ventas.topeDescuento')).toBe('topes')
+    expect(verMas('ventas.credito')).toBe('credito')
+    expect(verMas('ventas.politicaCredito')).toBe('credito')
+  })
+
+  it('el tema "credito" explica disponible, consumo, las tres políticas, la tolerancia sin señal y lo guardado', () => {
+    const tema = TEMAS.credito
+    expect(tema.titulo).toBe('Cómo funciona el crédito de los clientes')
+    expect(tema.secciones.map((seccion) => seccion.titulo)).toEqual([
+      'Cuánto crédito le queda',
+      'Qué consume una venta',
+      'Advertir',
+      'Autorizar',
+      'Bloquear',
+      'Sin señal',
+      'Qué queda guardado en la venta',
+    ])
+    for (let numero = 1; numero <= 10; numero += 1) {
+      expect(tema.reglas).toContain(`CRE-${String(numero).padStart(2, '0')}`)
+    }
+  })
+
+  it('el tema de avisos de ventas suma AUTORIZACION_OFFLINE y los avisos de crédito y descuento', () => {
+    const titulos = TEMAS['ventas-observaciones'].secciones.map((seccion) => seccion.titulo)
+    expect(titulos).toEqual(
+      expect.arrayContaining([
+        'Descuentos distintos',
+        'Autorización sin señal',
+        'Exceso de crédito advertido',
+        'Exceso dentro de la tolerancia',
+        'Exceso de crédito detectado al sincronizar',
+      ]),
+    )
+    expect(TEMAS['ventas-observaciones'].reglas).toContain('ADR-055')
   })
 })
 

@@ -164,4 +164,6 @@ def manejar_importacion_registrar(
 registrar_handler("IMPORTACION_REGISTRAR", 1, ImportacionRegistrarContenidoV1)(
     manejar_importacion_registrar
 )
-declarar_tipo("IMPORTACION_REGISTRAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "IMPORTACION_REGISTRAR", admite_online=True, admite_offline=False, permisos=("IMPORTAR_DATOS",)
+)

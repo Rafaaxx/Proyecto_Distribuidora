@@ -3,6 +3,7 @@
 from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
@@ -101,6 +102,18 @@ def _domain_error_a_problem_details(request: Request, exc: Exception) -> JSONRes
     )
 
 
+def _validacion_a_422_sin_valores(request: Request, exc: Exception) -> JSONResponse:
+    """422 de FastAPI sin `input` ni `ctx` (change 18b, `design.md` D2 punto 2, `02` §17): un
+    cuerpo inválido nunca devuelve el valor recibido (PIN, contraseña, etc.). Conserva la forma
+    `detail: [{type, loc, msg}]` que ya consume el frontend."""
+    assert isinstance(exc, RequestValidationError)
+    detalle = [
+        {"type": error["type"], "loc": list(error["loc"]), "msg": error["msg"]}
+        for error in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": detalle})
+
+
 def crear_app(settings: Settings) -> FastAPI:
     """Construye la aplicación con la configuración dada.
 
@@ -119,6 +132,7 @@ def crear_app(settings: Settings) -> FastAPI:
     app.dependency_overrides[dependencias._get_session_factory] = lambda: session_factory
 
     app.add_exception_handler(DomainError, _domain_error_a_problem_details)
+    app.add_exception_handler(RequestValidationError, _validacion_a_422_sin_valores)
 
     # El orden de agregado importa: Starlette envuelve en orden inverso, así
     # que el último agregado queda más externo. RequestIdMiddleware debe

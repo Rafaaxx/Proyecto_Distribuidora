@@ -24,7 +24,7 @@ resumen de la sesión; `design.md` fija el resultado observable de sus dos
 escenarios pero no el mecanismo exacto, y esta es la única forma de
 satisfacer ambos sin que se contradigan):
 
-- El handler (o `verificar_permiso`) LANZA una excepción: es "el handler
+- El handler (o la comprobación del permiso del tipo, ADR-056) LANZA una excepción: es "el handler
   falla" (`02` §6.3). `procesar_comando` revierte TODA la transacción,
   incluida la reserva -- no queda ninguna fila de `comando` para ese
   `operation_id`, así que el mismo `operation_id` puede reintentarse como
@@ -56,6 +56,7 @@ from app.commands.auditoria import DatosDeAuditoria as DatosDeAuditoria
 from app.commands.errores import (
     CodigoDeObservacionInvalidoError,
     ComandoInconsistenteError,
+    ContenidoDeComandoInvalidoError,
     JornadaAjenaError,
     JornadaInexistenteError,
     JornadaRequeridaError,
@@ -66,7 +67,7 @@ from app.commands.huella import ContenidoComando, calcular_huella
 from app.commands.observaciones import ObservacionProducida as ObservacionProducida
 from app.commands.sobre import SobreComando
 from app.core.clock import Clock
-from app.core.errors import DomainError
+from app.core.errors import DomainError, PermisoRequeridoError
 from app.core.ids import nuevo_id
 from app.core.logging import comando_contexto_var
 from app.modules.identidad import service as identidad_service
@@ -345,23 +346,25 @@ class _PermisoRevocado:
     motivo: str
 
 
-def _evaluar_permiso_offline(sesion: Session, sobre: SobreComando) -> _PermisoRevocado | None:
-    """Paso 4 de `02` §6.3 en modo `OFFLINE` (change 17, `design.md` D10, D11; SYN-05, SYN-10):
-    compara con los permisos que el usuario tiene AL SINCRONIZAR (sin foto en el servidor). Un
-    usuario o rol inactivo se evalúa sin permisos. Nunca rechaza: el comando sigue y el llamador
-    anota `PERMISO_REVOCADO`. Con conexión no hace nada: valida el handler (403). Un tipo que no
-    declaró permiso `OFFLINE` (solo ocurre en pruebas con catálogo propio) tampoco se evalúa."""
-    if sobre.modo != "OFFLINE":
-        return None
+def _evaluar_permiso_del_tipo(sesion: Session, sobre: SobreComando) -> _PermisoRevocado | None:
+    """Paso 4 de `02` §6.3 para TODO sobre (change 18b, `design.md` D23, ADR-056; change 17, D10,
+    D11; SEG-06, SYN-05, SYN-10): compara con los permisos que el usuario tiene AHORA (sin foto en
+    el servidor; un usuario o rol inactivo se evalúa sin permisos) contra los `permisos` que el
+    catálogo declara para el tipo (alcanza con uno). `ONLINE` sin ninguno: `PermisoRequeridoError`
+    (403), antes del handler. `OFFLINE`: nunca rechaza; devuelve el veredicto y el llamador anota
+    `PERMISO_REVOCADO`. Un tipo no declarado o `sin_permiso` (solo pruebas con catálogo propio)
+    no se evalúa."""
     declarado = catalogo.tipo_declarado(sobre.tipo)
-    if declarado is None or declarado.permiso_offline is None:
+    if declarado is None or not declarado.permisos:
         return None
-    motivo = identidad_service.motivo_de_permiso_faltante(
-        sobre.organizacion_id, sobre.usuario_id, declarado.permiso_offline, sesion
+    motivo = identidad_service.motivo_de_permisos_faltantes(
+        sobre.organizacion_id, sobre.usuario_id, declarado.permisos, sesion
     )
     if motivo is None:
         return None
-    return _PermisoRevocado(permiso=declarado.permiso_offline, motivo=motivo)
+    if sobre.modo != "OFFLINE":
+        raise PermisoRequeridoError(f"Falta el permiso {' o '.join(declarado.permisos)}.")
+    return _PermisoRevocado(permiso=" o ".join(declarado.permisos), motivo=motivo)
 
 
 def _operacion_para_observar(
@@ -415,7 +418,6 @@ def procesar_comando(
         [registro.SesionDeHandler],
         ResultadoHandler | ResultadoHandlerConObservaciones | ResultadoHandlerConAuditoria,
     ],
-    verificar_permiso: Callable[[], None] = lambda: None,
     config: ConfiguracionReintentos | None = None,
     dormir: Callable[[float], None] = time.sleep,
 ) -> Comando:
@@ -427,10 +429,10 @@ def procesar_comando(
 
     `ejecutar_handler` recibe una `SesionSinCommit` (tarea 6.3), nunca la
     `Session` real: así un handler no puede confirmar ni revertir la
-    transacción por su cuenta. `verificar_permiso` corre antes que
-    `ejecutar_handler`, dentro de la misma reserva ya tomada (SEG-06,
-    `02` §6.3 paso 4): si lanza, revierte también la reserva, igual que un
-    fallo del handler.
+    transacción por su cuenta. El permiso del tipo (`02` §6.3 paso 4,
+    SEG-06, ADR-056) se evalúa antes que `ejecutar_handler`, dentro de la misma reserva ya
+    tomada y para todo camino (REST y lote): si falta, lanza `PermisoRequeridoError` y revierte
+    también la reserva, igual que un fallo del handler.
 
     Auditoría automática (change 04, grupo 10, tarea 10.5): TODO comando
     que efectivamente ejecuta su handler (reserva nueva, `procesar_
@@ -454,9 +456,8 @@ def procesar_comando(
 
     def _paso_permiso_y_handler() -> ResultadoHandler:
         nonlocal se_ejecuto_el_handler, datos_de_auditoria
-        verificar_permiso()
-        # Paso 4 de `02` §6.3 sin conexión (change 17, D10): no rechaza, observa.
-        permiso_revocado = _evaluar_permiso_offline(sesion, sobre)
+        # Paso 4 de `02` §6.3: con conexión rechaza; sin conexión observa (change 17, D10).
+        permiso_revocado = _evaluar_permiso_del_tipo(sesion, sobre)
         se_ejecuto_el_handler = True
         resultado_bruto: object = ejecutar_handler(cast(registro.SesionDeHandler, sesion_protegida))
         if permiso_revocado is not None:
@@ -738,6 +739,24 @@ def resolver_resultado_del_handler(
     return (estado, resultado, error_codigo), datos_de_auditoria
 
 
+CLAVE_DE_CREDENCIALES = "credenciales"
+"""Clave que el cuerpo de `POST /ventas` usa para el dato efímero de D2. En el lote no existe:
+un ítem que la traiga dentro de su contenido es malformado."""
+
+
+def _trae_credenciales(contenido: dict[str, ContenidoComando]) -> bool:
+    return CLAVE_DE_CREDENCIALES in contenido
+
+
+def _rechazo_por_credenciales(operation_id: UUID) -> ResultadoItemLote:
+    return ResultadoItemLote(
+        operation_id=operation_id,
+        estado="RECHAZADO",
+        resultado=None,
+        error_codigo=ContenidoDeComandoInvalidoError.codigo,
+    )
+
+
 def _procesar_item_de_lote(
     sesion: Session,
     reloj: Clock,
@@ -755,6 +774,11 @@ def _procesar_item_de_lote(
     tal cual -- `procesar_lote` la traduce a un resultado RECHAZADO sin que
     quede ninguna fila de `comando` (reintentable con contenido corregido,
     mismo criterio que un handler que lanza, tarea 6.2)."""
+    if _trae_credenciales(sobre.contenido):
+        # Change 18b, D2: el lote no admite credenciales (PIN); no se guardan ni se registran.
+        raise ContenidoDeComandoInvalidoError(
+            f"El contenido de {sobre.tipo!r} trae credenciales, que el lote no admite."
+        )
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     declarado = catalogo.tipo_declarado(sobre.tipo)
     if declarado is None:
@@ -763,17 +787,31 @@ def _procesar_item_de_lote(
         raise TipoDeComandoDesconocidoError(
             f"El tipo {sobre.tipo!r} no está declarado en el catálogo de tipos (`02` §6.5)."
         )
+    if declarado.exige_credenciales_efimeras:
+        # Change 18b, D2 y D23: un tipo que siempre recibe un secreto fuera del contenido solo
+        # entra por su ruta; por el lote se rechaza en cualquier modo, antes de reservar y de
+        # validar el contenido (que podría traer el secreto de un cliente viejo).
+        raise ModoNoAdmitidoParaTipoError(
+            f"El tipo {sobre.tipo!r} solo se admite por su ruta (`02` §17)."
+        )
     admite_el_modo = declarado.admite_online if sobre.modo == "ONLINE" else declarado.admite_offline
     if not admite_el_modo:
         raise ModoNoAdmitidoParaTipoError(
             f"El tipo {sobre.tipo!r} no admite el modo {sobre.modo!r} (`02` §6.5)."
         )
-    contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
     huella = calcular_huella(sobre.contenido)
 
     def _ejecutar_handler(
         sesion_protegida: registro.SesionDeHandler,
     ) -> ResultadoHandler | ResultadoHandlerConObservaciones | ResultadoHandlerConAuditoria:
+        # Orden aprobado el 2026-10-23 (change 18b, D23): el permiso del tipo (paso 4 de `02`
+        # §6.3, que hace `procesar_comando` antes de llamar a esta función) va ANTES de validar
+        # el contenido. Así, en `ONLINE`, quien no tiene el permiso recibe solo
+        # `PERMISO_REQUERIDO` y nunca el detalle de la validación; sin conexión el permiso
+        # revocado no rechaza (SYN-10) y un contenido inválido sigue siendo un rechazo. El
+        # rechazo por contenido también deja la transacción sin la reserva (mismo resultado que
+        # antes: sin fila de `comando`) y un reenvío idempotente no vuelve a validar.
+        contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
         # Igual que por REST (`design.md` D9): el handler recibe la sesión protegida que
         # entrega `procesar_comando` (sin `commit`) y el mismo reloj del bus.
         # Sin resolver acá: `procesar_comando` normaliza el resultado y conserva el dato de
@@ -840,6 +878,22 @@ def procesar_lote(
     if dispositivo is not None and dispositivo.estado == "REVOCADO":
         resultados_cuarentena: list[ResultadoItemLote] = []
         for item in items_ordenados:
+            if _trae_credenciales(item.contenido):
+                # Change 18b, D2: un ítem con credenciales no se guarda ni en cuarentena.
+                resultados_cuarentena.append(_rechazo_por_credenciales(item.operation_id))
+                continue
+            declarado_del_item = catalogo.tipo_declarado(item.tipo)
+            if declarado_del_item is not None and declarado_del_item.exige_credenciales_efimeras:
+                # Change 18b, D2 y D23: su contenido podría traer un secreto; no se guarda.
+                resultados_cuarentena.append(
+                    ResultadoItemLote(
+                        operation_id=item.operation_id,
+                        estado="RECHAZADO",
+                        resultado=None,
+                        error_codigo="DISPOSITIVO_REVOCADO",
+                    )
+                )
+                continue
             poner_en_cuarentena(
                 sesion,
                 reloj,

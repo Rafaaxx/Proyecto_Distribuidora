@@ -30,7 +30,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.commands import registro
@@ -747,6 +747,52 @@ class TestClienteCreditoModificarContraElBus:
             "Los importes de `antes`/`despues` viajan como string porque las "
             "columnas son `jsonb` y JSON no tiene decimal (INV-03, `CLAUDE.md` §4)."
         )
+
+    def test_cre01_guardar_limite_y_politica_bloquear_no_inserta_movimientos_ni_toca_saldos(
+        self, db_session: Session
+    ) -> None:
+        """Escenarios "Guardar un límite no altera ninguna otra fila" y "Guardar la política
+        BLOQUEAR no bloquea nada" (CRE-01; CC-04; INV-13): solo cambia el cliente y su auditoría."""
+        organizacion = _crear_organizacion(db_session)
+        usuario_id, dispositivo_id = _crear_usuario_y_dispositivo(db_session, organizacion.id)
+        db_session.commit()
+        creado = _crear(
+            db_session,
+            organizacion_id=organizacion.id,
+            usuario_id=usuario_id,
+            dispositivo_id=dispositivo_id,
+        )
+        cliente_id = UUID(creado.resultado["cliente_id"])  # type: ignore[index]
+        db_session.commit()
+
+        def _libros() -> tuple[int, int, int]:
+            return tuple(  # type: ignore[return-value]
+                db_session.execute(text(f"SELECT count(*) FROM {tabla}")).scalar_one()
+                for tabla in ("cuenta_movimiento", "saldo_cuenta", "stock_movimiento")
+            )
+
+        antes = _libros()
+        for limite, politica in (("150000.00", "BLOQUEAR"), ("0.00", "ADVERTIR")):
+            _procesar(
+                db_session,
+                _sobre(
+                    tipo="CLIENTE_CREDITO_MODIFICAR",
+                    organizacion_id=organizacion.id,
+                    usuario_id=usuario_id,
+                    dispositivo_id=dispositivo_id,
+                    contenido={
+                        "cliente_id": str(cliente_id),
+                        "limite_credito": limite,
+                        "politica_credito": politica,
+                        "tolerancia_offline_tipo": None,
+                        "tolerancia_offline_valor": None,
+                    },
+                ),
+                handler=clientes_commands.manejar_cliente_credito_modificar,
+                contenido_cls=clientes_commands.ClienteCreditoModificarContenidoV1,
+            )
+            assert _clientes_de(db_session, organizacion.id)[0].politica_credito == politica
+            assert _libros() == antes, "Guardar el crédito no inserta movimientos ni saldos."
 
     def test_ningun_campo_en_nulo_deja_el_credito_heredando(self, db_session: Session) -> None:
         """D8, CRE-03: `None` significa HEREDAR, no "cero" ni "sin cambio".

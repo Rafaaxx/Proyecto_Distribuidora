@@ -144,7 +144,9 @@ def manejar_cliente_crear(
 
 
 registrar_handler("CLIENTE_CREAR", 1, ClienteCrearContenidoV1)(manejar_cliente_crear)
-declarar_tipo("CLIENTE_CREAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "CLIENTE_CREAR", admite_online=True, admite_offline=False, permisos=("GESTIONAR_CLIENTES",)
+)
 
 
 # --- CLIENTE_MODIFICAR (D7, máquina de estados de `docs/01` §18) -----------
@@ -221,7 +223,9 @@ def manejar_cliente_modificar(
 
 
 registrar_handler("CLIENTE_MODIFICAR", 1, ClienteModificarContenidoV1)(manejar_cliente_modificar)
-declarar_tipo("CLIENTE_MODIFICAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "CLIENTE_MODIFICAR", admite_online=True, admite_offline=False, permisos=("GESTIONAR_CLIENTES",)
+)
 
 
 # --- CLIENTE_CREDITO_MODIFICAR (D3, D8, CRE-01, CRE-03, CRE-06, AUD-01) ---
@@ -273,7 +277,12 @@ def manejar_cliente_credito_modificar(
 registrar_handler("CLIENTE_CREDITO_MODIFICAR", 1, ClienteCreditoModificarContenidoV1)(
     manejar_cliente_credito_modificar
 )
-declarar_tipo("CLIENTE_CREDITO_MODIFICAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "CLIENTE_CREDITO_MODIFICAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("GESTIONAR_CREDITO",),
+)
 
 
 # --- CLIENTE_CONSUMIDOR_FINAL_CONFIGURAR (D4, ADR-029) --------------------
@@ -316,4 +325,9 @@ def manejar_cliente_consumidor_final_configurar(
 registrar_handler(
     "CLIENTE_CONSUMIDOR_FINAL_CONFIGURAR", 1, ClienteConsumidorFinalConfigurarContenidoV1
 )(manejar_cliente_consumidor_final_configurar)
-declarar_tipo("CLIENTE_CONSUMIDOR_FINAL_CONFIGURAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "CLIENTE_CONSUMIDOR_FINAL_CONFIGURAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("ADMIN_CONFIGURACION",),
+)

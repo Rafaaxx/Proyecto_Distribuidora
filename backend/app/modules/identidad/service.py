@@ -10,6 +10,7 @@ existe el bus de comandos (change 04).
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -22,6 +23,7 @@ from sqlalchemy.orm import Session
 from app.core.clock import Clock
 from app.core.ids import nuevo_id
 from app.core.seguridad import (
+    PIN_AUTORIZACION_ITERACIONES_DEFAULT,
     AccessTokenInvalidoError,
     derivar_hash_refresh_token,
     derivar_pin_autorizacion,
@@ -29,17 +31,25 @@ from app.core.seguridad import (
     generar_refresh_token,
     hashear_password,
     verificar_password,
+    verificar_password_o_ficticio,
+    verificar_pin_autorizacion,
 )
 from app.modules.identidad import repository
+from app.modules.identidad.domain.clave_intento import clave_de_intento_login
 from app.modules.identidad.domain.permisos import (
     ADMINISTRADOR,
     PERMISOS_DEL_CATALOGO,
     PLANTILLAS_DE_ROL,
 )
 from app.modules.identidad.domain.usuarios import (
+    AutorizadorNoEncontradoError,
+    AutorizadorSinPermisoError,
+    ContrasenaIncorrectaError,
     CorrelativoNoAvanzaError,
     CredencialesInvalidasError,
     LoginBloqueadoPorIntentosError,
+    PinBloqueadoError,
+    PinIncorrectoError,
     RefreshTokenInvalidoError,
     RolConPermisoInexistenteError,
     RolSinAutorizacionParaPinError,
@@ -60,6 +70,7 @@ from app.modules.identidad.domain.valores import (
     validar_modo_impositivo,
     validar_politica_credito_default,
     validar_slug_organizacion,
+    validar_tolerancia_offline_de_organizacion,
 )
 from app.modules.identidad.models import (
     Auditoria,
@@ -275,6 +286,139 @@ def cambiar_condicion_iva(
         dispositivo_id=dispositivo_id_actor,
         antes={"condicion_iva": condicion_anterior},
         despues={"condicion_iva": condicion_nueva},
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+    return actualizada
+
+
+def configurar_descuento_manual(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    habilitado: bool,
+    motivo_obligatorio: bool,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> ConfiguracionOrganizacion | None:
+    """`DESCUENTO_MANUAL_CONFIGURAR` (change 18b, D13, DSC-06): fija si la organización habilita
+    el descuento manual y si exige motivo. Los dos se escriben juntos y, una vez definido, el
+    motivo obligatorio deja de ser nulo. No toca ninguna venta ya confirmada.
+
+    Toma la fila de configuración `FOR UPDATE` para que el `antes` de la auditoría sea el valor
+    anterior real (mismo criterio que `cambiar_condicion_iva`). Escribe UNA auditoría con el
+    valor anterior y el nuevo (AUD-01, `origen='COMANDO'`, `operation_id` del sobre); la fila
+    genérica del comando la deja el bus (ADR-022). Devuelve `None` si la organización no tiene
+    configuración. Sin `commit`."""
+    configuracion = repository.obtener_configuracion_bloqueada(
+        organizacion_id, sesion, exclusivo=True
+    )
+    if configuracion is None:
+        return None
+
+    antes: dict[str, object] = {
+        "descuento_manual_habilitado": configuracion.descuento_manual_habilitado,
+        "motivo_obligatorio_descuento": configuracion.motivo_obligatorio_descuento,
+    }
+    momento = reloj.now()
+    actualizada = repository.actualizar_configuracion(
+        organizacion_id,
+        sesion,
+        momento=momento,
+        actualizado_por_id=actor_id,
+        descuento_manual_habilitado=habilitado,
+        motivo_obligatorio_descuento=motivo_obligatorio,
+    )
+    assert actualizada is not None  # la fila existe: se acaba de bloquear.
+
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="DESCUENTO_MANUAL_CONFIGURAR",
+        entidad="configuracion_organizacion",
+        entidad_id=organizacion_id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        antes=antes,
+        despues={
+            "descuento_manual_habilitado": habilitado,
+            "motivo_obligatorio_descuento": motivo_obligatorio,
+        },
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+    return actualizada
+
+
+def configurar_credito_organizacion(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    politica: str,
+    tolerancia_tipo: str | None,
+    tolerancia_valor: str | None,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> ConfiguracionOrganizacion | None:
+    """`CREDITO_ORGANIZACION_CONFIGURAR` (change 18b, D14, CRE-03, CRE-06): fija la política de
+    crédito por defecto y la tolerancia sin conexión de la organización (tipo y valor juntos, o
+    los dos vacíos: `TOLERANCIA_OFFLINE_INVALIDA`). Los clientes con política o tolerancia
+    propias no cambian: la herencia se resuelve al evaluar el crédito.
+
+    Valida ANTES de bloquear ni escribir. Toma la fila `FOR UPDATE`, escribe UNA auditoría con
+    el valor anterior y el nuevo (`origen='COMANDO'`) y devuelve la configuración, o `None` si
+    la organización no tiene. Sin `commit`."""
+    validar_politica_credito_default(politica)
+    tipo, valor = validar_tolerancia_offline_de_organizacion(tolerancia_tipo, tolerancia_valor)
+
+    configuracion = repository.obtener_configuracion_bloqueada(
+        organizacion_id, sesion, exclusivo=True
+    )
+    if configuracion is None:
+        return None
+
+    def _importe(importe: Decimal | None) -> str | None:
+        return None if importe is None else f"{importe:.2f}"
+
+    antes: dict[str, object] = {
+        "politica_credito_default": configuracion.politica_credito_default,
+        "tolerancia_offline_tipo": configuracion.tolerancia_offline_tipo,
+        "tolerancia_offline_valor": _importe(configuracion.tolerancia_offline_valor),
+    }
+    momento = reloj.now()
+    actualizada = repository.actualizar_configuracion(
+        organizacion_id,
+        sesion,
+        momento=momento,
+        actualizado_por_id=actor_id,
+        politica_credito_default=politica,
+        tolerancia_offline_tipo=tipo,
+        tolerancia_offline_valor=valor,
+    )
+    assert actualizada is not None  # la fila existe: se acaba de bloquear.
+
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="CREDITO_ORGANIZACION_CONFIGURAR",
+        entidad="configuracion_organizacion",
+        entidad_id=organizacion_id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        antes=antes,
+        despues={
+            "politica_credito_default": politica,
+            "tolerancia_offline_tipo": tipo,
+            "tolerancia_offline_valor": _importe(valor),
+        },
         operation_id=operation_id,
         origen="COMANDO",
     )
@@ -1083,6 +1227,15 @@ def establecer_pin_autorizacion(
     usuario.pin_autorizacion_sal = sal
     usuario.pin_autorizacion_iteraciones = iteraciones
     sesion.flush()
+    # D21 punto 7: definir el PIN reinicia los dos contadores de D3 con una fila marcador,
+    # en la transacción del comando (si el comando se rechaza o se revierte, no queda).
+    repository.registrar_marcador_de_pin(
+        organizacion_id,
+        sesion,
+        intento_id=nuevo_id(),
+        autorizador_id=usuario_id,
+        momento=momento,
+    )
 
     if auditar:
         registrar_auditoria(
@@ -1098,6 +1251,205 @@ def establecer_pin_autorizacion(
     return usuario
 
 
+# Derivación ficticia contra la que se compara cuando el autorizador no tiene PIN: gasta lo mismo
+# que verificar uno real, así el tiempo de respuesta no distingue "sin PIN" de "PIN equivocado".
+_SAL_FICTICIA_PIN = "00" * 32
+_HASH_FICTICIO_PIN = "00" * 32
+
+
+# Intentos del PIN de autorización (change 18b, D3 revisada el 2026-10-22, SEG-04, ADR-011).
+LIMITE_FALLOS_PIN_POR_AUTORIZADOR = 20
+"""Fallos contra el mismo autorizador, sumando todos los usuarios, que bloquean su PIN para
+todos. Constante del código, junto a los límites del login: `03` no tiene campo para esto y
+`intentos_pin_max` (por par) es el único parámetro de PIN de la organización."""
+VENTANA_BLOQUEO_PIN = timedelta(minutes=15)
+
+_MENSAJE_PIN_BLOQUEADO = "Demasiados intentos con el PIN de autorización. Probá más tarde."
+
+logger = logging.getLogger("app.identidad")
+
+
+def _sesion_aparte(sesion: Session) -> Session:
+    """Una sesión nueva sobre el mismo motor, para escribir el contador en una transacción que
+    se confirma aunque la del comando se revierta (mismo patrón que `intento_login`)."""
+    return Session(bind=sesion.get_bind().engine, autoflush=False, expire_on_commit=False)
+
+
+def _hasta_del_bloqueo(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    autorizador_id: UUID,
+    intentante_id: UUID | None,
+    limite: int,
+    ahora: datetime,
+) -> datetime | None:
+    """Hasta cuándo rige el bloqueo, o `None` si no hay (`design.md` D3 punto 4): sea F el último
+    fallo contado, hay bloqueo si en (F - 15 min, F] hay al menos `limite` fallos y `ahora < F +
+    15 min`. Igual para el par (`intentante_id`) y el general (`None`)."""
+    ultimo = repository.ultimo_fallo_de_pin(
+        organizacion_id, sesion, autorizador_id=autorizador_id, intentante_id=intentante_id
+    )
+    if ultimo is None:
+        return None
+    hasta = ultimo + VENTANA_BLOQUEO_PIN
+    if ahora >= hasta:
+        return None
+    cuenta = repository.contar_fallos_de_pin_en_ventana(
+        organizacion_id,
+        sesion,
+        autorizador_id=autorizador_id,
+        intentante_id=intentante_id,
+        desde_exclusivo=ultimo - VENTANA_BLOQUEO_PIN,
+        hasta_inclusivo=ultimo,
+    )
+    return hasta if cuenta >= limite else None
+
+
+def _pin_coincide(autorizador: Usuario, pin: str) -> bool:
+    """Deriva SIEMPRE una vez (también sin PIN definido) y compara en tiempo constante."""
+    tiene_pin = (
+        autorizador.pin_autorizacion_hash is not None
+        and autorizador.pin_autorizacion_sal is not None
+        and autorizador.pin_autorizacion_iteraciones is not None
+    )
+    if tiene_pin:
+        return verificar_pin_autorizacion(
+            pin,
+            hash_almacenado=autorizador.pin_autorizacion_hash or "",
+            sal=autorizador.pin_autorizacion_sal or "",
+            iteraciones=autorizador.pin_autorizacion_iteraciones or 0,
+        )
+    verificar_pin_autorizacion(
+        pin,
+        hash_almacenado=_HASH_FICTICIO_PIN,
+        sal=_SAL_FICTICIA_PIN,
+        iteraciones=PIN_AUTORIZACION_ITERACIONES_DEFAULT,
+    )
+    return False
+
+
+def verificar_pin_de_autorizacion(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    autorizador_id: UUID,
+    intentante_id: UUID,
+    pin: str,
+    permiso: str,
+    dispositivo_id: UUID | None = None,
+) -> Usuario:
+    """Verifica `pin` contra la derivación guardada de `autorizador_id` (change 18b, D2, D3
+    revisada, SEG-04, SEG-05). Devuelve al autorizador si valida. `intentante_id` es el usuario
+    del sobre (quien envía el comando); `dispositivo_id` solo va al log y a la auditoría.
+
+    Orden: 1) `AutorizadorNoEncontradoError` (404) si no existe en la organización (INV-21; no
+    cuenta); 2) `AutorizadorSinPermisoError` (403) si le falta `permiso` (no verifica ni cuenta);
+    3) `PinBloqueadoError` (429) si rige un bloqueo del par o general, sin verificar, sin contar y
+    sin escribir; 4) el PIN. Un PIN equivocado, un autorizador sin PIN, con el PIN invalidado,
+    inactivo o con el rol inactivo lanzan el MISMO `PinIncorrectoError` (403), con una derivación
+    cada uno, y cuentan como fallo.
+
+    El fallo y la auditoría del bloqueo se escriben en una TRANSACCIÓN APARTE, que se confirma
+    aunque la del comando se revierta; con el PIN correcto no se escribe nada. El PIN nunca se
+    registra ni se incluye en un mensaje. La sesión recibida nunca se confirma."""
+    autorizador = repository.obtener_usuario_por_id(organizacion_id, autorizador_id, sesion)
+    if autorizador is None:
+        raise AutorizadorNoEncontradoError(
+            f"El autorizador {autorizador_id} no existe en esta organización."
+        )
+
+    motivo = motivo_de_permiso_faltante(organizacion_id, autorizador_id, permiso, sesion)
+    if motivo == "PERMISO_QUITADO":
+        raise AutorizadorSinPermisoError(f"El autorizador no tiene el permiso {permiso}.")
+    habilitado = motivo is None
+
+    configuracion = repository.obtener_configuracion(organizacion_id, sesion)
+    assert configuracion is not None, "toda organización tiene su configuración (02 §3)"
+    limite_por_par = configuracion.intentos_pin_max
+    ahora = reloj.now()
+
+    aparte = _sesion_aparte(sesion)
+    try:
+        repository.tomar_candado_de_pin_del_autorizador(
+            organizacion_id, aparte, autorizador_id=autorizador_id
+        )
+        for intentante_del_conteo, limite in (
+            (intentante_id, limite_por_par),
+            (None, LIMITE_FALLOS_PIN_POR_AUTORIZADOR),
+        ):
+            hasta = _hasta_del_bloqueo(
+                organizacion_id,
+                aparte,
+                autorizador_id=autorizador_id,
+                intentante_id=intentante_del_conteo,
+                limite=limite,
+                ahora=ahora,
+            )
+            if hasta is not None:
+                logger.warning(
+                    "PIN de autorización rechazado por bloqueo: autorizador=%s intentante=%s "
+                    "dispositivo=%s",
+                    autorizador_id,
+                    intentante_id,
+                    dispositivo_id,
+                )
+                raise PinBloqueadoError(_MENSAJE_PIN_BLOQUEADO)
+
+        if _pin_coincide(autorizador, pin) and habilitado:
+            return autorizador
+
+        repository.registrar_fallo_de_pin(
+            organizacion_id,
+            aparte,
+            intento_id=nuevo_id(),
+            autorizador_id=autorizador_id,
+            intentante_id=intentante_id,
+            momento=ahora,
+        )
+        for alcance, intentante_del_conteo, limite in (
+            ("USUARIO", intentante_id, limite_por_par),
+            ("GENERAL", None, LIMITE_FALLOS_PIN_POR_AUTORIZADOR),
+        ):
+            cuenta = repository.contar_fallos_de_pin_en_ventana(
+                organizacion_id,
+                aparte,
+                autorizador_id=autorizador_id,
+                intentante_id=intentante_del_conteo,
+                desde_exclusivo=ahora - VENTANA_BLOQUEO_PIN,
+                hasta_inclusivo=ahora,
+            )
+            if cuenta >= limite:
+                registrar_auditoria(
+                    organizacion_id,
+                    aparte,
+                    reloj,
+                    accion="PIN_AUTORIZACION_BLOQUEADO",
+                    entidad="usuario",
+                    entidad_id=autorizador_id,
+                    ocurrido_en=ahora,
+                    usuario_id=intentante_id,
+                    dispositivo_id=dispositivo_id,
+                    despues={
+                        "alcance": alcance,
+                        "intentante_id": str(intentante_id),
+                        "hasta": (ahora + VENTANA_BLOQUEO_PIN).isoformat(),
+                    },
+                )
+        aparte.commit()
+    finally:
+        aparte.close()
+
+    logger.warning(
+        "PIN de autorización incorrecto: autorizador=%s intentante=%s dispositivo=%s",
+        autorizador_id,
+        intentante_id,
+        dispositivo_id,
+    )
+    raise PinIncorrectoError("El PIN de autorización es incorrecto.")
+
+
 # --- Autenticación (login): tarea 8.3/8.4 (`ADR-021`, `ADR-017`) -----------
 
 REFRESH_TOKEN_TTL_DIAS = 30
@@ -1108,26 +1460,150 @@ LIMITE_INTENTOS_FALLIDOS_POR_USUARIO = 5
 LIMITE_INTENTOS_FALLIDOS_POR_IP = 20
 VENTANA_INTENTOS_LOGIN = timedelta(minutes=15)
 
-_MENSAJE_BLOQUEO_GENERICO = "Demasiados intentos. Intentá de nuevo más tarde."
+ZONA_HORARIA_POR_DEFECTO_DEL_BLOQUEO = "America/Argentina/Buenos_Aires"
+"""Zona con la que se dice la hora de desbloqueo cuando no hay una organización que la dé, y
+SIEMPRE en el bloqueo por IP del login: ese límite se evalúa antes de resolver la organización o
+el usuario, así que el texto no puede depender de si existen (ADR-018 3b)."""
 
 
-def _mensaje_de_bloqueo(desbloqueo_en: datetime | None) -> str:
-    """Mismo mensaje genérico sea cual sea el límite alcanzado (tarea 11.3:
-    "el bloqueo no revela si el usuario existe"). `ADR-018` pide "429 con
-    momento de desbloqueo": se agrega al mensaje cuando se puede calcular
-    (siempre que exista al menos un intento fallido en la ventana, que es
-    justo la condición bajo la que este mensaje se emite)."""
-    if desbloqueo_en is None:
-        return _MENSAJE_BLOQUEO_GENERICO
-    return f"{_MENSAJE_BLOQUEO_GENERICO} (desbloqueo: {desbloqueo_en.isoformat()})"
+def _mensaje_de_bloqueo(desbloqueo_en: datetime, zona_horaria: str | None) -> str:
+    """Mensaje del 429 por intentos (tarea 11.3: no revela si el usuario o la organización
+    existen; `ADR-018` pide informar el momento de desbloqueo). Siempre tiene la misma forma: la
+    hora como HH:MM (24 h) en la zona dada, o en `ZONA_HORARIA_POR_DEFECTO_DEL_BLOQUEO` si no hay
+    zona: "Demasiados intentos. Probá de nuevo a las 23:45." `desbloqueo_en` nunca es `None`:
+    todos los llamadores solo lo invocan con un bloqueo vigente."""
+    zona = ZoneInfo(zona_horaria or ZONA_HORARIA_POR_DEFECTO_DEL_BLOQUEO)
+    return f"Demasiados intentos. Probá de nuevo a las {desbloqueo_en.astimezone(zona):%H:%M}."
 
 
 def _registrar_intento_fallido(
-    sesion: Session, *, usuario_id: UUID | None, ip: str, momento: datetime
+    sesion: Session, *, clave_intento: str, usuario_id: UUID | None, ip: str, momento: datetime
 ) -> None:
     repository.registrar_intento_login(
-        sesion, intento_id=nuevo_id(), usuario_id=usuario_id, ip=ip, exito=False, momento=momento
+        sesion,
+        intento_id=nuevo_id(),
+        usuario_id=usuario_id,
+        clave_intento=clave_intento,
+        ip=ip,
+        exito=False,
+        momento=momento,
     )
+
+
+# --- "Mi PIN": PIN_AUTORIZACION_PROPIO_DEFINIR (change 18b, D21 parte B, D24) -------------------
+
+
+def _hasta_del_bloqueo_de_login(
+    sesion: Session,
+    *,
+    clave_intento: str | None,
+    ip: str | None,
+    ahora: datetime,
+) -> datetime | None:
+    """Hasta cuándo rige el bloqueo del login, o `None` (D24 punto 1, igual a la regla del PIN de
+    D3): para cada límite pedido (por par escrito 5, por IP 20), sea F el último fallo contado,
+    hay bloqueo si en (F - 15 min, F] hay al menos el límite y `ahora < F + 15 min`. Devuelve el
+    desbloqueo más tardío de los límites que rigen. El límite por par cuenta por `clave_intento`
+    (ADR-057: el par (slug, usuario) tal como se escribió, exista o no); con `clave_intento=None`
+    solo se evalúa la IP, y con `ip=None` solo el par."""
+    bloqueos: list[datetime] = []
+    sujetos: list[tuple[str | None, str | None, int]] = []
+    if clave_intento is not None:
+        sujetos.append((clave_intento, None, LIMITE_INTENTOS_FALLIDOS_POR_USUARIO))
+    if ip is not None:
+        sujetos.append((None, ip, LIMITE_INTENTOS_FALLIDOS_POR_IP))
+    for por_clave, por_ip, limite in sujetos:
+        ultimo = repository.ultimo_fallo_de_login(sesion, clave_intento=por_clave, ip=por_ip)
+        if ultimo is None or ahora >= ultimo + VENTANA_INTENTOS_LOGIN:
+            continue
+        cuenta = repository.contar_fallos_de_login_en_ventana(
+            sesion,
+            clave_intento=por_clave,
+            ip=por_ip,
+            desde_exclusivo=ultimo - VENTANA_INTENTOS_LOGIN,
+            hasta_inclusivo=ultimo,
+        )
+        if cuenta >= limite:
+            bloqueos.append(ultimo + VENTANA_INTENTOS_LOGIN)
+    return max(bloqueos) if bloqueos else None
+
+
+def definir_pin_propio(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    usuario_id: UUID,
+    password_actual: str,
+    pin: str,
+    ip: str,
+    dispositivo_id: UUID | None,
+) -> Usuario:
+    """ "Mi PIN" (D21 parte B): el propio usuario define su PIN de autorización reautenticándose
+    con su contraseña. Todo rechazo LANZA una excepción de dominio (nunca una tupla `RECHAZADO`):
+    así no queda fila de `comando` y un reintento con el mismo `Operation-Id` y los datos
+    corregidos se procesa.
+
+    Orden: 1) bloqueo de login (D24; usuario 5 y IP 20, 15 minutos desde el último fallo): 429
+    `IDENTIDAD_LOGIN_BLOQUEADO_POR_INTENTOS`, también con la contraseña correcta, sin verificar,
+    sin contar y sin escribir; 2) contraseña (`verificar_password` contra el hash del usuario): si
+    es incorrecta se anota un intento fallido en `intento_login` en una TRANSACCIÓN APARTE (se
+    confirma aunque el comando se rechace) y se lanza `ContrasenaIncorrectaError` (403); 3) el
+    PIN nuevo (`establecer_pin_autorizacion`: formato, rol con permiso de autorización, marcador
+    que reinicia el contador de D3). La contraseña y el PIN nunca se registran ni se incluyen en
+    un mensaje. Sin `commit` sobre `sesion`."""
+    usuario = repository.obtener_usuario_por_id(organizacion_id, usuario_id, sesion)
+    if usuario is None:
+        raise AutorizadorNoEncontradoError(f"El usuario {usuario_id} no existe.")
+    ahora = reloj.now()
+    organizacion = repository.obtener_organizacion_por_id(organizacion_id, sesion)
+    assert organizacion is not None  # el usuario existe: su organización también.
+    # ADR-057 punto 5: "Mi PIN" cuenta con el par guardado del propio usuario, que es exactamente
+    # lo que escribe en el login: los dos comparten el mismo cupo de 5.
+    clave = clave_de_intento_login(organizacion.slug, usuario.usuario)
+
+    desbloqueo = _hasta_del_bloqueo_de_login(sesion, clave_intento=clave, ip=ip, ahora=ahora)
+    if desbloqueo is not None:
+        logger.warning(
+            "'Mi PIN' rechazado por bloqueo del login: usuario=%s dispositivo=%s ip=%s",
+            usuario_id,
+            dispositivo_id,
+            ip,
+        )
+        # "Mi PIN" (usuario ya autenticado): la hora va en la zona de la organización. Solo el
+        # 429 del login usa siempre la zona argentina (ADR-057).
+        raise LoginBloqueadoPorIntentosError(
+            _mensaje_de_bloqueo(desbloqueo, organizacion.zona_horaria)
+        )
+
+    if not verificar_password(password_actual, usuario.password_hash):
+        aparte = _sesion_aparte(sesion)
+        try:
+            _registrar_intento_fallido(
+                aparte, clave_intento=clave, usuario_id=usuario_id, ip=ip, momento=ahora
+            )
+            aparte.commit()
+        finally:
+            aparte.close()
+        logger.warning(
+            "Contraseña incorrecta en 'Mi PIN': usuario=%s dispositivo=%s ip=%s",
+            usuario_id,
+            dispositivo_id,
+            ip,
+        )
+        raise ContrasenaIncorrectaError("La contraseña no es correcta.")
+
+    actualizado = establecer_pin_autorizacion(
+        organizacion_id,
+        sesion,
+        reloj,
+        usuario_id=usuario_id,
+        pin=pin,
+        actor_id=usuario_id,
+        auditar=False,
+    )
+    assert actualizado is not None  # el usuario existe: se leyó arriba.
+    return actualizado
 
 
 # Sentinela, no una IP real: distingue el marcador de desbloqueo manual de
@@ -1153,7 +1629,7 @@ def desbloquear_usuario(
 
     No existe un campo "bloqueado" persistente en `usuario`: el bloqueo es
     una propiedad calculada sobre la ventana de `intento_login`
-    (`repository.contar_intentos_fallidos_por_usuario`). Desbloquear
+    (`repository.ultimo_fallo_de_login`). Desbloquear
     significa insertar una fila marcador (`exito=True`, `ip` sentinela) que
     esa función trata como el nuevo punto de partida de la ventana --
     ningún intento fallido anterior al marcador vuelve a contarse, sin
@@ -1168,11 +1644,16 @@ def desbloquear_usuario(
     if usuario is None:
         return None
 
+    organizacion = repository.obtener_organizacion_por_id(organizacion_id, sesion)
+    assert organizacion is not None  # el usuario existe: su organización también.
     momento = reloj.now()
     repository.registrar_intento_login(
         sesion,
         intento_id=nuevo_id(),
         usuario_id=usuario_id,
+        # ADR-057 punto 6: el marcador lleva la clave del par actual del usuario y neutraliza los
+        # fallos anteriores de ESA clave; no toca el límite por IP.
+        clave_intento=clave_de_intento_login(organizacion.slug, usuario.usuario),
         ip=_IP_DESBLOQUEO_MANUAL,
         exito=True,
         momento=momento,
@@ -1189,22 +1670,6 @@ def desbloquear_usuario(
             usuario_id=actor_id,
         )
     return usuario
-
-
-def _desbloqueo_por_ip(sesion: Session, *, ip: str, desde_ventana: datetime) -> datetime | None:
-    mas_antiguo = repository.obtener_intento_fallido_mas_antiguo_en_ventana_por_ip(
-        sesion, ip=ip, desde=desde_ventana
-    )
-    return None if mas_antiguo is None else mas_antiguo + VENTANA_INTENTOS_LOGIN
-
-
-def _desbloqueo_por_usuario(
-    sesion: Session, *, usuario_id: UUID, desde_ventana: datetime
-) -> datetime | None:
-    mas_antiguo = repository.obtener_intento_fallido_mas_antiguo_en_ventana_por_usuario(
-        sesion, usuario_id=usuario_id, desde=desde_ventana
-    )
-    return None if mas_antiguo is None else mas_antiguo + VENTANA_INTENTOS_LOGIN
 
 
 @dataclass(frozen=True)
@@ -1241,103 +1706,109 @@ def iniciar_sesion(
     audita (no hay organización a la que asociar el registro, INV-02); el
     resto sí, con `usuario_id` cuando hay un usuario resuelto.
 
-    Rate limit de login (grupo 11, `ADR-018`): el límite por IP se verifica
-    ANTES de tocar `organizacion`/`usuario` (protege incluso contra un
-    `organizacion_slug` inexistente, que de otro modo no dejaría ningún
-    rastro). El límite por usuario se verifica apenas se resuelve un
-    `usuario` real. Ambos levantan `LoginBloqueadoPorIntentosError` (429),
-    con el mismo mensaje genérico sea cual sea el límite alcanzado (tarea
-    11.3). Cada intento fallido -- incluido uno bloqueado -- se registra en
-    `intento_login` (tabla de solo inserción, sin `organizacion_id`); un
-    intento exitoso no se registra ahí (`ADR-018`: "un INSERT por intento
-    fallido").
+    Rate limit de login (grupo 11, `ADR-018` y su enmienda, `design.md` D24, `ADR-057`): orden IP
+    (20), después par escrito (5; la clave es el SHA-256 de `[slug, usuario]` sin normalizar, exista
+    o no la organización o el usuario), después credenciales. Rige `_hasta_del_bloqueo_de_login`:
+    15 minutos desde el ÚLTIMO fallo contado. Ambos levantan `LoginBloqueadoPorIntentosError` (429)
+    con el mismo mensaje genérico (tarea 11.3) y la hora SIEMPRE en la zona de Buenos Aires.
+    Todo rechazo de credenciales verifica la contraseña (contra un hash ficticio si no hay usuario
+    utilizable). Cada intento fallido que NO fue rechazado por el bloqueo se registra en
+    `intento_login` con su `clave_intento` (tabla de solo inserción, sin `organizacion_id`); un
+    intento bloqueado no se escribe: su rastro queda en el log y, solo si el par resuelve un
+    usuario real, en la auditoría `LOGIN_BLOQUEADO_POR_INTENTOS`. Uno exitoso tampoco se escribe.
     """
     momento = reloj.now()
-    desde_ventana = momento - VENTANA_INTENTOS_LOGIN
-
-    if (
-        repository.contar_intentos_fallidos_por_ip(sesion, ip=ip, desde=desde_ventana)
-        >= LIMITE_INTENTOS_FALLIDOS_POR_IP
-    ):
-        _registrar_intento_fallido(sesion, usuario_id=None, ip=ip, momento=momento)
-        desbloqueo_en = _desbloqueo_por_ip(sesion, ip=ip, desde_ventana=desde_ventana)
-        raise LoginBloqueadoPorIntentosError(_mensaje_de_bloqueo(desbloqueo_en))
+    clave = clave_de_intento_login(organizacion_slug, nombre_usuario)
 
     organizacion = repository.obtener_organizacion_por_slug(organizacion_slug, sesion)
+
+    desbloqueo_en = _hasta_del_bloqueo_de_login(sesion, clave_intento=None, ip=ip, ahora=momento)
+    if desbloqueo_en is not None:
+        logger.warning("Login rechazado por bloqueo de la IP: ip=%s", ip)
+        # El bloqueo por IP no mira la organización: dice lo mismo exista o no (ADR-018 3b).
+        raise LoginBloqueadoPorIntentosError(_mensaje_de_bloqueo(desbloqueo_en, None))
+
     usuario = (
         repository.obtener_usuario_por_nombre_usuario(organizacion.id, nombre_usuario, sesion)
         if organizacion is not None
         else None
     )
 
-    if usuario is not None and (
-        repository.contar_intentos_fallidos_por_usuario(
-            sesion, usuario_id=usuario.id, desde=desde_ventana
-        )
-        >= LIMITE_INTENTOS_FALLIDOS_POR_USUARIO
-    ):
-        _registrar_intento_fallido(sesion, usuario_id=usuario.id, ip=ip, momento=momento)
-        assert organizacion is not None  # si hay usuario, hay organización que lo resolvió.
-        registrar_auditoria(
-            organizacion.id,
-            sesion,
-            reloj,
-            accion="LOGIN_BLOQUEADO_POR_INTENTOS",
-            entidad="usuario",
-            entidad_id=usuario.id,
-            ocurrido_en=momento,
-            origen="SISTEMA",
-            usuario_id=usuario.id,
-        )
-        desbloqueo_en = _desbloqueo_por_usuario(
-            sesion, usuario_id=usuario.id, desde_ventana=desde_ventana
-        )
-        raise LoginBloqueadoPorIntentosError(_mensaje_de_bloqueo(desbloqueo_en))
-
-    if organizacion is None:
-        _registrar_intento_fallido(sesion, usuario_id=None, ip=ip, momento=momento)
-        raise CredencialesInvalidasError("Usuario o contraseña incorrectos.")
+    # ADR-057 punto 4: el límite por par escrito se evalúa ANTES de mirar si el usuario existe y
+    # rige igual para un par que no corresponde a nadie; el 429 es indistinguible en los dos casos.
+    desbloqueo_en = _hasta_del_bloqueo_de_login(sesion, clave_intento=clave, ip=None, ahora=momento)
+    if desbloqueo_en is not None:
+        if usuario is not None:
+            assert organizacion is not None  # si hay usuario, hay organización que lo resolvió.
+            registrar_auditoria(
+                organizacion.id,
+                sesion,
+                reloj,
+                accion="LOGIN_BLOQUEADO_POR_INTENTOS",
+                entidad="usuario",
+                entidad_id=usuario.id,
+                ocurrido_en=momento,
+                origen="SISTEMA",
+                usuario_id=usuario.id,
+            )
+            logger.warning("Login rechazado por bloqueo: usuario=%s ip=%s", usuario.id, ip)
+        else:
+            # Sin usuario no hay a quién ligar la auditoría (y con slug inexistente tampoco
+            # organización, INV-02): solo el log, con el resumen de la clave y nunca el texto
+            # escrito ni la contraseña (ADR-057 punto 8, confirmado el 2026-10-24).
+            logger.warning(
+                "Login rechazado por bloqueo de un par sin usuario: clave=%s ip=%s", clave[:8], ip
+            )
+        # Siempre la zona argentina, exista o no la organización (ADR-057, 2026-10-24).
+        raise LoginBloqueadoPorIntentosError(_mensaje_de_bloqueo(desbloqueo_en, None))
 
     rol_del_usuario = (
         repository.obtener_rol_por_id(organizacion.id, usuario.rol_id, sesion)
-        if usuario is not None
+        if organizacion is not None and usuario is not None
         else None
     )
-    credenciales_validas = (
-        usuario is not None
+    # ADR-028 D9.1 último punto: un rol con `activo = false` se suma al mismo rechazo genérico que
+    # un usuario inactivo. ADR-057 punto 7: sin usuario utilizable (slug o usuario inexistentes,
+    # usuario o rol inactivos) la contraseña se verifica IGUAL, contra un hash ficticio, para que
+    # el tiempo de respuesta no revele cuál de los casos ocurrió.
+    hash_utilizable = (
+        usuario.password_hash
+        if usuario is not None
         and usuario.estado == "ACTIVO"
-        # ADR-028 D9.1 último punto: un rol con `activo = false` se suma al
-        # mismo rechazo genérico que un usuario inactivo (mismo criterio de
-        # `01` §19: "los roles son plantillas" de la organización, nunca
-        # `None` para un usuario ya creado -- pero se verifica `is not None`
-        # de todos modos, defensa en profundidad en vez de asumir la FK).
         and rol_del_usuario is not None
         and rol_del_usuario.activo
-        and verificar_password(password, usuario.password_hash)
+        else None
     )
+    credenciales_validas = verificar_password_o_ficticio(password, hash_utilizable)
     if not credenciales_validas:
         _registrar_intento_fallido(
             sesion,
+            clave_intento=clave,
             usuario_id=usuario.id if usuario is not None else None,
             ip=ip,
             momento=momento,
         )
-        registrar_auditoria(
-            organizacion.id,
-            sesion,
-            reloj,
-            accion="INICIO_SESION_FALLIDO",
-            entidad="usuario",
-            entidad_id=usuario.id if usuario is not None else None,
-            ocurrido_en=momento,
-            usuario_id=usuario.id if usuario is not None else None,
-            origen="SISTEMA",
-        )
+        if organizacion is not None:
+            registrar_auditoria(
+                organizacion.id,
+                sesion,
+                reloj,
+                accion="INICIO_SESION_FALLIDO",
+                entidad="usuario",
+                entidad_id=usuario.id if usuario is not None else None,
+                ocurrido_en=momento,
+                usuario_id=usuario.id if usuario is not None else None,
+                origen="SISTEMA",
+            )
+        # Un slug inexistente no se audita (no hay organización a la que asociar el registro).
         raise CredencialesInvalidasError("Usuario o contraseña incorrectos.")
+    assert organizacion is not None  # para mypy: sin organización no hay credenciales válidas.
     assert usuario is not None  # para mypy: ya lo verificó `credenciales_validas`.
 
     if dispositivo_id is None:
-        _registrar_intento_fallido(sesion, usuario_id=usuario.id, ip=ip, momento=momento)
+        _registrar_intento_fallido(
+            sesion, clave_intento=clave, usuario_id=usuario.id, ip=ip, momento=momento
+        )
         registrar_auditoria(
             organizacion.id,
             sesion,
@@ -1355,7 +1826,9 @@ def iniciar_sesion(
         organizacion.id, dispositivo_id, sesion
     )
     if dispositivo_existente is not None and dispositivo_existente.estado == "REVOCADO":
-        _registrar_intento_fallido(sesion, usuario_id=usuario.id, ip=ip, momento=momento)
+        _registrar_intento_fallido(
+            sesion, clave_intento=clave, usuario_id=usuario.id, ip=ip, momento=momento
+        )
         registrar_auditoria(
             organizacion.id,
             sesion,
@@ -1691,9 +2164,17 @@ def listar_permisos_del_usuario(
 def motivo_de_permiso_faltante(
     organizacion_id: UUID, usuario_id: UUID, permiso_codigo: str, sesion: Session
 ) -> str | None:
-    """Por qué `usuario_id` no tiene `permiso_codigo` hoy, o `None` si lo tiene (change 17,
-    `design.md` D10, D11; SYN-10, ADR-028 D9.3-B y D9.4-A). Es la lectura del paso 4 de `02` §6.3
-    en modo `OFFLINE`, contra los permisos vigentes (sin foto en el servidor):
+    """`motivo_de_permisos_faltantes` para un solo permiso (change 17)."""
+    return motivo_de_permisos_faltantes(organizacion_id, usuario_id, (permiso_codigo,), sesion)
+
+
+def motivo_de_permisos_faltantes(
+    organizacion_id: UUID, usuario_id: UUID, permisos_codigos: tuple[str, ...], sesion: Session
+) -> str | None:
+    """Por qué `usuario_id` no tiene NINGUNO de `permisos_codigos` hoy, o `None` si tiene al menos
+    uno (change 17 y 18b, `design.md` D10, D11, D23; SYN-10, ADR-028 D9.3-B y D9.4-A, ADR-056). Es
+    la lectura del paso 4 de `02` §6.3, en cualquier modo, contra los permisos vigentes (sin foto
+    en el servidor):
 
     - `USUARIO_INACTIVO`: el usuario está inactivo (o no existe en la organización, INV-21);
     - `ROL_INACTIVO`: el usuario está activo pero su rol tiene `activo = false`;
@@ -1708,7 +2189,7 @@ def motivo_de_permiso_faltante(
     if motivo_sesion is not None:
         return motivo_sesion
     permisos = repository.listar_permisos_de_rol(organizacion_id, usuario.rol_id, sesion)
-    return None if permiso_codigo in permisos else "PERMISO_QUITADO"
+    return None if any(codigo in permisos for codigo in permisos_codigos) else "PERMISO_QUITADO"
 
 
 @dataclass(frozen=True)
@@ -1741,6 +2222,39 @@ def obtener_datos_para_descuento_manual(
         tope_rol=rol.tope_descuento,
         tope_propio=usuario.tope_descuento_override,
     )
+
+
+@dataclass(frozen=True)
+class AutorizadorDisponible:
+    """Una persona a la que quien vende puede pedirle autorización con su PIN (change 18b, D15)."""
+
+    usuario_id: UUID
+    nombre: str
+    puede_autorizar_descuento: bool
+    puede_superar_credito: bool
+
+
+def listar_autorizadores_disponibles(
+    organizacion_id: UUID, sesion: Session, *, excluir_usuario_id: UUID
+) -> list[AutorizadorDisponible]:
+    """Los usuarios activos con rol activo, PIN definido y `AUTORIZAR_DESCUENTO` o
+    `SUPERAR_CREDITO`, sin `excluir_usuario_id` (quien vende) y sin datos de otra organización
+    (INV-21). Nunca expone la derivación del PIN (ADR-011). Solo lee."""
+    encontrados = repository.listar_autorizadores_con_pin(
+        organizacion_id,
+        sesion,
+        permisos=("AUTORIZAR_DESCUENTO", "SUPERAR_CREDITO"),
+        excluir_usuario_id=excluir_usuario_id,
+    )
+    return [
+        AutorizadorDisponible(
+            usuario_id=usuario_id,
+            nombre=nombre,
+            puede_autorizar_descuento="AUTORIZAR_DESCUENTO" in permisos,
+            puede_superar_credito="SUPERAR_CREDITO" in permisos,
+        )
+        for usuario_id, nombre, permisos in encontrados
+    ]
 
 
 # --- `GET /api/v1/yo` (grupo 3, D1) ----------------------------------------
@@ -1809,6 +2323,32 @@ def obtener_yo(organizacion_id: UUID, usuario_id: UUID, sesion: Session) -> Dato
         organizacion=OrganizacionYo(id=organizacion.id, nombre=organizacion.nombre),
         rol=RolYo(id=rol.id, nombre=rol.nombre),
         permisos=permisos,
+    )
+
+
+@dataclass(frozen=True)
+class EstadoDeMiPin:
+    """`GET /api/v1/yo/pin-autorizacion` (change 18b, tarea 11.5, D21 punto 1): lo que la pantalla
+    "Mi PIN" necesita saber. Nunca la derivación, la sal ni las iteraciones (ADR-011)."""
+
+    puede_definir: bool
+    tiene_pin_autorizacion: bool
+
+
+def obtener_estado_de_mi_pin(
+    organizacion_id: UUID, usuario_id: UUID, sesion: Session
+) -> EstadoDeMiPin:
+    """Si el rol del usuario confiere algún permiso de autorización (`puede_definir`, la misma
+    regla que exige la ruta de definición) y si ya tiene un PIN definido. Exige la sesión
+    habilitada (ADR-028 D9). Solo lee."""
+    exigir_sesion_habilitada(organizacion_id, usuario_id, sesion)
+    usuario = repository.obtener_usuario_por_id(organizacion_id, usuario_id, sesion)
+    if usuario is None:
+        raise AccessTokenInvalidoError("El usuario del token no existe.")
+    permisos = listar_permisos_del_usuario(organizacion_id, usuario_id, sesion)
+    return EstadoDeMiPin(
+        puede_definir=rol_confiere_autorizacion_excepcion(permisos),
+        tiene_pin_autorizacion=usuario.pin_autorizacion_hash is not None,
     )
 
 

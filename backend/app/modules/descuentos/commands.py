@@ -132,7 +132,12 @@ def manejar_regla_descuento_crear(
 registrar_handler("REGLA_DESCUENTO_CREAR", 1, ReglaDescuentoCrearContenidoV1)(
     manejar_regla_descuento_crear
 )
-declarar_tipo("REGLA_DESCUENTO_CREAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "REGLA_DESCUENTO_CREAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("GESTIONAR_DESCUENTOS",),
+)
 
 
 # --- REGLA_DESCUENTO_MODIFICAR (D15, D16) -----------------------------------------------
@@ -194,7 +199,12 @@ def manejar_regla_descuento_modificar(
 registrar_handler("REGLA_DESCUENTO_MODIFICAR", 1, ReglaDescuentoModificarContenidoV1)(
     manejar_regla_descuento_modificar
 )
-declarar_tipo("REGLA_DESCUENTO_MODIFICAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "REGLA_DESCUENTO_MODIFICAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("GESTIONAR_DESCUENTOS",),
+)
 
 
 # --- REGLA_DESCUENTO_ACTIVAR y REGLA_DESCUENTO_PAUSAR (`01` §18) ------------------------
@@ -225,7 +235,12 @@ def manejar_regla_descuento_activar(
 registrar_handler("REGLA_DESCUENTO_ACTIVAR", 1, ReglaDescuentoTransicionContenidoV1)(
     manejar_regla_descuento_activar
 )
-declarar_tipo("REGLA_DESCUENTO_ACTIVAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "REGLA_DESCUENTO_ACTIVAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("GESTIONAR_DESCUENTOS",),
+)
 
 
 def manejar_regla_descuento_pausar(
@@ -249,4 +264,9 @@ def manejar_regla_descuento_pausar(
 registrar_handler("REGLA_DESCUENTO_PAUSAR", 1, ReglaDescuentoTransicionContenidoV1)(
     manejar_regla_descuento_pausar
 )
-declarar_tipo("REGLA_DESCUENTO_PAUSAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "REGLA_DESCUENTO_PAUSAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("GESTIONAR_DESCUENTOS",),
+)

@@ -211,3 +211,72 @@ describe('diferencias con lo que vio el usuario (D2)', () => {
     expect(primera?.cambio).toBe(true)
   })
 })
+
+describe('cuerpo de VENTA_CONFIRMAR con descuentos y crédito (change 18b, D1, D2)', () => {
+  const vacio = {
+    descuentoGeneral: null,
+    motivoDescuentoId: null,
+    descuentoAutorizadorId: null,
+    aceptaExceso: false,
+    creditoAutorizadorId: null,
+    porLinea: new Map(),
+  }
+
+  it('sin extras (o con extras vacíos) el cuerpo es el de siempre: la huella no cambia', () => {
+    const base = construirSolicitudDeVenta(formulario(), [LINEA_CAJAS], '25000.00', VENTA_ID, COBRANZA_ID, true)
+    const conVacios = construirSolicitudDeVenta(formulario(), [LINEA_CAJAS], '25000.00', VENTA_ID, COBRANZA_ID, true, vacio)
+    expect(conVacios).toEqual(base)
+    expect(JSON.stringify(conVacios)).not.toContain('descuento')
+    expect(JSON.stringify(conVacios)).not.toContain('credito')
+  })
+
+  it('lleva el general, el motivo, el autorizador y, por línea, el propio y los descuentos esperados como texto', () => {
+    const solicitud = construirSolicitudDeVenta(formulario(), [LINEA_CAJAS, LINEA_BOTELLAS], '28125.00', VENTA_ID, COBRANZA_ID, true, {
+      ...vacio,
+      descuentoGeneral: '0.050000',
+      motivoDescuentoId: 'mot-1',
+      descuentoAutorizadorId: 'marta',
+      porLinea: new Map([
+        ['l1', { propio: '0.100000', descuentos: [{ origen: 'MANUAL' as const, reglaId: null, porcentaje: '0.100000', importe: '2500.00' }] }],
+        [
+          'l2',
+          {
+            propio: null,
+            descuentos: [
+              { origen: 'AUTOMATICO' as const, reglaId: 'r1', porcentaje: '0.050000', importe: '312.50' },
+              { origen: 'MANUAL' as const, reglaId: null, porcentaje: '0.050000', importe: '296.88' },
+            ],
+          },
+        ],
+      ]),
+    })
+    expect(solicitud.descuento_manual_general).toBe('0.050000')
+    expect(solicitud.motivo_descuento_id).toBe('mot-1')
+    expect(solicitud.descuento_autorizador_id).toBe('marta')
+    expect(solicitud.lineas[0]).toMatchObject({
+      descuento_manual: '0.100000',
+      descuentos: [{ origen: 'MANUAL', regla_id: null, porcentaje: '0.100000', importe: '2500.00' }],
+    })
+    expect(solicitud.lineas[1]?.descuento_manual).toBeUndefined()
+    expect(solicitud.lineas[1]?.descuentos).toEqual([
+      { origen: 'AUTOMATICO', regla_id: 'r1', porcentaje: '0.050000', importe: '312.50' },
+      { origen: 'MANUAL', regla_id: null, porcentaje: '0.050000', importe: '296.88' },
+    ])
+  })
+
+  it('el crédito viaja solo si hay algo que decir: la aceptación del exceso y/o el supervisor', () => {
+    const armar = (extras: Partial<typeof vacio>) =>
+      construirSolicitudDeVenta(formulario(), [LINEA_CAJAS], '25000.00', VENTA_ID, COBRANZA_ID, true, { ...vacio, ...extras }).credito
+    expect(armar({})).toBeUndefined()
+    expect(armar({ aceptaExceso: true })).toEqual({ acepta_exceso: true })
+    expect(armar({ creditoAutorizadorId: 'julia' })).toEqual({ acepta_exceso: false, autorizador_id: 'julia' })
+  })
+
+  it('nunca incluye credenciales ni PIN: el PIN no es parte del contenido (D2)', () => {
+    const solicitud = construirSolicitudDeVenta(formulario(), [LINEA_CAJAS], '25000.00', VENTA_ID, COBRANZA_ID, true, {
+      ...vacio,
+      descuentoAutorizadorId: 'marta',
+    })
+    expect(JSON.stringify(solicitud)).not.toMatch(/credenciales|pin/i)
+  })
+})

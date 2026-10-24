@@ -31,19 +31,20 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict
+from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel, ConfigDict, SecretStr, StrictBool
 from sqlalchemy.orm import Session
 
 from app.api_v1.dependencias import get_session
 from app.commands import registro
 from app.commands.huella import ContenidoComando, calcular_huella
-from app.commands.sobre import construir_sobre_online
+from app.commands.sobre import SobreComando, construir_sobre_online
 from app.core.autenticacion import (
     ContextoAutenticado,
     EntradaComandoOnline,
     obtener_contexto_autenticado,
     requiere_comando_online,
+    requiere_comando_online_algun_permiso,
     requiere_permiso,
     requiere_sesion,
 )
@@ -52,6 +53,7 @@ from app.core.errors import DomainError
 from app.modules.identidad import commands as identidad_commands  # noqa: F401
 from app.modules.identidad import repository
 from app.modules.identidad import service as identidad_service
+from app.modules.identidad.domain.usuarios import PERMISOS_AUTORIZACION_EXCEPCION
 from app.modules.identidad.domain.valores import computa_credito_fiscal
 from app.modules.sync import service as sync_service
 
@@ -157,15 +159,20 @@ class UsuarioResponse(BaseModel):
     email: str | None
     rol_id: UUID
     estado: str
+    tiene_pin_autorizacion: bool = False
+    """D21 (change 18b), ADR-011: solo si hay PIN definido, nunca su derivación (que sigue sin
+    declararse en este modelo)."""
 
     model_config = {"from_attributes": True}
 
 
 class CrearUsuarioRequest(BaseModel):
+    """`password: SecretStr`, sin validadores (D2): el valor no aparece en un error."""
+
     usuario: str
     nombre: str
     email: str | None
-    password: str
+    password: SecretStr
     rol_id: UUID
 
 
@@ -177,7 +184,12 @@ def listar_usuarios(
     """Tarea 10.8, escenario "La contraseña no se puede recuperar del
     sistema": ninguna vía de lectura de usuario expone `password_hash`."""
     usuarios = repository.listar_usuarios(contexto.organizacion_id, sesion)
-    return [UsuarioResponse.model_validate(u) for u in usuarios]
+    return [
+        UsuarioResponse.model_validate(u).model_copy(
+            update={"tiene_pin_autorizacion": u.pin_autorizacion_hash is not None}
+        )
+        for u in usuarios
+    ]
 
 
 @router.post("/usuarios", response_model=UsuarioResponse, status_code=201)
@@ -195,11 +207,11 @@ def crear_usuario(
     mismo usuario ya creado -- se relee de la base para que la respuesta
     sea el estado real, no un valor cacheado del primer intento."""
     reloj = SystemClock()
+    # La contraseña no entra al contenido ni a la huella: llega al handler por clausura (D2).
     contenido: dict[str, ContenidoComando] = {
         "usuario": datos.usuario,
         "nombre": datos.nombre,
         "email": datos.email,
-        "password": datos.password,
         "rol_id": str(datos.rol_id),
     }
     sobre = construir_sobre_online(
@@ -227,6 +239,7 @@ def crear_usuario(
             contenido_validado,  # type: ignore[arg-type]
             sesion=sesion_protegida,
             reloj=reloj,
+            password=datos.password,
         )
 
     comando = sync_service.procesar_comando(
@@ -452,7 +465,9 @@ def definir_tope_descuento_de_rol(
 
 
 class RotarPinRequest(BaseModel):
-    pin: str
+    """`pin: SecretStr`, sin validadores (D2): el valor no aparece en un error."""
+
+    pin: SecretStr
 
 
 @router.post("/usuarios/{usuario_id}/pin", status_code=204)
@@ -472,7 +487,8 @@ def rotar_pin_autorizacion(
     INV-21). El PIN nunca aparece en la respuesta (`status_code=204`, sin
     cuerpo)."""
     reloj = SystemClock()
-    contenido: dict[str, ContenidoComando] = {"usuario_id": str(usuario_id), "pin": datos.pin}
+    # El PIN no entra al contenido ni a la huella: llega al handler por clausura (D2).
+    contenido: dict[str, ContenidoComando] = {"usuario_id": str(usuario_id)}
     sobre = construir_sobre_online(
         operation_id=entrada.operation_id,
         tipo="PIN_AUTORIZACION_ROTAR",
@@ -498,6 +514,7 @@ def rotar_pin_autorizacion(
             contenido_validado,  # type: ignore[arg-type]
             sesion=sesion_protegida,
             reloj=reloj,
+            pin=datos.pin,
         )
 
     comando = sync_service.procesar_comando(
@@ -619,6 +636,95 @@ def obtener_yo(
     )
 
 
+# --- "Mi PIN": definir el propio PIN de autorización (change 18b, D21 parte B) -----------------
+
+
+class MiPinRequest(BaseModel):
+    """`POST /yo/pin-autorizacion`. `extra="forbid"`: el usuario sale del token, nunca del cuerpo
+    (un `usuario_id` es un 422 sin eco del valor). Los dos secretos son `SecretStr` y no tienen
+    validadores (D2, D21 punto 3): la ruta los separa antes de armar el contenido y la huella."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pin: SecretStr
+    password_actual: SecretStr
+
+
+class MiPinEstadoResponse(BaseModel):
+    """`GET /yo/pin-autorizacion`: dos booleanos y nada más (ADR-011): ni derivación ni sal."""
+
+    puede_definir: bool
+    tiene_pin_autorizacion: bool
+
+
+@router_yo.get("/yo/pin-autorizacion", response_model=MiPinEstadoResponse)
+def obtener_estado_de_mi_pin(
+    contexto: Annotated[ContextoAutenticado, Depends(requiere_sesion)],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> MiPinEstadoResponse:
+    """Change 18b, tarea 11.5 (D21 punto 1): si el usuario del token puede definir su PIN de
+    autorización y si ya lo tiene. Cualquier sesión habilitada (la pantalla decide si ofrece "Mi
+    PIN"); todo sale del token. `GET /yo` no cambia."""
+    estado = identidad_service.obtener_estado_de_mi_pin(
+        contexto.organizacion_id, contexto.usuario_id, sesion
+    )
+    return MiPinEstadoResponse(
+        puede_definir=estado.puede_definir,
+        tiene_pin_autorizacion=estado.tiene_pin_autorizacion,
+    )
+
+
+@router_yo.post("/yo/pin-autorizacion", status_code=204)
+def definir_mi_pin(
+    datos: MiPinRequest,
+    request: Request,
+    entrada: Annotated[
+        EntradaComandoOnline,
+        Depends(requiere_comando_online_algun_permiso(*sorted(PERMISOS_AUTORIZACION_EXCEPCION))),
+    ],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> None:
+    """`PIN_AUTORIZACION_PROPIO_DEFINIR` (D21 parte B). Exige alguno de los permisos de
+    autorización de excepciones (403 `PERMISO_REQUERIDO` antes de tocar la base). Delega en el
+    bus; el PIN, la contraseña y la IP del cliente (`request.client.host`, la misma que usa el
+    login) llegan al handler por clausura, no por el contenido. Respuesta 204 sin cuerpo."""
+    reloj = SystemClock()
+    ip = request.client.host if request.client is not None else "desconocida"
+    sobre = construir_sobre_online(
+        operation_id=entrada.operation_id,
+        tipo="PIN_AUTORIZACION_PROPIO_DEFINIR",
+        version=1,
+        modo="ONLINE",
+        organizacion_id=entrada.contexto.organizacion_id,
+        usuario_id=entrada.contexto.usuario_id,
+        dispositivo_id=entrada.contexto.dispositivo_id,
+        occurred_at=reloj.now(),
+        secuencia=1,
+        app_version="server",
+        contenido={},
+    )
+    huella = calcular_huella(sobre.contenido)
+    handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
+    contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_pin_autorizacion_propio_definir(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+            password_actual=datos.password_actual,
+            pin=datos.pin,
+            ip=ip,
+        )
+
+    sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+
+
 # --- configuración fiscal (change 11b, `design.md` D7, D8, CST-06) ---------------------
 #
 # `GET /configuracion/fiscal` la lee cualquier usuario autenticado de la organización:
@@ -709,3 +815,181 @@ def cambiar_condicion_iva(
     if comando.estado == "RECHAZADO" or comando.resultado is None:
         raise RecursoNoEncontradoError("La organización no tiene configuración.")
     return ConfiguracionFiscalResponse.model_validate(comando.resultado)
+
+
+# --- parámetros de la organización: descuento manual y crédito (change 18b, D13, D14) ----
+#
+# Las dos lecturas y las dos escrituras exigen `ADMIN_CONFIGURACION` (SEG-06). Las lecturas son
+# para la pantalla de "Configuración": quien vende recibe estos mismos valores por el contexto
+# de venta (D15), con su propio permiso. La organización sale siempre del token (INV-21).
+
+router_parametros = APIRouter(prefix="/configuracion", tags=["configuracion"])
+
+
+def _preparar_comando_online(
+    entrada: EntradaComandoOnline,
+    tipo: str,
+    contenido: dict[str, ContenidoComando],
+    reloj: SystemClock,
+) -> tuple[SobreComando, str, registro.HandlerRegistrado, object]:
+    """El sobre, la huella y el contenido ya validado de un comando REST de la organización. La
+    llamada a `procesar_comando` queda en cada ruta (el ratchet de cobertura del bus la busca en
+    la función del endpoint)."""
+    sobre = construir_sobre_online(
+        operation_id=entrada.operation_id,
+        tipo=tipo,
+        version=1,
+        modo="ONLINE",
+        organizacion_id=entrada.contexto.organizacion_id,
+        usuario_id=entrada.contexto.usuario_id,
+        dispositivo_id=entrada.contexto.dispositivo_id,
+        occurred_at=reloj.now(),
+        secuencia=1,
+        app_version="server",
+        contenido=contenido,
+    )
+    handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
+    contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
+    return sobre, calcular_huella(sobre.contenido), handler_registrado, contenido_validado
+
+
+class DescuentoManualResponse(BaseModel):
+    habilitado: bool
+    motivo_obligatorio: bool
+
+
+class DescuentoManualConfigurarRequest(BaseModel):
+    """Los dos booleanos estrictos y obligatorios: un texto, un número o un nulo responden 422."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    habilitado: StrictBool
+    motivo_obligatorio: StrictBool
+
+
+@router_parametros.get("/descuento-manual", response_model=DescuentoManualResponse)
+def obtener_descuento_manual(
+    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso("ADMIN_CONFIGURACION"))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> DescuentoManualResponse:
+    """Si la organización habilita el descuento manual y si exige motivo (DSC-06). Un motivo
+    obligatorio sin definir (nulo) se informa como `false`: no se exige."""
+    configuracion = identidad_service.obtener_configuracion(contexto.organizacion_id, sesion)
+    if configuracion is None:
+        raise RecursoNoEncontradoError("La organización no tiene configuración.")
+    return DescuentoManualResponse(
+        habilitado=configuracion.descuento_manual_habilitado,
+        motivo_obligatorio=bool(configuracion.motivo_obligatorio_descuento),
+    )
+
+
+@router_parametros.post("/descuento-manual", response_model=DescuentoManualResponse)
+def configurar_descuento_manual(
+    datos: DescuentoManualConfigurarRequest,
+    entrada: Annotated[
+        EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_CONFIGURACION"))
+    ],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> DescuentoManualResponse:
+    """`DESCUENTO_MANUAL_CONFIGURAR` (D13). La respuesta sale de `comando.resultado`, no de una
+    relectura: un reenvío idempotente devuelve exactamente lo mismo (INV-06)."""
+    reloj = SystemClock()
+    sobre, huella, handler_registrado, contenido_validado = _preparar_comando_online(
+        entrada,
+        "DESCUENTO_MANUAL_CONFIGURAR",
+        {"habilitado": datos.habilitado, "motivo_obligatorio": datos.motivo_obligatorio},
+        reloj,
+    )
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_descuento_manual_configurar(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO" or comando.resultado is None:
+        raise RecursoNoEncontradoError("La organización no tiene configuración.")
+    return DescuentoManualResponse.model_validate(comando.resultado)
+
+
+class CreditoOrganizacionResponse(BaseModel):
+    politica: Literal["ADVERTIR", "AUTORIZAR", "BLOQUEAR"]
+    tolerancia_tipo: Literal["IMPORTE", "PORCENTAJE"] | None
+    tolerancia_valor: str | None
+
+
+class CreditoOrganizacionConfigurarRequest(BaseModel):
+    """Política y tolerancia, los tres obligatorios (la tolerancia vacía son los dos `null`). La
+    política o el tipo fuera del catálogo responden 422; la pareja a medias, el dominio, con
+    `TOLERANCIA_OFFLINE_INVALIDA`."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    politica: Literal["ADVERTIR", "AUTORIZAR", "BLOQUEAR"]
+    tolerancia_tipo: Literal["IMPORTE", "PORCENTAJE"] | None
+    tolerancia_valor: str | None
+
+
+@router_parametros.get("/credito", response_model=CreditoOrganizacionResponse)
+def obtener_credito_de_la_organizacion(
+    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso("ADMIN_CONFIGURACION"))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> CreditoOrganizacionResponse:
+    """La política de crédito por defecto y la tolerancia sin conexión de la organización
+    (CRE-03, CRE-06)."""
+    configuracion = identidad_service.obtener_configuracion(contexto.organizacion_id, sesion)
+    if configuracion is None:
+        raise RecursoNoEncontradoError("La organización no tiene configuración.")
+    valor = configuracion.tolerancia_offline_valor
+    return CreditoOrganizacionResponse(
+        politica=configuracion.politica_credito_default,  # type: ignore[arg-type]
+        tolerancia_tipo=configuracion.tolerancia_offline_tipo,  # type: ignore[arg-type]
+        tolerancia_valor=None if valor is None else f"{valor:.2f}",
+    )
+
+
+@router_parametros.post("/credito", response_model=CreditoOrganizacionResponse)
+def configurar_credito_de_la_organizacion(
+    datos: CreditoOrganizacionConfigurarRequest,
+    entrada: Annotated[
+        EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_CONFIGURACION"))
+    ],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> CreditoOrganizacionResponse:
+    """`CREDITO_ORGANIZACION_CONFIGURAR` (D14). La respuesta sale de `comando.resultado`
+    (INV-06)."""
+    reloj = SystemClock()
+    sobre, huella, handler_registrado, contenido_validado = _preparar_comando_online(
+        entrada,
+        "CREDITO_ORGANIZACION_CONFIGURAR",
+        {
+            "politica": datos.politica,
+            "tolerancia_tipo": datos.tolerancia_tipo,
+            "tolerancia_valor": datos.tolerancia_valor,
+        },
+        reloj,
+    )
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_credito_organizacion_configurar(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO" or comando.resultado is None:
+        raise RecursoNoEncontradoError("La organización no tiene configuración.")
+    return CreditoOrganizacionResponse.model_validate(comando.resultado)

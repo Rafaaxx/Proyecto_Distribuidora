@@ -12,6 +12,25 @@ import { Campo } from '../../../components/ui/Field'
 import { PageHeader } from '../../../components/ui/PageHeader'
 import { formatearMonto, textoDeSaldo } from '../../../domain/cuentas-corrientes/presentacion'
 import {
+  autorizacionesNecesarias,
+  completarSeleccion,
+  type AutorizadorDeContexto,
+  type CredencialDePin,
+  type SeleccionDeAutorizadores,
+} from '../../../domain/ventas/autorizacionDeVenta'
+import { evaluarPanelDeCredito } from '../../../domain/ventas/creditoDeVenta'
+import {
+  aplicarDescuentosAlPedido,
+  leerPorcentaje,
+  motivoFalta,
+  reglaDelMotorDesdeApi,
+  necesidadDeAutorizacionDeDescuento,
+  type ContextoDeDescuento,
+  type DescuentoDeLinea,
+  type EntradaDeLinea,
+  type NecesidadDeDescuento,
+} from '../../../domain/ventas/descuentosDeVenta'
+import {
   AVISO_CONSUMIDOR_FINAL_DE_CONTADO,
   FALTA_CONTADO_DE_CONSUMIDOR_FINAL,
   decidirConfirmacionDeVenta,
@@ -26,7 +45,9 @@ import {
   construirSolicitudDeVenta,
   diferenciasConElServidor,
   puedeConfirmarVenta,
+  type DescuentosYCreditoDeVenta,
   type FormularioDeVenta,
+  type LineaDelPedido,
   type ValoresDelServidor,
 } from '../../../domain/ventas/formularioVenta'
 import {
@@ -55,7 +76,9 @@ import type { ProductoParaVender, VentaConfirmarResultado } from '../../../featu
 import { clavesVentas, type ContextoDePrecios } from '../../../features/ventas/claves'
 import {
   campoDelError,
+  descuentosDelServidorDe,
   ErrorDeVentas,
+  esErrorDeAutorizacion,
   PermisoRequeridoVentasError,
   productosSinPrecioDe,
   valoresDelServidorDe,
@@ -64,16 +87,22 @@ import {
 import {
   useBuscarPrecios,
   useConfirmarVenta,
+  useContextoDeVenta,
+  useDescuentosAplicables,
+  useCreditoParaVender,
   useNumeracion,
   usePreciosDeProductos,
   useVersionesElegibles,
 } from '../../../features/ventas/hooks'
 import { useTextoConDemora } from '../../../features/ventas/useTextoConDemora'
 import { generarOperationId } from '../../../lib/api/operationId'
-import { parsearImporteDesdeApi } from '../../../lib/money'
+import { formatearPorcentaje, parsearImporteDesdeApi } from '../../../lib/money'
 import { MediosDeCobranza } from '../cobranzas/MediosDeCobranza'
 import { BuscadorDeProductos } from './BuscadorDeProductos'
+import { DescuentosDeLaVenta } from './DescuentosDeLaVenta'
+import { DialogoDeAutorizacion } from './DialogoDeAutorizacion'
 import { ItemDeVenta } from './ItemDeVenta'
+import { PanelDeCreditoDeVenta } from './PanelDeCreditoDeVenta'
 import { SIN_PERMISO_PARA_VENDER, VentasSinPermiso } from './VentasSinPermiso'
 
 /**
@@ -118,7 +147,19 @@ interface PrecioDifiere {
   totalAnterior: string
 }
 
+interface DescuentoDifiere {
+  porLinea: ReadonlyMap<string, readonly DescuentoDeLinea[]>
+  totalAnterior: string
+}
+
+interface DescuentosAceptados {
+  clave: string
+  porLinea: ReadonlyMap<string, readonly DescuentoDeLinea[]>
+}
+
 type ErroresDeCampo = Partial<Record<CampoDeVenta, string>>
+
+const SIN_AUTORIZADORES: readonly AutorizadorDeContexto[] = []
 
 export function VentaFormScreen() {
   return (
@@ -153,6 +194,19 @@ function VentaFormulario() {
   const [aceptados, setAceptados] = useState<ValoresAceptados | null>(null)
   const [registrada, setRegistrada] = useState<VentaConfirmarResultado | null>(null)
   const ubicacionAutoElegida = useRef(false)
+  // Descuentos y crédito (change 18b): lo que escribe el usuario y lo que resuelve el servidor.
+  const [generalTexto, setGeneralTexto] = useState('')
+  const [propios, setPropios] = useState<Record<string, string>>({})
+  const [motivoDescuentoId, setMotivoDescuentoId] = useState('')
+  const [aceptaExceso, setAceptaExceso] = useState(false)
+  const [seleccion, setSeleccion] = useState<SeleccionDeAutorizadores>({})
+  const [autorizando, setAutorizando] = useState(false)
+  const [errorDeAutorizacion, setErrorDeAutorizacion] = useState<string | null>(null)
+  const [descuentoDifiere, setDescuentoDifiere] = useState<DescuentoDifiere | null>(null)
+  const [descuentosAceptados, setDescuentosAceptados] = useState<DescuentosAceptados | null>(null)
+  // El PIN de quien autoriza vive solo acá, entre que se escribe y que termina el envío: nunca
+  // en una variable de la mutación, ni en la caché de consultas, ni en ningún almacenamiento.
+  const credencialesRef = useRef<CredencialDePin[]>([])
 
   const textoDemorado = useTextoConDemora(textoProducto)
   const clientes = useOpcionesDeClientes(busquedaCliente, true)
@@ -162,7 +216,9 @@ function VentaFormulario() {
   const numeracion = useNumeracion()
   const ubicacionesQuery = useUbicaciones(true)
   const jornada = useJornadaActual(tiene('ABRIR_JORNADA'))
-  const confirmar = useConfirmarVenta()
+  const confirmar = useConfirmarVenta(() => credencialesRef.current)
+  const contextoDeVenta = useContextoDeVenta(true)
+  const reglasAplicables = useDescuentosAplicables(true)
 
   // --- ubicación o jornada (D3) -------------------------------------------------------------
   const esperandoJornada = tiene('ABRIR_JORNADA') && jornada.isPending
@@ -234,7 +290,111 @@ function VentaFormulario() {
   const contadoDeConsumidorFinal = evaluarContadoDeConsumidorFinal(esConsumidorFinal, envio.total, cobrado)
   const esperandoSaldo = formulario.clienteId !== '' && confirmacion.tipo === 'esperar'
 
-  const contextoDeVenta = {
+  // --- descuentos (D11, D15, D20) --------------------------------------------------------------
+  const datosDeContexto = contextoDeVenta.data
+  const contextoDeDescuento: ContextoDeDescuento | undefined = datosDeContexto && {
+    habilitado: datosDeContexto.descuento_manual.habilitado,
+    motivoObligatorio: datosDeContexto.descuento_manual.motivo_obligatorio,
+    tienePermiso: datosDeContexto.descuento_manual.tiene_permiso,
+    tope: datosDeContexto.descuento_manual.tope,
+    puedeAutorizar: datosDeContexto.descuento_manual.puede_autorizar,
+  }
+  const puedeDarDescuento = contextoDeDescuento !== undefined && contextoDeDescuento.habilitado && contextoDeDescuento.tienePermiso
+  const autorizadores: readonly AutorizadorDeContexto[] =
+    datosDeContexto?.autorizadores.map((a) => ({
+      id: a.id,
+      nombre: a.nombre,
+      puedeAutorizarDescuento: a.puede_autorizar_descuento,
+      puedeSuperarCredito: a.puede_superar_credito,
+    })) ?? SIN_AUTORIZADORES
+  const generalLeido = leerPorcentaje(generalTexto)
+  const general = puedeDarDescuento && generalLeido.valido ? generalLeido.fraccion : null
+  // El propio es de la línea, no del producto (ADR-050, DSC-08): se busca por `lineaId`.
+  const propioLeidoDe = (lineaId: string) => leerPorcentaje(propios[lineaId] ?? '')
+  const propioDe = (lineaId: string): string | null => {
+    const leido = propioLeidoDe(lineaId)
+    return puedeDarDescuento && leido.valido ? leido.fraccion : null
+  }
+  const hayPorcentajeInvalido =
+    puedeDarDescuento &&
+    (!generalLeido.valido || pedido.lineas.some((linea) => !propioLeidoDe(linea.lineaId).valido))
+  const erroresDePropios: Record<string, string> = {}
+  if (puedeDarDescuento) {
+    for (const linea of pedido.lineas) {
+      const leido = propioLeidoDe(linea.lineaId)
+      if (!leido.valido) erroresDePropios[linea.lineaId] = leido.mensaje
+    }
+  }
+  const claveDeDescuentos = JSON.stringify([claveDelPedido, generalTexto, propios])
+  const conocidos = descuentosAceptados?.clave === claveDeDescuentos ? descuentosAceptados.porLinea : null
+  // Reglas vigentes (DSC-05): con la gemela del motor la pantalla muestra los automáticos antes
+  // de confirmar. Si la consulta falla, queda sin reglas y el servidor decide (`DESCUENTO_DIFIERE`).
+  const reglasDelMotor = useMemo(() => reglasAplicables.data?.map(reglaDelMotorDesdeApi), [reglasAplicables.data])
+  const nombresDeReglas = useMemo(
+    () => new Map((reglasAplicables.data ?? []).map((regla) => [regla.id, regla.nombre])),
+    [reglasAplicables.data],
+  )
+  const cantidadBaseDeLinea = new Map(pedido.visibles.map((v) => [v.linea.lineaId, v.cantidadBase]))
+  const entradasDe = (lineas: readonly LineaDelPedido[]): EntradaDeLinea[] =>
+    lineas.map((linea) => {
+      const producto = productos.get(linea.productoId)
+      const cantidadBase = cantidadBaseDeLinea.get(linea.lineaId)
+      return {
+        lineaId: linea.lineaId,
+        bruto: linea.importeBruto,
+        propio: propioDe(linea.lineaId),
+        ...(cantidadBase === undefined
+          ? {}
+          : {
+              motor: {
+                cantidadBase,
+                unidadesReferencia: linea.unidadesReferencia,
+                productoId: linea.productoId,
+                categoriaId: producto?.categoriaId ?? '',
+                marcaId: producto?.marcaId ?? '',
+              },
+            }),
+      }
+    })
+  const conDescuentos = aplicarDescuentosAlPedido(entradasDe(envio.lineas), general, conocidos, reglasDelMotor)
+  const hayDescuentos = conDescuentos.lineas.some((linea) => linea.descuentos.length > 0)
+  const totalDeLaVenta = hayDescuentos ? conDescuentos.total : envio.total
+  const descuentosPorLinea = new Map(conDescuentos.lineas.map((linea) => [linea.lineaId, linea]))
+  const necesidadDeDescuento: NecesidadDeDescuento = contextoDeDescuento
+    ? necesidadDeAutorizacionDeDescuento(conDescuentos.mayorManual, contextoDeDescuento)
+    : { estado: 'sin-descuento' }
+  const faltaElMotivo = contextoDeDescuento ? motivoFalta(conDescuentos.mayorManual, contextoDeDescuento, motivoDescuentoId) : false
+
+  // --- crédito (D5, D6, D16) -------------------------------------------------------------------
+  const credito = useCreditoParaVender(formulario.clienteId === '' || esConsumidorFinal ? undefined : formulario.clienteId)
+  const panelDeCredito = credito.data
+    ? evaluarPanelDeCredito({
+        datos: {
+          limite: credito.data.limite,
+          saldo: credito.data.saldo,
+          politica: credito.data.politica,
+          toleranciaTipo: credito.data.tolerancia_tipo,
+          toleranciaValor: credito.data.tolerancia_valor,
+        },
+        total: totalDeLaVenta,
+        cobranza: cobrado,
+        aceptaExceso,
+        puedeSuperar: datosDeContexto?.credito.puede_superar ?? false,
+      })
+    : undefined
+  const decisionDeCredito = panelDeCredito?.decision ?? 'sin-control'
+
+  // --- autorización (D2, D4) -------------------------------------------------------------------
+  const necesarias = autorizacionesNecesarias(necesidadDeDescuento, decisionDeCredito)
+  const descuentoNoPermitido = necesidadDeDescuento.estado === 'deshabilitado' || necesidadDeDescuento.estado === 'sin-permiso'
+  const bloqueadoPorDescuentoOCredito =
+    hayPorcentajeInvalido ||
+    descuentoNoPermitido ||
+    faltaElMotivo ||
+    decisionDeCredito === 'bloqueado' ||
+    decisionDeCredito === 'pide-aceptar'
+
+  const contextoDelFormulario = {
     mediosQueRequierenReferencia: new Set((mediosPago.data?.items ?? []).filter((m) => m.requiere_referencia).map((m) => m.id)),
     ubicacionObligatoria: jornadaAbierta === null,
   }
@@ -242,14 +402,16 @@ function VentaFormulario() {
     pedido.completo &&
     !esperandoJornada &&
     contadoDeConsumidorFinal.cumple &&
-    puedeConfirmarVenta({ ...formulario, medios }, envio.lineas, contextoDeVenta)
+    !bloqueadoPorDescuentoOCredito &&
+    puedeConfirmarVenta({ ...formulario, medios }, envio.lineas, contextoDelFormulario)
   const operationIdPorContenido = useOperationIdPorContenido({
     formulario,
     lineas: envio.lineas,
-    total: envio.total,
+    total: totalDeLaVenta,
     ventaId,
     cobranzaId,
     conJornada: jornadaAbierta !== null,
+    descuentos: [general, motivoDescuentoId, aceptaExceso, seleccion, [...descuentosPorLinea.values()].map((l) => [l.lineaId, l.descuentos])],
   })
   const operationId = valoresVigentes?.operationId ?? operationIdPorContenido
 
@@ -281,7 +443,20 @@ function VentaFormulario() {
 
   const alErrorDeVenta = async (error: ErrorDeVentas) => {
     if (error instanceof PermisoRequeridoVentasError) {
+      setAutorizando(false)
       setErrorGeneral('No tenés permiso para esta operación.')
+      return
+    }
+    if (esErrorDeAutorizacion(error)) {
+      // El diálogo sigue abierto con el motivo del rechazo; el PIN ya se borró al enviar.
+      if (autorizando) setErrorDeAutorizacion(error.message)
+      else setErrorGeneral(error.message)
+      return
+    }
+    setAutorizando(false)
+    const descuentosDelServidor = descuentosDelServidorDe(error)
+    if (descuentosDelServidor !== null) {
+      setDescuentoDifiere({ porLinea: descuentosDelServidor, totalAnterior: totalDeLaVenta })
       return
     }
     const valores = valoresDelServidorDe(error)
@@ -318,27 +493,95 @@ function VentaFormulario() {
     setErrorGeneral(error.message)
   }
 
+  /** Los descuentos y el crédito que se suman al cuerpo (D1): lo que vio el usuario. */
+  const extrasDe = (lineas: readonly LineaDelPedido[]): { extras: DescuentosYCreditoDeVenta; total: string } => {
+    const calculado = aplicarDescuentosAlPedido(entradasDe(lineas), general, conocidos, reglasDelMotor)
+    const hayManual = calculado.mayorManual !== null
+    const extras: DescuentosYCreditoDeVenta = {
+      descuentoGeneral: hayManual ? general : null,
+      motivoDescuentoId: hayManual && motivoDescuentoId !== '' ? motivoDescuentoId : null,
+      descuentoAutorizadorId: necesidadDeDescuento.estado === 'requiere-autorizador' ? (seleccion.DESCUENTO ?? null) : null,
+      aceptaExceso: decisionDeCredito === 'aceptado',
+      creditoAutorizadorId: decisionDeCredito === 'pide-autorizador' ? (seleccion.CREDITO ?? null) : null,
+      porLinea: new Map(
+        calculado.lineas.map((linea) => [
+          linea.lineaId,
+          {
+            propio: propioDe(linea.lineaId),
+            descuentos: linea.descuentos,
+          },
+        ]),
+      ),
+    }
+    return { extras, total: calculado.lineas.some((l) => l.descuentos.length > 0) ? calculado.total : '' }
+  }
+
   const enviar = async (lineas: typeof envio.lineas, total: string, idDeOperacion: string) => {
     setConfirmando(false)
     setPrecioDifiere(null)
+    setDescuentoDifiere(null)
     limpiarErrores()
+    setErrorDeAutorizacion(null)
+    const { extras, total: totalConDescuentos } = extrasDe(lineas)
     const solicitud = construirSolicitudDeVenta(
       { ...formulario, medios },
       lineas,
-      total,
+      totalConDescuentos === '' ? total : totalConDescuentos,
       ventaId,
       cobranzaId,
       jornadaAbierta === null,
+      extras,
     )
     try {
       const resultado = await confirmar.mutateAsync({ ...solicitud, operationId: idDeOperacion })
+      setAutorizando(false)
       const correlativo = correlativoDeNumero(resultado.numero, prefijo ?? '')
       if (prefijo !== undefined && correlativo !== null) guardarCorrelativo(prefijo, correlativo, almacenDelNavegador())
       setRegistrada(resultado)
     } catch (error) {
       if (error instanceof ErrorDeVentas) await alErrorDeVenta(error)
-      else setErrorGeneral(MENSAJE_DE_RED)
+      else {
+        setAutorizando(false)
+        setErrorGeneral(MENSAJE_DE_RED)
+      }
+    } finally {
+      // Terminó el envío, salga como salga: el PIN no queda en memoria (D20).
+      credencialesRef.current = []
     }
+  }
+
+  /** Pide la autorización con PIN si hace falta y, si no, envía (D2, D4). */
+  const intentarEnviar = () => {
+    if (necesarias.length > 0) {
+      setSeleccion((actual) => completarSeleccion(necesarias, autorizadores, actual))
+      setErrorDeAutorizacion(null)
+      setAutorizando(true)
+      return
+    }
+    void enviar(envio.lineas, totalDeLaVenta, operationId)
+  }
+
+  const alConfirmarAutorizacion = (credenciales: CredencialDePin[]) => {
+    credencialesRef.current = credenciales
+    void enviar(envio.lineas, totalDeLaVenta, operationId)
+  }
+
+  const alCancelarAutorizacion = () => {
+    credencialesRef.current = []
+    setAutorizando(false)
+    setErrorDeAutorizacion(null)
+  }
+
+  const aceptarDescuentosDelServidor = () => {
+    if (descuentoDifiere === null) return
+    setDescuentosAceptados({ clave: claveDeDescuentos, porLinea: descuentoDifiere.porLinea })
+    setDescuentoDifiere(null)
+    void queryClient.invalidateQueries({ queryKey: clavesVentas.raiz() })
+  }
+
+  const cancelarDescuentoDifiere = () => {
+    setDescuentoDifiere(null)
+    void queryClient.invalidateQueries({ queryKey: clavesVentas.raiz() })
   }
 
   const alEnviar = (evento: React.SyntheticEvent) => {
@@ -348,7 +591,7 @@ function VentaFormulario() {
       setConfirmando(true)
       return
     }
-    void enviar(envio.lineas, envio.total, operationId)
+    intentarEnviar()
   }
 
   const aceptarValoresDelServidor = () => {
@@ -370,6 +613,12 @@ function VentaFormulario() {
     setItems([])
     setTextoProducto('')
     setAceptados(null)
+    setGeneralTexto('')
+    setPropios({})
+    setMotivoDescuentoId('')
+    setAceptaExceso(false)
+    setSeleccion({})
+    setDescuentosAceptados(null)
     setVentaId(generarOperationId())
     setCobranzaId(generarOperationId())
     setRegistrada(null)
@@ -413,7 +662,7 @@ function VentaFormulario() {
 
   const opcionesDeClientes = clientes.data?.pages.flatMap((pagina) => pagina.items) ?? []
   const hayCliente = formulario.clienteId !== ''
-  const totalAMostrar = parsearImporteDesdeApi(envio.total)
+  const totalAMostrar = parsearImporteDesdeApi(totalDeLaVenta)
   const diferencias = precioDifiere === null ? [] : diferenciasConElServidor(envio.lineas, precioDifiere.valores)
   const nombreDeLinea = (lineaId: string) => {
     const visible = pedido.visibles.find((v) => v.linea.lineaId === lineaId)
@@ -593,10 +842,30 @@ function VentaFormulario() {
                 alCambiarCajas={(cajas) => cambiarItem(item.productoId, { cajas })}
                 alCambiarUnidades={(unidades) => cambiarItem(item.productoId, { unidades })}
                 alQuitar={() => quitarItem(item.productoId)}
+                descuentosPorLinea={descuentosPorLinea}
+                nombresDeReglas={nombresDeReglas}
+                porcentajesPropios={puedeDarDescuento ? propios : undefined}
+                erroresDePorcentajePropio={erroresDePropios}
+                alCambiarPorcentajePropio={(lineaId, texto) => setPropios((actuales) => ({ ...actuales, [lineaId]: texto }))}
               />
             )
           })}
         </div>
+
+        {contextoDeDescuento && (
+          <DescuentosDeLaVenta
+            contexto={contextoDeDescuento}
+            motivos={datosDeContexto?.motivos ?? []}
+            general={generalTexto}
+            errorDelGeneral={generalLeido.valido ? undefined : generalLeido.mensaje}
+            alCambiarGeneral={setGeneralTexto}
+            hayDescuentoManual={conDescuentos.mayorManual !== null}
+            motivoId={motivoDescuentoId}
+            alCambiarMotivo={setMotivoDescuentoId}
+            faltaMotivo={faltaElMotivo}
+            error={erroresDeCampo.descuento}
+          />
+        )}
 
         <div data-testid="bloque-cobranza" className="flex flex-col gap-2">
           {contadoDeConsumidorFinal.aplica && !contadoDeConsumidorFinal.cumple && (
@@ -629,6 +898,15 @@ function VentaFormulario() {
           {erroresDeCampo.cobranza && <Alert>{erroresDeCampo.cobranza}</Alert>}
         </div>
 
+        {panelDeCredito && (
+          <PanelDeCreditoDeVenta
+            panel={panelDeCredito}
+            aceptaExceso={aceptaExceso}
+            alCambiarAcepta={setAceptaExceso}
+            error={erroresDeCampo.credito}
+          />
+        )}
+
         <Card className="flex flex-col gap-2 text-sm text-primary">
           <div data-testid="campo-numero">
             <Campo id="venta-numero" etiqueta="Número de venta" ayuda="ventas.numero" error={erroresDeCampo.numero}>
@@ -638,6 +916,11 @@ function VentaFormulario() {
           <p data-testid="total-de-la-venta" className="text-base font-semibold">
             Total: {formatearMonto(totalAMostrar.toFixed(2))}
           </p>
+          {hayDescuentos && (
+            <p data-testid="descuentos-de-la-venta" className="text-primary/70">
+              Incluye descuentos por {formatearMonto(conDescuentos.lineas.reduce((suma, l) => suma.plus(parsearImporteDesdeApi(l.descuentoTotal)), parsearImporteDesdeApi('0')).toFixed(2))}
+            </p>
+          )}
           {saldo.isSuccess && (
             <p data-testid="saldo-resultante">
               Saldo después de la venta: {textoDeSaldoResultanteDeVenta(saldo.data, envio.total, cobrado)}
@@ -664,12 +947,69 @@ function VentaFormulario() {
             Ese saldo se descuenta solo de la próxima compra del cliente. Si no es lo que querés, revisá lo cobrado.
           </p>
           <div className="flex gap-2">
-            <Boton onClick={() => void enviar(envio.lineas, envio.total, operationId)}>Aceptar y registrar</Boton>
+            <Boton
+              onClick={() => {
+                setConfirmando(false)
+                intentarEnviar()
+              }}
+            >
+              Aceptar y registrar
+            </Boton>
             <Boton variante="secundario" onClick={() => setConfirmando(false)}>
               Cancelar
             </Boton>
           </div>
         </div>
+      </Dialogo>
+
+      <DialogoDeAutorizacion
+        abierto={autorizando}
+        necesarias={necesarias}
+        autorizadores={autorizadores}
+        seleccion={seleccion}
+        alCambiarSeleccion={setSeleccion}
+        error={errorDeAutorizacion}
+        enviando={confirmar.isPending}
+        alConfirmar={alConfirmarAutorizacion}
+        alCancelar={alCancelarAutorizacion}
+      />
+
+      <Dialogo abierto={descuentoDifiere !== null} titulo="Cambiaron los descuentos" onCerrar={cancelarDescuentoDifiere}>
+        {descuentoDifiere !== null && (
+          <div className="flex flex-col gap-3">
+            <p className="flex items-center gap-1 text-sm text-primary">
+              Los descuentos que corresponden a esta venta no son los que armaste. Revisá los de abajo y aceptalos para seguir.
+              <Ayuda clave="ventas.descuentosAutomaticos" />
+            </p>
+            <ul className="flex flex-col gap-1 text-sm text-primary">
+              {[...descuentoDifiere.porLinea.entries()]
+                .filter(([, descuentos]) => descuentos.length > 0)
+                .map(([lineaId, descuentos]) => (
+                  <li key={lineaId} data-testid={`difiere-${lineaId}`}>
+                    {nombreDeLinea(lineaId)}:{' '}
+                    {descuentos
+                      .map(
+                        (d) =>
+                          `${d.origen === 'AUTOMATICO' ? 'descuento automático' : 'descuento manual'}${
+                            d.porcentaje === null ? '' : ` ${formatearPorcentaje(parsearImporteDesdeApi(d.porcentaje))}`
+                          } −${formatearMonto(d.importe)}`,
+                      )
+                      .join(' · ')}
+                  </li>
+                ))}
+            </ul>
+            <p className="text-sm font-semibold text-primary">
+              Total: {formatearMonto(descuentoDifiere.totalAnterior)} pasa a{' '}
+              {formatearMonto(aplicarDescuentosAlPedido(entradasDe(envio.lineas), general, descuentoDifiere.porLinea).total)}
+            </p>
+            <div className="flex gap-2">
+              <Boton onClick={aceptarDescuentosDelServidor}>Aceptar los descuentos nuevos</Boton>
+              <Boton variante="secundario" onClick={cancelarDescuentoDifiere}>
+                Cancelar
+              </Boton>
+            </div>
+          </div>
+        )}
       </Dialogo>
 
       <Dialogo abierto={precioDifiere !== null} titulo="Cambió el precio" onCerrar={cancelarPrecioDifiere}>

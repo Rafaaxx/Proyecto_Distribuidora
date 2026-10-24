@@ -12,7 +12,7 @@ lleva costos.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
@@ -20,10 +20,13 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.core.errors import PermisoRequeridoError
+from app.core.money import redondear_importe
 from app.modules.catalogo import service as catalogo_service
 from app.modules.clientes import service as clientes_service
 from app.modules.cobranzas import service as cobranzas_service
 from app.modules.configuracion import service as configuracion_service
+from app.modules.cuentas_corrientes import service as cuentas_corrientes_service
+from app.modules.descuentos import service as descuentos_service
 from app.modules.identidad import service as identidad_service
 from app.modules.precios import service as precios_service
 from app.modules.stock import service as stock_service
@@ -39,7 +42,7 @@ from app.modules.ventas.domain.errores import (
     VersionNoPermitidaError,
 )
 from app.modules.ventas.domain.numero import armar_numero
-from app.modules.ventas.models import Venta, VentaLinea
+from app.modules.ventas.models import Venta, VentaLinea, VentaLineaDescuento
 
 
 @dataclass(frozen=True)
@@ -60,6 +63,17 @@ class PaginaDeVentas:
 
 
 @dataclass(frozen=True)
+class DescuentoDelDetalle:
+    """Un descuento congelado de una línea (DSC-08) con los nombres de su regla, su motivo y su
+    autorizador (nulos si la referencia ya no se puede resolver o no aplica)."""
+
+    descuento: VentaLineaDescuento
+    regla_nombre: str | None
+    motivo_nombre: str | None
+    autorizador_nombre: str | None
+
+
+@dataclass(frozen=True)
 class LineaDelDetalle:
     """Una línea congelada con los nombres de su producto y presentación. `costo_unitario`,
     `costo_total` son `None` sin `con_costos` (VTA-05, `01` §19) y también cuando la línea se
@@ -70,12 +84,27 @@ class LineaDelDetalle:
     presentacion_nombre: str | None
     costo_unitario: Decimal | None
     costo_total: Decimal | None
+    descuentos: list[DescuentoDelDetalle] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
 class MotivoDeLista:
     motivo_id: UUID
     nombre: str | None
+
+
+@dataclass(frozen=True)
+class CreditoDelDetalle:
+    """El snapshot de crédito de la venta (CRE-10) con el nombre de quien autorizó."""
+
+    limite: Decimal | None
+    saldo_considerado: Decimal | None
+    disponible: Decimal | None
+    exceso: Decimal | None
+    politica: str | None
+    resolucion: str
+    autorizador_id: UUID | None
+    autorizador_nombre: str | None
 
 
 @dataclass(frozen=True)
@@ -86,6 +115,8 @@ class DetalleDeVenta:
     motivo_lista: MotivoDeLista | None
     cobranza: cobranzas_service.CobranzaDeVenta | None
     lineas: list[LineaDelDetalle]
+    credito: CreditoDelDetalle | None = None
+    """`None` en una venta anterior al change 18b (sin snapshot de crédito)."""
 
 
 def _con_nombres(
@@ -157,6 +188,7 @@ def _linea_del_detalle(
     presentaciones: dict[UUID, str],
     *,
     con_costos: bool,
+    descuentos: list[DescuentoDelDetalle],
 ) -> LineaDelDetalle:
     return LineaDelDetalle(
         linea=linea,
@@ -164,6 +196,7 @@ def _linea_del_detalle(
         presentacion_nombre=presentaciones.get(linea.presentacion_id),
         costo_unitario=linea.costo_unitario if con_costos else None,
         costo_total=linea.costo_total if con_costos else None,
+        descuentos=descuentos,
     )
 
 
@@ -192,6 +225,55 @@ def obtener_detalle_de_venta(
         if venta.motivo_lista_id is None
         else configuracion_service.obtener_motivo(organizacion_id, venta.motivo_lista_id, sesion)
     )
+    descuentos = repository.listar_descuentos_de_venta(organizacion_id, venta.id, sesion)
+    reglas = descuentos_service.nombres_de_reglas(
+        organizacion_id, {d.regla_id for d in descuentos if d.regla_id is not None}, sesion
+    )
+    motivos_de_descuento = {
+        motivo_id: configuracion_service.obtener_motivo(organizacion_id, motivo_id, sesion)
+        for motivo_id in {d.motivo_id for d in descuentos if d.motivo_id is not None}
+    }
+    autorizadores_ids = {d.autorizador_id for d in descuentos if d.autorizador_id is not None}
+    if venta.credito_autorizador_id is not None:
+        autorizadores_ids.add(venta.credito_autorizador_id)
+    autorizadores = identidad_service.obtener_nombres_de_usuarios(
+        organizacion_id, autorizadores_ids, sesion
+    )
+    por_linea: dict[UUID, list[DescuentoDelDetalle]] = {}
+    for descuento in descuentos:
+        motivo_del_descuento = (
+            None if descuento.motivo_id is None else motivos_de_descuento[descuento.motivo_id]
+        )
+        por_linea.setdefault(descuento.venta_linea_id, []).append(
+            DescuentoDelDetalle(
+                descuento=descuento,
+                regla_nombre=None if descuento.regla_id is None else reglas.get(descuento.regla_id),
+                motivo_nombre=None if motivo_del_descuento is None else motivo_del_descuento.nombre,
+                autorizador_nombre=(
+                    None
+                    if descuento.autorizador_id is None
+                    else autorizadores.get(descuento.autorizador_id)
+                ),
+            )
+        )
+    credito = (
+        None
+        if venta.credito_resolucion is None
+        else CreditoDelDetalle(
+            limite=venta.credito_limite,
+            saldo_considerado=venta.credito_saldo_considerado,
+            disponible=venta.credito_disponible,
+            exceso=venta.credito_exceso,
+            politica=venta.credito_politica,
+            resolucion=venta.credito_resolucion,
+            autorizador_id=venta.credito_autorizador_id,
+            autorizador_nombre=(
+                None
+                if venta.credito_autorizador_id is None
+                else autorizadores.get(venta.credito_autorizador_id)
+            ),
+        )
+    )
     return DetalleDeVenta(
         resumen=_con_nombres(organizacion_id, sesion, [venta])[0],
         lista_nombre=None if version is None else version.lista_nombre,
@@ -203,9 +285,16 @@ def obtener_detalle_de_venta(
         ),
         cobranza=cobranzas_service.cobranza_de_venta(organizacion_id, sesion, venta_id=venta.id),
         lineas=[
-            _linea_del_detalle(linea, productos, presentaciones, con_costos=con_costos)
+            _linea_del_detalle(
+                linea,
+                productos,
+                presentaciones,
+                con_costos=con_costos,
+                descuentos=por_linea.get(linea.id, []),
+            )
             for linea in lineas
         ],
+        credito=credito,
     )
 
 
@@ -394,4 +483,144 @@ def precios_para_vender(
         cursor_siguiente=(
             codificar_cursor_de_producto(pagina.items[-1].codigo) if pagina.hay_mas else None
         ),
+    )
+
+
+# --- Contexto de venta y crédito para vender (change 18b, D15 y D16) ------------------------
+
+_AMBITO_DESCUENTO_MANUAL = "DESCUENTO_MANUAL"
+_PERMISO_DESCUENTO_MANUAL = "DESCUENTO_MANUAL"
+_PERMISO_AUTORIZAR_DESCUENTO = "AUTORIZAR_DESCUENTO"
+_PERMISO_SUPERAR_CREDITO = "SUPERAR_CREDITO"
+
+
+@dataclass(frozen=True)
+class DescuentoManualDelContexto:
+    habilitado: bool
+    motivo_obligatorio: bool
+    tiene_permiso: bool
+    tope: Decimal | None
+    """Fracción del tope aplicable (el propio si lo tiene, si no el del rol); nulo si el usuario no
+    tiene `DESCUENTO_MANUAL`."""
+    puede_autorizar: bool
+
+
+@dataclass(frozen=True)
+class MotivoDelContexto:
+    id: UUID
+    nombre: str
+
+
+@dataclass(frozen=True)
+class ContextoDeVenta:
+    """Lo que quien vende necesita antes de armar el pedido (D15, SYN-11). El bootstrap del
+    change 21 reutiliza `contexto_de_venta`."""
+
+    descuento_manual: DescuentoManualDelContexto
+    puede_superar_credito: bool
+    motivos: list[MotivoDelContexto]
+    autorizadores: list[identidad_service.AutorizadorDisponible]
+
+
+def contexto_de_venta(
+    organizacion_id: UUID, sesion: Session, *, usuario_id: UUID
+) -> ContextoDeVenta:
+    """Tope, permisos, motivos activos del ámbito `DESCUENTO_MANUAL` y autorizadores de
+    `usuario_id` (DSC-06, SYN-11; `design.md` D15). Solo lee, siempre con los datos vigentes. El
+    tope no sale de `GET /yo` ni del token. Un usuario que no existe en la organización no se
+    encuentra (INV-21)."""
+    configuracion = identidad_service.obtener_configuracion(organizacion_id, sesion)
+    if configuracion is None:
+        raise RecursoNoEncontradoError("La organización no tiene configuración.")
+    usuario = identidad_service.obtener_datos_para_descuento_manual(
+        organizacion_id, usuario_id, sesion
+    )
+    if usuario is None:
+        raise RecursoNoEncontradoError(f"El usuario {usuario_id} no existe.")
+    tiene_permiso = _PERMISO_DESCUENTO_MANUAL in usuario.permisos
+    tope = (
+        (usuario.tope_rol if usuario.tope_propio is None else usuario.tope_propio)
+        if tiene_permiso
+        else None
+    )
+    motivos = configuracion_service.listar_motivos_por_ambito(
+        organizacion_id, sesion, _AMBITO_DESCUENTO_MANUAL
+    )
+    return ContextoDeVenta(
+        descuento_manual=DescuentoManualDelContexto(
+            habilitado=configuracion.descuento_manual_habilitado,
+            motivo_obligatorio=configuracion.motivo_obligatorio_descuento is True,
+            tiene_permiso=tiene_permiso,
+            tope=tope,
+            puede_autorizar=_PERMISO_AUTORIZAR_DESCUENTO in usuario.permisos,
+        ),
+        puede_superar_credito=_PERMISO_SUPERAR_CREDITO in usuario.permisos,
+        motivos=sorted(
+            (MotivoDelContexto(motivo.id, motivo.nombre) for motivo in motivos),
+            key=lambda motivo: (motivo.nombre, motivo.id),
+        ),
+        autorizadores=identidad_service.listar_autorizadores_disponibles(
+            organizacion_id, sesion, excluir_usuario_id=usuario_id
+        ),
+    )
+
+
+@dataclass(frozen=True)
+class ReglaParaVender:
+    """Una regla activa y vigente con su nombre, tal como la muestra la pantalla de venta."""
+
+    nombre: str
+    regla: descuentos_service.ReglaAplicable
+
+
+def descuentos_aplicables(
+    organizacion_id: UUID, sesion: Session, *, ahora: datetime
+) -> list[ReglaParaVender]:
+    """Las reglas `ACTIVA` vigentes en `ahora` con sus alcances y su nombre, por prioridad y
+    antigüedad (DSC-01, DSC-05; ADR-050). Es la lectura de quien vende: no pide
+    `GESTIONAR_DESCUENTOS` y no expone nada que no sea la regla (la pantalla calcula con la
+    gemela del motor y el servidor decide, TR-10). Solo lee; filtra por la organización
+    (INV-21)."""
+    reglas = descuentos_service.reglas_aplicables(organizacion_id, sesion, ahora)
+    nombres = descuentos_service.nombres_de_reglas(
+        organizacion_id, {UUID(regla.id) for regla in reglas}, sesion
+    )
+    return [ReglaParaVender(nombres[UUID(regla.id)], regla) for regla in reglas]
+
+
+@dataclass(frozen=True)
+class CreditoParaVender:
+    """El crédito de un cliente visto por quien vende (D16, `01` §19)."""
+
+    cliente_id: UUID
+    limite: Decimal | None
+    """Nulo = sin control (CRE-01)."""
+    saldo: Decimal
+    disponible: Decimal | None
+    """Límite menos saldo (negativo si el cliente ya está excedido); nulo sin límite."""
+    politica: str
+    tolerancia_tipo: str | None
+    tolerancia_valor: Decimal | None
+
+
+def credito_para_vender(
+    organizacion_id: UUID, sesion: Session, *, cliente_id: UUID
+) -> CreditoParaVender:
+    """Límite, saldo, disponible, política y tolerancia aplicables de `cliente_id`, con la
+    herencia de la organización ya resuelta (CRE-01, CRE-03, CRE-06; `design.md` D16). Es la única
+    lectura que expone el disponible y la política aplicable; la pantalla evalúa con la gemela de
+    `cre01` y el servidor decide (TR-10). Solo lee. Un cliente que no existe o es de otra
+    organización responde como inexistente (INV-21)."""
+    datos = clientes_service.resolver_datos_de_credito(organizacion_id, cliente_id, sesion)
+    saldo = cuentas_corrientes_service.obtener_saldo(
+        organizacion_id, sesion, cuenta_tipo="CLIENTE", entidad_id=cliente_id
+    )
+    return CreditoParaVender(
+        cliente_id=cliente_id,
+        limite=datos.limite,
+        saldo=saldo,
+        disponible=None if datos.limite is None else redondear_importe(datos.limite - saldo),
+        politica=datos.politica,
+        tolerancia_tipo=datos.tolerancia_tipo,
+        tolerancia_valor=datos.tolerancia_valor,
     )

@@ -71,6 +71,10 @@ def _crear_usuario_y_dispositivo(sesion: Session, organizacion_id: UUID) -> tupl
         activo=True,
         momento=MOMENTO,
     )
+    # El bus exige el permiso del tipo en todo camino (ADR-056).
+    identidad_repository.asignar_permiso_a_rol(
+        organizacion_id, sesion, rol_id=rol.id, permiso_codigo="REGISTRAR_COBRANZA"
+    )
     usuario = identidad_repository.crear_usuario(
         organizacion_id,
         sesion,
@@ -626,7 +630,7 @@ def _catalogo_y_registro_aislados(monkeypatch: pytest.MonkeyPatch) -> None:
         "PRUEBA_OBSERVACION",
         admite_online=True,
         admite_offline=True,
-        permiso_offline="REGISTRAR_COBRANZA",
+        permisos=("REGISTRAR_COBRANZA",),
     )
     registro.registrar_handler("PRUEBA_OBSERVACION", 1, _EsquemaPruebaObservacion)(
         _handler_prueba_observacion

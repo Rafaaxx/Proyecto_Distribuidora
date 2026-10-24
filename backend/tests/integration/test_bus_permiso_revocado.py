@@ -77,12 +77,12 @@ def _catalogo_y_registro_aislados(monkeypatch: pytest.MonkeyPatch) -> None:
         TIPO,
         admite_online=True,
         admite_offline=True,
-        permiso_offline=PERMISO,
+        permisos=(PERMISO,),
         operacion_offline=OperacionObservable("OPERACION_DE_PRUEBA", "operacion_id"),
     )
     registro.registrar_handler(TIPO, 1, _Esquema)(_handler)
     catalogo.declarar_tipo(
-        TIPO_SIN_OPERACION, admite_online=True, admite_offline=True, permiso_offline=PERMISO
+        TIPO_SIN_OPERACION, admite_online=True, admite_offline=True, permisos=(PERMISO,)
     )
     registro.registrar_handler(TIPO_SIN_OPERACION, 1, _Esquema)(_handler)
 

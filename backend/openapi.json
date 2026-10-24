@@ -920,6 +920,123 @@
         }
       }
     },
+    "/api/v1/yo/pin-autorizacion": {
+      "get": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Obtener Estado De Mi Pin",
+        "description": "Change 18b, tarea 11.5 (D21 punto 1): si el usuario del token puede definir su PIN de\nautorización y si ya lo tiene. Cualquier sesión habilitada (la pantalla decide si ofrece \"Mi\nPIN\"); todo sale del token. `GET /yo` no cambia.",
+        "operationId": "obtener_estado_de_mi_pin_api_v1_yo_pin_autorizacion_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MiPinEstadoResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Definir Mi Pin",
+        "description": "`PIN_AUTORIZACION_PROPIO_DEFINIR` (D21 parte B). Exige alguno de los permisos de\nautorización de excepciones (403 `PERMISO_REQUERIDO` antes de tocar la base). Delega en el\nbus; el PIN, la contraseña y la IP del cliente (`request.client.host`, la misma que usa el\nlogin) llegan al handler por clausura, no por el contenido. Respuesta 204 sin cuerpo.",
+        "operationId": "definir_mi_pin_api_v1_yo_pin_autorizacion_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MiPinRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/configuracion/fiscal": {
       "get": {
         "tags": [
@@ -1028,6 +1145,254 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ConfiguracionFiscalResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/configuracion/descuento-manual": {
+      "get": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Obtener Descuento Manual",
+        "description": "Si la organización habilita el descuento manual y si exige motivo (DSC-06). Un motivo\nobligatorio sin definir (nulo) se informa como `false`: no se exige.",
+        "operationId": "obtener_descuento_manual_api_v1_configuracion_descuento_manual_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DescuentoManualResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Configurar Descuento Manual",
+        "description": "`DESCUENTO_MANUAL_CONFIGURAR` (D13). La respuesta sale de `comando.resultado`, no de una\nrelectura: un reenvío idempotente devuelve exactamente lo mismo (INV-06).",
+        "operationId": "configurar_descuento_manual_api_v1_configuracion_descuento_manual_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DescuentoManualConfigurarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DescuentoManualResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/configuracion/credito": {
+      "get": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Obtener Credito De La Organizacion",
+        "description": "La política de crédito por defecto y la tolerancia sin conexión de la organización\n(CRE-03, CRE-06).",
+        "operationId": "obtener_credito_de_la_organizacion_api_v1_configuracion_credito_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditoOrganizacionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Configurar Credito De La Organizacion",
+        "description": "`CREDITO_ORGANIZACION_CONFIGURAR` (D14). La respuesta sale de `comando.resultado`\n(INV-06).",
+        "operationId": "configurar_credito_de_la_organizacion_api_v1_configuracion_credito_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreditoOrganizacionConfigurarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditoOrganizacionResponse"
                 }
               }
             }
@@ -10120,6 +10485,166 @@
         }
       }
     },
+    "/api/v1/ventas/contexto": {
+      "get": {
+        "tags": [
+          "ventas"
+        ],
+        "summary": "Obtener Contexto De Venta",
+        "description": "Change 18b, D15 (SYN-11, DSC-06): el tope de descuento, los permisos, los motivos activos y\nlos autorizadores de quien vende. `VENDER`. Sin parámetros: el usuario sale del token. Hasta el\nbootstrap del change 21, que reutiliza `ventas_queries.contexto_de_venta`.",
+        "operationId": "obtener_contexto_de_venta_api_v1_ventas_contexto_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextoDeVentaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ventas/descuentos-aplicables": {
+      "get": {
+        "tags": [
+          "ventas"
+        ],
+        "summary": "Obtener Descuentos Aplicables",
+        "description": "Change 18b, apply del 2026-10-23 (DSC-01, DSC-05, ADR-050): las reglas activas y vigentes\nahora, con su nombre y sus alcances, para que la pantalla de venta muestre los descuentos\nautomáticos antes de confirmar. `VENDER` (no `GESTIONAR_DESCUENTOS`, DSC-04). Sin parámetros:\nla organización sale del token.",
+        "operationId": "obtener_descuentos_aplicables_api_v1_ventas_descuentos_aplicables_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DescuentosAplicablesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ventas/credito": {
+      "get": {
+        "tags": [
+          "ventas"
+        ],
+        "summary": "Obtener Credito Para Vender",
+        "description": "Change 18b, D16 (CRE-01, `01` §19): límite, saldo, disponible, política y tolerancia\naplicables del cliente, con la herencia de la organización resuelta. `VENDER`. Cliente de otra\norganización o inexistente, 404.",
+        "operationId": "obtener_credito_para_vender_api_v1_ventas_credito_get",
+        "parameters": [
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Cliente Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditoParaVenderResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/ventas/versiones": {
       "get": {
         "tags": [
@@ -10505,6 +11030,25 @@
         "title": "AjusteResponse",
         "description": "Sale de `comando.resultado` (un reenvío idempotente devuelve lo mismo, INV-06); la\nruta le agrega el costo de cada línea, leído del ajuste, si el usuario tiene `VER_COSTOS`."
       },
+      "AlcanceDeReglaResponse": {
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "entidad_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Entidad Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tipo",
+          "entidad_id"
+        ],
+        "title": "AlcanceDeReglaResponse"
+      },
       "AlcanceReglaRequest": {
         "properties": {
           "tipo": {
@@ -10640,6 +11184,36 @@
           "anulada_por_id"
         ],
         "title": "AnulacionDeTransferenciaResponse"
+      },
+      "AutorizadorContextoResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "puede_autorizar_descuento": {
+            "type": "boolean",
+            "title": "Puede Autorizar Descuento"
+          },
+          "puede_superar_credito": {
+            "type": "boolean",
+            "title": "Puede Superar Credito"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "puede_autorizar_descuento",
+          "puede_superar_credito"
+        ],
+        "title": "AutorizadorContextoResponse",
+        "description": "Nunca la derivación del PIN ni nada de ella (ADR-011)."
       },
       "Body_importar_api_v1_importaciones__tipo__post": {
         "properties": {
@@ -12673,6 +13247,39 @@
         "title": "ConsumidorFinalResponse",
         "description": "`GET /clientes/consumidor-final` (spec `consumidor-final`,\nescenarios \"Organización sin consumidor final\" y \"Organización con\nconsumidor final\").\n\n**No es 404 cuando la organización no lo habilitó**: 200 con\n`habilitado: false` y `cliente: null`. El 404 queda para el cliente de\notra organización o inexistente por id en `GET /clientes/{cliente_id}`\n(INV-21), no para un estado legítimo de esta organización. Por eso este\nesquema NO declara `from_attributes`: se arma explícito en `api.py` y no\nsale de `model_validate` de una fila."
       },
+      "ContextoDeVentaResponse": {
+        "properties": {
+          "descuento_manual": {
+            "$ref": "#/components/schemas/DescuentoManualContextoResponse"
+          },
+          "credito": {
+            "$ref": "#/components/schemas/CreditoContextoResponse"
+          },
+          "motivos": {
+            "items": {
+              "$ref": "#/components/schemas/MotivoContextoResponse"
+            },
+            "type": "array",
+            "title": "Motivos"
+          },
+          "autorizadores": {
+            "items": {
+              "$ref": "#/components/schemas/AutorizadorContextoResponse"
+            },
+            "type": "array",
+            "title": "Autorizadores"
+          }
+        },
+        "type": "object",
+        "required": [
+          "descuento_manual",
+          "credito",
+          "motivos",
+          "autorizadores"
+        ],
+        "title": "ContextoDeVentaResponse",
+        "description": "`GET /ventas/contexto` (change 18b, D15)."
+      },
       "CostoDelLoteRequest": {
         "properties": {
           "producto_id": {
@@ -12991,7 +13598,9 @@
           },
           "password": {
             "type": "string",
-            "title": "Password"
+            "format": "password",
+            "title": "Password",
+            "writeOnly": true
           },
           "rol_id": {
             "type": "string",
@@ -13007,7 +13616,434 @@
           "password",
           "rol_id"
         ],
-        "title": "CrearUsuarioRequest"
+        "title": "CrearUsuarioRequest",
+        "description": "`password: SecretStr`, sin validadores (D2): el valor no aparece en un error."
+      },
+      "CredencialPinRequest": {
+        "properties": {
+          "autorizador_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Autorizador Id"
+          },
+          "pin": {
+            "type": "string",
+            "format": "password",
+            "title": "Pin",
+            "writeOnly": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "autorizador_id",
+          "pin"
+        ],
+        "title": "CredencialPinRequest",
+        "description": "El PIN que un supervisor escribió para autorizar una excepción (change 18b, D2). Viaja\nfuera del contenido del comando: la ruta lo separa antes de armar la huella. `SecretStr` y\nningún validador sobre el PIN (no puede citarlo en un mensaje de error)."
+      },
+      "CreditoContextoResponse": {
+        "properties": {
+          "puede_superar": {
+            "type": "boolean",
+            "title": "Puede Superar"
+          }
+        },
+        "type": "object",
+        "required": [
+          "puede_superar"
+        ],
+        "title": "CreditoContextoResponse"
+      },
+      "CreditoOrganizacionConfigurarRequest": {
+        "properties": {
+          "politica": {
+            "type": "string",
+            "enum": [
+              "ADVERTIR",
+              "AUTORIZAR",
+              "BLOQUEAR"
+            ],
+            "title": "Politica"
+          },
+          "tolerancia_tipo": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "IMPORTE",
+                  "PORCENTAJE"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tolerancia Tipo"
+          },
+          "tolerancia_valor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tolerancia Valor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "politica",
+          "tolerancia_tipo",
+          "tolerancia_valor"
+        ],
+        "title": "CreditoOrganizacionConfigurarRequest",
+        "description": "Política y tolerancia, los tres obligatorios (la tolerancia vacía son los dos `null`). La\npolítica o el tipo fuera del catálogo responden 422; la pareja a medias, el dominio, con\n`TOLERANCIA_OFFLINE_INVALIDA`."
+      },
+      "CreditoOrganizacionResponse": {
+        "properties": {
+          "politica": {
+            "type": "string",
+            "enum": [
+              "ADVERTIR",
+              "AUTORIZAR",
+              "BLOQUEAR"
+            ],
+            "title": "Politica"
+          },
+          "tolerancia_tipo": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "IMPORTE",
+                  "PORCENTAJE"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tolerancia Tipo"
+          },
+          "tolerancia_valor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tolerancia Valor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "politica",
+          "tolerancia_tipo",
+          "tolerancia_valor"
+        ],
+        "title": "CreditoOrganizacionResponse"
+      },
+      "CreditoParaVenderResponse": {
+        "properties": {
+          "cliente_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Cliente Id"
+          },
+          "limite": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limite"
+          },
+          "saldo": {
+            "type": "string",
+            "title": "Saldo"
+          },
+          "disponible": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disponible"
+          },
+          "politica": {
+            "type": "string",
+            "title": "Politica"
+          },
+          "tolerancia_tipo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tolerancia Tipo"
+          },
+          "tolerancia_valor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tolerancia Valor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cliente_id",
+          "limite",
+          "saldo",
+          "disponible",
+          "politica",
+          "tolerancia_tipo",
+          "tolerancia_valor"
+        ],
+        "title": "CreditoParaVenderResponse",
+        "description": "`GET /ventas/credito` (change 18b, D16). Importes como string (INV-03); `limite` y\n`disponible` nulos = sin control."
+      },
+      "CreditoRequest": {
+        "properties": {
+          "acepta_exceso": {
+            "type": "boolean",
+            "title": "Acepta Exceso",
+            "default": false
+          },
+          "autorizador_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Autorizador Id"
+          },
+          "limite": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?\\d+(\\.\\d+)?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limite"
+          },
+          "saldo_considerado": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?\\d+(\\.\\d+)?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Saldo Considerado"
+          },
+          "politica": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "ADVERTIR",
+                  "AUTORIZAR",
+                  "BLOQUEAR"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Politica"
+          },
+          "resolucion": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "SIN_EXCESO",
+                  "ADVERTENCIA_ACEPTADA",
+                  "PERMISO_PROPIO",
+                  "PIN_SUPERVISOR",
+                  "TOLERANCIA_OFFLINE"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolucion"
+          }
+        },
+        "type": "object",
+        "title": "CreditoRequest",
+        "description": "El crédito de la venta (change 18b, D1): con conexión, si el usuario acepta el exceso\n(ADVERTIR) y quién autoriza (AUTORIZAR). La evaluación del dispositivo es solo del camino sin\nconexión (D7)."
+      },
+      "DescuentoEsperadoRequest": {
+        "properties": {
+          "origen": {
+            "type": "string",
+            "enum": [
+              "AUTOMATICO",
+              "MANUAL"
+            ],
+            "title": "Origen"
+          },
+          "regla_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regla Id"
+          },
+          "porcentaje": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?\\d+(\\.\\d+)?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Porcentaje"
+          },
+          "importe": {
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "title": "Importe"
+          }
+        },
+        "type": "object",
+        "required": [
+          "origen",
+          "importe"
+        ],
+        "title": "DescuentoEsperadoRequest",
+        "description": "Un descuento de la línea tal como lo vio el usuario (change 18b, D1, D11): el servidor lo\ncompara con el que calcula (`DESCUENTO_DIFIERE`)."
+      },
+      "DescuentoManualConfigurarRequest": {
+        "properties": {
+          "habilitado": {
+            "type": "boolean",
+            "title": "Habilitado"
+          },
+          "motivo_obligatorio": {
+            "type": "boolean",
+            "title": "Motivo Obligatorio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "habilitado",
+          "motivo_obligatorio"
+        ],
+        "title": "DescuentoManualConfigurarRequest",
+        "description": "Los dos booleanos estrictos y obligatorios: un texto, un número o un nulo responden 422."
+      },
+      "DescuentoManualContextoResponse": {
+        "properties": {
+          "habilitado": {
+            "type": "boolean",
+            "title": "Habilitado"
+          },
+          "motivo_obligatorio": {
+            "type": "boolean",
+            "title": "Motivo Obligatorio"
+          },
+          "tiene_permiso": {
+            "type": "boolean",
+            "title": "Tiene Permiso"
+          },
+          "tope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tope"
+          },
+          "puede_autorizar": {
+            "type": "boolean",
+            "title": "Puede Autorizar"
+          }
+        },
+        "type": "object",
+        "required": [
+          "habilitado",
+          "motivo_obligatorio",
+          "tiene_permiso",
+          "tope",
+          "puede_autorizar"
+        ],
+        "title": "DescuentoManualContextoResponse",
+        "description": "`tope`: fracción de texto (`\"0.050000\"` = 5 %), nula sin `DESCUENTO_MANUAL` (INV-03)."
+      },
+      "DescuentoManualResponse": {
+        "properties": {
+          "habilitado": {
+            "type": "boolean",
+            "title": "Habilitado"
+          },
+          "motivo_obligatorio": {
+            "type": "boolean",
+            "title": "Motivo Obligatorio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "habilitado",
+          "motivo_obligatorio"
+        ],
+        "title": "DescuentoManualResponse"
+      },
+      "DescuentosAplicablesResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReglaAplicableResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "DescuentosAplicablesResponse",
+        "description": "`GET /ventas/descuentos-aplicables` (change 18b, apply del 2026-10-23): por prioridad y\nantigüedad, las reglas vigentes ahora."
       },
       "DetalleDeAjusteResponse": {
         "properties": {
@@ -13878,6 +14914,7 @@
             "title": "Jornada Id"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "operation_id",
@@ -13891,7 +14928,7 @@
           "app_version"
         ],
         "title": "ItemLoteComandoRequest",
-        "description": "Un comando de la cola local (`02` §13.2 `cola`), tal como el\ndispositivo lo generó. `usuario_id`/`dispositivo_id` son los que\ndeclaró al generarlo -- el servidor los compara contra la sesión que\nsincroniza (`ColaAjenaError`, tarea 8.5), nunca los usa tal cual para\nconstruir el sobre sin esa verificación."
+        "description": "Un comando de la cola local (`02` §13.2 `cola`), tal como el\ndispositivo lo generó. `usuario_id`/`dispositivo_id` son los que\ndeclaró al generarlo -- el servidor los compara contra la sesión que\nsincroniza (`ColaAjenaError`, tarea 8.5), nunca los usa tal cual para\nconstruir el sobre sin esa verificación.\n\n`extra=\"forbid\"` (change 18b, `design.md` D2): el lote no admite credenciales efímeras; un\nítem que traiga `credenciales` (o cualquier campo ajeno) se rechaza como malformado, sin\nguardarlo ni registrar su valor."
       },
       "JornadaAbrirRequest": {
         "properties": {
@@ -15302,6 +16339,68 @@
         ],
         "title": "MedioPagoResponse",
         "description": "Un medio de pago activo con su indicador de referencia obligatoria."
+      },
+      "MiPinEstadoResponse": {
+        "properties": {
+          "puede_definir": {
+            "type": "boolean",
+            "title": "Puede Definir"
+          },
+          "tiene_pin_autorizacion": {
+            "type": "boolean",
+            "title": "Tiene Pin Autorizacion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "puede_definir",
+          "tiene_pin_autorizacion"
+        ],
+        "title": "MiPinEstadoResponse",
+        "description": "`GET /yo/pin-autorizacion`: dos booleanos y nada más (ADR-011): ni derivación ni sal."
+      },
+      "MiPinRequest": {
+        "properties": {
+          "pin": {
+            "type": "string",
+            "format": "password",
+            "title": "Pin",
+            "writeOnly": true
+          },
+          "password_actual": {
+            "type": "string",
+            "format": "password",
+            "title": "Password Actual",
+            "writeOnly": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pin",
+          "password_actual"
+        ],
+        "title": "MiPinRequest",
+        "description": "`POST /yo/pin-autorizacion`. `extra=\"forbid\"`: el usuario sale del token, nunca del cuerpo\n(un `usuario_id` es un 422 sin eco del valor). Los dos secretos son `SecretStr` y no tienen\nvalidadores (D2, D21 punto 3): la ruta los separa antes de armar el contenido y la huella."
+      },
+      "MotivoContextoResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre"
+        ],
+        "title": "MotivoContextoResponse"
       },
       "MotivoResponse": {
         "properties": {
@@ -17183,6 +18282,23 @@
             "type": "string",
             "title": "Nombre"
           },
+          "categoria_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Categoria Id"
+          },
+          "marca_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marca Id"
+          },
           "precio_referencia": {
             "anyOf": [
               {
@@ -17233,6 +18349,8 @@
           "producto_id",
           "codigo",
           "nombre",
+          "categoria_id",
+          "marca_id",
           "precio_referencia",
           "unidades_referencia",
           "sin_precio",
@@ -17693,6 +18811,93 @@
           "dispositivo_id"
         ],
         "title": "RefreshRequest"
+      },
+      "ReglaAplicableResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "medida": {
+            "type": "string",
+            "title": "Medida"
+          },
+          "operador": {
+            "type": "string",
+            "title": "Operador"
+          },
+          "umbral": {
+            "type": "string",
+            "title": "Umbral"
+          },
+          "accion_tipo": {
+            "type": "string",
+            "title": "Accion Tipo"
+          },
+          "accion_porcentaje": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accion Porcentaje"
+          },
+          "accion_importe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accion Importe"
+          },
+          "acumulable": {
+            "type": "boolean",
+            "title": "Acumulable"
+          },
+          "prioridad": {
+            "type": "integer",
+            "title": "Prioridad"
+          },
+          "alcances": {
+            "items": {
+              "$ref": "#/components/schemas/AlcanceDeReglaResponse"
+            },
+            "type": "array",
+            "title": "Alcances"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "tipo",
+          "medida",
+          "operador",
+          "umbral",
+          "accion_tipo",
+          "accion_porcentaje",
+          "accion_importe",
+          "acumulable",
+          "prioridad",
+          "alcances"
+        ],
+        "title": "ReglaAplicableResponse",
+        "description": "Una regla activa y vigente tal como la necesita la gemela del motor (`motor.ts`, ADR-050).\nImportes y porcentajes como string (INV-03)."
       },
       "ReglaCrearRequest": {
         "properties": {
@@ -18499,14 +19704,17 @@
         "properties": {
           "pin": {
             "type": "string",
-            "title": "Pin"
+            "format": "password",
+            "title": "Pin",
+            "writeOnly": true
           }
         },
         "type": "object",
         "required": [
           "pin"
         ],
-        "title": "RotarPinRequest"
+        "title": "RotarPinRequest",
+        "description": "`pin: SecretStr`, sin validadores (D2): el valor no aparece en un error."
       },
       "SaldoInicialRegistrarRequest": {
         "properties": {
@@ -19235,6 +20443,11 @@
           "estado": {
             "type": "string",
             "title": "Estado"
+          },
+          "tiene_pin_autorizacion": {
+            "type": "boolean",
+            "title": "Tiene Pin Autorizacion",
+            "default": false
           }
         },
         "type": "object",
@@ -19483,6 +20696,60 @@
                 "type": "null"
               }
             ]
+          },
+          "descuento_manual_general": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?\\d+(\\.\\d+)?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Descuento Manual General"
+          },
+          "motivo_descuento_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Descuento Id"
+          },
+          "descuento_autorizador_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Descuento Autorizador Id"
+          },
+          "credito": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CreditoRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "credenciales": {
+            "items": {
+              "$ref": "#/components/schemas/CredencialPinRequest"
+            },
+            "type": "array",
+            "maxItems": 2,
+            "title": "Credenciales"
           }
         },
         "type": "object",
@@ -19494,7 +20761,7 @@
           "total"
         ],
         "title": "VentaConfirmarRequest",
-        "description": "`POST /ventas`. `venta_id` y `numero` los genera quien origina la venta (`02` §9, D4)."
+        "description": "`POST /ventas`. `venta_id` y `numero` los genera quien origina la venta (`02` §9, D4).\n`credenciales` (de 0 a 2) NO forma parte del contenido ni de la huella (change 18b, D2).\nLos campos de descuentos y crédito son opcionales (D1)."
       },
       "VentaConfirmarResponse": {
         "properties": {
@@ -19543,6 +20810,105 @@
         ],
         "title": "VentaConfirmarResponse",
         "description": "Sale de `comando.resultado`, no de una relectura: un reenvío idempotente del mismo\n`Operation-Id` devuelve exactamente lo mismo (INV-06). `saldo` es el saldo resultante del\ncliente, con la cobranza en el acto ya aplicada; negativo es saldo a favor."
+      },
+      "VentaCreditoResponse": {
+        "properties": {
+          "limite": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limite"
+          },
+          "saldo_considerado": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Saldo Considerado"
+          },
+          "disponible": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disponible"
+          },
+          "exceso": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exceso"
+          },
+          "politica": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Politica"
+          },
+          "resolucion": {
+            "type": "string",
+            "title": "Resolucion"
+          },
+          "autorizador_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Autorizador Id"
+          },
+          "autorizador_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Autorizador Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "limite",
+          "saldo_considerado",
+          "disponible",
+          "exceso",
+          "politica",
+          "resolucion",
+          "autorizador_id",
+          "autorizador_nombre"
+        ],
+        "title": "VentaCreditoResponse",
+        "description": "El snapshot de crédito congelado (CRE-10). Sin límite: límite, disponible y exceso nulos."
       },
       "VentaDetalleResponse": {
         "properties": {
@@ -19727,6 +21093,16 @@
             },
             "type": "array",
             "title": "Observaciones"
+          },
+          "credito": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VentaCreditoResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -19762,6 +21138,112 @@
         ],
         "title": "VentaDetalleResponse",
         "description": "La venta como quedó congelada (VTA-03, VTA-12)."
+      },
+      "VentaLineaDescuentoResponse": {
+        "properties": {
+          "origen": {
+            "type": "string",
+            "title": "Origen"
+          },
+          "regla_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regla Id"
+          },
+          "regla_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regla Nombre"
+          },
+          "porcentaje": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Porcentaje"
+          },
+          "importe": {
+            "type": "string",
+            "title": "Importe"
+          },
+          "motivo_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Id"
+          },
+          "motivo_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Nombre"
+          },
+          "autorizador_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Autorizador Id"
+          },
+          "autorizador_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Autorizador Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "origen",
+          "regla_id",
+          "regla_nombre",
+          "porcentaje",
+          "importe",
+          "motivo_id",
+          "motivo_nombre",
+          "autorizador_id",
+          "autorizador_nombre"
+        ],
+        "title": "VentaLineaDescuentoResponse",
+        "description": "Un descuento congelado de la línea (DSC-08). Porcentaje e importe como string (INV-03)."
       },
       "VentaLineaRequest": {
         "properties": {
@@ -19802,6 +21284,25 @@
             "type": "string",
             "pattern": "^-?\\d+(\\.\\d+)?$",
             "title": "Importe Bruto"
+          },
+          "descuento_manual": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?\\d+(\\.\\d+)?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Descuento Manual"
+          },
+          "descuentos": {
+            "items": {
+              "$ref": "#/components/schemas/DescuentoEsperadoRequest"
+            },
+            "type": "array",
+            "title": "Descuentos"
           }
         },
         "type": "object",
@@ -19816,7 +21317,7 @@
           "importe_bruto"
         ],
         "title": "VentaLineaRequest",
-        "description": "Una línea con lo que vio el usuario (D2)."
+        "description": "Una línea con lo que vio el usuario (D2). `descuento_manual` (fracción como texto) y\n`descuentos` (los esperados) son opcionales (change 18b, D1)."
       },
       "VentaLineaResponse": {
         "properties": {
@@ -19927,6 +21428,14 @@
               }
             ],
             "title": "Costo Total"
+          },
+          "descuentos": {
+            "items": {
+              "$ref": "#/components/schemas/VentaLineaDescuentoResponse"
+            },
+            "type": "array",
+            "title": "Descuentos",
+            "default": []
           }
         },
         "type": "object",

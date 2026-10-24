@@ -51,7 +51,7 @@ _HANDLERS = {
     PAGAR: "manejar_pago_proveedor_registrar",
     ANULAR_PAGO: "manejar_pago_proveedor_anular",
 }
-PERMISOS = frozenset({"REGISTRAR_COMPRA"})
+PERMISOS = frozenset({"REGISTRAR_COMPRA", "EDITAR_COSTOS"})
 PERMISOS_DE_PAGO = frozenset({"REGISTRAR_COMPRA", "REGISTRAR_PAGO_PROVEEDOR"})
 """Lo que necesita quien paga una deuda: registrar la compra que la origina y el pago que
 la reduce (`SEG-06`). La prueba de permisos arma su propio entorno sin ninguno."""

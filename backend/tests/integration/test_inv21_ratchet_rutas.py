@@ -406,6 +406,35 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("get", "/api/v1/ventas/precios"),
         ("get", "/api/v1/ventas/numeracion"),
         ("get", "/api/v1/ventas/versiones"),
+        # Change 18b, grupo 5 (tareas 5.1 y 5.2): las cuatro rutas de parámetros de la
+        # organización (descuento manual y crédito: lectura y escritura dedicada). Pruebas
+        # reales de aislamiento en `test_descuento_manual_configurar.py` y
+        # `test_credito_organizacion_configurar.py` (`test_inv21_http_el_cambio_afecta_solo_a_
+        # la_organizacion_del_token`: login real de dos organizaciones, un `organizacion_id`
+        # ajeno en el cuerpo se ignora y cada lectura trae solo la propia).
+        ("get", "/api/v1/configuracion/descuento-manual"),
+        ("post", "/api/v1/configuracion/descuento-manual"),
+        ("get", "/api/v1/configuracion/credito"),
+        ("post", "/api/v1/configuracion/credito"),
+        # Change 18b, tarea 6.5 (`identidad/api.py::router_yo`): "Mi PIN". Todo sale del token (el
+        # cuerpo no acepta `usuario_id` ni `organizacion_id`); prueba real de aislamiento en
+        # `test_identidad_pin_propio_definir.py::test_inv21_definir_el_pin_propio_no_toca_a_los_
+        # usuarios_de_otra_organizacion`.
+        ("post", "/api/v1/yo/pin-autorizacion"),
+        # Change 18b, grupo 11 (tareas 11.1, 11.2 y 11.5): las tres lecturas para vender. Todo
+        # sale del token; pruebas reales de aislamiento en `test_ventas_contexto.py::test_syn11_no_
+        # son_autorizadores_los_que_no_cumplen_las_condiciones` y `test_dsc06_los_motivos_son_
+        # solo_los_activos_del_ambito_de_descuento_manual_propio` (usuarios y motivos de otra
+        # organización no figuran), `test_ventas_credito_lectura.py::test_seg07_el_credito_de_un_
+        # cliente_de_otra_organizacion_responde_404` y `test_identidad_yo_pin.py::test_seg07_cada_
+        # usuario_ve_solo_lo_suyo_y_get_yo_no_cambia`.
+        ("get", "/api/v1/ventas/contexto"),
+        ("get", "/api/v1/ventas/credito"),
+        # Apply del 2026-10-23: las reglas vigentes de la organización del token; aislamiento en
+        # `test_ventas_descuentos_aplicables.py::test_inv21_las_reglas_de_otra_organizacion_no_
+        # figuran`.
+        ("get", "/api/v1/ventas/descuentos-aplicables"),
+        ("get", "/api/v1/yo/pin-autorizacion"),
     }
 )
 

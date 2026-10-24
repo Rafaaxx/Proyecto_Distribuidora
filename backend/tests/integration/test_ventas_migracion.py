@@ -52,6 +52,9 @@ from ventas_utiles import (
 )
 
 REVISION = "a2b3c4d5e6f7"
+# La del change 18b: el `head`. Un `downgrade` que aborta en la revisión de este change revierte
+# toda la corrida (Alembic corre en una sola transacción), así que la base queda en `head`.
+REVISION_HEAD = "c8d9e0f1a2b3"
 REVISION_ANTERIOR = "f8a9b0c1d2e3"  # `medios_de_pago_administrables`, la previa a este change.
 
 AMBITO = "LISTA_ANTERIOR"
@@ -93,6 +96,8 @@ FKS_ESPERADAS = {
         "fk_venta__lista": ("lista_id", "lista_precio"),
         "fk_venta__lista_version": ("lista_version_id", "lista_version"),
         "fk_venta__motivo_lista": ("motivo_lista_id", "motivo"),
+        # Change 18b (D12): el autorizador del snapshot de crédito.
+        "fk_venta__credito_autorizador": ("credito_autorizador_id", "usuario"),
     },
     "venta_linea": {
         "fk_venta_linea__venta": ("venta_id", "venta"),
@@ -1031,7 +1036,7 @@ def test_el_downgrade_aborta_si_hay_ventas(database_url: str, _engine_de_sesion:
         abortada = _alembic(database_url, "downgrade", REVISION_ANTERIOR)
         assert abortada.returncode != 0
         assert "venta" in abortada.stderr
-        assert _revision_actual(_engine_de_sesion) == REVISION
+        assert _revision_actual(_engine_de_sesion) == REVISION_HEAD
         for tabla in TABLAS:
             assert _existe_tabla(_engine_de_sesion, tabla)
         with _engine_de_sesion.connect() as conexion:
@@ -1061,7 +1066,7 @@ def test_el_downgrade_aborta_si_hay_observaciones_de_codigos_nuevos(
         abortada = _alembic(database_url, "downgrade", REVISION_ANTERIOR)
         assert abortada.returncode != 0
         assert codigo in abortada.stderr
-        assert _revision_actual(_engine_de_sesion) == REVISION
+        assert _revision_actual(_engine_de_sesion) == REVISION_HEAD
         for tabla in TABLAS:
             assert _existe_tabla(_engine_de_sesion, tabla)
 

@@ -42,7 +42,9 @@ class Entorno:
     def __init__(self, sesion: Session) -> None:
         self.sesion = sesion
         self.org = crear_organizacion(sesion).id
-        self.usuario_id, self.dispositivo_id = crear_usuario_y_dispositivo(sesion, self.org)
+        self.usuario_id, self.dispositivo_id = crear_usuario_y_dispositivo(
+            sesion, self.org, permisos=frozenset({"ADMIN_USUARIOS", "REGISTRAR_COBRANZA"})
+        )
         self.motivo_id = crear_motivo_sql(sesion, self.org)
         self.otro_motivo_id = crear_motivo_sql(sesion, self.org)
         sesion.commit()
@@ -224,7 +226,7 @@ def test_aud02_el_lote_tambien_copia_el_motivo_del_handler(
         "PRUEBA_MOTIVO",
         admite_online=True,
         admite_offline=True,
-        permiso_offline="REGISTRAR_COBRANZA",
+        permisos=("REGISTRAR_COBRANZA",),
     )
 
     def _handler(

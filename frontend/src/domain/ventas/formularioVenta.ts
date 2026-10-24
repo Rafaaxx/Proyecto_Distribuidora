@@ -10,6 +10,7 @@ import { z } from 'zod'
 import type { components } from '../../api/schema.gen'
 import { redondearImporte } from '../../lib/money'
 import { esImporteValido, type MedioDePagoDeFormulario } from '../pagos-proveedores/formularioPago'
+import type { DescuentoDeLinea } from './descuentosDeVenta'
 
 const MAXIMO_DE_LINEAS = 200
 const MAXIMO_DE_MEDIOS = 20
@@ -101,6 +102,29 @@ function textoONulo(texto: string): string | null {
   return recortado === '' ? null : recortado
 }
 
+/** Descuentos y crédito que se suman al cuerpo de la venta (change 18b, D1); todo opcional. */
+export interface DescuentosYCreditoDeVenta {
+  /** Fracción de texto o nulo. */
+  descuentoGeneral: string | null
+  /** Solo si hay descuento manual. */
+  motivoDescuentoId: string | null
+  descuentoAutorizadorId: string | null
+  /** ADVERTIR: el usuario aceptó vender con exceso (CRE-04). */
+  aceptaExceso: boolean
+  /** AUTORIZAR: el supervisor del crédito (CRE-05). */
+  creditoAutorizadorId: string | null
+  /** Por línea: su porcentaje propio y los descuentos que vio el usuario (DSC-09). */
+  porLinea: ReadonlyMap<string, { propio: string | null; descuentos: readonly DescuentoDeLinea[] }>
+}
+
+function credito(extras: DescuentosYCreditoDeVenta): VentaConfirmarDatos['credito'] {
+  if (!extras.aceptaExceso && extras.creditoAutorizadorId === null) return undefined
+  return {
+    acepta_exceso: extras.aceptaExceso,
+    ...(extras.creditoAutorizadorId === null ? {} : { autorizador_id: extras.creditoAutorizadorId }),
+  }
+}
+
 /**
  * Cuerpo de `VENTA_CONFIRMAR` (`POST /ventas`): lo que el usuario vio (D2). `ubicacion_id` va
  * solo si no hay jornada abierta (D3); lista, versión y motivo, solo si se eligió otra (D6).
@@ -112,8 +136,9 @@ export function construirSolicitudDeVenta(
   ventaId: string,
   cobranzaId: string,
   enviarUbicacion: boolean,
+  extras?: DescuentosYCreditoDeVenta,
 ): VentaConfirmarDatos {
-  return {
+  const cuerpo: VentaConfirmarDatos = {
     venta_id: ventaId,
     numero: formulario.numero.trim(),
     cliente_id: formulario.clienteId,
@@ -144,6 +169,33 @@ export function construirSolicitudDeVenta(
               referencia: textoONulo(medio.referencia),
             })),
           },
+  }
+  if (extras === undefined) return cuerpo
+  const cabecera = credito(extras)
+  return {
+    ...cuerpo,
+    ...(extras.descuentoGeneral === null ? {} : { descuento_manual_general: extras.descuentoGeneral }),
+    ...(extras.motivoDescuentoId === null ? {} : { motivo_descuento_id: extras.motivoDescuentoId }),
+    ...(extras.descuentoAutorizadorId === null ? {} : { descuento_autorizador_id: extras.descuentoAutorizadorId }),
+    ...(cabecera === undefined ? {} : { credito: cabecera }),
+    lineas: cuerpo.lineas.map((linea) => {
+      const delPedido = extras.porLinea.get(linea.linea_id)
+      if (delPedido === undefined) return linea
+      return {
+        ...linea,
+        ...(delPedido.propio === null ? {} : { descuento_manual: delPedido.propio }),
+        ...(delPedido.descuentos.length === 0
+          ? {}
+          : {
+              descuentos: delPedido.descuentos.map((d) => ({
+                origen: d.origen,
+                regla_id: d.reglaId,
+                porcentaje: d.porcentaje,
+                importe: d.importe,
+              })),
+            }),
+      }
+    }),
   }
 }
 

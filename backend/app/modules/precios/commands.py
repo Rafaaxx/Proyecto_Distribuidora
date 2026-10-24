@@ -101,7 +101,9 @@ def manejar_lista_precio_crear(
 
 
 registrar_handler("LISTA_PRECIO_CREAR", 1, ListaPrecioCrearContenidoV1)(manejar_lista_precio_crear)
-declarar_tipo("LISTA_PRECIO_CREAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "LISTA_PRECIO_CREAR", admite_online=True, admite_offline=False, permisos=("GESTIONAR_LISTAS",)
+)
 
 
 # --- LISTA_PRECIO_MODIFICAR (PRC-01, PRC-04) --------------------------------------------
@@ -140,7 +142,12 @@ def manejar_lista_precio_modificar(
 registrar_handler("LISTA_PRECIO_MODIFICAR", 1, ListaPrecioModificarContenidoV1)(
     manejar_lista_precio_modificar
 )
-declarar_tipo("LISTA_PRECIO_MODIFICAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "LISTA_PRECIO_MODIFICAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("GESTIONAR_LISTAS",),
+)
 
 
 # --- REGLA_MARGEN_CREAR (PRC-12, PRC-13, D8) --------------------------------------------
@@ -177,7 +184,9 @@ def manejar_regla_margen_crear(
 
 
 registrar_handler("REGLA_MARGEN_CREAR", 1, ReglaMargenCrearContenidoV1)(manejar_regla_margen_crear)
-declarar_tipo("REGLA_MARGEN_CREAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "REGLA_MARGEN_CREAR", admite_online=True, admite_offline=False, permisos=("GESTIONAR_LISTAS",)
+)
 
 
 # --- REGLA_MARGEN_MODIFICAR (PRC-12, PRC-16) --------------------------------------------
@@ -219,7 +228,12 @@ def manejar_regla_margen_modificar(
 registrar_handler("REGLA_MARGEN_MODIFICAR", 1, ReglaMargenModificarContenidoV1)(
     manejar_regla_margen_modificar
 )
-declarar_tipo("REGLA_MARGEN_MODIFICAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "REGLA_MARGEN_MODIFICAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("GESTIONAR_LISTAS",),
+)
 
 
 # --- REDONDEO_CATEGORIA_DEFINIR (PRC-14, D9) --------------------------------------------
@@ -266,7 +280,12 @@ def manejar_redondeo_categoria_definir(
 registrar_handler("REDONDEO_CATEGORIA_DEFINIR", 1, RedondeoCategoriaDefinirContenidoV1)(
     manejar_redondeo_categoria_definir
 )
-declarar_tipo("REDONDEO_CATEGORIA_DEFINIR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "REDONDEO_CATEGORIA_DEFINIR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("GESTIONAR_LISTAS",),
+)
 
 
 # --- LISTA_GENERAR_BORRADOR (PRC-17, D4, D5) --------------------------------------------
@@ -313,7 +332,12 @@ def manejar_lista_generar_borrador(
 registrar_handler("LISTA_GENERAR_BORRADOR", 1, ListaGenerarBorradorContenidoV1)(
     manejar_lista_generar_borrador
 )
-declarar_tipo("LISTA_GENERAR_BORRADOR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "LISTA_GENERAR_BORRADOR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("GESTIONAR_LISTAS",),
+)
 
 
 # --- LISTA_BORRADOR_PRECIO_FIJAR (PRC-16, D7) -------------------------------------------
@@ -362,7 +386,12 @@ def manejar_lista_borrador_precio_fijar(
 registrar_handler("LISTA_BORRADOR_PRECIO_FIJAR", 1, ListaBorradorPrecioFijarContenidoV1)(
     manejar_lista_borrador_precio_fijar
 )
-declarar_tipo("LISTA_BORRADOR_PRECIO_FIJAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "LISTA_BORRADOR_PRECIO_FIJAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("GESTIONAR_LISTAS",),
+)
 
 
 # --- LISTA_PUBLICAR (PRC-02, PRC-06, D6) ------------------------------------------------
@@ -414,7 +443,9 @@ def manejar_lista_publicar(
 
 
 registrar_handler("LISTA_PUBLICAR", 1, ListaPublicarContenidoV1)(manejar_lista_publicar)
-declarar_tipo("LISTA_PUBLICAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "LISTA_PUBLICAR", admite_online=True, admite_offline=False, permisos=("PUBLICAR_LISTAS",)
+)
 
 
 # --- LISTA_ANULAR_VERSION (PRC-05, PRC-06) ----------------------------------------------
@@ -447,7 +478,9 @@ def manejar_lista_anular_version(
 registrar_handler("LISTA_ANULAR_VERSION", 1, ListaAnularVersionContenidoV1)(
     manejar_lista_anular_version
 )
-declarar_tipo("LISTA_ANULAR_VERSION", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "LISTA_ANULAR_VERSION", admite_online=True, admite_offline=False, permisos=("PUBLICAR_LISTAS",)
+)
 
 
 # --- LISTA_PRECIO_PREDETERMINADA_DEFINIR (PRC-20, D11 punto 2) --------------------------
@@ -485,4 +518,9 @@ def manejar_lista_precio_predeterminada_definir(
 registrar_handler(
     "LISTA_PRECIO_PREDETERMINADA_DEFINIR", 1, ListaPrecioPredeterminadaDefinirContenidoV1
 )(manejar_lista_precio_predeterminada_definir)
-declarar_tipo("LISTA_PRECIO_PREDETERMINADA_DEFINIR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "LISTA_PRECIO_PREDETERMINADA_DEFINIR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("ADMIN_CONFIGURACION",),
+)

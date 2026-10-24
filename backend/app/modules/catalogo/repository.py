@@ -818,15 +818,16 @@ def listar_productos_activos_para_vender(
     producto_id: UUID | None = None,
     despues_de_codigo: str | None = None,
     limite: int,
-) -> tuple[list[tuple[UUID, str, str]], bool]:
-    """`((producto_id, codigo, nombre), hay_mas)` de los productos activos de la organización
-    ordenados por código, filtrados en SQL (CAT-05: un producto inactivo no se vende). `texto`
-    busca sin distinguir mayúsculas en nombre o código, como texto literal; `producto_id` trae
-    uno solo; `despues_de_codigo` es el cursor (el código es único por organización, CAT-01).
+) -> tuple[list[tuple[UUID, str, str, UUID, UUID | None]], bool]:
+    """`((producto_id, codigo, nombre, categoria_id, marca_id), hay_mas)` de los productos
+    activos de la organización ordenados por código, filtrados en SQL (CAT-05: un producto
+    inactivo no se vende). `texto` busca sin distinguir mayúsculas en nombre o código, como
+    texto literal; `producto_id` trae uno solo; `despues_de_codigo` es el cursor (el código es
+    único por organización, CAT-01).
     Se pide una fila de más para saber si hay otra página."""
-    consulta = select(Producto.id, Producto.codigo, Producto.nombre).where(
-        Producto.organizacion_id == organizacion_id, Producto.activo.is_(True)
-    )
+    consulta = select(
+        Producto.id, Producto.codigo, Producto.nombre, Producto.categoria_id, Producto.marca_id
+    ).where(Producto.organizacion_id == organizacion_id, Producto.activo.is_(True))
     if producto_id is not None:
         consulta = consulta.where(Producto.id == producto_id)
     if texto is not None:
@@ -838,7 +839,7 @@ def listar_productos_activos_para_vender(
     if despues_de_codigo is not None:
         consulta = consulta.where(Producto.codigo > despues_de_codigo)
     consulta = consulta.order_by(Producto.codigo, Producto.id).limit(limite + 1)
-    filas = [(fila[0], fila[1], fila[2]) for fila in sesion.execute(consulta)]
+    filas = [(fila[0], fila[1], fila[2], fila[3], fila[4]) for fila in sesion.execute(consulta)]
     return filas[:limite], len(filas) > limite
 
 

@@ -334,10 +334,68 @@ class IntentoLogin(Base):
         ForeignKeyConstraint(["usuario_id"], ["usuario.id"], name="fk_intento_login__usuario"),
         Index("ix_intento_login__usuario_id_creado_en", "usuario_id", "creado_en"),
         Index("ix_intento_login__ip_creado_en", "ip", "creado_en"),
+        Index("ix_intento_login__clave_intento_creado_en", "clave_intento", "creado_en"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=nuevo_id)
     usuario_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    clave_intento: Mapped[str | None] = mapped_column(Text, nullable=True)
+    """SHA-256 hexadecimal del par escrito (slug, usuario), ADR-057. Con ella se cuenta el límite
+    de 5 fallos; `usuario_id` se llena cuando el par resuelve un usuario, pero ya no cuenta.
+    Nulable solo por las filas anteriores a la migración que no tenían `usuario_id`."""
     ip: Mapped[str] = mapped_column(Text, nullable=False)
+    exito: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class IntentoPinAutorizacion(Base):
+    """Contador de fallos del PIN de autorización verificado en el servidor (`design.md` D3
+    revisada, change 18b): una fila por intento fallido (`exito = false`, con `intentante_id`, el
+    usuario del sobre, y `autorizador_id`) y una fila marcador (`exito = true`, `intentante_id`
+    nulo) cuando se define el PIN, que reinicia los contadores (D21, punto 7). De solo inserción
+    para `app_runtime`; se escribe en una transacción aparte para que el fallo quede aunque la
+    del comando se revierta. Con `organizacion_id` y FK compuestas a `usuario`."""
+
+    __tablename__ = "intento_pin_autorizacion"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organizacion_id"],
+            ["organizacion.id"],
+            name="fk_intento_pin_autorizacion__organizacion",
+        ),
+        ForeignKeyConstraint(
+            ["organizacion_id", "autorizador_id"],
+            ["usuario.organizacion_id", "usuario.id"],
+            name="fk_intento_pin_autorizacion__autorizador",
+        ),
+        ForeignKeyConstraint(
+            ["organizacion_id", "intentante_id"],
+            ["usuario.organizacion_id", "usuario.id"],
+            name="fk_intento_pin_autorizacion__intentante",
+        ),
+        UniqueConstraint("organizacion_id", "id", name="ux_intento_pin_autorizacion__org_id"),
+        CheckConstraint(
+            "exito OR intentante_id IS NOT NULL",
+            name="ck_intento_pin_autorizacion__fallo_con_intentante",
+        ),
+        Index(
+            "ix_intento_pin_autorizacion__autorizador_creado_en",
+            "organizacion_id",
+            "autorizador_id",
+            "creado_en",
+        ),
+        Index(
+            "ix_intento_pin_autorizacion__par_creado_en",
+            "organizacion_id",
+            "autorizador_id",
+            "intentante_id",
+            "creado_en",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=nuevo_id)
+    organizacion_id: Mapped[UUID] = mapped_column(nullable=False)
+    autorizador_id: Mapped[UUID] = mapped_column(nullable=False)
+    intentante_id: Mapped[UUID | None] = mapped_column(nullable=True)
     exito: Mapped[bool] = mapped_column(Boolean, nullable=False)
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

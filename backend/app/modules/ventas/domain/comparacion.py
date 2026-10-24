@@ -80,6 +80,18 @@ def comparar_con_esperado(
     )
 
 
+def comparar_precios_de_lineas(
+    esperadas: Sequence[ValoresDeLinea],
+    resueltas: Sequence[ValoresDeLinea],
+    total_resuelto: Decimal,
+) -> None:
+    """D2 con conexión, primera parte (change 18b, D18): compara solo versión, precio, unidades
+    y bruto de cada línea. El total (que ya incluye los descuentos) se compara después de los
+    descuentos, para que una diferencia de descuentos se informe como `DESCUENTO_DIFIERE` y no
+    como un total distinto. Precedencia: precio -> descuento -> total."""
+    comparar_con_esperado(esperadas, resueltas, total_resuelto, total_resuelto)
+
+
 def verificar_productos_con_precio(sin_precio: Sequence[ProductoSinPrecio]) -> None:
     """D7 con conexión: un producto sin precio en la versión rechaza la venta entera."""
     if not sin_precio:

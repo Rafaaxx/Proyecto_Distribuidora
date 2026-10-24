@@ -1,5 +1,6 @@
-"""Modelos SQLAlchemy de `ventas`: `Venta` y `VentaLinea` (`docs/03-modelo-de-datos.md` §12;
-migración `a2b3c4d5e6f7`, `design.md` D16).
+"""Modelos SQLAlchemy de `ventas`: `Venta`, `VentaLinea` y `VentaLineaDescuento`
+(`docs/03-modelo-de-datos.md` §12; migraciones `a2b3c4d5e6f7` y `b6c7d8e9f0a1`, `design.md` D16
+y, del 18b, D12).
 
 `id` se genera con UUIDv7 (`core/ids.py`); las ventas lo reciben de quien las origina (el
 dispositivo). Los momentos son `timestamptz`. De solo inserción para `app_runtime` (INV-05,
@@ -55,6 +56,7 @@ class Venta(Base):
         _fk("venta", "lista", "lista_id", "lista_precio"),
         _fk("venta", "lista_version", "lista_version_id", "lista_version"),
         _fk("venta", "motivo_lista", "motivo_lista_id", "motivo"),
+        _fk("venta", "credito_autorizador", "credito_autorizador_id", "usuario"),
         UniqueConstraint("organizacion_id", "id", name="ux_venta__org_id"),
         UniqueConstraint("organizacion_id", "numero", name="ux_venta__numero"),
         CheckConstraint("estado IN ('CONFIRMADA','ANULADA')", name="ck_venta__estado"),
@@ -72,6 +74,27 @@ class Venta(Base):
         ),
         CheckConstraint(
             "modo_confirmacion = 'ONLINE' OR jornada_id IS NOT NULL", name="ck_venta__jornada"
+        ),
+        CheckConstraint(
+            "credito_politica IN ('ADVERTIR','AUTORIZAR','BLOQUEAR')",
+            name="ck_venta__credito_politica",
+        ),
+        CheckConstraint(
+            "credito_resolucion IN ('ADVERTENCIA_ACEPTADA','PERMISO_PROPIO','PIN_SUPERVISOR',"
+            "'TOLERANCIA_OFFLINE','SIN_EXCESO')",
+            name="ck_venta__credito_resolucion",
+        ),
+        CheckConstraint(
+            "credito_resolucion <> 'PIN_SUPERVISOR' OR credito_autorizador_id IS NOT NULL",
+            name="ck_venta__credito_autorizador",
+        ),
+        CheckConstraint("credito_exceso >= 0", name="ck_venta__credito_exceso"),
+        CheckConstraint(
+            "(credito_limite IS NULL) = (credito_disponible IS NULL) "
+            "AND (credito_limite IS NULL) = (credito_exceso IS NULL) "
+            "AND (credito_limite IS NOT NULL OR credito_resolucion IS NULL "
+            "OR credito_resolucion = 'SIN_EXCESO')",
+            name="ck_venta__credito_sin_control",
         ),
         Index(
             "ix_venta__occurred_at", "organizacion_id", text("occurred_at DESC"), text("id DESC")
@@ -122,6 +145,14 @@ class Venta(Base):
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Snapshot de crédito congelado (CRE-10, change 18b, D12); nulo en las ventas del 18a.
+    credito_limite: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    credito_saldo_considerado: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    credito_disponible: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    credito_exceso: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    credito_politica: Mapped[str | None] = mapped_column(Text, nullable=True)
+    credito_resolucion: Mapped[str | None] = mapped_column(Text, nullable=True)
+    credito_autorizador_id: Mapped[UUID | None] = mapped_column(nullable=True)
 
 
 class VentaLinea(Base):
@@ -178,3 +209,57 @@ class VentaLinea(Base):
     importe_iva: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     costo_unitario: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
     costo_total: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+
+
+class VentaLineaDescuento(Base):
+    """Un descuento aplicado a una línea de venta (DSC-05, DSC-08; change 18b, D12): automático
+    por regla o manual (a lo sumo uno por línea), con el motivo y el autorizador copiados. Solo
+    inserción para `app_runtime` (INV-10)."""
+
+    __tablename__ = "venta_linea_descuento"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organizacion_id"], ["organizacion.id"], name="fk_venta_linea_descuento__organizacion"
+        ),
+        _fk("venta_linea_descuento", "venta_linea", "venta_linea_id", "venta_linea"),
+        _fk("venta_linea_descuento", "regla", "regla_id", "regla_descuento"),
+        _fk("venta_linea_descuento", "motivo", "motivo_id", "motivo"),
+        _fk("venta_linea_descuento", "autorizador", "autorizador_id", "usuario"),
+        UniqueConstraint("organizacion_id", "id", name="ux_venta_linea_descuento__org_id"),
+        UniqueConstraint(
+            "organizacion_id",
+            "venta_linea_id",
+            "orden",
+            name="ux_venta_linea_descuento__linea_orden",
+        ),
+        CheckConstraint("orden >= 0", name="ck_venta_linea_descuento__orden"),
+        CheckConstraint(
+            "origen IN ('AUTOMATICO','MANUAL')", name="ck_venta_linea_descuento__origen"
+        ),
+        CheckConstraint(
+            "(origen = 'MANUAL') = (regla_id IS NULL)", name="ck_venta_linea_descuento__regla"
+        ),
+        CheckConstraint("importe > 0", name="ck_venta_linea_descuento__importe"),
+        CheckConstraint(
+            "porcentaje IS NULL OR (porcentaje > 0 AND porcentaje <= 1)",
+            name="ck_venta_linea_descuento__porcentaje",
+        ),
+        Index(
+            "ux_venta_linea_descuento__manual",
+            "organizacion_id",
+            "venta_linea_id",
+            unique=True,
+            postgresql_where=text("origen = 'MANUAL'"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=nuevo_id)
+    organizacion_id: Mapped[UUID] = mapped_column(nullable=False)
+    venta_linea_id: Mapped[UUID] = mapped_column(nullable=False)
+    orden: Mapped[int] = mapped_column(Integer, nullable=False)
+    origen: Mapped[str] = mapped_column(Text, nullable=False)
+    regla_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    porcentaje: Mapped[Decimal | None] = mapped_column(Numeric(9, 6), nullable=True)
+    importe: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    motivo_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    autorizador_id: Mapped[UUID | None] = mapped_column(nullable=True)

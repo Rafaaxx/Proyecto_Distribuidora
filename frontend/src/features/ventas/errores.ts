@@ -1,3 +1,4 @@
+import type { DescuentoDeLinea } from '../../domain/ventas/descuentosDeVenta'
 import type { ValoresDelServidor } from '../../domain/ventas/formularioVenta'
 
 /**
@@ -30,7 +31,7 @@ export class PermisoRequeridoVentasError extends ErrorDeVentas {
   }
 }
 
-export type CampoDeVenta = 'cliente' | 'ubicacion' | 'lineas' | 'numero' | 'lista' | 'cobranza'
+export type CampoDeVenta = 'cliente' | 'ubicacion' | 'lineas' | 'numero' | 'lista' | 'cobranza' | 'descuento' | 'credito'
 
 const CAMPO_POR_CODIGO: Record<string, CampoDeVenta> = {
   CLIENTE_SUSPENDIDO: 'cliente',
@@ -55,6 +56,30 @@ const CAMPO_POR_CODIGO: Record<string, CampoDeVenta> = {
   CONSUMIDOR_FINAL_CONTADO: 'cobranza',
   MEDIOS_NO_SUMAN_IMPORTE: 'cobranza',
   OBSERVACION_INVALIDA: 'cobranza',
+  // Change 18b: descuentos y crédito (los de autorización van al diálogo, no a un campo).
+  DESCUENTO_MANUAL_DESHABILITADO: 'descuento',
+  DESCUENTO_MANUAL_INVALIDO: 'descuento',
+  MOTIVO_REQUERIDO: 'descuento',
+  TOTALES_INCONSISTENTES: 'descuento',
+  EXCESO_CREDITO_SIN_ACEPTAR: 'credito',
+  CREDITO_EXCEDIDO: 'credito',
+}
+
+/**
+ * Los rechazos de la autorización con PIN (change 18b, D2, D3, D18): se muestran en el diálogo
+ * de autorización, que borra el PIN escrito. `AUTORIZACION_REQUERIDA` y
+ * `AUTORIZACION_CREDITO_REQUERIDA` son la credencial que faltaba.
+ */
+const CODIGOS_DE_AUTORIZACION = new Set([
+  'PIN_INCORRECTO',
+  'PIN_BLOQUEADO',
+  'AUTORIZACION_REQUERIDA',
+  'AUTORIZACION_CREDITO_REQUERIDA',
+  'AUTORIZADOR_SIN_PERMISO',
+])
+
+export function esErrorDeAutorizacion(error: ErrorDeVentas): boolean {
+  return CODIGOS_DE_AUTORIZACION.has(error.codigo)
 }
 
 /** Campo del formulario al que pertenece el error; `null` es un error general (reloj, duplicada, ...). */
@@ -86,6 +111,38 @@ export function valoresDelServidorDe(error: ErrorDeVentas): ValoresDelServidor |
   return { lineas, total }
 }
 
+function esDescuentoDelServidor(valor: unknown): valor is { origen: string; regla_id: string | null; porcentaje: string | null; importe: string } {
+  if (typeof valor !== 'object' || valor === null) return false
+  const d = valor as Record<string, unknown>
+  return (
+    (d.origen === 'AUTOMATICO' || d.origen === 'MANUAL') &&
+    (d.regla_id === null || esTexto(d.regla_id)) &&
+    (d.porcentaje === null || esTexto(d.porcentaje)) &&
+    esTexto(d.importe)
+  )
+}
+
+/**
+ * Los descuentos que resolvió el servidor en un `DESCUENTO_DIFIERE` (DSC-09, D11), por línea;
+ * `null` si el detalle no viene completo.
+ */
+export function descuentosDelServidorDe(error: ErrorDeVentas): Map<string, DescuentoDeLinea[]> | null {
+  if (error.codigo !== 'DESCUENTO_DIFIERE') return null
+  const { lineas } = error.extension
+  if (!Array.isArray(lineas)) return null
+  const porLinea = new Map<string, DescuentoDeLinea[]>()
+  for (const linea of lineas as unknown[]) {
+    if (typeof linea !== 'object' || linea === null) return null
+    const { linea_id: lineaId, descuentos } = linea as Record<string, unknown>
+    if (!esTexto(lineaId) || !Array.isArray(descuentos) || !descuentos.every(esDescuentoDelServidor)) return null
+    porLinea.set(
+      lineaId,
+      descuentos.map((d) => ({ origen: d.origen as DescuentoDeLinea['origen'], reglaId: d.regla_id, porcentaje: d.porcentaje, importe: d.importe })),
+    )
+  }
+  return porLinea
+}
+
 /** Nombres de los productos sin precio de un `PRODUCTO_SIN_PRECIO` (D7). */
 export function productosSinPrecioDe(error: ErrorDeVentas): string[] {
   const { productos } = error.extension
@@ -109,8 +166,13 @@ export async function errorDesdeRespuesta(respuesta: Response): Promise<ErrorDeV
   }
 
   const mensaje = esTexto(problema.title) ? problema.title : MENSAJE_GENERICO_DE_RESERVA
-  if (respuesta.status === 403) return new PermisoRequeridoVentasError(mensaje)
+  const codigo = esTexto(problema.codigo) ? problema.codigo : undefined
+  // El 403 también lo usan el PIN incorrecto y la autorización que falta (change 18b): solo el
+  // permiso del usuario es `PermisoRequeridoVentasError`.
+  if (respuesta.status === 403 && (codigo === undefined || codigo === 'PERMISO_REQUERIDO')) {
+    return new PermisoRequeridoVentasError(mensaje)
+  }
   const medio = typeof problema.medio === 'number' ? problema.medio : null
   const extension = Object.fromEntries(Object.entries(problema).filter(([clave]) => !CLAVES_DEL_PROBLEMA.has(clave)))
-  return new ErrorDeVentas(esTexto(problema.codigo) ? problema.codigo : 'ERROR_DESCONOCIDO', mensaje, medio, extension)
+  return new ErrorDeVentas(codigo ?? 'ERROR_DESCONOCIDO', mensaje, medio, extension)
 }

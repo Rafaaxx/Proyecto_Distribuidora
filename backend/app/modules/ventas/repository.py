@@ -7,13 +7,13 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import exists, select, tuple_
+from sqlalchemy import and_, exists, select, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.ventas.domain.consultas import codificar_cursor, decodificar_cursor
 from app.modules.ventas.domain.errores import NumeroDuplicadoError
-from app.modules.ventas.models import Venta, VentaLinea
+from app.modules.ventas.models import Venta, VentaLinea, VentaLineaDescuento
 
 
 def presentacion_figura_en_alguna_linea(
@@ -60,6 +60,13 @@ def insertar_venta(sesion: Session, venta: Venta, lineas: Sequence[VentaLinea]) 
             raise NumeroDuplicadoError(f"El número {venta.numero} ya fue usado.") from error
         raise
     sesion.add_all(lineas)
+    sesion.flush()
+
+
+def insertar_descuentos(sesion: Session, descuentos: Sequence[VentaLineaDescuento]) -> None:
+    """Escribe los descuentos congelados de las líneas de la venta (DSC-08, INV-10); solo
+    inserción. Se llama después de `insertar_venta`: sus claves foráneas apuntan a las líneas."""
+    sesion.add_all(descuentos)
     sesion.flush()
 
 
@@ -122,5 +129,28 @@ def listar_lineas_de_venta(
             select(VentaLinea)
             .where(VentaLinea.organizacion_id == organizacion_id, VentaLinea.venta_id == venta_id)
             .order_by(VentaLinea.orden)
+        ).all()
+    )
+
+
+def listar_descuentos_de_venta(
+    organizacion_id: UUID, venta_id: UUID, sesion: Session
+) -> list[VentaLineaDescuento]:
+    """Los descuentos de todas las líneas de la venta, por línea y orden (DSC-08)."""
+    return list(
+        sesion.scalars(
+            select(VentaLineaDescuento)
+            .join(
+                VentaLinea,
+                and_(
+                    VentaLinea.organizacion_id == VentaLineaDescuento.organizacion_id,
+                    VentaLinea.id == VentaLineaDescuento.venta_linea_id,
+                ),
+            )
+            .where(
+                VentaLinea.organizacion_id == organizacion_id,
+                VentaLinea.venta_id == venta_id,
+            )
+            .order_by(VentaLinea.orden, VentaLineaDescuento.orden)
         ).all()
     )

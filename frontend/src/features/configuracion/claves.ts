@@ -9,4 +9,6 @@ export const clavesConfiguracion = {
   mediosPagoRaiz: () => ['configuracion', 'medios-pago'] as const,
   mediosPagoAdmin: () => ['configuracion', 'medios-pago', 'todos'] as const,
   resumenReglaIva: () => ['costos', 'resumen-regla-iva'] as const,
+  descuentoManual: () => ['configuracion', 'descuento-manual'] as const,
+  credito: () => ['configuracion', 'credito'] as const,
 }

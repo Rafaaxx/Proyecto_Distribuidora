@@ -654,3 +654,184 @@ def test_downgrade_menos_uno_y_upgrade_corren_limpios_con_datos_de_catalogo_semb
 
     # Deja la base en `head`, compartida con el resto de la sesión de
     # pytest (docstring del módulo).
+
+
+# --- ADR-057 (change 18b, tarea 24.3): `intento_login.clave_intento` -----------------------------
+
+REVISION_CLAVE_INTENTO = "c8d9e0f1a2b3"
+REVISION_ANTERIOR_A_CLAVE_INTENTO = "b6c7d8e9f0a1"
+INDICE_CLAVE_INTENTO = "ix_intento_login__clave_intento_creado_en"
+
+
+def _dejar_en_head_y_limpio(database_url: str, motor) -> None:
+    """La base es compartida con el resto de la sesión: termina en `head` y sin filas propias."""
+    subida = _alembic("upgrade", "head", database_url=database_url)
+    assert subida.returncode == 0, subida.stderr
+    with motor.begin() as conexion:
+        conexion.execute(text("TRUNCATE TABLE organizacion CASCADE"))
+        conexion.execute(text("TRUNCATE TABLE intento_login"))
+
+
+def test_adr057_intento_login_tiene_la_columna_nulable_y_el_indice_de_la_clave(
+    database_url: str, _engine_de_sesion
+) -> None:
+    """ADR-057 punto 2: columna `clave_intento` (texto, nulable por las filas viejas) e índice
+    `(clave_intento, creado_en)`; los dos índices existentes se conservan."""
+    with _engine_de_sesion.connect() as conexion:
+        columna = conexion.execute(
+            text(
+                "SELECT data_type, is_nullable FROM information_schema.columns "
+                "WHERE table_name = 'intento_login' AND column_name = 'clave_intento'"
+            )
+        ).one()
+        indices = dict(
+            conexion.execute(
+                text("SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'intento_login'")
+            ).all()
+        )
+    assert tuple(columna) == ("text", "YES")
+    assert "(clave_intento, creado_en)" in indices[INDICE_CLAVE_INTENTO]
+    assert "ix_intento_login__usuario_id_creado_en" in indices
+    assert "ix_intento_login__ip_creado_en" in indices
+
+
+def test_inv05_inv02_intento_login_sigue_solo_select_insert_y_sin_organizacion_id(
+    database_url: str, _engine_de_sesion
+) -> None:
+    """INV-05: `app_runtime` sigue con `SELECT, INSERT` (el completado de las filas viejas lo hace
+    la migración con el rol dueño). INV-02: la tabla sigue sin `organizacion_id` (exenta,
+    ADR-057 punto 3)."""
+    with _engine_de_sesion.connect() as conexion:
+        privilegios = set(
+            conexion.execute(
+                text(
+                    "SELECT privilege_type FROM information_schema.role_table_grants "
+                    "WHERE table_name = 'intento_login' AND grantee = 'app_runtime'"
+                )
+            )
+            .scalars()
+            .all()
+        )
+        columnas_con_update = (
+            conexion.execute(
+                text(
+                    "SELECT column_name FROM information_schema.column_privileges "
+                    "WHERE table_name = 'intento_login' AND grantee = 'app_runtime' "
+                    "AND privilege_type IN ('UPDATE', 'DELETE')"
+                )
+            )
+            .scalars()
+            .all()
+        )
+        columnas = (
+            conexion.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'intento_login'"
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert privilegios == {"SELECT", "INSERT"}
+    assert columnas_con_update == []
+    assert "organizacion_id" not in columnas
+
+
+def test_adr057_la_migracion_completa_las_filas_viejas_con_usuario_y_baja_y_sube(
+    database_url: str, _engine_de_sesion
+) -> None:
+    """ADR-057 punto 2: las filas viejas con `usuario_id` (fallos y marcadores) reciben la clave de
+    su par (slug, usuario); las que no tienen `usuario_id` quedan nulas; baja y vuelve a subir."""
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    from cuentas_corrientes_utiles import crear_organizacion, crear_usuario_y_dispositivo
+    from sqlalchemy.orm import Session
+
+    from app.modules.identidad.domain.clave_intento import clave_de_intento_login
+
+    with Session(_engine_de_sesion) as sesion:
+        organizacion = crear_organizacion(sesion)
+        usuario_id, _ = crear_usuario_y_dispositivo(sesion, organizacion.id)
+        sesion.commit()
+        slug = organizacion.slug
+    with _engine_de_sesion.connect() as conexion:
+        nombre_usuario = conexion.execute(
+            text("SELECT usuario FROM usuario WHERE id = :id"), {"id": usuario_id}
+        ).scalar_one()
+
+    momento = datetime(2026, 1, 1, tzinfo=UTC)
+    ids = {"fallo": uuid4(), "marcador": uuid4(), "sin_usuario": uuid4()}
+    filas = {
+        "fallo": (usuario_id, "10.9.0.1", False),
+        "marcador": (usuario_id, "admin:desbloqueo-manual", True),
+        "sin_usuario": (None, "10.9.0.2", False),
+    }
+    try:
+        bajada = _alembic("downgrade", REVISION_ANTERIOR_A_CLAVE_INTENTO, database_url=database_url)
+        assert bajada.returncode == 0, bajada.stderr
+        with _engine_de_sesion.connect() as conexion:
+            assert (
+                conexion.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+                == REVISION_ANTERIOR_A_CLAVE_INTENTO
+            )
+        with _engine_de_sesion.begin() as conexion:
+            for nombre, (uid, ip, exito) in filas.items():
+                conexion.execute(
+                    text(
+                        "INSERT INTO intento_login (id, usuario_id, ip, exito, creado_en) "
+                        "VALUES (:id, :u, :ip, :e, :m)"
+                    ),
+                    {"id": ids[nombre], "u": uid, "ip": ip, "e": exito, "m": momento},
+                )
+
+        subida = _alembic("upgrade", "head", database_url=database_url)
+        assert subida.returncode == 0, subida.stderr
+        with _engine_de_sesion.connect() as conexion:
+            claves = dict(
+                conexion.execute(text("SELECT id, clave_intento FROM intento_login")).all()
+            )
+        esperada = clave_de_intento_login(slug, nombre_usuario)
+        assert claves[ids["fallo"]] == esperada
+        assert claves[ids["marcador"]] == esperada
+        assert claves[ids["sin_usuario"]] is None
+    finally:
+        _dejar_en_head_y_limpio(database_url, _engine_de_sesion)
+
+
+def test_adr057_la_migracion_es_la_cabeza_y_el_ciclo_corre_limpio(
+    database_url: str, _engine_de_sesion
+) -> None:
+    try:
+        bajada = _alembic("downgrade", REVISION_ANTERIOR_A_CLAVE_INTENTO, database_url=database_url)
+        assert bajada.returncode == 0, bajada.stderr
+        with _engine_de_sesion.connect() as conexion:
+            columnas = (
+                conexion.execute(
+                    text(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_name = 'intento_login'"
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            indices = (
+                conexion.execute(
+                    text("SELECT indexname FROM pg_indexes WHERE tablename = 'intento_login'")
+                )
+                .scalars()
+                .all()
+            )
+        assert "clave_intento" not in columnas
+        assert INDICE_CLAVE_INTENTO not in indices
+        subida = _alembic("upgrade", "head", database_url=database_url)
+        assert subida.returncode == 0, subida.stderr
+        with _engine_de_sesion.connect() as conexion:
+            assert (
+                conexion.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+                == REVISION_CLAVE_INTENTO
+            )
+    finally:
+        _dejar_en_head_y_limpio(database_url, _engine_de_sesion)

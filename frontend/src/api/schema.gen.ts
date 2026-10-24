@@ -344,6 +344,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/yo/pin-autorizacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Estado De Mi Pin
+         * @description Change 18b, tarea 11.5 (D21 punto 1): si el usuario del token puede definir su PIN de
+         *     autorización y si ya lo tiene. Cualquier sesión habilitada (la pantalla decide si ofrece "Mi
+         *     PIN"); todo sale del token. `GET /yo` no cambia.
+         */
+        get: operations["obtener_estado_de_mi_pin_api_v1_yo_pin_autorizacion_get"];
+        put?: never;
+        /**
+         * Definir Mi Pin
+         * @description `PIN_AUTORIZACION_PROPIO_DEFINIR` (D21 parte B). Exige alguno de los permisos de
+         *     autorización de excepciones (403 `PERMISO_REQUERIDO` antes de tocar la base). Delega en el
+         *     bus; el PIN, la contraseña y la IP del cliente (`request.client.host`, la misma que usa el
+         *     login) llegan al handler por clausura, no por el contenido. Respuesta 204 sin cuerpo.
+         */
+        post: operations["definir_mi_pin_api_v1_yo_pin_autorizacion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/configuracion/fiscal": {
         parameters: {
             query?: never;
@@ -376,6 +405,58 @@ export interface paths {
          *     no de una relectura: un reenvío idempotente devuelve exactamente lo mismo (INV-06).
          */
         post: operations["cambiar_condicion_iva_api_v1_configuracion_fiscal_condicion_iva_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/configuracion/descuento-manual": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Descuento Manual
+         * @description Si la organización habilita el descuento manual y si exige motivo (DSC-06). Un motivo
+         *     obligatorio sin definir (nulo) se informa como `false`: no se exige.
+         */
+        get: operations["obtener_descuento_manual_api_v1_configuracion_descuento_manual_get"];
+        put?: never;
+        /**
+         * Configurar Descuento Manual
+         * @description `DESCUENTO_MANUAL_CONFIGURAR` (D13). La respuesta sale de `comando.resultado`, no de una
+         *     relectura: un reenvío idempotente devuelve exactamente lo mismo (INV-06).
+         */
+        post: operations["configurar_descuento_manual_api_v1_configuracion_descuento_manual_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/configuracion/credito": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Credito De La Organizacion
+         * @description La política de crédito por defecto y la tolerancia sin conexión de la organización
+         *     (CRE-03, CRE-06).
+         */
+        get: operations["obtener_credito_de_la_organizacion_api_v1_configuracion_credito_get"];
+        put?: never;
+        /**
+         * Configurar Credito De La Organizacion
+         * @description `CREDITO_ORGANIZACION_CONFIGURAR` (D14). La respuesta sale de `comando.resultado`
+         *     (INV-06).
+         */
+        post: operations["configurar_credito_de_la_organizacion_api_v1_configuracion_credito_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2217,6 +2298,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ventas/contexto": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Contexto De Venta
+         * @description Change 18b, D15 (SYN-11, DSC-06): el tope de descuento, los permisos, los motivos activos y
+         *     los autorizadores de quien vende. `VENDER`. Sin parámetros: el usuario sale del token. Hasta el
+         *     bootstrap del change 21, que reutiliza `ventas_queries.contexto_de_venta`.
+         */
+        get: operations["obtener_contexto_de_venta_api_v1_ventas_contexto_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ventas/descuentos-aplicables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Descuentos Aplicables
+         * @description Change 18b, apply del 2026-10-23 (DSC-01, DSC-05, ADR-050): las reglas activas y vigentes
+         *     ahora, con su nombre y sus alcances, para que la pantalla de venta muestre los descuentos
+         *     automáticos antes de confirmar. `VENDER` (no `GESTIONAR_DESCUENTOS`, DSC-04). Sin parámetros:
+         *     la organización sale del token.
+         */
+        get: operations["obtener_descuentos_aplicables_api_v1_ventas_descuentos_aplicables_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ventas/credito": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Credito Para Vender
+         * @description Change 18b, D16 (CRE-01, `01` §19): límite, saldo, disponible, política y tolerancia
+         *     aplicables del cliente, con la herencia de la organización resuelta. `VENDER`. Cliente de otra
+         *     organización o inexistente, 404.
+         */
+        get: operations["obtener_credito_para_vender_api_v1_ventas_credito_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ventas/versiones": {
         parameters: {
             query?: never;
@@ -2400,6 +2548,16 @@ export interface components {
             /** Lineas */
             lineas: components["schemas"]["LineaAjusteResponse"][];
         };
+        /** AlcanceDeReglaResponse */
+        AlcanceDeReglaResponse: {
+            /** Tipo */
+            tipo: string;
+            /**
+             * Entidad Id
+             * Format: uuid
+             */
+            entidad_id: string;
+        };
         /** AlcanceReglaRequest */
         AlcanceReglaRequest: {
             /**
@@ -2480,6 +2638,23 @@ export interface components {
              * Format: uuid
              */
             anulada_por_id: string;
+        };
+        /**
+         * AutorizadorContextoResponse
+         * @description Nunca la derivación del PIN ni nada de ella (ADR-011).
+         */
+        AutorizadorContextoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Puede Autorizar Descuento */
+            puede_autorizar_descuento: boolean;
+            /** Puede Superar Credito */
+            puede_superar_credito: boolean;
         };
         /** Body_importar_api_v1_importaciones__tipo__post */
         Body_importar_api_v1_importaciones__tipo__post: {
@@ -3331,6 +3506,18 @@ export interface components {
             cliente: components["schemas"]["ClienteResponse"] | null;
         };
         /**
+         * ContextoDeVentaResponse
+         * @description `GET /ventas/contexto` (change 18b, D15).
+         */
+        ContextoDeVentaResponse: {
+            descuento_manual: components["schemas"]["DescuentoManualContextoResponse"];
+            credito: components["schemas"]["CreditoContextoResponse"];
+            /** Motivos */
+            motivos: components["schemas"]["MotivoContextoResponse"][];
+            /** Autorizadores */
+            autorizadores: components["schemas"]["AutorizadorContextoResponse"][];
+        };
+        /**
          * CostoDelLoteRequest
          * @description Un costo dentro del lote de `POST /costos` (D12). `valor` y
          *     `bonificacion` viajan como string estricto (P3); la cantidad de
@@ -3499,7 +3686,10 @@ export interface components {
             /** Por Presentacion */
             por_presentacion: components["schemas"]["CostoInformadoResponse"][];
         };
-        /** CrearUsuarioRequest */
+        /**
+         * CrearUsuarioRequest
+         * @description `password: SecretStr`, sin validadores (D2): el valor no aparece en un error.
+         */
         CrearUsuarioRequest: {
             /** Usuario */
             usuario: string;
@@ -3507,13 +3697,175 @@ export interface components {
             nombre: string;
             /** Email */
             email: string | null;
-            /** Password */
+            /**
+             * Password
+             * Format: password
+             */
             password: string;
             /**
              * Rol Id
              * Format: uuid
              */
             rol_id: string;
+        };
+        /**
+         * CredencialPinRequest
+         * @description El PIN que un supervisor escribió para autorizar una excepción (change 18b, D2). Viaja
+         *     fuera del contenido del comando: la ruta lo separa antes de armar la huella. `SecretStr` y
+         *     ningún validador sobre el PIN (no puede citarlo en un mensaje de error).
+         */
+        CredencialPinRequest: {
+            /**
+             * Autorizador Id
+             * Format: uuid
+             */
+            autorizador_id: string;
+            /**
+             * Pin
+             * Format: password
+             */
+            pin: string;
+        };
+        /** CreditoContextoResponse */
+        CreditoContextoResponse: {
+            /** Puede Superar */
+            puede_superar: boolean;
+        };
+        /**
+         * CreditoOrganizacionConfigurarRequest
+         * @description Política y tolerancia, los tres obligatorios (la tolerancia vacía son los dos `null`). La
+         *     política o el tipo fuera del catálogo responden 422; la pareja a medias, el dominio, con
+         *     `TOLERANCIA_OFFLINE_INVALIDA`.
+         */
+        CreditoOrganizacionConfigurarRequest: {
+            /**
+             * Politica
+             * @enum {string}
+             */
+            politica: "ADVERTIR" | "AUTORIZAR" | "BLOQUEAR";
+            /** Tolerancia Tipo */
+            tolerancia_tipo: ("IMPORTE" | "PORCENTAJE") | null;
+            /** Tolerancia Valor */
+            tolerancia_valor: string | null;
+        };
+        /** CreditoOrganizacionResponse */
+        CreditoOrganizacionResponse: {
+            /**
+             * Politica
+             * @enum {string}
+             */
+            politica: "ADVERTIR" | "AUTORIZAR" | "BLOQUEAR";
+            /** Tolerancia Tipo */
+            tolerancia_tipo: ("IMPORTE" | "PORCENTAJE") | null;
+            /** Tolerancia Valor */
+            tolerancia_valor: string | null;
+        };
+        /**
+         * CreditoParaVenderResponse
+         * @description `GET /ventas/credito` (change 18b, D16). Importes como string (INV-03); `limite` y
+         *     `disponible` nulos = sin control.
+         */
+        CreditoParaVenderResponse: {
+            /**
+             * Cliente Id
+             * Format: uuid
+             */
+            cliente_id: string;
+            /** Limite */
+            limite: string | null;
+            /** Saldo */
+            saldo: string;
+            /** Disponible */
+            disponible: string | null;
+            /** Politica */
+            politica: string;
+            /** Tolerancia Tipo */
+            tolerancia_tipo: string | null;
+            /** Tolerancia Valor */
+            tolerancia_valor: string | null;
+        };
+        /**
+         * CreditoRequest
+         * @description El crédito de la venta (change 18b, D1): con conexión, si el usuario acepta el exceso
+         *     (ADVERTIR) y quién autoriza (AUTORIZAR). La evaluación del dispositivo es solo del camino sin
+         *     conexión (D7).
+         */
+        CreditoRequest: {
+            /**
+             * Acepta Exceso
+             * @default false
+             */
+            acepta_exceso: boolean;
+            /** Autorizador Id */
+            autorizador_id?: string | null;
+            /** Limite */
+            limite?: string | null;
+            /** Saldo Considerado */
+            saldo_considerado?: string | null;
+            /** Politica */
+            politica?: ("ADVERTIR" | "AUTORIZAR" | "BLOQUEAR") | null;
+            /** Resolucion */
+            resolucion?: ("SIN_EXCESO" | "ADVERTENCIA_ACEPTADA" | "PERMISO_PROPIO" | "PIN_SUPERVISOR" | "TOLERANCIA_OFFLINE") | null;
+        };
+        /**
+         * DescuentoEsperadoRequest
+         * @description Un descuento de la línea tal como lo vio el usuario (change 18b, D1, D11): el servidor lo
+         *     compara con el que calcula (`DESCUENTO_DIFIERE`).
+         */
+        DescuentoEsperadoRequest: {
+            /**
+             * Origen
+             * @enum {string}
+             */
+            origen: "AUTOMATICO" | "MANUAL";
+            /** Regla Id */
+            regla_id?: string | null;
+            /** Porcentaje */
+            porcentaje?: string | null;
+            /** Importe */
+            importe: string;
+        };
+        /**
+         * DescuentoManualConfigurarRequest
+         * @description Los dos booleanos estrictos y obligatorios: un texto, un número o un nulo responden 422.
+         */
+        DescuentoManualConfigurarRequest: {
+            /** Habilitado */
+            habilitado: boolean;
+            /** Motivo Obligatorio */
+            motivo_obligatorio: boolean;
+        };
+        /**
+         * DescuentoManualContextoResponse
+         * @description `tope`: fracción de texto (`"0.050000"` = 5 %), nula sin `DESCUENTO_MANUAL` (INV-03).
+         */
+        DescuentoManualContextoResponse: {
+            /** Habilitado */
+            habilitado: boolean;
+            /** Motivo Obligatorio */
+            motivo_obligatorio: boolean;
+            /** Tiene Permiso */
+            tiene_permiso: boolean;
+            /** Tope */
+            tope: string | null;
+            /** Puede Autorizar */
+            puede_autorizar: boolean;
+        };
+        /** DescuentoManualResponse */
+        DescuentoManualResponse: {
+            /** Habilitado */
+            habilitado: boolean;
+            /** Motivo Obligatorio */
+            motivo_obligatorio: boolean;
+        };
+        /**
+         * DescuentosAplicablesResponse
+         * @description `GET /ventas/descuentos-aplicables` (change 18b, apply del 2026-10-23): por prioridad y
+         *     antigüedad, las reglas vigentes ahora.
+         */
+        DescuentosAplicablesResponse: {
+            /** Items */
+            items: components["schemas"]["ReglaAplicableResponse"][];
         };
         /** DetalleDeAjusteResponse */
         DetalleDeAjusteResponse: {
@@ -3851,6 +4203,10 @@ export interface components {
          *     declaró al generarlo -- el servidor los compara contra la sesión que
          *     sincroniza (`ColaAjenaError`, tarea 8.5), nunca los usa tal cual para
          *     construir el sobre sin esa verificación.
+         *
+         *     `extra="forbid"` (change 18b, `design.md` D2): el lote no admite credenciales efímeras; un
+         *     ítem que traiga `credenciales` (o cualquier campo ajeno) se rechaza como malformado, sin
+         *     guardarlo ni registrar su valor.
          */
         ItemLoteComandoRequest: {
             /**
@@ -4517,6 +4873,44 @@ export interface components {
             nombre: string;
             /** Requiere Referencia */
             requiere_referencia: boolean;
+        };
+        /**
+         * MiPinEstadoResponse
+         * @description `GET /yo/pin-autorizacion`: dos booleanos y nada más (ADR-011): ni derivación ni sal.
+         */
+        MiPinEstadoResponse: {
+            /** Puede Definir */
+            puede_definir: boolean;
+            /** Tiene Pin Autorizacion */
+            tiene_pin_autorizacion: boolean;
+        };
+        /**
+         * MiPinRequest
+         * @description `POST /yo/pin-autorizacion`. `extra="forbid"`: el usuario sale del token, nunca del cuerpo
+         *     (un `usuario_id` es un 422 sin eco del valor). Los dos secretos son `SecretStr` y no tienen
+         *     validadores (D2, D21 punto 3): la ruta los separa antes de armar el contenido y la huella.
+         */
+        MiPinRequest: {
+            /**
+             * Pin
+             * Format: password
+             */
+            pin: string;
+            /**
+             * Password Actual
+             * Format: password
+             */
+            password_actual: string;
+        };
+        /** MotivoContextoResponse */
+        MotivoContextoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
         };
         /** MotivoResponse */
         MotivoResponse: {
@@ -5332,6 +5726,13 @@ export interface components {
             codigo: string;
             /** Nombre */
             nombre: string;
+            /**
+             * Categoria Id
+             * Format: uuid
+             */
+            categoria_id: string;
+            /** Marca Id */
+            marca_id: string | null;
             /** Precio Referencia */
             precio_referencia: string | null;
             /** Unidades Referencia */
@@ -5544,6 +5945,40 @@ export interface components {
              * Format: uuid
              */
             dispositivo_id: string;
+        };
+        /**
+         * ReglaAplicableResponse
+         * @description Una regla activa y vigente tal como la necesita la gemela del motor (`motor.ts`, ADR-050).
+         *     Importes y porcentajes como string (INV-03).
+         */
+        ReglaAplicableResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Tipo */
+            tipo: string;
+            /** Medida */
+            medida: string;
+            /** Operador */
+            operador: string;
+            /** Umbral */
+            umbral: string;
+            /** Accion Tipo */
+            accion_tipo: string;
+            /** Accion Porcentaje */
+            accion_porcentaje: string | null;
+            /** Accion Importe */
+            accion_importe: string | null;
+            /** Acumulable */
+            acumulable: boolean;
+            /** Prioridad */
+            prioridad: number;
+            /** Alcances */
+            alcances: components["schemas"]["AlcanceDeReglaResponse"][];
         };
         /**
          * ReglaCrearRequest
@@ -5863,9 +6298,15 @@ export interface components {
             /** Nombre */
             nombre: string;
         };
-        /** RotarPinRequest */
+        /**
+         * RotarPinRequest
+         * @description `pin: SecretStr`, sin validadores (D2): el valor no aparece en un error.
+         */
         RotarPinRequest: {
-            /** Pin */
+            /**
+             * Pin
+             * Format: password
+             */
             pin: string;
         };
         /** SaldoInicialRegistrarRequest */
@@ -6238,6 +6679,11 @@ export interface components {
             rol_id: string;
             /** Estado */
             estado: string;
+            /**
+             * Tiene Pin Autorizacion
+             * @default false
+             */
+            tiene_pin_autorizacion: boolean;
         };
         /** UsuarioYoResponse */
         UsuarioYoResponse: {
@@ -6307,6 +6753,8 @@ export interface components {
         /**
          * VentaConfirmarRequest
          * @description `POST /ventas`. `venta_id` y `numero` los genera quien origina la venta (`02` §9, D4).
+         *     `credenciales` (de 0 a 2) NO forma parte del contenido ni de la huella (change 18b, D2).
+         *     Los campos de descuentos y crédito son opcionales (D1).
          */
         VentaConfirmarRequest: {
             /**
@@ -6334,6 +6782,15 @@ export interface components {
             /** Total */
             total: string;
             cobranza?: components["schemas"]["VentaCobranzaRequest"] | null;
+            /** Descuento Manual General */
+            descuento_manual_general?: string | null;
+            /** Motivo Descuento Id */
+            motivo_descuento_id?: string | null;
+            /** Descuento Autorizador Id */
+            descuento_autorizador_id?: string | null;
+            credito?: components["schemas"]["CreditoRequest"] | null;
+            /** Credenciales */
+            credenciales?: components["schemas"]["CredencialPinRequest"][];
         };
         /**
          * VentaConfirmarResponse
@@ -6357,6 +6814,28 @@ export interface components {
             saldo: string;
             /** Cobranza Id */
             cobranza_id: string | null;
+        };
+        /**
+         * VentaCreditoResponse
+         * @description El snapshot de crédito congelado (CRE-10). Sin límite: límite, disponible y exceso nulos.
+         */
+        VentaCreditoResponse: {
+            /** Limite */
+            limite: string | null;
+            /** Saldo Considerado */
+            saldo_considerado: string | null;
+            /** Disponible */
+            disponible: string | null;
+            /** Exceso */
+            exceso: string | null;
+            /** Politica */
+            politica: string | null;
+            /** Resolucion */
+            resolucion: string;
+            /** Autorizador Id */
+            autorizador_id: string | null;
+            /** Autorizador Nombre */
+            autorizador_nombre: string | null;
         };
         /**
          * VentaDetalleResponse
@@ -6444,10 +6923,36 @@ export interface components {
             lineas: components["schemas"]["VentaLineaResponse"][];
             /** Observaciones */
             observaciones: components["schemas"]["VentaObservacionResponse"][];
+            credito?: components["schemas"]["VentaCreditoResponse"] | null;
+        };
+        /**
+         * VentaLineaDescuentoResponse
+         * @description Un descuento congelado de la línea (DSC-08). Porcentaje e importe como string (INV-03).
+         */
+        VentaLineaDescuentoResponse: {
+            /** Origen */
+            origen: string;
+            /** Regla Id */
+            regla_id: string | null;
+            /** Regla Nombre */
+            regla_nombre: string | null;
+            /** Porcentaje */
+            porcentaje: string | null;
+            /** Importe */
+            importe: string;
+            /** Motivo Id */
+            motivo_id: string | null;
+            /** Motivo Nombre */
+            motivo_nombre: string | null;
+            /** Autorizador Id */
+            autorizador_id: string | null;
+            /** Autorizador Nombre */
+            autorizador_nombre: string | null;
         };
         /**
          * VentaLineaRequest
-         * @description Una línea con lo que vio el usuario (D2).
+         * @description Una línea con lo que vio el usuario (D2). `descuento_manual` (fracción como texto) y
+         *     `descuentos` (los esperados) son opcionales (change 18b, D1).
          */
         VentaLineaRequest: {
             /**
@@ -6478,6 +6983,10 @@ export interface components {
             unidades_referencia: number;
             /** Importe Bruto */
             importe_bruto: string;
+            /** Descuento Manual */
+            descuento_manual?: string | null;
+            /** Descuentos */
+            descuentos?: components["schemas"]["DescuentoEsperadoRequest"][];
         };
         /**
          * VentaLineaResponse
@@ -6535,6 +7044,11 @@ export interface components {
             costo_unitario: string | null;
             /** Costo Total */
             costo_total: string | null;
+            /**
+             * Descuentos
+             * @default []
+             */
+            descuentos: components["schemas"]["VentaLineaDescuentoResponse"][];
         };
         /** VentaMotivoResponse */
         VentaMotivoResponse: {
@@ -7231,6 +7745,71 @@ export interface operations {
             };
         };
     };
+    obtener_estado_de_mi_pin_api_v1_yo_pin_autorizacion_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MiPinEstadoResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    definir_mi_pin_api_v1_yo_pin_autorizacion_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MiPinRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     obtener_configuracion_fiscal_api_v1_configuracion_fiscal_get: {
         parameters: {
             query?: never;
@@ -7285,6 +7864,140 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConfiguracionFiscalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_descuento_manual_api_v1_configuracion_descuento_manual_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DescuentoManualResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    configurar_descuento_manual_api_v1_configuracion_descuento_manual_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DescuentoManualConfigurarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DescuentoManualResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_credito_de_la_organizacion_api_v1_configuracion_credito_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditoOrganizacionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    configurar_credito_de_la_organizacion_api_v1_configuracion_credito_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreditoOrganizacionConfigurarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditoOrganizacionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11142,6 +11855,101 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NumeracionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_contexto_de_venta_api_v1_ventas_contexto_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextoDeVentaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_descuentos_aplicables_api_v1_ventas_descuentos_aplicables_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DescuentosAplicablesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_credito_para_vender_api_v1_ventas_credito_get: {
+        parameters: {
+            query: {
+                cliente_id: string;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditoParaVenderResponse"];
                 };
             };
             /** @description Validation Error */

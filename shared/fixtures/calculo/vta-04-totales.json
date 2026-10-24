@@ -383,5 +383,295 @@
     "salida_esperada": {
       "error": "MODO_IMPOSITIVO_NO_SOPORTADO"
     }
+  },
+  {
+    "id": "VTA04-manual-general-solo",
+    "reglas": [
+      "VTA-04",
+      "DSC-06",
+      "DSC-07",
+      "INV-14"
+    ],
+    "comentario": "Sin reglas, un general de 5% sobre 31250.00 descuenta 1562.50; neto 29687.50.",
+    "entrada": {
+      "motor": "vta04",
+      "modo_impositivo": "A",
+      "lineas": [
+        {
+          "id": "l-1",
+          "precio_referencia": "12500.00",
+          "unidades_referencia": 6,
+          "cantidad_base": 15,
+          "alicuota": "0.210000",
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": "0.050000"
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-1",
+          "bruto": "31250.00",
+          "descuento_total": "1562.50",
+          "neto": "29687.50",
+          "alicuota": "0.210000",
+          "iva": "0.00"
+        }
+      ],
+      "total_neto": "29687.50",
+      "total_iva": "0.00",
+      "total": "29687.50"
+    }
+  },
+  {
+    "id": "VTA04-manual-propio-reemplaza-al-general",
+    "reglas": [
+      "VTA-04",
+      "DSC-07",
+      "INV-14"
+    ],
+    "comentario": "La l-1 trae 10% propio y reemplaza al general de 5% (3125.00, no 15%); la l-2 sin propio usa el general: 5% de 6250.00 = 312.50. Total 28125.00 + 5937.50.",
+    "entrada": {
+      "motor": "vta04",
+      "modo_impositivo": "A",
+      "lineas": [
+        {
+          "id": "l-1",
+          "precio_referencia": "12500.00",
+          "unidades_referencia": 6,
+          "cantidad_base": 15,
+          "alicuota": "0.210000",
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": "0.100000"
+        },
+        {
+          "id": "l-2",
+          "precio_referencia": "12500.00",
+          "unidades_referencia": 6,
+          "cantidad_base": 3,
+          "alicuota": "0.210000",
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": "0.050000"
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-1",
+          "bruto": "31250.00",
+          "descuento_total": "3125.00",
+          "neto": "28125.00",
+          "alicuota": "0.210000",
+          "iva": "0.00"
+        },
+        {
+          "id": "l-2",
+          "bruto": "6250.00",
+          "descuento_total": "312.50",
+          "neto": "5937.50",
+          "alicuota": "0.210000",
+          "iva": "0.00"
+        }
+      ],
+      "total_neto": "34062.50",
+      "total_iva": "0.00",
+      "total": "34062.50"
+    }
+  },
+  {
+    "id": "VTA04-automatico-mas-manual-general",
+    "reglas": [
+      "VTA-04",
+      "DSC-05",
+      "DSC-07",
+      "INV-14",
+      "TR-03"
+    ],
+    "comentario": "Regla de 5% (1562.50) y general de 5% sobre el resto 29687.50: 1484.375 se redondea a 1484.38 (mitad hacia arriba). Descuento total 3046.88, neto 28203.12.",
+    "entrada": {
+      "motor": "vta04",
+      "modo_impositivo": "A",
+      "lineas": [
+        {
+          "id": "l-1",
+          "precio_referencia": "12500.00",
+          "unidades_referencia": 6,
+          "cantidad_base": 15,
+          "alicuota": "0.210000",
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [
+        {
+          "id": "00000000-0000-7000-8000-000000000001",
+          "tipo": "VOLUMEN_OPERACION",
+          "medida": "CAJAS_EQUIVALENTES",
+          "operador": "GTE",
+          "umbral": "2",
+          "accion_tipo": "PORCENTAJE",
+          "accion_porcentaje": "0.050000",
+          "accion_importe": null,
+          "acumulable": false,
+          "prioridad": 1,
+          "alcances": []
+        }
+      ],
+      "descuento_manual_general": "0.050000"
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-1",
+          "bruto": "31250.00",
+          "descuento_total": "3046.88",
+          "neto": "28203.12",
+          "alicuota": "0.210000",
+          "iva": "0.00"
+        }
+      ],
+      "total_neto": "28203.12",
+      "total_iva": "0.00",
+      "total": "28203.12"
+    }
+  },
+  {
+    "id": "VTA04-general-reemplazado-en-todas-las-lineas",
+    "reglas": [
+      "VTA-04",
+      "DSC-07",
+      "INV-14"
+    ],
+    "comentario": "Las dos líneas traen manual propio (10% y 2%): el general de 5% no se aplica a ninguna.",
+    "entrada": {
+      "motor": "vta04",
+      "modo_impositivo": "A",
+      "lineas": [
+        {
+          "id": "l-1",
+          "precio_referencia": "12500.00",
+          "unidades_referencia": 6,
+          "cantidad_base": 15,
+          "alicuota": "0.210000",
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": "0.100000"
+        },
+        {
+          "id": "l-2",
+          "precio_referencia": "12500.00",
+          "unidades_referencia": 6,
+          "cantidad_base": 3,
+          "alicuota": "0.210000",
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": "0.020000"
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": "0.050000"
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-1",
+          "bruto": "31250.00",
+          "descuento_total": "3125.00",
+          "neto": "28125.00",
+          "alicuota": "0.210000",
+          "iva": "0.00"
+        },
+        {
+          "id": "l-2",
+          "bruto": "6250.00",
+          "descuento_total": "125.00",
+          "neto": "6125.00",
+          "alicuota": "0.210000",
+          "iva": "0.00"
+        }
+      ],
+      "total_neto": "34250.00",
+      "total_iva": "0.00",
+      "total": "34250.00"
+    }
+  },
+  {
+    "id": "VTA04-manual-propio-sin-general",
+    "reglas": [
+      "VTA-04",
+      "DSC-06",
+      "DSC-07",
+      "INV-14"
+    ],
+    "comentario": "Sin general, solo la línea con propio (10%) descuenta; la otra queda en su bruto.",
+    "entrada": {
+      "motor": "vta04",
+      "modo_impositivo": "A",
+      "lineas": [
+        {
+          "id": "l-1",
+          "precio_referencia": "12500.00",
+          "unidades_referencia": 6,
+          "cantidad_base": 15,
+          "alicuota": "0.210000",
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": "0.100000"
+        },
+        {
+          "id": "l-2",
+          "precio_referencia": "12500.00",
+          "unidades_referencia": 6,
+          "cantidad_base": 3,
+          "alicuota": "0.210000",
+          "producto_id": "prod-vino-a",
+          "categoria_id": "cat-vinos",
+          "marca_id": "marca-bodega-norte",
+          "descuento_manual": null
+        }
+      ],
+      "reglas_descuento": [],
+      "descuento_manual_general": null
+    },
+    "salida_esperada": {
+      "lineas": [
+        {
+          "id": "l-1",
+          "bruto": "31250.00",
+          "descuento_total": "3125.00",
+          "neto": "28125.00",
+          "alicuota": "0.210000",
+          "iva": "0.00"
+        },
+        {
+          "id": "l-2",
+          "bruto": "6250.00",
+          "descuento_total": "0.00",
+          "neto": "6250.00",
+          "alicuota": "0.210000",
+          "iva": "0.00"
+        }
+      ],
+      "total_neto": "34375.00",
+      "total_iva": "0.00",
+      "total": "34375.00"
+    }
   }
 ]

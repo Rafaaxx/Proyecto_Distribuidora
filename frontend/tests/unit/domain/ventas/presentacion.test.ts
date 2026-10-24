@@ -6,10 +6,13 @@ import {
   etiquetaDeEstadoDeVenta,
   etiquetaDeModoDeConfirmacion,
   etiquetaDeObservacionDeVenta,
+  etiquetaDePoliticaDeCredito,
+  etiquetaDeResolucionDeCredito,
   etiquetaDeVersion,
   observacionesDeLineaDeVenta,
   observacionesGeneralesDeVenta,
   textoDeCantidadDeLinea,
+  textoDeDescuentoCongelado,
   type ObservacionDeVenta,
 } from '../../../../src/domain/ventas/presentacion'
 import { proponerTrasDuplicado } from '../../../../src/domain/ventas/numeracion'
@@ -88,5 +91,69 @@ describe('cantidad inicial al agregar un producto', () => {
     expect(cantidadInicialDeProducto([botella, caja])).toEqual({ cajas: 1, unidades: 0 })
     expect(cantidadInicialDeProducto([botella])).toEqual({ cajas: 0, unidades: 1 })
     expect(cantidadInicialDeProducto([caja])).toEqual({ cajas: 1, unidades: 0 })
+  })
+})
+
+describe('descuentos y crédito congelados (change 18b, D20; DSC-08, CRE-10)', () => {
+  it('un descuento automático dice la regla, el porcentaje y el importe', () => {
+    expect(
+      textoDeDescuentoCongelado({
+        origen: 'AUTOMATICO',
+        regla_nombre: 'Volumen vinos',
+        porcentaje: '0.050000',
+        importe: '1562.50',
+        motivo_nombre: null,
+        autorizador_nombre: null,
+      }),
+    ).toBe('Descuento automático «Volumen vinos» 5 %: −$ 1.562,50')
+  })
+
+  it('uno de importe fijo no inventa un porcentaje', () => {
+    expect(
+      textoDeDescuentoCongelado({
+        origen: 'AUTOMATICO',
+        regla_nombre: 'Promo',
+        porcentaje: null,
+        importe: '500.00',
+        motivo_nombre: null,
+        autorizador_nombre: null,
+      }),
+    ).toBe('Descuento automático «Promo»: −$ 500,00')
+  })
+
+  it('un descuento manual dice el porcentaje, el motivo y quién autorizó', () => {
+    expect(
+      textoDeDescuentoCongelado({
+        origen: 'MANUAL',
+        regla_nombre: null,
+        porcentaje: '0.100000',
+        importe: '3125.00',
+        motivo_nombre: 'Cliente frecuente',
+        autorizador_nombre: 'Marta',
+      }),
+    ).toBe('Descuento manual 10 % (motivo: Cliente frecuente; autorizó Marta): −$ 3.125,00')
+    expect(
+      textoDeDescuentoCongelado({
+        origen: 'MANUAL',
+        regla_nombre: null,
+        porcentaje: '0.050000',
+        importe: '10.00',
+        motivo_nombre: null,
+        autorizador_nombre: null,
+      }),
+    ).toBe('Descuento manual 5 %: −$ 10,00')
+  })
+
+  it('la resolución y la política del crédito se dicen en palabras; una desconocida se muestra tal cual', () => {
+    expect(etiquetaDeResolucionDeCredito('PIN_SUPERVISOR')).toBe('Autorizado con el PIN de un supervisor')
+    expect(etiquetaDeResolucionDeCredito('SIN_EXCESO')).toBe('Sin exceso')
+    expect(etiquetaDeResolucionDeCredito('NUEVA')).toBe('NUEVA')
+    expect(etiquetaDePoliticaDeCredito('BLOQUEAR')).toBe('Bloquear')
+  })
+
+  it('las observaciones nuevas tienen su título (los mismos del tema de ayuda)', () => {
+    expect(etiquetaDeObservacionDeVenta('AUTORIZACION_OFFLINE')).toBe('Autorización sin señal')
+    expect(etiquetaDeObservacionDeVenta('DESCUENTO_DIFIERE')).toBe('Descuentos distintos')
+    expect(etiquetaDeObservacionDeVenta('EXCESO_CREDITO_DETECTADO_SYNC')).toBe('Exceso de crédito detectado al sincronizar')
   })
 })

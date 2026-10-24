@@ -815,6 +815,10 @@ class ProductoParaVender:
     producto_id: UUID
     codigo: str
     nombre: str
+    categoria_id: UUID
+    marca_id: UUID | None
+    """Nulo si el producto no tiene marca. Con la categoría, resuelven los alcances de los
+    descuentos en la pantalla de venta (ADR-050)."""
     presentaciones: tuple[PresentacionVendible, ...]
 
 
@@ -868,9 +872,11 @@ def productos_activos_para_vender(
                 producto_id=id_producto,
                 codigo=codigo,
                 nombre=nombre,
+                categoria_id=categoria_id,
+                marca_id=marca_id,
                 presentaciones=tuple(vendibles.get(id_producto, [])),
             )
-            for id_producto, codigo, nombre in filas
+            for id_producto, codigo, nombre, categoria_id, marca_id in filas
         ],
         hay_mas=hay_mas,
     )

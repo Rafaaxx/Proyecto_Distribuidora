@@ -197,3 +197,30 @@ class RangoDeFechasInvalidoError(DomainError):
 
     codigo = "RANGO_DE_FECHAS_INVALIDO"
     status_http = 422
+
+
+class DescuentoDifiereError(DomainError):
+    """Con conexión, los descuentos que vio el usuario no son los que calcula el servidor con las
+    reglas vigentes al `occurred_at` (DSC-09, change 18b, D11). La respuesta trae los del
+    servidor, igual que `PRECIO_DIFIERE`."""
+
+    codigo = "DESCUENTO_DIFIERE"
+    status_http = 409
+
+
+class AutorizacionRequeridaError(DomainError):
+    """Un descuento sobre el tope nombra a un autorizador, pero la venta no trae su credencial
+    (el PIN viaja fuera del contenido, `design.md` D2): equivale a no tener autorización
+    (DSC-06). Mismo código que el de `descuentos`."""
+
+    codigo = "AUTORIZACION_REQUERIDA"
+    status_http = 403
+
+
+class AutorizacionCreditoRequeridaError(DomainError):
+    """Un exceso de crédito nombra a un autorizador, pero la venta no trae su credencial
+    (`design.md` D2): equivale a no tener autorización (CRE-05). Mismo código que el de
+    `clientes`."""
+
+    codigo = "AUTORIZACION_CREDITO_REQUERIDA"
+    status_http = 403

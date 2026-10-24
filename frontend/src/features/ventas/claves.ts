@@ -30,4 +30,7 @@ export const clavesVentas = {
     ['ventas', 'precios', 'producto', contexto, productoId] as const,
   numeracion: () => ['ventas', 'numeracion'] as const,
   versiones: (listaId: string) => ['ventas', 'versiones', listaId] as const,
+  contexto: () => ['ventas', 'contexto'] as const,
+  descuentosAplicables: () => ['ventas', 'descuentos-aplicables'] as const,
+  credito: (clienteId: string) => ['ventas', 'credito', clienteId] as const,
 }

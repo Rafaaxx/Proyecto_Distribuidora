@@ -75,10 +75,8 @@ def test_la_excepcion_del_catalogo_global_es_explicita_y_enumerable() -> None:
         "obtener_organizacion_por_slug",
         "obtener_sesion_refresh_por_token_hash_global",
         "registrar_intento_login",
-        "contar_intentos_fallidos_por_usuario",
-        "contar_intentos_fallidos_por_ip",
-        "obtener_intento_fallido_mas_antiguo_en_ventana_por_usuario",
-        "obtener_intento_fallido_mas_antiguo_en_ventana_por_ip",
+        "ultimo_fallo_de_login",
+        "contar_fallos_de_login_en_ventana",
     } == identidad_repository.FUNCIONES_SIN_ORGANIZACION_ID
 
 

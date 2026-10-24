@@ -102,6 +102,9 @@ def _endpoint_eco(
             )
 
     def _handler(_sesion: object) -> sync_service.ResultadoHandler:
+        # Como un handler real: el recurso de otra organización lanza 404 dentro de la
+        # transacción del bus, que revierte también la reserva.
+        _verificar_permiso()
         return "ACEPTADO", {"mensaje": datos.mensaje}, None
 
     comando = sync_service.procesar_comando(
@@ -109,7 +112,6 @@ def _endpoint_eco(
         FixedClock(MOMENTO),
         sobre=sobre,
         huella=huella,
-        verificar_permiso=_verificar_permiso,
         ejecutar_handler=_handler,
     )
     return {"estado": comando.estado, "resultado": comando.resultado}

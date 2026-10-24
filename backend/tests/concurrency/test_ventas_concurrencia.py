@@ -1075,7 +1075,10 @@ class TestVentaSinConexionFrenteALaLiberacionYLaNuevaTomaDeSuJornada:
         return resultado[0], resultado[1], resultado[2]
 
     def _contenido(self, escenario: _Escenario) -> dict[str, Any]:
-        return escenario.entorno.contenido(ubicacion_id=None)
+        # Change 18b, D7: sin conexión el `credito` del dispositivo es obligatorio.
+        return escenario.entorno.contenido(
+            ubicacion_id=None, credito=escenario.entorno.credito_offline()
+        )
 
     def test_rut09_venta_primero_la_liberacion_espera_y_la_venta_no_observa(
         self, database_url: str, _engine_de_sesion

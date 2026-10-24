@@ -157,7 +157,7 @@ declarar_tipo(
     "COBRANZA_REGISTRAR",
     admite_online=True,
     admite_offline=True,
-    permiso_offline=PERMISO_REGISTRAR_COBRANZA,
+    permisos=(PERMISO_REGISTRAR_COBRANZA,),
     operacion_offline=OperacionObservable("COBRANZA", "cobranza_id"),
 )
 
@@ -213,4 +213,6 @@ def manejar_cobranza_anular(
 
 
 registrar_handler("COBRANZA_ANULAR", 1, CobranzaAnularContenidoV1)(manejar_cobranza_anular)
-declarar_tipo("COBRANZA_ANULAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "COBRANZA_ANULAR", admite_online=True, admite_offline=False, permisos=("ANULAR_COBRANZA",)
+)

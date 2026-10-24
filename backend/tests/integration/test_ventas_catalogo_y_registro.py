@@ -13,13 +13,13 @@ from app.commands.catalogo import tipo_declarado, tipos_declarados
 from app.commands.verificacion import verificar_catalogo_y_registro
 
 
-def test_vta12_venta_confirmar_esta_declarada_en_los_dos_modos_con_su_permiso_offline() -> None:
+def test_vta12_venta_confirmar_esta_declarada_en_los_dos_modos_con_su_permiso() -> None:
     """Tarea 11.1: `ONLINE` y `OFFLINE`, con `VENDER` como permiso offline."""
     declarado = tipo_declarado("VENTA_CONFIRMAR")
 
     assert declarado is not None
     assert (declarado.admite_online, declarado.admite_offline) == (True, True)
-    assert declarado.permiso_offline == "VENDER"
+    assert declarado.permisos == ("VENDER",)
 
 
 def test_vta12_venta_confirmar_tiene_su_handler_v1_y_el_catalogo_coincide_con_el_registro() -> None:

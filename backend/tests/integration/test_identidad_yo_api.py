@@ -477,7 +477,7 @@ class TestYoContrato:
             sesion,
             SystemClock(),
             usuario_id=usuario.id,
-            pin="123456",
+            pin="573190",
             actor_id=usuario.id,
             auditar=False,
         )

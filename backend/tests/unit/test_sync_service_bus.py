@@ -19,8 +19,10 @@ from uuid import uuid4
 
 import pytest
 
+from app.commands import catalogo
 from app.commands.sobre import SobreComando
 from app.core.clock import FixedClock
+from app.core.errors import PermisoRequeridoError
 from app.modules.sync import service as sync_service
 
 MOMENTO = datetime(2026, 1, 1, tzinfo=UTC)
@@ -29,7 +31,7 @@ MOMENTO = datetime(2026, 1, 1, tzinfo=UTC)
 def _sobre() -> SobreComando:
     return SobreComando(
         operation_id=uuid4(),
-        tipo="USUARIO_CREAR",
+        tipo="PRUEBA_UNITARIA_SIN_CATALOGO",
         version=1,
         modo="ONLINE",
         organizacion_id=uuid4(),
@@ -248,35 +250,80 @@ class TestReintentoDeErroresTransitorios:
         assert llamadas["n"] == 1
 
 
-class TestVerificarPermiso:
-    """`verificar_permiso` corre antes que el handler y, si lanza, revierte
-    la transacción igual que un fallo del handler (adelanto de la tarea
-    7.5, ejercitado acá porque el mecanismo es de `procesar_comando`)."""
+class TestPermisoDelTipo:
+    """El paso 4 de `02` §6.3 corre dentro de `procesar_comando` antes que el handler (change 18b,
+    D23, ADR-056) y, si falta el permiso, revierte la transacción igual que un fallo del handler."""
 
-    def test_un_permiso_faltante_no_ejecuta_el_handler(self) -> None:
+    @pytest.fixture(autouse=True)
+    def _tipo_declarado(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("app.commands.catalogo._CATALOGO", {})
+        catalogo.declarar_tipo(
+            "PRUEBA_UNITARIA_SIN_CATALOGO",
+            admite_online=True,
+            admite_offline=False,
+            permisos=("VENDER", "ANULAR_VENTA"),
+        )
+
+    def test_un_permiso_faltante_no_ejecuta_el_handler(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        consultas: list[tuple[str, ...]] = []
+
+        def _motivo(_org: object, _usuario: object, permisos: tuple[str, ...], _sesion: object):
+            consultas.append(permisos)
+            return "PERMISO_QUITADO"
+
+        monkeypatch.setattr(sync_service.identidad_service, "motivo_de_permisos_faltantes", _motivo)
         sesion_real = MagicMock()
         llamadas: list[str] = []
-
-        class _PermisoFalso(Exception):
-            pass
-
-        def _verificar_permiso() -> None:
-            raise _PermisoFalso("sin permiso")
 
         def _handler(_sesion: object) -> sync_service.ResultadoHandler:
             llamadas.append("ejecutado")
             return "ACEPTADO", {}, None
 
-        with pytest.raises(_PermisoFalso):
+        with pytest.raises(PermisoRequeridoError, match="VENDER o ANULAR_VENTA"):
             sync_service.procesar_comando(
                 sesion_real,
                 FixedClock(MOMENTO),
                 sobre=_sobre(),
                 huella="huella-1",
-                verificar_permiso=_verificar_permiso,
                 ejecutar_handler=_handler,
             )
 
+        assert consultas == [("VENDER", "ANULAR_VENTA")]
         assert llamadas == []
         sesion_real.commit.assert_not_called()
         sesion_real.rollback.assert_called_once()
+
+    def test_con_el_permiso_no_hay_veredicto(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Triangulación: sin faltante (`None`) el paso 4 no rechaza ni observa."""
+        monkeypatch.setattr(
+            sync_service.identidad_service,
+            "motivo_de_permisos_faltantes",
+            lambda _org, _usuario, _permisos, _sesion: None,
+        )
+
+        assert sync_service._evaluar_permiso_del_tipo(MagicMock(), _sobre()) is None
+
+    def test_sin_conexion_el_faltante_observa_y_nunca_rechaza(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("app.commands.catalogo._CATALOGO", {})
+        catalogo.declarar_tipo(
+            "PRUEBA_UNITARIA_SIN_CATALOGO",
+            admite_online=True,
+            admite_offline=True,
+            permisos=("VENDER",),
+        )
+        monkeypatch.setattr(
+            sync_service.identidad_service,
+            "motivo_de_permisos_faltantes",
+            lambda _org, _usuario, _permisos, _sesion: "USUARIO_INACTIVO",
+        )
+        sobre = _sobre()
+        offline = SobreComando(**{**sobre.__dict__, "modo": "OFFLINE"})
+
+        veredicto = sync_service._evaluar_permiso_del_tipo(MagicMock(), offline)
+
+        assert veredicto is not None
+        assert (veredicto.permiso, veredicto.motivo) == ("VENDER", "USUARIO_INACTIVO")

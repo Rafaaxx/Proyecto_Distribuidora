@@ -237,17 +237,29 @@ def manejar_stock_inicial_registrar(
 
 
 registrar_handler("UBICACION_CREAR", 1, UbicacionCrearContenidoV1)(manejar_ubicacion_crear)
-declarar_tipo("UBICACION_CREAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "UBICACION_CREAR", admite_online=True, admite_offline=False, permisos=("ADMIN_CONFIGURACION",)
+)
 
 registrar_handler("UBICACION_MODIFICAR", 1, UbicacionModificarContenidoV1)(
     manejar_ubicacion_modificar
 )
-declarar_tipo("UBICACION_MODIFICAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "UBICACION_MODIFICAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("ADMIN_CONFIGURACION",),
+)
 
 registrar_handler("STOCK_INICIAL_REGISTRAR", 1, StockInicialRegistrarContenidoV1)(
     manejar_stock_inicial_registrar
 )
-declarar_tipo("STOCK_INICIAL_REGISTRAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "STOCK_INICIAL_REGISTRAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("IMPORTAR_DATOS",),
+)
 
 
 # --- STOCK_TRANSFERIR (change 14: STK-07, INV-15; `design.md` D1, D6, D9) -------------
@@ -349,7 +361,9 @@ def manejar_stock_transferir(
 
 
 registrar_handler("STOCK_TRANSFERIR", 1, StockTransferirContenidoV1)(manejar_stock_transferir)
-declarar_tipo("STOCK_TRANSFERIR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "STOCK_TRANSFERIR", admite_online=True, admite_offline=False, permisos=("TRANSFERIR_STOCK",)
+)
 
 
 # --- STOCK_AJUSTAR (change 14: STK-08; `design.md` D1, D3, D6, D9) ---------------------
@@ -439,7 +453,9 @@ def manejar_stock_ajustar(
 
 
 registrar_handler("STOCK_AJUSTAR", 1, StockAjustarContenidoV1)(manejar_stock_ajustar)
-declarar_tipo("STOCK_AJUSTAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "STOCK_AJUSTAR", admite_online=True, admite_offline=False, permisos=("AJUSTAR_STOCK",)
+)
 
 
 # --- STOCK_TRANSFERENCIA_ANULAR (change 14: TR-06; `design.md` D5, D5.4, D10) ----------------
@@ -538,7 +554,12 @@ def manejar_stock_transferencia_anular(
 registrar_handler("STOCK_TRANSFERENCIA_ANULAR", 1, StockTransferenciaAnularContenidoV1)(
     manejar_stock_transferencia_anular
 )
-declarar_tipo("STOCK_TRANSFERENCIA_ANULAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "STOCK_TRANSFERENCIA_ANULAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("TRANSFERIR_STOCK",),
+)
 
 
 # --- STOCK_AJUSTE_ANULAR (change 14: TR-06; `design.md` D5, D10) ----------------------------
@@ -633,4 +654,6 @@ def manejar_stock_ajuste_anular(
 registrar_handler("STOCK_AJUSTE_ANULAR", 1, StockAjusteAnularContenidoV1)(
     manejar_stock_ajuste_anular
 )
-declarar_tipo("STOCK_AJUSTE_ANULAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "STOCK_AJUSTE_ANULAR", admite_online=True, admite_offline=False, permisos=("AJUSTAR_STOCK",)
+)

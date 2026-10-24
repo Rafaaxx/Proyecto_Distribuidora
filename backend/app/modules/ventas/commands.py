@@ -15,9 +15,10 @@ reserva del `operation_id`, y el comando puede reintentarse con contenido correg
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_validator
 
 from app.commands.auditoria import (
     DatosDeAuditoria,
@@ -25,6 +26,7 @@ from app.commands.auditoria import (
     unir_observaciones,
 )
 from app.commands.catalogo import OperacionObservable, declarar_tipo
+from app.commands.credenciales import CredencialDePin
 from app.commands.observaciones import ObservacionProducida
 from app.commands.registro import SesionDeHandler, registrar_handler
 from app.commands.sobre import SobreComando
@@ -33,8 +35,10 @@ from app.core.errors import PermisoRequeridoError
 from app.modules.cobranzas.service import MedioACobrar
 from app.modules.identidad import service as identidad_service
 from app.modules.ventas import service as ventas_service
+from app.modules.ventas.domain.descuentos import DescuentoDeLinea
 from app.modules.ventas.service import (
     CobranzaDeVenta,
+    CreditoDelDispositivo,
     DatosDeVenta,
     LineaDeVenta,
     PermisosDeVenta,
@@ -79,9 +83,48 @@ def _exigir_permiso(
 # --- VENTA_CONFIRMAR (VTA-12; D2, D12, D17) --------------------------------------------------
 
 
+class DescuentoEsperadoContenidoV1(BaseModel):
+    """Un descuento de la línea tal como lo vio el usuario (change 18b, D1): origen, regla
+    (nula en el manual), porcentaje (nulo en una regla de importe fijo) e importe, como texto
+    (INV-03). Con conexión el servidor lo compara con el que calcula (D11)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    origen: Literal["AUTOMATICO", "MANUAL"]
+    regla_id: UUID | None = None
+    porcentaje: str | None = Field(default=None, pattern=_PATRON_DECIMAL)
+    importe: str = Field(pattern=_PATRON_DECIMAL)
+
+
+class CreditoContenidoV1(BaseModel):
+    """El crédito de la venta (change 18b, D1). Con conexión: `acepta_exceso` (ADVERTIR) y
+    `autorizador_id` (AUTORIZAR); el PIN NO viaja acá (D2). `limite`, `saldo_considerado`,
+    `politica` y `resolucion` son la evaluación del dispositivo, solo del camino sin conexión
+    (D7)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    acepta_exceso: StrictBool = False
+    autorizador_id: UUID | None = None
+    limite: str | None = Field(default=None, pattern=_PATRON_DECIMAL)
+    saldo_considerado: str | None = Field(default=None, pattern=_PATRON_DECIMAL)
+    politica: Literal["ADVERTIR", "AUTORIZAR", "BLOQUEAR"] | None = None
+    resolucion: (
+        Literal[
+            "SIN_EXCESO",
+            "ADVERTENCIA_ACEPTADA",
+            "PERMISO_PROPIO",
+            "PIN_SUPERVISOR",
+            "TOLERANCIA_OFFLINE",
+        ]
+        | None
+    ) = None
+
+
 class LineaDeVentaContenidoV1(BaseModel):
     """Una línea con lo que vio el usuario (D2). La cantidad es un entero estricto: `2.5` o un
-    texto se rechazan como contenido inválido (INV-04)."""
+    texto se rechazan como contenido inválido (INV-04). `descuento_manual` (fracción como texto)
+    y `descuentos` (los que vio el usuario) son opcionales (change 18b, D1)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -93,6 +136,8 @@ class LineaDeVentaContenidoV1(BaseModel):
     precio_referencia: str = Field(pattern=_PATRON_DECIMAL)
     unidades_referencia: StrictInt
     importe_bruto: str = Field(pattern=_PATRON_DECIMAL)
+    descuento_manual: str | None = Field(default=None, pattern=_PATRON_DECIMAL)
+    descuentos: list[DescuentoEsperadoContenidoV1] = Field(default_factory=list)
 
 
 class MedioDeVentaContenidoV1(BaseModel):
@@ -134,6 +179,10 @@ class VentaConfirmarContenidoV1(BaseModel):
     lineas: list[LineaDeVentaContenidoV1]
     total: str = Field(pattern=_PATRON_DECIMAL)
     cobranza: CobranzaDeVentaContenidoV1 | None = None
+    descuento_manual_general: str | None = Field(default=None, pattern=_PATRON_DECIMAL)
+    motivo_descuento_id: UUID | None = None
+    descuento_autorizador_id: UUID | None = None
+    credito: CreditoContenidoV1 | None = None
 
     @model_validator(mode="after")
     def _la_version_elegida_nombra_su_lista(self) -> VentaConfirmarContenidoV1:
@@ -143,16 +192,25 @@ class VentaConfirmarContenidoV1(BaseModel):
         return self
 
 
+def _decimal_o_nulo(valor: str | None) -> Decimal | None:
+    return None if valor is None else Decimal(valor)
+
+
 def manejar_venta_confirmar(
     sobre: SobreComando,
     contenido: VentaConfirmarContenidoV1,
     *,
     sesion: SesionDeHandler,
     reloj: Clock,
+    credenciales: tuple[CredencialDePin, ...] = (),
 ) -> ResultadoHandlerConAuditoria:
     """Confirma una venta con conexión (`VENDER`). El resultado se guarda y se reenvía tal cual
     ante un doble envío (INV-06): venta, número, total, saldo del cliente y cobranza, todos los
-    importes como string (INV-03). Devuelve siempre el dato de auditoría (AUD-01, AUD-02, D20)."""
+    importes como string (INV-03). Devuelve siempre el dato de auditoría (AUD-01, AUD-02, D20).
+
+    `credenciales` es el dato efímero de D2 (change 18b): llega por clausura desde la ruta y no
+    está en el contenido. Las usa la verificación del PIN de `confirmar_venta` solo si hace falta;
+    nunca se guardan ni se registran."""
     permisos = _exigir_permiso(sobre, sesion, PERMISO_VENDER)
     resultado = ventas_service.confirmar_venta(
         sobre.organizacion_id,
@@ -173,10 +231,44 @@ def manejar_venta_confirmar(
                     precio_referencia=Decimal(linea.precio_referencia),
                     unidades_referencia=linea.unidades_referencia,
                     importe_bruto=Decimal(linea.importe_bruto),
+                    descuento_manual=(
+                        None if linea.descuento_manual is None else Decimal(linea.descuento_manual)
+                    ),
+                    descuentos=tuple(
+                        DescuentoDeLinea(
+                            descuento.origen,
+                            descuento.regla_id,
+                            None if descuento.porcentaje is None else Decimal(descuento.porcentaje),
+                            Decimal(descuento.importe),
+                        )
+                        for descuento in linea.descuentos
+                    ),
                 )
                 for linea in contenido.lineas
             ],
             total=Decimal(contenido.total),
+            descuento_manual_general=(
+                None
+                if contenido.descuento_manual_general is None
+                else Decimal(contenido.descuento_manual_general)
+            ),
+            motivo_descuento_id=contenido.motivo_descuento_id,
+            descuento_autorizador_id=contenido.descuento_autorizador_id,
+            acepta_exceso=contenido.credito is not None and contenido.credito.acepta_exceso,
+            credito_autorizador_id=(
+                None if contenido.credito is None else contenido.credito.autorizador_id
+            ),
+            credito_del_dispositivo=(
+                None
+                if contenido.credito is None
+                else CreditoDelDispositivo(
+                    limite=_decimal_o_nulo(contenido.credito.limite),
+                    saldo_considerado=_decimal_o_nulo(contenido.credito.saldo_considerado),
+                    politica=contenido.credito.politica,
+                    resolucion=contenido.credito.resolucion,
+                    autorizador_id=contenido.credito.autorizador_id,
+                )
+            ),
             lista_id=contenido.lista_id,
             lista_version_id=contenido.lista_version_id,
             motivo_lista_id=contenido.motivo_lista_id,
@@ -202,6 +294,7 @@ def manejar_venta_confirmar(
             puede_stock_negativo="PERMITIR_STOCK_NEGATIVO" in permisos,
             puede_vender_suspendido="VENDER_CLIENTE_SUSPENDIDO" in permisos,
             puede_liberar_ubicacion="LIBERAR_UBICACION" in permisos,
+            codigos=permisos,
         ),
         operation_id=sobre.operation_id,
         usuario_id=sobre.usuario_id,
@@ -209,6 +302,7 @@ def manejar_venta_confirmar(
         occurred_at=sobre.occurred_at,
         jornada_del_sobre=sobre.jornada_id,
         modo=sobre.modo,
+        credenciales={credencial.autorizador_id: credencial.pin for credencial in credenciales},
     )
     venta = resultado.venta
     cuerpo: dict[str, object] = {
@@ -254,6 +348,6 @@ declarar_tipo(
     "VENTA_CONFIRMAR",
     admite_online=True,
     admite_offline=True,
-    permiso_offline=PERMISO_VENDER,
+    permisos=(PERMISO_VENDER,),
     operacion_offline=OperacionObservable("VENTA", "venta_id"),
 )

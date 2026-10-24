@@ -23,6 +23,10 @@ export interface ProductoConPrecio {
   precioReferencia: string | null
   unidadesReferencia: number | null
   stockBase: number | null
+  /** Para resolver los alcances `CATEGORIA` y `MARCA` de los descuentos (ADR-050). */
+  categoriaId?: string
+  /** Vacío o ausente si el producto no tiene marca. */
+  marcaId?: string
   /** Versión de lista de la que sale el precio (se congela por línea, PRC-23). */
   listaVersionId: string
   presentaciones: readonly PresentacionDeVenta[]
@@ -116,6 +120,8 @@ export interface ProductoParaVenderDeApi {
   precio_referencia: string | null
   unidades_referencia: number | null
   stock_base: number | null
+  categoria_id?: string
+  marca_id?: string | null
   presentaciones: readonly {
     presentacion_id: string
     nombre: string
@@ -132,6 +138,8 @@ export function aProductoConPrecio(producto: ProductoParaVenderDeApi, listaVersi
     precioReferencia: producto.precio_referencia,
     unidadesReferencia: producto.unidades_referencia,
     stockBase: producto.stock_base,
+    categoriaId: producto.categoria_id,
+    marcaId: producto.marca_id ?? undefined,
     listaVersionId,
     presentaciones: producto.presentaciones.map((p) => ({
       presentacionId: p.presentacion_id,

@@ -222,7 +222,7 @@ class TestRotarPinAutorizacion:
             db_session,
             RELOJ,
             usuario_id=supervisor.id,
-            pin="111111",
+            pin="371946",
             actor_id=supervisor.id,
         )
         hash_anterior = repository.obtener_usuario_por_id(
@@ -235,7 +235,7 @@ class TestRotarPinAutorizacion:
             db_session,
             RELOJ,
             usuario_id=supervisor.id,
-            pin="222222",
+            pin="582073",
             actor_id=admin.id,
         )
 
@@ -260,7 +260,7 @@ class TestRotarPinAutorizacion:
             db_session,
             RELOJ,
             usuario_id=supervisor_a.id,
-            pin="999999",
+            pin="640817",
             actor_id=admin_b.id,
         )
 

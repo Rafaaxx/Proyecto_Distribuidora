@@ -32,16 +32,46 @@ from app.core.clock import Clock
 from app.core.ids import nuevo_id
 from app.modules.clientes import repository
 from app.modules.clientes.domain.credito import (
+    Autorizador as Autorizador,
+)
+from app.modules.clientes.domain.credito import (
+    CalculoDeExceso as CalculoDeExceso,
+)
+from app.modules.clientes.domain.credito import (
+    DatosDeCredito as DatosDeCredito,
+)
+from app.modules.clientes.domain.credito import (
+    ResultadoCredito as ResultadoCredito,
+)
+from app.modules.clientes.domain.credito import (
+    calcular_exceso as calcular_exceso,
+)
+from app.modules.clientes.domain.credito import (
+    evaluar_credito as evaluar_credito,
+)
+from app.modules.clientes.domain.credito import (
+    evaluar_credito_del_dispositivo as evaluar_credito_del_dispositivo,
+)
+from app.modules.clientes.domain.credito import (
     limite_de_consumidor_final,
     validar_credito_de_consumidor_final,
     validar_limite_credito,
     validar_politica_credito,
     validar_tolerancia_offline,
 )
+from app.modules.clientes.domain.credito import (
+    resolver_datos_de_credito as _resolver_datos_de_credito,
+)
+from app.modules.clientes.domain.credito import (
+    verificar_forma_del_credito_del_dispositivo as verificar_forma_del_credito_del_dispositivo,
+)
 from app.modules.clientes.domain.errores import (
     ConfiguracionDeOrganizacionAusenteError,
     ConsumidorFinalYaHabilitadoError,
     RecursoNoEncontradoError,
+)
+from app.modules.clientes.domain.errores import (
+    CreditoInconsistenteError as CreditoInconsistenteError,
 )
 from app.modules.clientes.domain.estado import (
     validar_estado,
@@ -380,6 +410,31 @@ def obtener_cliente_por_id(
     organizacion_id: UUID, cliente_id: UUID, sesion: Session
 ) -> Cliente | None:
     return repository.obtener_cliente_por_id(organizacion_id, cliente_id, sesion)
+
+
+def resolver_datos_de_credito(
+    organizacion_id: UUID, cliente_id: UUID, sesion: Session
+) -> DatosDeCredito:
+    """Límite, política y tolerancia de crédito del cliente con la herencia de la organización
+    ya resuelta (CRE-01, CRE-03, CRE-06; change 18b, tarea 8.1). Solo lee. Un cliente que no
+    existe en la organización (o es de otra) no se encuentra (INV-21)."""
+    cliente = repository.obtener_cliente_por_id(organizacion_id, cliente_id, sesion)
+    if cliente is None:
+        raise RecursoNoEncontradoError(f"El cliente {cliente_id} no existe.")
+    configuracion = identidad_service.obtener_configuracion(organizacion_id, sesion)
+    if configuracion is None:
+        raise ConfiguracionDeOrganizacionAusenteError(
+            "La organización no tiene configuración: no se pueden resolver los datos de crédito."
+        )
+    return _resolver_datos_de_credito(
+        limite_cliente=cliente.limite_credito,
+        politica_cliente=cliente.politica_credito,
+        tolerancia_tipo_cliente=cliente.tolerancia_offline_tipo,
+        tolerancia_valor_cliente=cliente.tolerancia_offline_valor,
+        politica_organizacion=configuracion.politica_credito_default,
+        tolerancia_tipo_organizacion=configuracion.tolerancia_offline_tipo,
+        tolerancia_valor_organizacion=configuracion.tolerancia_offline_valor,
+    )
 
 
 def obtener_consumidor_final(organizacion_id: UUID, sesion: Session) -> Cliente | None:

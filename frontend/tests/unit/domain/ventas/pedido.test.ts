@@ -108,6 +108,13 @@ describe('aProductoConPrecio (D19)', () => {
     expect(aProductoConPrecio(RESPUESTA, 'v2')).toEqual(VINO_A)
   })
 
+  it('lleva la categoría y la marca para resolver los alcances de los descuentos (ADR-050)', () => {
+    const con = aProductoConPrecio({ ...RESPUESTA, categoria_id: 'cat-vinos', marca_id: 'marca-x' }, 'v2')
+    expect([con.categoriaId, con.marcaId]).toEqual(['cat-vinos', 'marca-x'])
+    const sinMarca = aProductoConPrecio({ ...RESPUESTA, categoria_id: 'cat-vinos', marca_id: null }, 'v2')
+    expect([sinMarca.categoriaId, sinMarca.marcaId]).toEqual(['cat-vinos', undefined])
+  })
+
   it('un producto sin precio conserva el precio nulo y sigue siendo un producto del pedido', () => {
     const sin = aProductoConPrecio({ ...RESPUESTA, precio_referencia: null, unidades_referencia: null, sin_precio: true, stock_base: null }, 'v2')
     expect(sin.precioReferencia).toBeNull()

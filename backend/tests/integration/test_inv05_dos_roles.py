@@ -18,11 +18,14 @@ from sqlalchemy.exc import ProgrammingError
 # Lista explícita y enumerable (mismo criterio que el ratchet de rutas del
 # change 02 y la exención de catálogo global de la tarea 3.1): las tablas de
 # libro declaradas hasta este change. `cuenta_movimiento` se agregó en el
-# change 08; `stock_movimiento` y `costo_producto_mov`, en el 09.
+# change 08; `stock_movimiento` y `costo_producto_mov`, en el 09;
+# `intento_pin_autorizacion` y `venta_linea_descuento`, en el 18b.
 TABLAS_DE_LIBRO_DECLARADAS = frozenset(
     {
         "auditoria",
         "intento_login",
+        "intento_pin_autorizacion",
+        "venta_linea_descuento",
         "cuenta_movimiento",
         "stock_movimiento",
         "costo_producto_mov",

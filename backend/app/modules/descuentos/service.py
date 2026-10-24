@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from typing import TypedDict
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -30,6 +31,9 @@ from app.modules.descuentos.domain.estados import validar_fin_de_vigencia
 from app.modules.descuentos.domain.manual import Autorizador, ResultadoManual
 from app.modules.descuentos.domain.manual import (
     evaluar_descuento_manual as _evaluar_descuento_manual,
+)
+from app.modules.descuentos.domain.manual import (
+    rechazos_del_descuento_manual as _rechazos_del_descuento_manual,
 )
 from app.modules.descuentos.domain.motor import calcular_descuentos as _calcular_descuentos
 from app.modules.descuentos.domain.reglas import AlcanceNuevo, ReglaValidada, validar_regla
@@ -403,7 +407,30 @@ def calcular_descuentos(
     return _calcular_descuentos(lineas, reglas, descuento_manual_general)
 
 
-def evaluar_descuento_manual(
+def nombres_de_reglas(
+    organizacion_id: UUID, regla_ids: set[UUID] | frozenset[UUID], sesion: Session
+) -> dict[UUID, str]:
+    """Nombre de cada regla de la organización pedida, por lote (change 18b, tarea 11.3: el
+    detalle de la venta nombra la regla de cada descuento automático). Una regla de otra
+    organización no figura (INV-21)."""
+    return repository.nombres_de_reglas(organizacion_id, frozenset(regla_ids), sesion)
+
+
+class _DatosDelManual(TypedDict):
+    """Los argumentos que comparten `evaluar_descuento_manual` y `rechazos_del_descuento_manual`
+    del dominio, salvo el `usuario_id`."""
+
+    descuento_manual_habilitado: bool
+    motivo_obligatorio: bool | None
+    permisos_usuario: frozenset[str]
+    tope_rol: Decimal
+    tope_propio: Decimal | None
+    porcentaje_maximo: Decimal
+    motivo: str | None
+    autorizador: Autorizador | None
+
+
+def _datos_del_descuento_manual(
     organizacion_id: UUID,
     sesion: Session,
     *,
@@ -411,17 +438,11 @@ def evaluar_descuento_manual(
     porcentaje_maximo: Decimal,
     motivo: str | None,
     autorizador_id: UUID | None,
-) -> ResultadoManual:
-    """Decide si el descuento manual de una venta se acepta, con qué tope y con qué resolución
-    (DSC-06; `design.md` D12, D20). Se llama UNA vez por venta, con el
-    `porcentaje_manual_maximo` que entregó el motor y solo si no es nulo. El servidor evalúa
-    siempre con los datos vigentes, sin confiar en lo que el dispositivo haya decidido (TR-10).
-
-    Resuelve por `identidad/service.py` la configuración de la organización, los permisos y el
-    tope aplicable del usuario y los permisos del autorizador. Un usuario o un autorizador que no
-    existe en la organización (o es de otra) no se encuentra (404, INV-21). SOLO LEE: no verifica
-    ningún PIN, no escribe ninguna autorización y no audita (eso lo hace la venta, change 18b).
-    Los identificadores del resultado son cadenas (`UUID` en su forma canónica)."""
+) -> _DatosDelManual:
+    """Lo que `domain/manual.py` necesita, leído con los datos vigentes por `identidad`: la
+    configuración, los permisos y el tope del usuario y los permisos del autorizador. Un usuario o
+    un autorizador que no existe en la organización (o es de otra) no se encuentra (404,
+    INV-21)."""
     configuracion = identidad_service.obtener_configuracion(organizacion_id, sesion)
     if configuracion is None:
         raise DescuentoManualDeshabilitadoError(
@@ -444,8 +465,7 @@ def evaluar_descuento_manual(
             )
         autorizador = Autorizador(str(datos.usuario_id), datos.permisos)
 
-    return _evaluar_descuento_manual(
-        usuario_id=str(usuario.usuario_id),
+    return _DatosDelManual(
         descuento_manual_habilitado=configuracion.descuento_manual_habilitado,
         motivo_obligatorio=configuracion.motivo_obligatorio_descuento,
         permisos_usuario=usuario.permisos,
@@ -455,3 +475,57 @@ def evaluar_descuento_manual(
         motivo=motivo,
         autorizador=autorizador,
     )
+
+
+def rechazos_del_descuento_manual(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    usuario_id: UUID,
+    porcentaje_maximo: Decimal,
+    motivo: str | None,
+    autorizador_id: UUID | None,
+) -> list[str]:
+    """Los códigos de TODOS los rechazos que el descuento manual tendría hoy (en el orden de
+    D12), sin lanzar ninguno: lo usa la venta sin conexión, donde cada rechazo es una causa de
+    `DESCUENTO_DIFIERE` (change 18b, D10 punto 4, SYN-05, INV-17). La evaluación con conexión es
+    `evaluar_descuento_manual`, que rechaza con el primero. Solo lee."""
+    datos = _datos_del_descuento_manual(
+        organizacion_id,
+        sesion,
+        usuario_id=usuario_id,
+        porcentaje_maximo=porcentaje_maximo,
+        motivo=motivo,
+        autorizador_id=autorizador_id,
+    )
+    return [error.codigo for error in _rechazos_del_descuento_manual(**datos)]
+
+
+def evaluar_descuento_manual(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    usuario_id: UUID,
+    porcentaje_maximo: Decimal,
+    motivo: str | None,
+    autorizador_id: UUID | None,
+) -> ResultadoManual:
+    """Decide si el descuento manual de una venta se acepta, con qué tope y con qué resolución
+    (DSC-06; `design.md` D12, D20). Se llama UNA vez por venta, con el
+    `porcentaje_manual_maximo` que entregó el motor y solo si no es nulo. El servidor evalúa
+    siempre con los datos vigentes, sin confiar en lo que el dispositivo haya decidido (TR-10).
+
+    Resuelve por `identidad/service.py` la configuración de la organización, los permisos y el
+    tope aplicable del usuario y los permisos del autorizador. Un usuario o un autorizador que no
+    existe en la organización (o es de otra) no se encuentra (404, INV-21). SOLO LEE: no verifica
+    ningún PIN, no escribe ninguna autorización y no audita (eso lo hace la venta, change 18b).
+    Los identificadores del resultado son cadenas (`UUID` en su forma canónica)."""
+    datos = _datos_del_descuento_manual(
+        organizacion_id,
+        sesion,
+        usuario_id=usuario_id,
+        porcentaje_maximo=porcentaje_maximo,
+        motivo=motivo,
+        autorizador_id=autorizador_id,
+    )
+    return _evaluar_descuento_manual(usuario_id=str(usuario_id), **datos)

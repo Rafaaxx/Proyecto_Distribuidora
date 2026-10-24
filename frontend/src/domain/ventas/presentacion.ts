@@ -4,6 +4,7 @@
  * los importes llegan como string de la API y no pasan por `number` (INV-03).
  */
 
+import { formatearPorcentaje, parsearImporteDesdeApi } from '../../lib/money'
 import { formatearMonto } from '../cuentas-corrientes/presentacion'
 import { formatearCantidad } from '../stock/cantidades'
 
@@ -74,6 +75,12 @@ const ETIQUETAS_DE_OBSERVACION: Record<string, string> = {
   CONSUMIDOR_FINAL_CON_DEUDA: 'Consumidor final con deuda',
   MEDIO_INACTIVO: 'Medio de pago inactivo',
   REFERENCIA_FALTANTE: 'Falta la referencia',
+  // Change 18b (D9): los mismos títulos del tema de ayuda "avisos de las ventas".
+  DESCUENTO_DIFIERE: 'Descuentos distintos',
+  AUTORIZACION_OFFLINE: 'Autorización sin señal',
+  EXCESO_CREDITO_ADVERTIDO: 'Exceso de crédito advertido',
+  EXCESO_CREDITO_AUTORIZADO_OFFLINE: 'Exceso dentro de la tolerancia',
+  EXCESO_CREDITO_DETECTADO_SYNC: 'Exceso de crédito detectado al sincronizar',
 }
 
 export function etiquetaDeObservacionDeVenta(codigo: string): string {
@@ -115,4 +122,56 @@ export function detalleDeObservacionDeVenta(observacion: ObservacionDeVenta): st
     if (total !== null && cobranza !== null) return `Total ${formatearMonto(total)} · cobrado ${formatearMonto(cobranza)}`
   }
   return null
+}
+
+// --- Descuentos y crédito congelados (change 18b, D20; DSC-08, CRE-10) -----------------------
+
+export interface DescuentoCongelado {
+  origen: string
+  regla_nombre: string | null
+  porcentaje: string | null
+  importe: string
+  motivo_nombre: string | null
+  autorizador_nombre: string | null
+}
+
+/**
+ * Un descuento de la línea en palabras: `"Descuento automático «Volumen» 5 %: −$ 1.562,50"` o
+ * `"Descuento manual 10 % (motivo: Cliente frecuente; autorizó Marta): −$ 3.125,00"`.
+ */
+export function textoDeDescuentoCongelado(descuento: DescuentoCongelado): string {
+  const porcentaje =
+    descuento.porcentaje === null ? '' : ` ${formatearPorcentaje(parsearImporteDesdeApi(descuento.porcentaje))}`
+  const importe = `−${formatearMonto(descuento.importe)}`
+  if (descuento.origen === 'AUTOMATICO') {
+    const regla = descuento.regla_nombre === null ? '' : ` «${descuento.regla_nombre}»`
+    return `Descuento automático${regla}${porcentaje}: ${importe}`
+  }
+  const detalles = [
+    descuento.motivo_nombre === null ? null : `motivo: ${descuento.motivo_nombre}`,
+    descuento.autorizador_nombre === null ? null : `autorizó ${descuento.autorizador_nombre}`,
+  ].filter((detalle): detalle is string => detalle !== null)
+  return `Descuento manual${porcentaje}${detalles.length === 0 ? '' : ` (${detalles.join('; ')})`}: ${importe}`
+}
+
+const ETIQUETAS_DE_RESOLUCION_DE_CREDITO: Record<string, string> = {
+  SIN_EXCESO: 'Sin exceso',
+  ADVERTENCIA_ACEPTADA: 'Exceso aceptado tras el aviso',
+  PERMISO_PROPIO: 'Autorizado con su propio permiso',
+  PIN_SUPERVISOR: 'Autorizado con el PIN de un supervisor',
+  TOLERANCIA_OFFLINE: 'Dentro de la tolerancia sin señal',
+}
+
+export function etiquetaDeResolucionDeCredito(resolucion: string): string {
+  return ETIQUETAS_DE_RESOLUCION_DE_CREDITO[resolucion] ?? resolucion
+}
+
+const ETIQUETAS_DE_POLITICA_DE_CREDITO: Record<string, string> = {
+  ADVERTIR: 'Advertir',
+  AUTORIZAR: 'Autorizar',
+  BLOQUEAR: 'Bloquear',
+}
+
+export function etiquetaDePoliticaDeCredito(politica: string): string {
+  return ETIQUETAS_DE_POLITICA_DE_CREDITO[politica] ?? politica
 }

@@ -79,7 +79,9 @@ def manejar_categoria_crear(
 
 
 registrar_handler("CATEGORIA_CREAR", 1, CategoriaCrearContenidoV1)(manejar_categoria_crear)
-declarar_tipo("CATEGORIA_CREAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "CATEGORIA_CREAR", admite_online=True, admite_offline=False, permisos=("GESTIONAR_CATALOGO",)
+)
 
 
 class CategoriaModificarContenidoV1(BaseModel):
@@ -110,7 +112,12 @@ def manejar_categoria_modificar(
 registrar_handler("CATEGORIA_MODIFICAR", 1, CategoriaModificarContenidoV1)(
     manejar_categoria_modificar
 )
-declarar_tipo("CATEGORIA_MODIFICAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "CATEGORIA_MODIFICAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("GESTIONAR_CATALOGO",),
+)
 
 
 # --- MARCA_CREAR / MARCA_MODIFICAR (CAT-01, CAT-05) ------------------------
@@ -134,7 +141,9 @@ def manejar_marca_crear(
 
 
 registrar_handler("MARCA_CREAR", 1, MarcaCrearContenidoV1)(manejar_marca_crear)
-declarar_tipo("MARCA_CREAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "MARCA_CREAR", admite_online=True, admite_offline=False, permisos=("GESTIONAR_CATALOGO",)
+)
 
 
 class MarcaModificarContenidoV1(BaseModel):
@@ -163,7 +172,9 @@ def manejar_marca_modificar(
 
 
 registrar_handler("MARCA_MODIFICAR", 1, MarcaModificarContenidoV1)(manejar_marca_modificar)
-declarar_tipo("MARCA_MODIFICAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "MARCA_MODIFICAR", admite_online=True, admite_offline=False, permisos=("GESTIONAR_CATALOGO",)
+)
 
 
 # --- PRODUCTO_CREAR / PRODUCTO_MODIFICAR (CAT-01 a CAT-06, INV-01) ---------
@@ -241,7 +252,9 @@ def manejar_producto_crear(
 
 
 registrar_handler("PRODUCTO_CREAR", 2, ProductoCrearContenidoV2)(manejar_producto_crear)
-declarar_tipo("PRODUCTO_CREAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "PRODUCTO_CREAR", admite_online=True, admite_offline=False, permisos=("GESTIONAR_CATALOGO",)
+)
 
 
 class ProductoModificarContenidoV2(BaseModel):
@@ -284,7 +297,9 @@ def manejar_producto_modificar(
 
 
 registrar_handler("PRODUCTO_MODIFICAR", 2, ProductoModificarContenidoV2)(manejar_producto_modificar)
-declarar_tipo("PRODUCTO_MODIFICAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "PRODUCTO_MODIFICAR", admite_online=True, admite_offline=False, permisos=("GESTIONAR_CATALOGO",)
+)
 
 
 # --- PRESENTACION_AGREGAR / PRESENTACION_MODIFICAR (CAT-02, CAT-04) --------
@@ -322,7 +337,12 @@ def manejar_presentacion_agregar(
 registrar_handler("PRESENTACION_AGREGAR", 1, PresentacionAgregarContenidoV1)(
     manejar_presentacion_agregar
 )
-declarar_tipo("PRESENTACION_AGREGAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "PRESENTACION_AGREGAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("GESTIONAR_CATALOGO",),
+)
 
 
 class PresentacionModificarContenidoV1(BaseModel):
@@ -359,7 +379,12 @@ def manejar_presentacion_modificar(
 registrar_handler("PRESENTACION_MODIFICAR", 1, PresentacionModificarContenidoV1)(
     manejar_presentacion_modificar
 )
-declarar_tipo("PRESENTACION_MODIFICAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "PRESENTACION_MODIFICAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("GESTIONAR_CATALOGO",),
+)
 
 
 # --- PRESENTACION_REFERENCIA_CAMBIAR (CAT-03, D5) --------------------------
@@ -391,4 +416,9 @@ def manejar_presentacion_referencia_cambiar(
 registrar_handler("PRESENTACION_REFERENCIA_CAMBIAR", 1, PresentacionReferenciaCambiarContenidoV1)(
     manejar_presentacion_referencia_cambiar
 )
-declarar_tipo("PRESENTACION_REFERENCIA_CAMBIAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "PRESENTACION_REFERENCIA_CAMBIAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("GESTIONAR_CATALOGO",),
+)

@@ -119,6 +119,8 @@ export const LINEA_CAJAS = {
   importe_iva: '0.00',
   costo_unitario: null,
   costo_total: null,
+  // Change 18b: la API siempre trae los descuentos congelados de la línea (vacío sin descuentos).
+  descuentos: [] as unknown[],
 }
 
 export const LINEA_BOTELLAS = {
@@ -151,6 +153,8 @@ export function ventaDetalle(campos: Partial<Record<string, unknown>> = {}) {
     cobranza: { cobranza_id: COBRANZA_ID, importe: '20000.00', estado: 'CONFIRMADA' },
     lineas: [LINEA_CAJAS, LINEA_BOTELLAS],
     observaciones: [],
+    // Change 18b: nulo en una venta anterior al change (sin snapshot de crédito).
+    credito: null,
     ...campos,
   }
 }

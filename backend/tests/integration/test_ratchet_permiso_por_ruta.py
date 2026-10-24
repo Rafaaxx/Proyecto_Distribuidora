@@ -89,6 +89,11 @@ RUTAS_EXENTAS_DE_PERMISO = frozenset(
         # habilitada (`Depends(requiere_sesion)`), no un permiso
         # (`test_condicion_iva_api.py`: `test_la_configuracion_fiscal_sin_sesion_responde_401`).
         ("GET", "/api/v1/configuracion/fiscal"),
+        # Change 18b, tarea 11.5 (`identidad/api.py::router_yo`, D21 punto 1): si el usuario del
+        # token puede definir su PIN y si ya lo tiene; la consulta de la propia sesión, como
+        # `GET /yo`: exige sesión válida y habilitada (`Depends(requiere_sesion)`), ningún
+        # permiso, porque la pantalla "Mi PIN" decide con `puede_definir` si se ofrece.
+        ("GET", "/api/v1/yo/pin-autorizacion"),
     }
 )
 
@@ -121,6 +126,13 @@ def _rutas_con_prefijo(routes: list[object], prefijo: str = "") -> list[tuple[st
 # (`core/autenticacion.py`), así que la comparación es por conjunto y no por cadena: el
 # orden en que la ruta los lista no es parte del contrato.
 PERMISOS_ESPERADOS_POR_RUTA: dict[tuple[str, str], frozenset[str]] = {
+    # Change 18b, grupo 5 (tareas 5.1 y 5.2, `design.md` D13 y D14, SEG-06): los parametros del
+    # descuento manual y del credito de la organizacion se leen y se cambian con
+    # `ADMIN_CONFIGURACION` (la lectura para quien vende es el contexto de venta, D15).
+    ("GET", "/api/v1/configuracion/descuento-manual"): frozenset({"ADMIN_CONFIGURACION"}),
+    ("POST", "/api/v1/configuracion/descuento-manual"): frozenset({"ADMIN_CONFIGURACION"}),
+    ("GET", "/api/v1/configuracion/credito"): frozenset({"ADMIN_CONFIGURACION"}),
+    ("POST", "/api/v1/configuracion/credito"): frozenset({"ADMIN_CONFIGURACION"}),
     # D7: leer pagos (listado y detalle) alcanza con cualquiera de los dos permisos de pago.
     ("GET", "/api/v1/pagos-proveedores"): frozenset(
         {"REGISTRAR_PAGO_PROVEEDOR", "ANULAR_PAGO_PROVEEDOR"}

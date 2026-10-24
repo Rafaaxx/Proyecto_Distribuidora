@@ -432,6 +432,54 @@
       "sessions": 0,
       "memories": 2,
       "prompts": 0
+    },
+    {
+      "id": "1bef52e6",
+      "created_by": "rafan",
+      "created_at": "2026-10-21T19:39:12Z",
+      "sessions": 0,
+      "memories": 1,
+      "prompts": 0
+    },
+    {
+      "id": "5997f4ee",
+      "created_by": "rafan",
+      "created_at": "2026-10-22T01:46:06Z",
+      "sessions": 0,
+      "memories": 2,
+      "prompts": 0
+    },
+    {
+      "id": "31ac5b57",
+      "created_by": "rafan",
+      "created_at": "2026-10-22T04:28:02Z",
+      "sessions": 0,
+      "memories": 2,
+      "prompts": 0
+    },
+    {
+      "id": "91b35e41",
+      "created_by": "rafan",
+      "created_at": "2026-10-24T00:53:27Z",
+      "sessions": 0,
+      "memories": 6,
+      "prompts": 0
+    },
+    {
+      "id": "b405b8a8",
+      "created_by": "rafan",
+      "created_at": "2026-10-24T04:15:33Z",
+      "sessions": 0,
+      "memories": 5,
+      "prompts": 0
+    },
+    {
+      "id": "b31ea390",
+      "created_by": "rafan",
+      "created_at": "2026-10-24T04:16:06Z",
+      "sessions": 0,
+      "memories": 1,
+      "prompts": 0
     }
   ]
 }

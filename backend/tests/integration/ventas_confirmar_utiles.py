@@ -13,12 +13,14 @@ criterio que `cobranzas_utiles.py`, del que hereda). Es un módulo y no un `conf
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
 from cobranzas_utiles import Entorno as EntornoDeCobranzas
+from cuentas_corrientes_utiles import crear_organizacion
+from pydantic import SecretStr
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 from stock_utiles import (
@@ -30,10 +32,14 @@ from stock_utiles import (
 from ventas_utiles import insertar_sql, sembrar_lista_sql
 
 from app.commands import registro
+from app.commands.credenciales import CredencialDePin
 from app.commands.huella import calcular_huella
 from app.commands.sobre import SobreComando
 from app.core.clock import FixedClock
+from app.core.ids import nuevo_id
 from app.modules.costeo.models import CostoProducto
+from app.modules.identidad import repository as identidad_repository
+from app.modules.identidad import service as identidad_service
 from app.modules.identidad.models import Dispositivo
 from app.modules.stock import service as stock_service
 from app.modules.stock.domain.movimientos import LineaDeMovimiento
@@ -41,7 +47,7 @@ from app.modules.stock.models import StockMovimiento
 from app.modules.sync import service as sync_service
 from app.modules.sync.models import Comando
 from app.modules.ventas import commands as ventas_commands  # noqa: F401 (registra el handler)
-from app.modules.ventas.models import Venta, VentaLinea
+from app.modules.ventas.models import Venta, VentaLinea, VentaLineaDescuento
 
 MOMENTO_VENTA = datetime(2026, 10, 19, 12, 0, tzinfo=UTC)
 RELOJ_VENTA = FixedClock(MOMENTO_VENTA)
@@ -277,6 +283,26 @@ class EntornoVenta(EntornoDeCobranzas):
         cuerpo.update(cambios)
         return cuerpo
 
+    def credito_offline(
+        self,
+        *,
+        limite: str | None = None,
+        saldo: str | None = "150000.00",
+        politica: str | None = "ADVERTIR",
+        resolucion: str | None = "SIN_EXCESO",
+        autorizador_id: UUID | None = None,
+    ) -> dict[str, Any]:
+        """El objeto `credito` de una venta sin conexión (change 18b, D7; obligatorio, decisión del
+        usuario del 2026-10-23): la evaluación del dispositivo. Por defecto, Kiosco La Esquina sin
+        límite (sin control) con el saldo de la siembra y `SIN_EXCESO`."""
+        return {
+            "limite": limite,
+            "saldo_considerado": saldo,
+            "politica": politica,
+            "resolucion": resolucion,
+            "autorizador_id": None if autorizador_id is None else str(autorizador_id),
+        }
+
     def cobranza(self, *medios: tuple[UUID, str, str | None]) -> dict[str, Any]:
         """El bloque `cobranza` del contenido; por defecto, `20000.00` en efectivo."""
         return {
@@ -317,6 +343,7 @@ class EntornoVenta(EntornoDeCobranzas):
         tipo: str = VENTA_CONFIRMAR,
         jornada_id: UUID | None = None,
         occurred_at: datetime | None = None,
+        credenciales: tuple[CredencialDePin, ...] = (),
     ) -> Comando:
         sobre = self.sobre(
             contenido if contenido is not None else self.contenido(),
@@ -330,16 +357,209 @@ class EntornoVenta(EntornoDeCobranzas):
         validado = registro.validar_contenido(registrado, sobre.contenido)
 
         def _ejecutar(sesion_protegida: registro.SesionDeHandler) -> sync_service.ResultadoHandler:
+            # Solo el handler de la venta recibe el dato efímero de D2 (los demás no lo declaran).
+            extra: dict[str, Any] = {"credenciales": credenciales} if credenciales else {}
+            if sobre.tipo == VENTA_CONFIRMAR:
+                extra = {"credenciales": credenciales}
             return registrado.funcion(  # type: ignore[no-any-return]
-                sobre, validado, sesion=sesion_protegida, reloj=RELOJ_VENTA
+                sobre, validado, sesion=sesion_protegida, reloj=RELOJ_VENTA, **extra
             )
 
         return sync_service.procesar_comando(
             self.sesion, RELOJ_VENTA, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar
         )
 
-    def vender(self, *lineas: dict[str, Any], **cambios: object) -> Comando:
-        return self.enviar(self.contenido(*lineas, **cambios))
+    def vender(
+        self,
+        *lineas: dict[str, Any],
+        credenciales: tuple[CredencialDePin, ...] = (),
+        **cambios: object,
+    ) -> Comando:
+        return self.enviar(self.contenido(*lineas, **cambios), credenciales=credenciales)
+
+    # --- descuentos y crédito (change 18b) -------------------------------------------
+
+    def permitir(self, *permisos: str, usuario_id: UUID | None = None) -> None:
+        """Le suma permisos al rol del usuario (por defecto, el de quien vende)."""
+        rol_id = self.sesion.scalar(
+            text("SELECT rol_id FROM usuario WHERE organizacion_id = :o AND id = :u"),
+            {"o": self.org, "u": usuario_id or self.usuario_id},
+        )
+        for codigo in permisos:
+            identidad_repository.asignar_permiso_a_rol(
+                self.org, self.sesion, rol_id=rol_id, permiso_codigo=codigo
+            )
+        self.sesion.commit()
+
+    def fijar_tope(self, tope: str, *, usuario_id: UUID | None = None) -> None:
+        """Tope de descuento del rol del usuario (fracción como texto: `"0.05"` = 5 %)."""
+        self.sesion.execute(
+            text(
+                "UPDATE rol SET tope_descuento = :t WHERE organizacion_id = :o AND id = "
+                "(SELECT rol_id FROM usuario WHERE organizacion_id = :o AND id = :u)"
+            ),
+            {"t": Decimal(tope), "o": self.org, "u": usuario_id or self.usuario_id},
+        )
+        self.sesion.commit()
+
+    def crear_usuario(
+        self,
+        permisos: frozenset[str],
+        *,
+        pin: str | None = None,
+        tope: str = "0",
+        org: UUID | None = None,
+    ) -> UUID:
+        """Otro usuario (en `org`, por defecto la del entorno) con un rol propio y, si se pide,
+        un PIN de autorización definido."""
+        organizacion = org or self.org
+        rol = identidad_repository.crear_rol(
+            organizacion,
+            self.sesion,
+            rol_id=nuevo_id(),
+            nombre=f"Rol {uuid4().hex[:6]}",
+            tope_descuento=Decimal(tope),
+            activo=True,
+            momento=MOMENTO_VENTA,
+        )
+        for codigo in sorted(permisos):
+            identidad_repository.asignar_permiso_a_rol(
+                organizacion, self.sesion, rol_id=rol.id, permiso_codigo=codigo
+            )
+        usuario = identidad_repository.crear_usuario(
+            organizacion,
+            self.sesion,
+            usuario_id=nuevo_id(),
+            usuario=f"u-{uuid4().hex[:8]}",
+            nombre="Supervisor de prueba",
+            email=None,
+            password_hash="hash",
+            rol_id=rol.id,
+            estado="ACTIVO",
+            momento=MOMENTO_VENTA,
+        )
+        if pin is not None:
+            # El PIN se define una hora antes de la venta: su fila marcador reinicia el contador
+            # de fallos y los fallos de la venta tienen que ser posteriores (ADR-011, D3).
+            identidad_service.establecer_pin_autorizacion(
+                organizacion,
+                self.sesion,
+                FixedClock(MOMENTO_VENTA - timedelta(hours=1)),
+                usuario_id=usuario.id,
+                pin=pin,
+                actor_id=usuario.id,
+            )
+        self.sesion.commit()
+        return usuario.id
+
+    def otra_organizacion(self) -> UUID:
+        organizacion = crear_organizacion(self.sesion).id
+        self.sesion.commit()
+        return organizacion
+
+    def credencial(self, autorizador_id: UUID, pin: str) -> CredencialDePin:
+        return CredencialDePin(autorizador_id=autorizador_id, pin=SecretStr(pin))
+
+    def crear_regla(
+        self,
+        *,
+        porcentaje: str = "0.050000",
+        umbral: str = "20",
+        medida: str = "CAJAS_EQUIVALENTES",
+        estado: str = "ACTIVA",
+        desde: datetime | None = None,
+        hasta: datetime | None = None,
+        prioridad: int = 1,
+        acumulable: bool = False,
+    ) -> UUID:
+        """Una regla de volumen sobre toda la venta ("cajas equivalentes >= 20 -> 5 %")."""
+        regla_id = uuid4()
+        if estado != "BORRADOR" and desde is None:
+            desde = MOMENTO_VENTA - timedelta(days=30)
+        insertar_sql(
+            self.sesion,
+            "regla_descuento",
+            {
+                "id": regla_id,
+                "organizacion_id": self.org,
+                "nombre": f"Regla {regla_id.hex[:6]}",
+                "tipo": "VOLUMEN_OPERACION",
+                "medida": medida,
+                "operador": "GTE",
+                "umbral": Decimal(umbral),
+                "accion_tipo": "PORCENTAJE",
+                "accion_porcentaje": Decimal(porcentaje),
+                "accion_importe": None,
+                "prioridad": prioridad,
+                "acumulable": acumulable,
+                "vigencia_desde": desde,
+                "vigencia_hasta": hasta,
+                "estado": estado,
+                "creado_en": MOMENTO_VENTA,
+                "actualizado_en": MOMENTO_VENTA,
+            },
+        )
+        self.sesion.commit()
+        return regla_id
+
+    def pausar_regla(self, regla_id: UUID) -> None:
+        self.sesion.execute(
+            text(
+                "UPDATE regla_descuento SET estado = 'PAUSADA' "
+                "WHERE organizacion_id = :o AND id = :r"
+            ),
+            {"o": self.org, "r": regla_id},
+        )
+        self.sesion.commit()
+
+    def datos_de_credito(
+        self,
+        cliente_id: UUID | None = None,
+        *,
+        limite: str | None,
+        politica: str | None = None,
+    ) -> None:
+        """Límite y política propios del cliente (por defecto, Kiosco La Esquina)."""
+        self.actualizar_cliente(
+            cliente_id or self.cliente_id,
+            limite_credito=None if limite is None else Decimal(limite),
+            politica_credito=politica,
+        )
+        self.sesion.commit()
+
+    def producto_a(self, precio: str, *, stock: int = 1000, costo: str = "10") -> tuple[UUID, UUID]:
+        """Un producto de una sola presentación de una unidad al `precio`, con stock y costo.
+        Devuelve `(producto_id, presentacion_id)`."""
+        producto_id, presentacion_id = self.crear_producto(f"Producto a {precio}", unidades_caja=1)
+        self.poner_precio(self.version_id, producto_id, precio, 1)
+        self.comprar(producto_id, stock, costo)
+        self.sesion.commit()
+        return producto_id, presentacion_id
+
+    def descuentos_de_venta(self) -> list[VentaLineaDescuento]:
+        """Todas las filas de `venta_linea_descuento` de la organización, por línea y orden."""
+        self.sesion.expire_all()
+        return list(
+            self.sesion.scalars(
+                select(VentaLineaDescuento)
+                .where(VentaLineaDescuento.organizacion_id == self.org)
+                .order_by(VentaLineaDescuento.venta_linea_id, VentaLineaDescuento.orden)
+            ).all()
+        )
+
+    def intentos_de_pin(self) -> int:
+        """Filas de fallos del PIN (lo único que puede quedar escrito tras un rechazo)."""
+        self.sesion.rollback()
+        return int(
+            self.sesion.scalar(
+                text(
+                    "SELECT count(*) FROM intento_pin_autorizacion "
+                    "WHERE organizacion_id = :o AND NOT exito"
+                ),
+                {"o": self.org},
+            )
+            or 0
+        )
 
     # --- lecturas -------------------------------------------------------------------
 

@@ -92,7 +92,8 @@ CREATE TABLE venta (
 
 ```
 identidad        organizacion · configuracion_organizacion · usuario · rol · permiso
-                 rol_permiso · dispositivo · sesion_refresh
+                 rol_permiso · dispositivo · sesion_refresh · intento_login
+                 intento_pin_autorizacion
 configuracion    alicuota_iva · medio_pago · motivo
 catalogo         categoria · marca · producto · presentacion
 proveedores      proveedor · costo_informado · compra · compra_linea
@@ -193,6 +194,14 @@ El catálogo de `permiso` se sincroniza por migración con `01` §19. Permisos p
 ### `sesion_refresh`
 
 `id`, `organizacion_id`, `usuario_id`, `dispositivo_id`, `token_hash`, `familia_id`, `emitido_en`, `expira_en`, `usado_en`, `revocado_en`, `motivo_revocacion`. Índice por `token_hash` (`02` §12.1).
+
+### `intento_login`
+
+`id`, `usuario_id` (FK a `usuario`; nulo si el par escrito no resuelve un usuario), `clave_intento` `text` (SHA-256 hexadecimal, 64 caracteres, del par escrito `[slug, usuario]`; nulo solo en las filas anteriores al change 18b que no tenían `usuario_id`), `ip`, `exito` (`true` solo en el marcador del desbloqueo manual), `creado_en`. Índices `(usuario_id, creado_en)`, `(ip, creado_en)` y `(clave_intento, creado_en)`. Sin `organizacion_id` a propósito: es seguridad previa a la autenticación y existe también cuando el slug no existe (exenta de INV-02). Solo inserción (`app_runtime` con `SELECT, INSERT`, INV-05). El límite de 5 fallos se cuenta por `clave_intento` (ADR-057, ADR-018).
+
+### `intento_pin_autorizacion`
+
+`id`, `organizacion_id`, `autorizador_id`, `intentante_id` (obligatorio salvo en la fila marcador), `exito` (`true` solo en la fila que reinicia la cuenta al definir el PIN), `creado_en`. Claves foráneas compuestas a `usuario`; `CHECK (exito OR intentante_id IS NOT NULL)`; índices `(organizacion_id, autorizador_id, creado_en)` y `(organizacion_id, autorizador_id, intentante_id, creado_en)`. Solo inserción; se escribe en una transacción aparte para que el fallo quede aunque el comando se revierta (SEG-05, ADR-055).
 
 ### `alicuota_iva`, `medio_pago`, `motivo`
 
@@ -470,9 +479,9 @@ Una regla `VOLUMEN_OPERACION` no tiene filas de alcance. Una `VOLUMEN_ALCANCE` t
 | `estado` | `text` | `CONFIRMADA`, `ANULADA` |
 | `estado_facturacion` | `text` | `NO_REQUIERE`, `PENDIENTE`, `PARCIAL`, `FACTURADA` |
 | `importe_facturado` | `numeric(14,2)` | Default 0 (INV-09) |
-| `credito_limite`, `credito_saldo_considerado`, `credito_disponible`, `credito_exceso` | `numeric(14,2)` | CRE-10; las agrega el change 18b (ADR-054 D15) |
-| `credito_politica`, `credito_resolucion` | `text` | Las agrega el 18b. `ADVERTENCIA_ACEPTADA`, `PERMISO_PROPIO`, `PIN_SUPERVISOR`, `TOLERANCIA_OFFLINE`, `SIN_EXCESO` |
-| `credito_autorizador_id` | `uuid` | Lo agrega el 18b |
+| `credito_limite`, `credito_saldo_considerado`, `credito_disponible`, `credito_exceso` | `numeric(14,2)` | CRE-10. Nulos en las ventas anteriores al 18b; límite, disponible y exceso nulos juntos significan sin control (con resolución `SIN_EXCESO`); `CHECK (credito_exceso >= 0)` |
+| `credito_politica`, `credito_resolucion` | `text` | `ADVERTIR`, `AUTORIZAR`, `BLOQUEAR`; `ADVERTENCIA_ACEPTADA`, `PERMISO_PROPIO`, `PIN_SUPERVISOR`, `TOLERANCIA_OFFLINE`, `SIN_EXCESO` (`CHECK` de catálogo) |
+| `credito_autorizador_id` | `uuid` | FK compuesta a `usuario`; obligatorio con `PIN_SUPERVISOR` (`CHECK`) |
 | `operation_id`, `occurred_at`, `registered_at` | | |
 
 ```sql
@@ -511,7 +520,7 @@ ALTER TABLE venta ADD CONSTRAINT ck_venta__total
 
 ### `venta_linea_descuento`
 
-`id`, `organizacion_id`, `venta_linea_id`, `origen` (`AUTOMATICO`, `MANUAL`), `regla_id` (nulo si manual), `porcentaje` `numeric(9,6)`, `importe` `numeric(14,2)`, `motivo_id`, `autorizador_id` (DSC-08).
+`id`, `organizacion_id`, `venta_linea_id`, `origen` (`AUTOMATICO`, `MANUAL`), `regla_id` (nulo si manual), `porcentaje` `numeric(9,6)`, `importe` `numeric(14,2)`, `motivo_id`, `autorizador_id` (DSC-08), más `orden`. Claves foráneas compuestas a `venta_linea`, `regla_descuento`, `motivo` y `usuario`; `CHECK` de origen, regla nula si y solo si es manual, importe > 0 y porcentaje en (0, 1] o nulo (importe fijo); índice único parcial por línea donde `origen = 'MANUAL'` (DSC-08); `app_runtime` con `SELECT, INSERT` (INV-10).
 
 ### `venta_anulacion`
 
@@ -582,7 +591,7 @@ El índice único es el mecanismo de idempotencia (`02` §6.3). El contenido com
 
 ### `observacion`
 
-`id`, `organizacion_id`, `comando_id`, `operacion_tipo`, `operacion_id`, `codigo` (SYN-07; `CHECK` `ck_observacion__codigo` con el catálogo, que el change 17 amplía con `MEDIO_INACTIVO` y `REFERENCIA_FALTANTE` y el change 18a con `VENTA_SIN_COSTO`, `CONSUMIDOR_FINAL_CON_DEUDA` y `UBICACION_TOMADA_AL_SINCRONIZAR`), `detalle` `jsonb`, `estado` (`PENDIENTE`, `RESUELTA`), `resuelto_por_id`, `resuelto_en`, `comentario`. En las observaciones de un medio de cobranza, `detalle` lleva `medio` (posición de la línea), `medio_pago_id`, `nombre` e `importe` (ADR-052).
+`id`, `organizacion_id`, `comando_id`, `operacion_tipo`, `operacion_id`, `codigo` (SYN-07; `CHECK` `ck_observacion__codigo` con el catálogo, que el change 17 amplía con `MEDIO_INACTIVO` y `REFERENCIA_FALTANTE`, el change 18a con `VENTA_SIN_COSTO`, `CONSUMIDOR_FINAL_CON_DEUDA` y `UBICACION_TOMADA_AL_SINCRONIZAR` y el change 18b con `AUTORIZACION_OFFLINE`), `detalle` `jsonb`, `estado` (`PENDIENTE`, `RESUELTA`), `resuelto_por_id`, `resuelto_en`, `comentario`. En las observaciones de un medio de cobranza, `detalle` lleva `medio` (posición de la línea), `medio_pago_id`, `nombre` e `importe` (ADR-052).
 
 Índice parcial `(organizacion_id, codigo) WHERE estado = 'PENDIENTE'`.
 

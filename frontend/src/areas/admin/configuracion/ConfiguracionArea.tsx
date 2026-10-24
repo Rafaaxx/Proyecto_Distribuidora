@@ -1,6 +1,7 @@
 import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
 
 import { ConfiguracionFiscalScreen } from './ConfiguracionFiscalScreen'
+import { DescuentoYCreditoScreen } from './DescuentoYCreditoScreen'
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { ListaPredeterminadaScreen } from './ListaPredeterminadaScreen'
 import { MediosPagoScreen } from './MediosPagoScreen'
@@ -10,8 +11,9 @@ const CLASE_ENLACE = 'text-primary/70 hover:text-primary'
 
 /**
  * Router del área de configuración dentro de `/admin` (change 11b, tarea 7.4; change 13, tarea
- * 13.5). Se carga en diferido desde `AdminScreen`. Dos pantallas: `/admin/configuracion/fiscal` y
- * `/admin/configuracion/lista-predeterminada`; la ruta índice lleva a la fiscal.
+ * 13.5; change 18b, tarea 14.1). Se carga en diferido desde `AdminScreen`. Pantallas:
+ * `/admin/configuracion/fiscal`, `lista-predeterminada`, `medios-pago` y `descuento-y-credito`; la
+ * ruta índice lleva a la fiscal.
  */
 export function ConfiguracionArea() {
   return (
@@ -36,6 +38,12 @@ export function ConfiguracionArea() {
           >
             Medios de pago
           </NavLink>
+          <NavLink
+            to="/admin/configuracion/descuento-y-credito"
+            className={({ isActive }) => (isActive ? CLASE_ENLACE_ACTIVO : CLASE_ENLACE)}
+          >
+            Descuento y crédito
+          </NavLink>
         </SiTienePermiso>
       </nav>
       <Routes>
@@ -43,6 +51,7 @@ export function ConfiguracionArea() {
         <Route path="fiscal" element={<ConfiguracionFiscalScreen />} />
         <Route path="lista-predeterminada" element={<ListaPredeterminadaScreen />} />
         <Route path="medios-pago" element={<MediosPagoScreen />} />
+        <Route path="descuento-y-credito" element={<DescuentoYCreditoScreen />} />
       </Routes>
     </div>
   )

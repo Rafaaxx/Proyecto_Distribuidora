@@ -77,6 +77,9 @@ class ResultadoVenta:
     total_neto: Decimal
     total_iva: Decimal
     total: Decimal
+    porcentaje_manual_maximo: Decimal | None = None
+    """El mayor porcentaje manual que quedó aplicado en alguna línea (nulo si ninguna lleva
+    manual): lo que se compara contra el tope (DSC-06; change 18b)."""
 
 
 def _exigir_alicuota(linea: LineaCalculo) -> None:
@@ -150,4 +153,5 @@ def calcular_venta(
         total_neto=total_neto,
         total_iva=total_iva,
         total=total_neto + total_iva,
+        porcentaje_manual_maximo=descuentos.porcentaje_manual_maximo,
     )

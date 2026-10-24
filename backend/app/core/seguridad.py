@@ -69,6 +69,23 @@ def verificar_password(password: str, hash_almacenado: str) -> bool:
         return False
 
 
+# Hash Argon2id ficticio del login (ADR-057 punto 7): se deriva una vez al cargar el módulo, con los
+# mismos parámetros que `hashear_password`, de un valor aleatorio que se descarta. Si cambian los
+# parámetros de Argon2, se regenera solo.
+_HASH_FICTICIO_LOGIN = hashear_password(secrets.token_urlsafe(_REFRESH_TOKEN_BYTES))
+
+
+def verificar_password_o_ficticio(password: str, hash_almacenado: str | None) -> bool:
+    """Como `verificar_password`, pero SIEMPRE deriva una vez con Argon2id: sin `hash_almacenado`
+    (slug, usuario, estado o rol inutilizables) verifica contra el hash ficticio y devuelve
+    `False`, para que el tiempo de respuesta del login no revele si el usuario existe o está
+    activo (ADR-057 punto 7, SEG-01)."""
+    if hash_almacenado is None:
+        verificar_password(password, _HASH_FICTICIO_LOGIN)
+        return False
+    return verificar_password(password, hash_almacenado)
+
+
 def emitir_access_token(
     *,
     usuario_id: UUID,

@@ -103,3 +103,44 @@ export async function modificarMedioPago(
     await apiFetch(`/configuracion/medios-pago/${medioPagoId}`, escrituraDeMedio('PUT', operationId, datos)),
   )
 }
+
+// --- descuento manual y crédito por defecto (change 18b, D13, D14) --------------------------
+
+export type DescuentoManualConfig = components['schemas']['DescuentoManualResponse']
+export type DescuentoManualConfigurarDatos = components['schemas']['DescuentoManualConfigurarRequest']
+export type CreditoOrganizacion = components['schemas']['CreditoOrganizacionResponse']
+export type CreditoOrganizacionConfigurarDatos = components['schemas']['CreditoOrganizacionConfigurarRequest']
+
+function escritura(operationId: string, cuerpo: unknown): RequestInit {
+  return {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Operation-Id': operationId },
+    body: JSON.stringify(cuerpo),
+  }
+}
+
+/** `GET /configuracion/descuento-manual`: si está habilitado y si exige motivo. */
+export async function obtenerDescuentoManual(): Promise<DescuentoManualConfig> {
+  return leerFiscalOLanzar(await apiFetch('/configuracion/descuento-manual'))
+}
+
+/** `POST /configuracion/descuento-manual` (`DESCUENTO_MANUAL_CONFIGURAR`, `ADMIN_CONFIGURACION`). */
+export async function configurarDescuentoManual(
+  datos: DescuentoManualConfigurarDatos,
+  operationId: string,
+): Promise<DescuentoManualConfig> {
+  return leerFiscalOLanzar(await apiFetch('/configuracion/descuento-manual', escritura(operationId, datos)))
+}
+
+/** `GET /configuracion/credito`: política por defecto y tolerancia sin conexión. */
+export async function obtenerCreditoOrganizacion(): Promise<CreditoOrganizacion> {
+  return leerFiscalOLanzar(await apiFetch('/configuracion/credito'))
+}
+
+/** `POST /configuracion/credito` (`CREDITO_ORGANIZACION_CONFIGURAR`, `ADMIN_CONFIGURACION`). */
+export async function configurarCreditoOrganizacion(
+  datos: CreditoOrganizacionConfigurarDatos,
+  operationId: string,
+): Promise<CreditoOrganizacion> {
+  return leerFiscalOLanzar(await apiFetch('/configuracion/credito', escritura(operationId, datos)))
+}

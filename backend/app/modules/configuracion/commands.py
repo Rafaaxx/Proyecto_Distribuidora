@@ -103,9 +103,16 @@ def manejar_medio_pago_modificar(
 
 
 registrar_handler("MEDIO_PAGO_CREAR", 1, MedioPagoCrearContenidoV1)(manejar_medio_pago_crear)
-declarar_tipo("MEDIO_PAGO_CREAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "MEDIO_PAGO_CREAR", admite_online=True, admite_offline=False, permisos=("ADMIN_CONFIGURACION",)
+)
 
 registrar_handler("MEDIO_PAGO_MODIFICAR", 1, MedioPagoModificarContenidoV1)(
     manejar_medio_pago_modificar
 )
-declarar_tipo("MEDIO_PAGO_MODIFICAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "MEDIO_PAGO_MODIFICAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("ADMIN_CONFIGURACION",),
+)

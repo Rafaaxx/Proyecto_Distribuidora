@@ -3,12 +3,14 @@ import { Link, NavLink, Outlet } from 'react-router-dom'
 import { Alert } from '../../components/ui/Alert'
 import { Boton } from '../../components/ui/Button'
 import type { Yo } from '../../features/identidad/api'
+import { ofreceMiPin } from '../../domain/identidad/pin'
 import { seccionesPermitidas } from '../../features/identidad/secciones'
 import { usePermisos } from '../../features/identidad/usePermisos'
 
 const CLASE_ENLACE_ACTIVO = 'font-semibold text-primary'
 const CLASE_ENLACE = 'text-primary/70 hover:text-primary'
 const RUTA_AYUDA = '/admin/ayuda'
+const RUTA_MI_PIN = '/admin/mi-pin'
 const MENSAJE_SIN_PERMISOS = 'No se pudieron obtener tus permisos.'
 
 /**
@@ -87,7 +89,15 @@ export function AdminLayout() {
             )}
           </nav>
 
-          {identificacion && <p className="text-sm text-primary/70">{identificacion}</p>}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            {identificacion && <p className="text-sm text-primary/70">{identificacion}</p>}
+            {/* "Mi PIN" (change 18b, D21 parte B): solo con algún permiso de autorización. */}
+            {permisos.yo && ofreceMiPin(permisos.tiene) && (
+              <NavLink to={RUTA_MI_PIN} className={({ isActive }) => (isActive ? CLASE_ENLACE_ACTIVO : CLASE_ENLACE)}>
+                Mi PIN
+              </NavLink>
+            )}
+          </div>
         </div>
 
         {permisos.estado === 'error' && (

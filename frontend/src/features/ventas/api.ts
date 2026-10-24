@@ -1,4 +1,5 @@
 import type { components } from '../../api/schema.gen'
+import type { CredencialDePin } from '../../domain/ventas/autorizacionDeVenta'
 import type { VentaConfirmarDatos } from '../../domain/ventas/formularioVenta'
 import { apiFetch } from '../../lib/api/httpClient'
 import type { ContextoDePrecios, FiltrosVentas } from './claves'
@@ -22,6 +23,9 @@ export type PreciosParaVender = components['schemas']['PreciosParaVenderResponse
 export type ProductoParaVender = components['schemas']['ProductoParaVenderResponse']
 export type Numeracion = components['schemas']['NumeracionResponse']
 export type VersionElegible = components['schemas']['VersionElegibleResponse']
+export type ContextoDeVentaDeApi = components['schemas']['ContextoDeVentaResponse']
+export type ReglaAplicable = components['schemas']['ReglaAplicableResponse']
+export type CreditoParaVender = components['schemas']['CreditoParaVenderResponse']
 
 const LIMITE_DE_PRECIOS = 20
 
@@ -90,11 +94,39 @@ export async function listarVersionesElegibles(listaId: string): Promise<Version
   return (await leerJsonOLanzar<{ items: VersionElegible[] }>(respuesta)).items
 }
 
-export async function confirmarVenta(datos: VentaConfirmarDatos, operationId: string): Promise<VentaConfirmarResultado> {
+/** Tope, motivos y autorizadores de quien vende (`VENDER`, change 18b, D15). */
+export async function obtenerContextoDeVenta(): Promise<ContextoDeVentaDeApi> {
+  const respuesta = await apiFetch('/ventas/contexto')
+  return leerJsonOLanzar(respuesta)
+}
+
+/** Reglas de descuento activas y vigentes ahora (`VENDER`, DSC-01, ADR-050). */
+export async function listarDescuentosAplicables(): Promise<ReglaAplicable[]> {
+  const respuesta = await apiFetch('/ventas/descuentos-aplicables')
+  return (await leerJsonOLanzar<{ items: ReglaAplicable[] }>(respuesta)).items
+}
+
+/** Límite, saldo, disponible, política y tolerancia de un cliente para vender (`VENDER`, D16). */
+export async function obtenerCreditoParaVender(clienteId: string): Promise<CreditoParaVender> {
+  const respuesta = await apiFetch(`/ventas/credito?${new URLSearchParams({ cliente_id: clienteId }).toString()}`)
+  return leerJsonOLanzar(respuesta)
+}
+
+/**
+ * `POST /ventas`. Las `credenciales` (PIN de quien autoriza) viajan en el cuerpo pero NO forman
+ * parte del contenido del comando ni de su huella (D2): el servidor las separa. Esta función no
+ * guarda nada: el PIN existe solo mientras dura la llamada.
+ */
+export async function confirmarVenta(
+  datos: VentaConfirmarDatos,
+  operationId: string,
+  credenciales: readonly CredencialDePin[] = [],
+): Promise<VentaConfirmarResultado> {
+  const cuerpo = credenciales.length === 0 ? datos : { ...datos, credenciales }
   const respuesta = await apiFetch('/ventas', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Operation-Id': operationId },
-    body: JSON.stringify(datos),
+    body: JSON.stringify(cuerpo),
   })
   return leerJsonOLanzar(respuesta)
 }

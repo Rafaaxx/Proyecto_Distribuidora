@@ -116,6 +116,20 @@ def obtener_regla(organizacion_id: UUID, regla_id: UUID, sesion: Session) -> Reg
     ).one_or_none()
 
 
+def nombres_de_reglas(
+    organizacion_id: UUID, regla_ids: frozenset[UUID], sesion: Session
+) -> dict[UUID, str]:
+    """El nombre de cada regla pedida de la organización, en una sola consulta."""
+    if not regla_ids:
+        return {}
+    filas = sesion.execute(
+        select(ReglaDescuento.id, ReglaDescuento.nombre).where(
+            ReglaDescuento.organizacion_id == organizacion_id, ReglaDescuento.id.in_(regla_ids)
+        )
+    ).all()
+    return {regla_id: nombre for regla_id, nombre in filas}
+
+
 def obtener_regla_para_actualizar(
     organizacion_id: UUID, regla_id: UUID, sesion: Session
 ) -> ReglaDescuento | None:

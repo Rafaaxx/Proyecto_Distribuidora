@@ -174,6 +174,42 @@ class EntradaComandoOnline:
     operation_id: UUID
 
 
+def requiere_comando_online_algun_permiso(
+    *codigos_permiso: str,
+) -> Callable[..., EntradaComandoOnline]:
+    """Como `requiere_comando_online`, pero alcanza con CUALQUIERA de los permisos (change 18b,
+    `design.md` D21 punto 2: "Mi PIN" lo puede definir quien tenga algún permiso de autorización
+    de excepciones). Compone `requiere_algun_permiso`; el marcador del ratchet de permiso por
+    ruta lleva los códigos unidos con ` o `."""
+    dependencia_permiso = requiere_algun_permiso(*codigos_permiso)
+
+    def _dependencia(
+        contexto: ContextoAutenticado = Depends(dependencia_permiso),  # noqa: B008
+        operation_id: Annotated[str | None, Header(alias="Operation-Id")] = None,
+    ) -> EntradaComandoOnline:
+        return _entrada_de_comando_online(contexto, operation_id)
+
+    _dependencia.permiso_requerido = " o ".join(codigos_permiso)  # type: ignore[attr-defined]
+    return _dependencia
+
+
+def _entrada_de_comando_online(
+    contexto: ContextoAutenticado, operation_id: str | None
+) -> EntradaComandoOnline:
+    """Valida el encabezado `Operation-Id` (compartido por las dos variantes)."""
+    if operation_id is None:
+        raise OperationIdAusenteError(
+            "Falta el encabezado Operation-Id, obligatorio en toda escritura (SYN-01, TR-07)."
+        )
+    try:
+        operation_id_uuid = UUID(operation_id)
+    except ValueError as error:
+        raise OperationIdInvalidoError(
+            f"El encabezado Operation-Id no es un identificador válido: {operation_id!r}."
+        ) from error
+    return EntradaComandoOnline(contexto=contexto, operation_id=operation_id_uuid)
+
+
 def requiere_comando_online(codigo_permiso: str) -> Callable[..., EntradaComandoOnline]:
     """Fábrica de dependencia (tarea 7.3, `design.md` D4): compone
     `requiere_permiso` (que ya resuelve `ContextoAutenticado` desde el
@@ -203,17 +239,7 @@ def requiere_comando_online(codigo_permiso: str) -> Callable[..., EntradaComando
         contexto: ContextoAutenticado = Depends(dependencia_permiso),  # noqa: B008
         operation_id: Annotated[str | None, Header(alias="Operation-Id")] = None,
     ) -> EntradaComandoOnline:
-        if operation_id is None:
-            raise OperationIdAusenteError(
-                "Falta el encabezado Operation-Id, obligatorio en toda escritura (SYN-01, TR-07)."
-            )
-        try:
-            operation_id_uuid = UUID(operation_id)
-        except ValueError as error:
-            raise OperationIdInvalidoError(
-                f"El encabezado Operation-Id no es un identificador válido: {operation_id!r}."
-            ) from error
-        return EntradaComandoOnline(contexto=contexto, operation_id=operation_id_uuid)
+        return _entrada_de_comando_online(contexto, operation_id)
 
     _dependencia.permiso_requerido = codigo_permiso  # type: ignore[attr-defined]
     return _dependencia

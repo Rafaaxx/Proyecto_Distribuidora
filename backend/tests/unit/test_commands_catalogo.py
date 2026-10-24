@@ -53,7 +53,7 @@ def test_un_tipo_declarado_sin_handler_falla_la_verificacion() -> None:
         "VENTA_CONFIRMAR",
         admite_online=True,
         admite_offline=True,
-        permiso_offline="REGISTRAR_COBRANZA",
+        permisos=("REGISTRAR_COBRANZA",),
     )
 
     with pytest.raises(CatalogoDesincronizadoError):
@@ -73,7 +73,9 @@ def test_un_handler_registrado_sin_declarar_en_el_catalogo_falla_la_verificacion
 def test_un_tipo_declarado_con_su_handler_registrado_verifica_sin_error() -> None:
     """Cuando catálogo y registro coinciden, la verificación no levanta
     nada."""
-    catalogo.declarar_tipo("USUARIO_CREAR", admite_online=True, admite_offline=False)
+    catalogo.declarar_tipo(
+        "USUARIO_CREAR", admite_online=True, admite_offline=False, permisos=("ADMIN_USUARIOS",)
+    )
     registrar_handler("USUARIO_CREAR", 1, _Esquema)(_handler_de_prueba)
 
     verificar_catalogo_y_registro()  # no debe lanzar

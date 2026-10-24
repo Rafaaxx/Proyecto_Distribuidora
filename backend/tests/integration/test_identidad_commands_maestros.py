@@ -529,13 +529,13 @@ class TestPinAutorizacionRotar:
 
         respuesta = cliente.post(
             f"/api/v1/identidad/usuarios/{supervisor.id}/pin",
-            json={"pin": "654321"},
+            json={"pin": "735194"},
             headers={"Authorization": f"Bearer {access_token}"},
         )
 
         assert respuesta.status_code == 400
         assert respuesta.json()["codigo"] == "OPERATION_ID_REQUERIDO"
-        assert "654321" not in respuesta.text
+        assert "735194" not in respuesta.text
 
     def test_reenviar_la_rotacion_no_vuelve_a_derivar_el_pin(
         self, cliente: TestClient, sesion: Session
@@ -551,7 +551,7 @@ class TestPinAutorizacionRotar:
 
         primera = cliente.post(
             f"/api/v1/identidad/usuarios/{supervisor.id}/pin",
-            json={"pin": "654321"},
+            json={"pin": "735194"},
             headers={"Authorization": f"Bearer {access_token}", "Operation-Id": operation_id},
         )
         sesion.refresh(supervisor)
@@ -559,7 +559,7 @@ class TestPinAutorizacionRotar:
 
         segunda = cliente.post(
             f"/api/v1/identidad/usuarios/{supervisor.id}/pin",
-            json={"pin": "654321"},
+            json={"pin": "735194"},
             headers={"Authorization": f"Bearer {access_token}", "Operation-Id": operation_id},
         )
         sesion.refresh(supervisor)
@@ -569,9 +569,12 @@ class TestPinAutorizacionRotar:
         assert supervisor.pin_autorizacion_hash == hash_despues_de_la_primera
         assert _contar_auditoria(sesion, organizacion.id, accion="PIN_AUTORIZACION_ROTAR") == 1
 
-    def test_reenviar_con_otro_contenido_se_rechaza_como_inconsistente(
+    def test_reenviar_con_otro_pin_devuelve_el_resultado_original(
         self, cliente: TestClient, sesion: Session
     ) -> None:
+        """Change 18b, tarea 6.7 (D2): el PIN ya no forma parte del contenido ni de la huella,
+        así que el reenvío con el mismo `Operation-Id` y otro PIN devuelve 204 con el resultado
+        original (antes: 409 `COMANDO_INCONSISTENTE`), sin volver a derivar ni cambiar el PIN."""
         organizacion = _crear_organizacion(sesion, f"org-pin-3-{uuid4().hex[:8]}")
         _, _ = _crear_usuario(
             sesion, organizacion.id, permisos=frozenset({"ADMIN_USUARIOS"}), nombre_usuario="admin1"
@@ -583,20 +586,23 @@ class TestPinAutorizacionRotar:
 
         primera = cliente.post(
             f"/api/v1/identidad/usuarios/{supervisor.id}/pin",
-            json={"pin": "654321"},
+            json={"pin": "735194"},
             headers={"Authorization": f"Bearer {access_token}", "Operation-Id": operation_id},
         )
+        sesion.refresh(supervisor)
+        derivacion = supervisor.pin_autorizacion_hash
         segunda = cliente.post(
             f"/api/v1/identidad/usuarios/{supervisor.id}/pin",
             json={"pin": "111222"},
             headers={"Authorization": f"Bearer {access_token}", "Operation-Id": operation_id},
         )
+        sesion.refresh(supervisor)
 
         assert primera.status_code == 204
-        assert segunda.status_code == 409
-        assert segunda.json()["codigo"] == "COMANDO_INCONSISTENTE"
+        assert segunda.status_code == 204
+        assert supervisor.pin_autorizacion_hash == derivacion
         assert "111222" not in segunda.text
-        assert "654321" not in segunda.text
+        assert "735194" not in segunda.text
 
     def test_sin_permiso_se_rechaza_sin_efectos(self, cliente: TestClient, sesion: Session) -> None:
         organizacion = _crear_organizacion(sesion, f"org-pin-4-{uuid4().hex[:8]}")
@@ -609,7 +615,7 @@ class TestPinAutorizacionRotar:
 
         respuesta = cliente.post(
             f"/api/v1/identidad/usuarios/{supervisor.id}/pin",
-            json={"pin": "654321"},
+            json={"pin": "735194"},
             headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
         )
 
@@ -632,7 +638,7 @@ class TestPinAutorizacionRotar:
 
         respuesta = cliente.post(
             f"/api/v1/identidad/usuarios/{supervisor.id}/pin",
-            json={"pin": "654321"},
+            json={"pin": "735194"},
             headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(operation_id)},
         )
 
@@ -722,6 +728,47 @@ class TestPinAutorizacionRotar:
         assert pin_invalido_por_longitud not in texto_sin_identificadores
         sesion.refresh(supervisor)
         assert supervisor.pin_autorizacion_hash is None
+
+    @pytest.mark.parametrize("pin_trivial", ["123456", "000000", "987654"])
+    def test_un_pin_trivial_se_rechaza_y_deja_vigente_el_anterior(
+        self, cliente: TestClient, sesion: Session, pin_trivial: str
+    ) -> None:
+        """Change 18b, tarea 6.4 (ADR-019, SEG-05): rotar a un PIN trivial se rechaza con
+        `IDENTIDAD_PIN_AUTORIZACION_INVALIDO` sin el valor en la respuesta, y el PIN anterior
+        sigue validando (misma derivación guardada)."""
+        from app.core.seguridad import verificar_pin_autorizacion
+
+        organizacion = _crear_organizacion(sesion, f"org-pin-t-{uuid4().hex[:8]}")
+        _, _ = _crear_usuario(
+            sesion, organizacion.id, permisos=frozenset({"ADMIN_USUARIOS"}), nombre_usuario="admin1"
+        )
+        supervisor = self._crear_supervisor(sesion, organizacion.id)
+        sesion.commit()
+        access_token = _login(cliente, organizacion.slug, "admin1")
+        cabeceras = {"Authorization": f"Bearer {access_token}"}
+        url = f"/api/v1/identidad/usuarios/{supervisor.id}/pin"
+        vigente = cliente.post(
+            url, json={"pin": "735194"}, headers={**cabeceras, "Operation-Id": str(uuid4())}
+        )
+        assert vigente.status_code == 204
+        sesion.refresh(supervisor)
+        derivacion_anterior = supervisor.pin_autorizacion_hash
+
+        respuesta = cliente.post(
+            url, json={"pin": pin_trivial}, headers={**cabeceras, "Operation-Id": str(uuid4())}
+        )
+
+        assert respuesta.status_code == 400
+        assert respuesta.json()["codigo"] == "IDENTIDAD_PIN_AUTORIZACION_INVALIDO"
+        assert pin_trivial not in respuesta.text
+        sesion.refresh(supervisor)
+        assert supervisor.pin_autorizacion_hash == derivacion_anterior
+        assert verificar_pin_autorizacion(
+            "735194",
+            hash_almacenado=supervisor.pin_autorizacion_hash or "",
+            sal=supervisor.pin_autorizacion_sal or "",
+            iteraciones=supervisor.pin_autorizacion_iteraciones or 0,
+        )
 
 
 class TestRolPermisosCambiar:

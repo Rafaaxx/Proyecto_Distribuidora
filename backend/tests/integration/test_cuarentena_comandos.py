@@ -48,7 +48,7 @@ def _catalogo_y_registro_aislados(monkeypatch: pytest.MonkeyPatch) -> None:
         "PRUEBA_CUARENTENA",
         admite_online=True,
         admite_offline=True,
-        permiso_offline="REGISTRAR_COBRANZA",
+        permisos=("REGISTRAR_COBRANZA",),
     )
     registro.registrar_handler("PRUEBA_CUARENTENA", 1, _EsquemaPrueba)(_handler_prueba)
 

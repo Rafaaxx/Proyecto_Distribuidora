@@ -98,7 +98,9 @@ def manejar_proveedor_crear(
 
 
 registrar_handler("PROVEEDOR_CREAR", 1, ProveedorCrearContenidoV1)(manejar_proveedor_crear)
-declarar_tipo("PROVEEDOR_CREAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "PROVEEDOR_CREAR", admite_online=True, admite_offline=False, permisos=("GESTIONAR_PROVEEDORES",)
+)
 
 
 class ProveedorModificarContenidoV1(BaseModel):
@@ -137,7 +139,12 @@ def manejar_proveedor_modificar(
 registrar_handler("PROVEEDOR_MODIFICAR", 1, ProveedorModificarContenidoV1)(
     manejar_proveedor_modificar
 )
-declarar_tipo("PROVEEDOR_MODIFICAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "PROVEEDOR_MODIFICAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("GESTIONAR_PROVEEDORES",),
+)
 
 
 # --- COSTO_INFORMAR (D3, D4, D12, D14; CST-01, CST-02, INV-01, INV-18) -----
@@ -200,7 +207,9 @@ def manejar_costo_informar(
 
 
 registrar_handler("COSTO_INFORMAR", 1, CostoInformarContenidoV1)(manejar_costo_informar)
-declarar_tipo("COSTO_INFORMAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "COSTO_INFORMAR", admite_online=True, admite_offline=False, permisos=("EDITAR_COSTOS",)
+)
 
 
 # --- COMPRA_CONFIRMAR (change 11: CMP-01 a CMP-04, CMP-08; `design.md` D1 a D7, D14) ------
@@ -344,7 +353,9 @@ def manejar_compra_confirmar(
 
 
 registrar_handler("COMPRA_CONFIRMAR", 1, CompraConfirmarContenidoV1)(manejar_compra_confirmar)
-declarar_tipo("COMPRA_CONFIRMAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "COMPRA_CONFIRMAR", admite_online=True, admite_offline=False, permisos=("REGISTRAR_COMPRA",)
+)
 
 
 # --- COMPRA_ANULAR (change 11: CMP-05 a CMP-07, CC-03; `design.md` D3, D9, D10, D14) ----
@@ -419,7 +430,9 @@ def manejar_compra_anular(
 
 
 registrar_handler("COMPRA_ANULAR", 1, CompraAnularContenidoV1)(manejar_compra_anular)
-declarar_tipo("COMPRA_ANULAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "COMPRA_ANULAR", admite_online=True, admite_offline=False, permisos=("ANULAR_COMPRA",)
+)
 
 
 # --- PAGO_PROVEEDOR_REGISTRAR (change 12: PAG-01, PAG-02; D2 a D6, D10; CC-03, CC-04) ----
@@ -499,7 +512,12 @@ def manejar_pago_proveedor_registrar(
 registrar_handler("PAGO_PROVEEDOR_REGISTRAR", 1, PagoProveedorRegistrarContenidoV1)(
     manejar_pago_proveedor_registrar
 )
-declarar_tipo("PAGO_PROVEEDOR_REGISTRAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "PAGO_PROVEEDOR_REGISTRAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("REGISTRAR_PAGO_PROVEEDOR",),
+)
 
 
 # --- PAGO_PROVEEDOR_ANULAR (change 12: PAG-03; CC-03, CC-04; `design.md` D1, D2, D5, D10) --
@@ -553,4 +571,9 @@ def manejar_pago_proveedor_anular(
 registrar_handler("PAGO_PROVEEDOR_ANULAR", 1, PagoProveedorAnularContenidoV1)(
     manejar_pago_proveedor_anular
 )
-declarar_tipo("PAGO_PROVEEDOR_ANULAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "PAGO_PROVEEDOR_ANULAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("ANULAR_PAGO_PROVEEDOR",),
+)

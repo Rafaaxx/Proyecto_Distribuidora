@@ -27,7 +27,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 MAXIMO_COMANDOS_POR_LOTE = 50
 
@@ -37,7 +37,13 @@ class ItemLoteComandoRequest(BaseModel):
     dispositivo lo generó. `usuario_id`/`dispositivo_id` son los que
     declaró al generarlo -- el servidor los compara contra la sesión que
     sincroniza (`ColaAjenaError`, tarea 8.5), nunca los usa tal cual para
-    construir el sobre sin esa verificación."""
+    construir el sobre sin esa verificación.
+
+    `extra="forbid"` (change 18b, `design.md` D2): el lote no admite credenciales efímeras; un
+    ítem que traiga `credenciales` (o cualquier campo ajeno) se rechaza como malformado, sin
+    guardarlo ni registrar su valor."""
+
+    model_config = ConfigDict(extra="forbid")
 
     operation_id: UUID
     tipo: str

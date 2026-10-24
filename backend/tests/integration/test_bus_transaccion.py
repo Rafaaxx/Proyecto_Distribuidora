@@ -59,6 +59,10 @@ def _crear_usuario_y_dispositivo(sesion: Session, organizacion_id: UUID) -> tupl
         activo=True,
         momento=MOMENTO,
     )
+    # `USUARIO_CREAR` exige `ADMIN_USUARIOS` en todo camino (ADR-056).
+    identidad_repository.asignar_permiso_a_rol(
+        organizacion_id, sesion, rol_id=rol.id, permiso_codigo="ADMIN_USUARIOS"
+    )
     usuario = identidad_repository.crear_usuario(
         organizacion_id,
         sesion,

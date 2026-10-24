@@ -21,7 +21,6 @@ Escenarios (`design.md` D4, D8, ADR-053):
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -34,10 +33,8 @@ from app.commands.huella import calcular_huella
 from app.commands.sobre import SobreComando
 from app.core.db import crear_engine
 from app.core.errors import DomainError
-from app.core.ids import nuevo_id
 from app.modules.configuracion import commands as _configuracion_commands  # noqa: F401
 from app.modules.identidad import commands as _identidad_commands  # noqa: F401
-from app.modules.identidad import repository as identidad_repository
 from app.modules.sync import service as sync_service
 from tests.concurrency.test_compras_concurrencia import (
     MOMENTO,
@@ -69,6 +66,7 @@ class _Escenario:
 
     def __init__(self, database_url: str) -> None:
         self.database_url = database_url
+        self.actor_de_rol: dict[UUID, tuple[UUID, UUID]] = {}
         sesion = _sesion_independiente(database_url)
         try:
             self.org = crear_organizacion(sesion).id
@@ -99,36 +97,23 @@ class _Escenario:
         return medio_id
 
     def crear_rol_con_usuario(self, nombre: str, permisos: frozenset[str]) -> UUID:
-        """Un rol activo con los permisos dados y un usuario activo. Devuelve el id del rol."""
+        """Un rol activo con los permisos dados, su usuario activo y su dispositivo. Devuelve el
+        id del rol; el usuario queda registrado como el actor que cambia ESE rol (el bus exige
+        `ADMIN_USUARIOS` a quien envía `ROL_PERMISOS_CAMBIAR`, ADR-056)."""
         sesion = _sesion_independiente(self.database_url)
         try:
-            rol = identidad_repository.crear_rol(
-                self.org,
-                sesion,
-                rol_id=nuevo_id(),
-                nombre=nombre,
-                tope_descuento=Decimal("0"),
-                activo=True,
-                momento=MOMENTO,
+            usuario_id, dispositivo_id = crear_usuario_y_dispositivo(
+                sesion, self.org, permisos=permisos
             )
-            for codigo in sorted(permisos):
-                identidad_repository.asignar_permiso_a_rol(
-                    self.org, sesion, rol_id=rol.id, permiso_codigo=codigo
-                )
-            identidad_repository.crear_usuario(
-                self.org,
-                sesion,
-                usuario_id=nuevo_id(),
-                usuario=f"u-{uuid4().hex[:8]}",
-                nombre="Persona de prueba",
-                email=None,
-                password_hash="hash",
-                rol_id=rol.id,
-                estado="ACTIVO",
-                momento=MOMENTO,
+            rol_id = sesion.execute(
+                text("SELECT rol_id FROM usuario WHERE id = :u"), {"u": usuario_id}
+            ).scalar_one()
+            sesion.execute(
+                text("UPDATE rol SET nombre = :n WHERE id = :r"), {"n": nombre, "r": rol_id}
             )
             sesion.commit()
-            return rol.id
+            self.actor_de_rol[rol_id] = (usuario_id, dispositivo_id)
+            return rol_id
         finally:
             sesion.close()
 
@@ -140,15 +125,17 @@ class _Escenario:
         tipo: str,
         contenido: dict[str, Any],
         operation_id: UUID | None = None,
+        actor: tuple[UUID, UUID] | None = None,
     ) -> Any:
+        usuario_id, dispositivo_id = actor or (self.admin_id, self.admin_dispositivo_id)
         sobre = SobreComando(
             operation_id=operation_id or uuid4(),
             tipo=tipo,
             version=1,
             modo="ONLINE",
             organizacion_id=self.org,
-            usuario_id=self.admin_id,
-            dispositivo_id=self.admin_dispositivo_id,
+            usuario_id=usuario_id,
+            dispositivo_id=dispositivo_id,
             occurred_at=MOMENTO,
             secuencia=1,
             app_version="1.0.0",
@@ -194,8 +181,13 @@ class _Escenario:
         )
 
     def cambiar_permisos(self, sesion: Session, rol_id: UUID, permisos: list[str]) -> Any:
+        # Quien cambia el rol es el usuario de ESE rol: es quien tiene `ADMIN_USUARIOS` (el bus lo
+        # exige) cuando el rol es el único administrador.
         return self.enviar(
-            sesion, "ROL_PERMISOS_CAMBIAR", {"rol_id": str(rol_id), "permisos": permisos}
+            sesion,
+            "ROL_PERMISOS_CAMBIAR",
+            {"rol_id": str(rol_id), "permisos": permisos},
+            actor=self.actor_de_rol.get(rol_id),
         )
 
     # --- lecturas confirmadas ---------------------------------------------------------

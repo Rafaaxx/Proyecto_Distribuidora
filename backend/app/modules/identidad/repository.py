@@ -24,6 +24,7 @@ from app.modules.identidad.models import (
     ConfiguracionOrganizacion,
     Dispositivo,
     IntentoLogin,
+    IntentoPinAutorizacion,
     Organizacion,
     Permiso,
     Rol,
@@ -48,10 +49,9 @@ FUNCIONES_SIN_ORGANIZACION_ID = frozenset(
         # (ver docstring de la migración `e5f6a7b8c9d0` y del modelo
         # `IntentoLogin`): el límite por IP es transversal a organizaciones.
         "registrar_intento_login",
-        "contar_intentos_fallidos_por_usuario",
-        "contar_intentos_fallidos_por_ip",
-        "obtener_intento_fallido_mas_antiguo_en_ventana_por_usuario",
-        "obtener_intento_fallido_mas_antiguo_en_ventana_por_ip",
+        # D24 (change 18b): mismo motivo, bloqueo desde el último fallo.
+        "ultimo_fallo_de_login",
+        "contar_fallos_de_login_en_ventana",
     }
 )
 
@@ -369,6 +369,45 @@ def contar_usuarios_activos_por_rol(organizacion_id: UUID, sesion: Session) -> d
         .group_by(Usuario.rol_id)
     )
     return {rol_id: cantidad for rol_id, cantidad in sesion.execute(consulta).all()}
+
+
+def listar_autorizadores_con_pin(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    permisos: Collection[str],
+    excluir_usuario_id: UUID,
+) -> list[tuple[UUID, str, frozenset[str]]]:
+    """Usuarios ACTIVOS de la organización con rol activo, PIN de autorización definido y alguno
+    de `permisos` (change 18b, D15): `(id, nombre, permisos de esos que tiene)`, ordenados por
+    nombre y id. Una sola consulta (sin N+1); nunca trae la derivación del PIN."""
+    consulta = (
+        select(Usuario.id, Usuario.nombre, RolPermiso.permiso_codigo)
+        .join(Rol, and_(Rol.id == Usuario.rol_id, Rol.organizacion_id == Usuario.organizacion_id))
+        .join(
+            RolPermiso,
+            and_(
+                RolPermiso.rol_id == Usuario.rol_id,
+                RolPermiso.organizacion_id == Usuario.organizacion_id,
+            ),
+        )
+        .where(
+            Usuario.organizacion_id == organizacion_id,
+            Usuario.estado == "ACTIVO",
+            Usuario.id != excluir_usuario_id,
+            Usuario.pin_autorizacion_hash.is_not(None),
+            Rol.activo.is_(True),
+            RolPermiso.permiso_codigo.in_(list(permisos)),
+        )
+        .order_by(Usuario.nombre, Usuario.id)
+    )
+    acumulado: dict[UUID, tuple[str, set[str]]] = {}
+    for usuario_id, nombre, permiso in sesion.execute(consulta).all():
+        acumulado.setdefault(usuario_id, (nombre, set()))[1].add(permiso)
+    return [
+        (usuario_id, nombre, frozenset(encontrados))
+        for usuario_id, (nombre, encontrados) in acumulado.items()
+    ]
 
 
 def listar_permisos_de_todos_los_roles(
@@ -800,27 +839,38 @@ def registrar_intento_login(
     *,
     intento_id: UUID,
     usuario_id: UUID | None,
+    clave_intento: str,
     ip: str,
     exito: bool,
     momento: datetime,
 ) -> IntentoLogin:
-    fila = IntentoLogin(id=intento_id, usuario_id=usuario_id, ip=ip, exito=exito, creado_en=momento)
+    """Inserta un fallo o un marcador. `clave_intento` (ADR-057) es obligatoria: es la que cuenta;
+    `usuario_id` es el rastro de AUD-01 cuando el par resuelve un usuario."""
+    fila = IntentoLogin(
+        id=intento_id,
+        usuario_id=usuario_id,
+        clave_intento=clave_intento,
+        ip=ip,
+        exito=exito,
+        creado_en=momento,
+    )
     sesion.add(fila)
     sesion.flush()
     return fila
 
 
-def _filtro_no_neutralizado_por_desbloqueo_manual(*, usuario_id: UUID) -> sa.ColumnElement[bool]:
+def _filtro_no_neutralizado_por_desbloqueo_manual(*, clave_intento: str) -> sa.ColumnElement[bool]:
     """Tarea 11.4 (desbloqueo manual): un desbloqueo se registra como una
     fila marcador con `exito=True` (único caso en que se inserta con
     éxito, ver `identidad/service.py::desbloquear_usuario`). Un intento
     fallido ESTRICTAMENTE anterior o simultáneo al último marcador no
     cuenta más (`<=`, no una ventana de tiempo): así se "neutraliza" sin
-    `UPDATE`/`DELETE` (tabla de solo inserción, INV-05). Devuelve una
-    condición SQLAlchemy lista para usar en un `.where(...)`."""
+    `UPDATE`/`DELETE` (tabla de solo inserción, INV-05). El marcador es el último DE LA MISMA
+    CLAVE (ADR-057 punto 6): desbloquear a un usuario no neutraliza los fallos de otro par.
+    Devuelve una condición SQLAlchemy lista para usar en un `.where(...)`."""
     subconsulta_ultimo_desbloqueo = (
         select(func.max(IntentoLogin.creado_en))
-        .where(IntentoLogin.usuario_id == usuario_id, IntentoLogin.exito.is_(True))
+        .where(IntentoLogin.clave_intento == clave_intento, IntentoLogin.exito.is_(True))
         .scalar_subquery()
     )
     return sa.or_(
@@ -829,62 +879,178 @@ def _filtro_no_neutralizado_por_desbloqueo_manual(*, usuario_id: UUID) -> sa.Col
     )
 
 
-def contar_intentos_fallidos_por_usuario(
-    sesion: Session, *, usuario_id: UUID, desde: datetime
+# --- Bloqueo de login desde el último fallo (change 18b, D24, enmienda a ADR-018) ---------------
+#
+# Las usan `iniciar_sesion` (6.9) y "Mi PIN" (`definir_pin_propio`). No tienen `organizacion_id`
+# (`intento_login` no lo tiene): el límite por IP es transversal.
+
+
+def _fallos_de_login(*, clave_intento: str | None, ip: str | None) -> list[sa.ColumnElement[bool]]:
+    """Fallos del par escrito `clave_intento` (posteriores a su último desbloqueo manual, ADR-057)
+    o de `ip`."""
+    condiciones: list[sa.ColumnElement[bool]] = [IntentoLogin.exito.is_(False)]
+    if clave_intento is not None:
+        condiciones.append(IntentoLogin.clave_intento == clave_intento)
+        condiciones.append(
+            _filtro_no_neutralizado_por_desbloqueo_manual(clave_intento=clave_intento)
+        )
+    if ip is not None:
+        condiciones.append(IntentoLogin.ip == ip)
+    return condiciones
+
+
+def ultimo_fallo_de_login(
+    sesion: Session, *, clave_intento: str | None = None, ip: str | None = None
+) -> datetime | None:
+    """El último fallo contado (F de `design.md` D24 punto 1), por par escrito o por IP."""
+    consulta = select(func.max(IntentoLogin.creado_en)).where(
+        *_fallos_de_login(clave_intento=clave_intento, ip=ip)
+    )
+    return sesion.execute(consulta).scalar_one()
+
+
+def contar_fallos_de_login_en_ventana(
+    sesion: Session,
+    *,
+    clave_intento: str | None = None,
+    ip: str | None = None,
+    desde_exclusivo: datetime,
+    hasta_inclusivo: datetime,
 ) -> int:
-    """Cuenta con `SELECT COUNT(*)` en la base (`CLAUDE.md` §4: los reportes
-    y conteos se calculan en la base, nunca trayendo filas a Python) los
-    intentos fallidos de `usuario_id` con `creado_en >= desde` (ventana
-    deslizante de 15 minutos, `ADR-018`), respetando el último desbloqueo
-    manual si lo hay (tarea 11.4)."""
+    """Fallos en `(desde_exclusivo, hasta_inclusivo]`, por par escrito o por IP."""
     consulta = (
         select(func.count())
         .select_from(IntentoLogin)
         .where(
-            IntentoLogin.usuario_id == usuario_id,
-            IntentoLogin.exito.is_(False),
-            IntentoLogin.creado_en >= desde,
-            _filtro_no_neutralizado_por_desbloqueo_manual(usuario_id=usuario_id),
+            *_fallos_de_login(clave_intento=clave_intento, ip=ip),
+            IntentoLogin.creado_en > desde_exclusivo,
+            IntentoLogin.creado_en <= hasta_inclusivo,
         )
     )
     return int(sesion.execute(consulta).scalar_one())
 
 
-def contar_intentos_fallidos_por_ip(sesion: Session, *, ip: str, desde: datetime) -> int:
+# --- Intentos del PIN de autorización (change 18b, D3 revisada, D21 punto 7) --------------------
+#
+# `intento_pin_autorizacion` es de solo inserción para `app_runtime`: un fallo (`exito = false`,
+# con `intentante_id`) y un marcador (`exito = true`, `intentante_id` nulo) que reinicia los dos
+# contadores del autorizador. Los conteos se calculan en la base (`CLAUDE.md` §4).
+
+
+def tomar_candado_de_pin_del_autorizador(
+    organizacion_id: UUID, sesion: Session, *, autorizador_id: UUID
+) -> None:
+    """Serializa los intentos contra el mismo autorizador (cuenta, decide el bloqueo y escribe sin
+    carreras) con un candado de aviso de transacción. No toca la fila de `usuario`, así no choca
+    con las claves foráneas que la transacción del comando pueda tener."""
+    sesion.execute(
+        sa.text("SELECT pg_advisory_xact_lock(hashtextextended(:clave, 0))"),
+        {"clave": f"pin-autorizacion:{organizacion_id}:{autorizador_id}"},
+    )
+
+
+def registrar_fallo_de_pin(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    intento_id: UUID,
+    autorizador_id: UUID,
+    intentante_id: UUID,
+    momento: datetime,
+) -> IntentoPinAutorizacion:
+    fila = IntentoPinAutorizacion(
+        id=intento_id,
+        organizacion_id=organizacion_id,
+        autorizador_id=autorizador_id,
+        intentante_id=intentante_id,
+        exito=False,
+        creado_en=momento,
+    )
+    sesion.add(fila)
+    sesion.flush()
+    return fila
+
+
+def registrar_marcador_de_pin(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    intento_id: UUID,
+    autorizador_id: UUID,
+    momento: datetime,
+) -> IntentoPinAutorizacion:
+    """La fila marcador de D21 punto 7: reinicia los dos contadores del autorizador."""
+    fila = IntentoPinAutorizacion(
+        id=intento_id,
+        organizacion_id=organizacion_id,
+        autorizador_id=autorizador_id,
+        intentante_id=None,
+        exito=True,
+        creado_en=momento,
+    )
+    sesion.add(fila)
+    sesion.flush()
+    return fila
+
+
+def _fallos_de_pin_vigentes(
+    organizacion_id: UUID, autorizador_id: UUID, intentante_id: UUID | None
+) -> list[sa.ColumnElement[bool]]:
+    """Fallos del autorizador (del par si `intentante_id` viene) posteriores a su último
+    marcador."""
+    ultimo_marcador = (
+        select(func.max(IntentoPinAutorizacion.creado_en))
+        .where(
+            IntentoPinAutorizacion.organizacion_id == organizacion_id,
+            IntentoPinAutorizacion.autorizador_id == autorizador_id,
+            IntentoPinAutorizacion.exito.is_(True),
+        )
+        .scalar_subquery()
+    )
+    condiciones: list[sa.ColumnElement[bool]] = [
+        IntentoPinAutorizacion.organizacion_id == organizacion_id,
+        IntentoPinAutorizacion.autorizador_id == autorizador_id,
+        IntentoPinAutorizacion.exito.is_(False),
+        sa.or_(ultimo_marcador.is_(None), IntentoPinAutorizacion.creado_en > ultimo_marcador),
+    ]
+    if intentante_id is not None:
+        condiciones.append(IntentoPinAutorizacion.intentante_id == intentante_id)
+    return condiciones
+
+
+def ultimo_fallo_de_pin(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    autorizador_id: UUID,
+    intentante_id: UUID | None,
+) -> datetime | None:
+    """El último fallo contado (F de `design.md` D3 punto 4): del par si `intentante_id` viene, o
+    general del autorizador si es `None`."""
+    consulta = select(func.max(IntentoPinAutorizacion.creado_en)).where(
+        *_fallos_de_pin_vigentes(organizacion_id, autorizador_id, intentante_id)
+    )
+    return sesion.execute(consulta).scalar_one()
+
+
+def contar_fallos_de_pin_en_ventana(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    autorizador_id: UUID,
+    intentante_id: UUID | None,
+    desde_exclusivo: datetime,
+    hasta_inclusivo: datetime,
+) -> int:
+    """Fallos contados en `(desde_exclusivo, hasta_inclusivo]` (la ventana de `design.md` D3
+    punto 4), del par o generales del autorizador."""
     consulta = (
         select(func.count())
-        .select_from(IntentoLogin)
+        .select_from(IntentoPinAutorizacion)
         .where(
-            IntentoLogin.ip == ip,
-            IntentoLogin.exito.is_(False),
-            IntentoLogin.creado_en >= desde,
+            *_fallos_de_pin_vigentes(organizacion_id, autorizador_id, intentante_id),
+            IntentoPinAutorizacion.creado_en > desde_exclusivo,
+            IntentoPinAutorizacion.creado_en <= hasta_inclusivo,
         )
     )
     return int(sesion.execute(consulta).scalar_one())
-
-
-def obtener_intento_fallido_mas_antiguo_en_ventana_por_usuario(
-    sesion: Session, *, usuario_id: UUID, desde: datetime
-) -> datetime | None:
-    """El momento del intento fallido más antiguo todavía dentro de la
-    ventana: cuando venza (`+ 15 minutos`), el bloqueo por usuario se
-    levanta solo (tarea 11.4, desbloqueo automático). Respeta el último
-    desbloqueo manual, igual que `contar_intentos_fallidos_por_usuario`."""
-    consulta = select(func.min(IntentoLogin.creado_en)).where(
-        IntentoLogin.usuario_id == usuario_id,
-        IntentoLogin.exito.is_(False),
-        IntentoLogin.creado_en >= desde,
-        _filtro_no_neutralizado_por_desbloqueo_manual(usuario_id=usuario_id),
-    )
-    return sesion.execute(consulta).scalar_one_or_none()
-
-
-def obtener_intento_fallido_mas_antiguo_en_ventana_por_ip(
-    sesion: Session, *, ip: str, desde: datetime
-) -> datetime | None:
-    consulta = select(func.min(IntentoLogin.creado_en)).where(
-        IntentoLogin.ip == ip,
-        IntentoLogin.exito.is_(False),
-        IntentoLogin.creado_en >= desde,
-    )
-    return sesion.execute(consulta).scalar_one_or_none()

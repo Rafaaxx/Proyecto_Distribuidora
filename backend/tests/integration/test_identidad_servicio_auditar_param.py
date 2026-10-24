@@ -222,7 +222,7 @@ class TestAuditarParamEstablecerPinAutorizacion:
             db_session,
             FixedClock(MOMENTO),
             usuario_id=usuario.id,
-            pin="654321",
+            pin="735194",
             actor_id=usuario.id,
         )
 
@@ -249,7 +249,7 @@ class TestAuditarParamEstablecerPinAutorizacion:
             db_session,
             FixedClock(MOMENTO),
             usuario_id=usuario.id,
-            pin="654321",
+            pin="735194",
             actor_id=usuario.id,
             auditar=False,
         )

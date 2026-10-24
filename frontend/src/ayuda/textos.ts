@@ -63,7 +63,7 @@ export const TEMAS = {
       {
         titulo: '4. El descuento manual, al final',
         parrafos: [
-          'Al final, el descuento manual del vendedor sobre lo que quedó: uno general para toda la venta o uno distinto en un producto, que reemplaza al general en ese producto.',
+          'Al final, el descuento manual del vendedor sobre lo que quedó: uno general para toda la venta o uno distinto en una línea, que reemplaza al general en esa línea.',
         ],
       },
     ],
@@ -177,9 +177,56 @@ export const TEMAS = {
       },
     ],
   },
+  credito: {
+    titulo: 'Cómo funciona el crédito de los clientes',
+    reglas: ['CRE-01', 'CRE-02', 'CRE-03', 'CRE-04', 'CRE-05', 'CRE-06', 'CRE-07', 'CRE-08', 'CRE-09', 'CRE-10'],
+    secciones: [
+      {
+        titulo: 'Cuánto crédito le queda',
+        parrafos: [
+          'El disponible es el límite menos lo que el cliente ya debe. Sin límite cargado no hay control; con límite cero, solo se le vende de contado.',
+        ],
+      },
+      {
+        titulo: 'Qué consume una venta',
+        parrafos: [
+          'La venta usa crédito solo por lo que queda sin cobrar. Si se cobra todo en el acto no usa nada, aunque el cliente ya esté pasado de su límite.',
+        ],
+      },
+      {
+        titulo: 'Advertir',
+        parrafos: ['Te muestra cuánto se pasa y podés confirmar aceptándolo. La venta queda marcada para revisar.'],
+      },
+      {
+        titulo: 'Autorizar',
+        parrafos: [
+          'Hace falta el permiso de superar el crédito o el PIN de un supervisor que lo tenga. Queda registrado quién autorizó.',
+        ],
+      },
+      {
+        titulo: 'Bloquear',
+        parrafos: ['La venta no se confirma, ni con permiso. Podés cobrar más en el acto o sacar productos del pedido.'],
+      },
+      {
+        titulo: 'Sin señal',
+        parrafos: [
+          'El teléfono calcula con lo último que sabe del cliente y la venta nunca se rechaza por crédito, porque la mercadería ya se entregó. Con la política Autorizar, un exceso que entra en la tolerancia de la empresa se confirma solo; si no entra, hace falta permiso propio o el PIN de un supervisor.',
+          'Cuando la venta llega al sistema, se vuelve a calcular con lo que el cliente debe de verdad. Si se pasaba y el teléfono no lo había visto, la venta queda marcada para revisar.',
+        ],
+        ejemplo:
+          'Ej.: Exceso de $10.000: con tolerancia $20.000 se confirma y queda marcada; con $5.000 pide permiso o PIN.',
+      },
+      {
+        titulo: 'Qué queda guardado en la venta',
+        parrafos: [
+          'La venta guarda lo que vio quien vendió: límite, deuda considerada, disponible, exceso, política, cómo se resolvió y quién autorizó. Si después cambia el límite del cliente, la venta no cambia.',
+        ],
+      },
+    ],
+  },
   'ventas-observaciones': {
     titulo: 'Avisos de las ventas cargadas sin señal',
-    reglas: ['SYN-05', 'SYN-07', 'STK-06', 'ADR-054'],
+    reglas: ['SYN-05', 'SYN-07', 'STK-06', 'CRE-09', 'DSC-09', 'ADR-054', 'ADR-055'],
     secciones: [
       {
         titulo: 'Por qué la venta se toma igual',
@@ -224,6 +271,26 @@ export const TEMAS = {
       {
         titulo: 'Falta la referencia',
         parrafos: ['Se cobró con un medio que exige referencia, por ejemplo el número de transferencia, y no se cargó.'],
+      },
+      {
+        titulo: 'Descuentos distintos',
+        parrafos: ['Los descuentos que registró el teléfono no coinciden con los que da el sistema hoy, o el descuento manual ya no habría pasado la revisión (tope, permiso, motivo o autorizador). La venta se tomó con los descuentos del teléfono.'],
+      },
+      {
+        titulo: 'Autorización sin señal',
+        parrafos: ['Un descuento o un exceso de crédito se autorizó sin señal, con el PIN de un supervisor o con el permiso del propio vendedor. Conviene revisar que quien autorizó tenía el permiso.'],
+      },
+      {
+        titulo: 'Exceso de crédito advertido',
+        parrafos: ['El cliente se pasó de su límite y el vendedor aceptó el aviso para confirmar la venta.'],
+      },
+      {
+        titulo: 'Exceso dentro de la tolerancia',
+        parrafos: ['Sin señal, el cliente se pasó de su límite pero el exceso entraba en la tolerancia de la empresa, y la venta se confirmó sin pedir permiso.'],
+      },
+      {
+        titulo: 'Exceso de crédito detectado al sincronizar',
+        parrafos: ['Con lo que el cliente debía de verdad, la venta lo dejó pasado de su límite, aunque el teléfono no lo había visto.'],
       },
     ],
   },
@@ -574,6 +641,95 @@ export const AYUDAS = {
       'Avisos para revisar en una venta. La venta se tomó igual porque la mercadería ya se entregó. Tocá «Ver más» para ver qué significa cada aviso.',
     reglas: ['SYN-05', 'SYN-07', 'STK-06', 'ADR-054'],
     verMas: 'ventas-observaciones',
+  },
+  // --- Venta con descuentos, crédito y autorización (change 18b, D22; textos corregidos por el
+  // usuario el 2026-10-21 y cargados tal cual) ---
+  'ventas.descuentoGeneral': {
+    titulo: 'Descuento a toda la venta',
+    texto:
+      'Un porcentaje para todos los productos, que se aplica después de los descuentos automáticos. Si a una línea le ponés su propio porcentaje, ese reemplaza al general en esa línea: no se suman.',
+    ejemplo: 'Ej.: 5 % general sobre un vino que ya quedó en $29.687,50 por volumen → $1.484,38 menos.',
+    reglas: ['DSC-05', 'DSC-06'],
+    verMas: 'topes',
+  },
+  'ventas.descuentoPropio': {
+    titulo: 'Descuento de esta línea',
+    texto:
+      'Reemplaza al general solo en esta línea, sea mayor o menor. No se puede poner 0 % para dejar una línea sin el general.',
+    ejemplo: 'Ej.: General 5 % y 10 % en el vino → el vino lleva 10 % y el resto 5 %.',
+    reglas: ['DSC-05', 'DSC-08', 'ADR-050'],
+  },
+  'ventas.topeDescuento': {
+    titulo: 'Tu tope',
+    texto:
+      'Cuánto descuento manual podés dar sin pedir autorización. Se compara con el porcentaje manual más alto que quedó en algún producto; los descuentos automáticos no cuentan.',
+    ejemplo:
+      'Ej.: Con tope 5 %: 5 % general pasa directo; 5 % general y 8 % en un producto pide autorización.',
+    reglas: ['DSC-06'],
+    verMas: 'topes',
+  },
+  'ventas.autorizacion': {
+    titulo: 'Autorización',
+    texto:
+      'Si el descuento pasa tu tope, o el cliente se pasa del crédito y su política pide autorización, alguien tiene que aprobar la venta. Si tenés el permiso, la aprobás vos. Si no, un supervisor elige su nombre y escribe su PIN acá; el PIN no se guarda y queda registrado quién autorizó.',
+    ejemplo: 'Ej.: Marta escribe su PIN y la venta queda con Marta como autorizadora.',
+    reglas: ['DSC-06', 'CRE-05', 'SEG-05'],
+  },
+  'ventas.motivoDescuento': {
+    titulo: 'Motivo del descuento',
+    texto:
+      'Si la empresa lo exige, toda venta con descuento manual lleva un motivo, uno solo por venta, que queda guardado en cada producto con descuento manual.',
+    reglas: ['DSC-06', 'DSC-08'],
+  },
+  'ventas.descuentosAutomaticos': {
+    titulo: 'Descuentos automáticos',
+    texto:
+      'Salen de las reglas activas (por cajas, unidades o importe) y se calculan solos; desde la venta no se quitan ni se cambian. Si cambian entre que armaste el pedido y confirmás, la venta no se confirma y se muestran los nuevos.',
+    reglas: ['DSC-05', 'DSC-09'],
+  },
+  'ventas.credito': {
+    titulo: 'Crédito del cliente',
+    texto:
+      'Disponible = límite − lo que ya debe. La venta usa crédito solo por lo que queda sin cobrar. Sin límite cargado no hay control; límite cero es solo de contado.',
+    ejemplo:
+      'Ej.: Límite $200.000, debe $150.000, venta $80.000 con cobranza $20.000 → queda debiendo $210.000: se pasa $10.000.',
+    reglas: ['CRE-01', 'CRE-02'],
+    verMas: 'credito',
+  },
+  'ventas.politicaCredito': {
+    titulo: 'Si se pasa del crédito',
+    texto:
+      'Depende de la política del cliente o, si no tiene, la de la empresa. Advertir: te avisa y podés confirmar; la venta queda marcada para revisar. Autorizar: hace falta tu permiso o el PIN de un supervisor. Bloquear: no se confirma; podés cobrar más o sacar productos.',
+    reglas: ['CRE-03', 'CRE-04', 'CRE-05', 'CRE-07'],
+    verMas: 'credito',
+  },
+
+  // --- Configuración del descuento manual y del crédito (change 18b, D22) ---
+  'configuracion.descuentoManual': {
+    titulo: 'Descuento manual',
+    texto:
+      'Deshabilitado: nadie da descuentos manuales en la venta (los automáticos siguen). Exigir motivo: cada venta con descuento manual pide elegir un motivo.',
+    reglas: ['DSC-06'],
+  },
+  'configuracion.credito': {
+    titulo: 'Crédito por defecto',
+    texto:
+      'La política vale para los clientes que no tienen una propia. La tolerancia sin señal es cuánto puede pasarse un vendedor sin conexión cuando la política es Autorizar, en pesos o en porcentaje del límite; sin tolerancia, todo exceso sin señal pide permiso o PIN.',
+    ejemplo: 'Ej.: Exceso de $10.000: con tolerancia $20.000 se confirma y queda marcada; con $5.000 pide permiso o PIN.',
+    reglas: ['CRE-03', 'CRE-06', 'ADR-032'],
+  },
+
+  // --- PIN de autorización (change 18b, D21, D22) ---
+  'roles.pinAutorizacion': {
+    titulo: 'PIN de autorización',
+    texto: 'Con este PIN un supervisor aprueba, en la pantalla de otro, un descuento o un exceso de crédito.',
+    reglas: ['SEG-05', 'ADR-011', 'ADR-019'],
+  },
+  'cuenta.miPin': {
+    titulo: 'Mi PIN',
+    texto:
+      'Es el PIN con el que aprobás, en la pantalla de otra persona, un descuento o una venta que se pasa del crédito. Para cambiarlo te pedimos tu contraseña. Tiene que tener al menos 6 números y no puede ser fácil de adivinar, como 123456 o 111111. Es distinto del PIN con el que desbloqueás el teléfono. Cuando lo cambiás, el anterior deja de servir.',
+    reglas: ['SEG-05', 'ADR-011', 'ADR-019'],
   },
 } as const satisfies Record<string, EntradaDeAyuda>
 

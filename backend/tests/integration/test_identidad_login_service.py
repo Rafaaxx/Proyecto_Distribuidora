@@ -349,3 +349,95 @@ class TestRechazoDeInicioDeSesion:
             .one()
         )
         assert auditoria.usuario_id == usuario.id
+
+
+class TestTiempoDeRespuestaNoRevelaSiElUsuarioExiste:
+    """ADR-057 punto 7, SEG-01: todo rechazo de credenciales deriva Argon2id una vez (contra un hash
+    ficticio si no hay usuario utilizable), así el tiempo de respuesta no distingue los casos."""
+
+    @staticmethod
+    def _espiar(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+        from argon2 import PasswordHasher
+
+        llamadas: list[str] = []
+        original = PasswordHasher.verify
+
+        def _verify(self, hash_, password):  # type: ignore[no-untyped-def]
+            llamadas.append(str(hash_))
+            return original(self, hash_, password)
+
+        monkeypatch.setattr(PasswordHasher, "verify", _verify)
+        return llamadas
+
+    def _intentar(self, sesion: Session, slug: str, nombre: str) -> None:
+        with pytest.raises(CredencialesInvalidasError):
+            _iniciar_sesion(
+                sesion,
+                organizacion_slug=slug,
+                nombre_usuario=nombre,
+                password="una-contrasena-incorrecta",
+                dispositivo_id=nuevo_id(),
+            )
+
+    def test_slug_usuario_inexistente_usuario_inactivo_y_rol_inactivo_derivan_una_vez(
+        self, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        organizacion = _crear_organizacion(db_session, "org-tiempo-1")
+        _crear_usuario_activo(db_session, organizacion.id, nombre_usuario="activo")
+        _crear_usuario_activo(
+            db_session, organizacion.id, nombre_usuario="inactivo", estado="INACTIVO"
+        )
+        rol_inactivo = repository.crear_rol(
+            organizacion.id,
+            db_session,
+            rol_id=nuevo_id(),
+            nombre="Rol inactivo",
+            tope_descuento=Decimal("0"),
+            activo=False,
+            momento=MOMENTO,
+        )
+        repository.crear_usuario(
+            organizacion.id,
+            db_session,
+            usuario_id=nuevo_id(),
+            usuario="con-rol-inactivo",
+            nombre="Persona",
+            email=None,
+            password_hash=hashear_password(PASSWORD),
+            rol_id=rol_inactivo.id,
+            estado="ACTIVO",
+            momento=MOMENTO,
+        )
+        llamadas = self._espiar(monkeypatch)
+
+        casos = {
+            "activo con contraseña incorrecta": (organizacion.slug, "activo"),
+            "usuario inexistente": (organizacion.slug, "nadie"),
+            "usuario inactivo": (organizacion.slug, "inactivo"),
+            "rol inactivo": (organizacion.slug, "con-rol-inactivo"),
+            "slug inexistente": ("slug-que-no-existe", "activo"),
+        }
+        for descripcion, (slug, nombre) in casos.items():
+            antes = len(llamadas)
+            self._intentar(db_session, slug, nombre)
+            assert len(llamadas) - antes == 1, descripcion
+
+    def test_sin_usuario_utilizable_la_derivacion_es_contra_el_hash_ficticio_y_nunca_acepta(
+        self, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        organizacion = _crear_organizacion(db_session, "org-tiempo-2")
+        usuario = _crear_usuario_activo(db_session, organizacion.id, nombre_usuario="activo")
+        llamadas = self._espiar(monkeypatch)
+
+        self._intentar(db_session, organizacion.slug, "nadie")
+
+        assert llamadas and llamadas[0] != usuario.password_hash
+        # La contraseña de un usuario real, escrita para un usuario inexistente, tampoco entra.
+        with pytest.raises(CredencialesInvalidasError):
+            _iniciar_sesion(
+                db_session,
+                organizacion_slug=organizacion.slug,
+                nombre_usuario="nadie",
+                password=PASSWORD,
+                dispositivo_id=nuevo_id(),
+            )

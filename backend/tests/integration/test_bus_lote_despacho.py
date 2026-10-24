@@ -281,8 +281,18 @@ class TestUnHandlerNoConfirmaPorElLote:
     def _handlers_que_confirman(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("app.commands.catalogo._CATALOGO", dict(catalogo._CATALOGO))
         monkeypatch.setattr("app.commands.registro._REGISTRO", dict(registro._REGISTRO))
-        catalogo.declarar_tipo("PRUEBA_CONFIRMA", admite_online=True, admite_offline=False)
-        catalogo.declarar_tipo("PRUEBA_REVIERTE", admite_online=True, admite_offline=False)
+        catalogo.declarar_tipo(
+            "PRUEBA_CONFIRMA",
+            admite_online=True,
+            admite_offline=False,
+            sin_permiso="tipo de prueba",
+        )
+        catalogo.declarar_tipo(
+            "PRUEBA_REVIERTE",
+            admite_online=True,
+            admite_offline=False,
+            sin_permiso="tipo de prueba",
+        )
 
         @registro.registrar_handler("PRUEBA_CONFIRMA", 1, _EsquemaVacio)
         def _confirma(

@@ -94,6 +94,49 @@ class CorrelativoNoAvanzaError(DomainError):
     codigo = "IDENTIDAD_CORRELATIVO_NO_AVANZA"
 
 
+class PinIncorrectoError(DomainError):
+    """El PIN no valida (change 18b, D2/D3, SEG-05). Un PIN equivocado, un autorizador sin PIN y
+    uno con el PIN invalidado responden exactamente igual (mismo código, estado y mensaje): no se
+    revela cuál es el caso."""
+
+    codigo = "PIN_INCORRECTO"
+    status_http = 403
+
+
+class ContrasenaIncorrectaError(DomainError):
+    """La contraseña actual de "Mi PIN" no es correcta (change 18b, D21 punto 4). 403 y no 401:
+    la interfaz trata el 401 como sesión terminada."""
+
+    codigo = "IDENTIDAD_CONTRASENA_INCORRECTA"
+    status_http = 403
+
+
+class PinBloqueadoError(DomainError):
+    """Demasiados fallos del PIN de un autorizador (change 18b, D3 revisada, SEG-04): por par
+    (quien intenta, autorizador) o general por autorizador. Mismo código y mensaje en los dos
+    casos: no se revela cuál de los dos límites se alcanzó ni cuánto falta."""
+
+    codigo = "PIN_BLOQUEADO"
+    status_http = 429
+
+
+class AutorizadorSinPermisoError(DomainError):
+    """El autorizador no tiene el permiso que la autorización exige (change 18b, D3 revisada,
+    punto 5): se revisa ANTES del PIN y no cuenta como fallo. Mismo código que el de
+    `clientes` y `descuentos`."""
+
+    codigo = "AUTORIZADOR_SIN_PERMISO"
+    status_http = 403
+
+
+class AutorizadorNoEncontradoError(DomainError):
+    """El autorizador no existe en la organización (o es de otra): 404 como todo recurso ajeno
+    (INV-21, SEG-07)."""
+
+    codigo = "RECURSO_NO_ENCONTRADO"
+    status_http = 404
+
+
 class RolSinAutorizacionParaPinError(DomainError):
     codigo = "IDENTIDAD_ROL_SIN_AUTORIZACION_PARA_PIN"
 
@@ -183,15 +226,31 @@ def validar_tope_descuento(valor: Decimal | str) -> Decimal:
     return decimal_exacto
 
 
+def _es_pin_trivial(valor: str) -> bool:
+    """ADR-019 (precisado en el change 18b, D21 punto 6): trivial es todo PIN de dígitos
+    iguales (`000000`) o una escalera de paso 1, ascendente o descendente, sin vuelta
+    (`123456`, `456789`, `987654`; `901234` no lo es porque se corta en 9 -> 0)."""
+    digitos = [int(caracter) for caracter in valor]
+    pasos = {
+        siguiente - anterior for anterior, siguiente in zip(digitos, digitos[1:], strict=False)
+    }
+    return pasos in ({0}, {1}, {-1})
+
+
 def validar_formato_pin_autorizacion(valor: str) -> str:
-    """Valida el formato del PIN de autorización: mínimo seis caracteres,
-    solo dígitos (tarea 5.4). La validación de trivialidad (secuencias,
-    repeticiones) es de `ADR-019` y se implementa en el grupo 9, junto con la
-    derivación PBKDF2 del servidor."""
+    """Valida el formato del PIN de autorización: mínimo seis caracteres, solo dígitos (tarea
+    5.4) y no trivial (todos los dígitos iguales o una escalera de paso 1 sin vuelta, ADR-019;
+    change 18b, tarea 6.4). El mensaje nunca incluye el valor. Solo se controla al DEFINIR el
+    PIN: uno trivial ya definido sigue validando."""
     if len(valor) < PIN_AUTORIZACION_LONGITUD_MINIMA or not valor.isdigit():
         raise PinAutorizacionInvalidoError(
             "El PIN de autorización debe tener al menos "
             f"{PIN_AUTORIZACION_LONGITUD_MINIMA} dígitos y contener solo dígitos."
+        )
+    if _es_pin_trivial(valor):
+        raise PinAutorizacionInvalidoError(
+            "El PIN de autorización no puede ser trivial: ni todos los dígitos iguales ni una "
+            "secuencia consecutiva ascendente o descendente (ADR-019)."
         )
     return valor
 

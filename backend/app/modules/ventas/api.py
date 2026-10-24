@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.api_v1.dependencias import get_session
 from app.commands import registro
+from app.commands.credenciales import CredencialDePin
 from app.commands.huella import ContenidoComando, calcular_huella
 from app.commands.sobre import construir_sobre_online
 from app.core.autenticacion import (
@@ -42,21 +43,33 @@ from app.modules.sync import service as sync_service
 from app.modules.ventas import commands as ventas_commands
 from app.modules.ventas import queries as ventas_queries
 from app.modules.ventas.schemas import (
+    AlcanceDeReglaResponse,
+    AutorizadorContextoResponse,
+    ContextoDeVentaResponse,
+    CreditoContextoResponse,
+    CreditoParaVenderResponse,
+    DescuentoManualContextoResponse,
+    DescuentosAplicablesResponse,
+    MotivoContextoResponse,
     NumeracionResponse,
     PaginaVentas,
     PreciosParaVenderResponse,
     PresentacionParaVenderResponse,
     ProductoParaVenderResponse,
+    ReglaAplicableResponse,
     VentaCobranzaResponse,
     VentaConfirmarRequest,
     VentaConfirmarResponse,
+    VentaCreditoResponse,
     VentaDetalleResponse,
+    VentaLineaDescuentoResponse,
     VentaLineaResponse,
     VentaMotivoResponse,
     VentaObservacionResponse,
     VentaResumenResponse,
     VersionElegibleResponse,
     VersionesElegiblesResponse,
+    armar_contenido_de_venta,
 )
 
 PERMISO_VENDER = "VENDER"
@@ -68,10 +81,6 @@ _OPERACION_TIPO = "VENTA"
 router = APIRouter(prefix="/ventas", tags=["ventas"])
 
 
-def _texto(valor: UUID | None) -> str | None:
-    return None if valor is None else str(valor)
-
-
 @router.post("", response_model=VentaConfirmarResponse, status_code=201)
 def confirmar_venta(
     datos: VentaConfirmarRequest,
@@ -81,46 +90,7 @@ def confirmar_venta(
     """`POST /ventas` (VTA-12). El resultado sale de `comando.resultado`, no de una relectura
     (INV-06); los importes viajan y vuelven como string (INV-03)."""
     reloj = SystemClock()
-    cobranza = datos.cobranza
-    contenido: dict[str, ContenidoComando] = {
-        "venta_id": str(datos.venta_id),
-        "numero": datos.numero,
-        "cliente_id": str(datos.cliente_id),
-        "ubicacion_id": _texto(datos.ubicacion_id),
-        "lista_id": _texto(datos.lista_id),
-        "lista_version_id": _texto(datos.lista_version_id),
-        "motivo_lista_id": _texto(datos.motivo_lista_id),
-        "lineas": [
-            {
-                "linea_id": str(linea.linea_id),
-                "producto_id": str(linea.producto_id),
-                "presentacion_id": str(linea.presentacion_id),
-                "cantidad": linea.cantidad,
-                "lista_version_id": str(linea.lista_version_id),
-                "precio_referencia": linea.precio_referencia,
-                "unidades_referencia": linea.unidades_referencia,
-                "importe_bruto": linea.importe_bruto,
-            }
-            for linea in datos.lineas
-        ],
-        "total": datos.total,
-        "cobranza": (
-            None
-            if cobranza is None
-            else {
-                "cobranza_id": str(cobranza.cobranza_id),
-                "medios": [
-                    {
-                        "medio_pago_id": str(medio.medio_pago_id),
-                        "importe": medio.importe,
-                        "referencia": medio.referencia,
-                    }
-                    for medio in cobranza.medios
-                ],
-                "observacion": cobranza.observacion,
-            }
-        ),
-    }
+    contenido = cast(dict[str, ContenidoComando], armar_contenido_de_venta(datos))
     sobre = construir_sobre_online(
         operation_id=entrada.operation_id,
         tipo="VENTA_CONFIRMAR",
@@ -135,6 +105,11 @@ def confirmar_venta(
         contenido=contenido,
     )
     huella = calcular_huella(sobre.contenido)
+    # Las credenciales (PIN) no entran al contenido ni a la huella: llegan al handler por
+    # clausura y no se persisten ni se registran (change 18b, D2).
+    credenciales = tuple(
+        CredencialDePin(autorizador_id=c.autorizador_id, pin=c.pin) for c in datos.credenciales
+    )
     handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
     contenido_validado = cast(
         ventas_commands.VentaConfirmarContenidoV1,
@@ -145,7 +120,11 @@ def confirmar_venta(
         sesion_protegida: registro.SesionDeHandler,
     ) -> sync_service.ResultadoHandlerConAuditoria:
         return ventas_commands.manejar_venta_confirmar(
-            sobre, contenido_validado, sesion=sesion_protegida, reloj=reloj
+            sobre,
+            contenido_validado,
+            sesion=sesion_protegida,
+            reloj=reloj,
+            credenciales=credenciales,
         )
 
     comando = sync_service.procesar_comando(
@@ -281,6 +260,8 @@ def obtener_precios_para_vender(
                 producto_id=item.producto.producto_id,
                 codigo=item.producto.codigo,
                 nombre=item.producto.nombre,
+                categoria_id=item.producto.categoria_id,
+                marca_id=item.producto.marca_id,
                 precio_referencia=_texto_o_nulo(item.precio_referencia),
                 unidades_referencia=item.unidades_referencia,
                 sin_precio=item.precio_referencia is None,
@@ -315,6 +296,101 @@ def obtener_numeracion(
         prefijo=numeracion.prefijo,
         ultimo_correlativo=numeracion.ultimo_correlativo,
         siguiente_numero=numeracion.siguiente_numero,
+    )
+
+
+@router.get("/contexto", response_model=ContextoDeVentaResponse)
+def obtener_contexto_de_venta(
+    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso(PERMISO_VENDER))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> ContextoDeVentaResponse:
+    """Change 18b, D15 (SYN-11, DSC-06): el tope de descuento, los permisos, los motivos activos y
+    los autorizadores de quien vende. `VENDER`. Sin parámetros: el usuario sale del token. Hasta el
+    bootstrap del change 21, que reutiliza `ventas_queries.contexto_de_venta`."""
+    datos = ventas_queries.contexto_de_venta(
+        contexto.organizacion_id, sesion, usuario_id=contexto.usuario_id
+    )
+    manual = datos.descuento_manual
+    return ContextoDeVentaResponse(
+        descuento_manual=DescuentoManualContextoResponse(
+            habilitado=manual.habilitado,
+            motivo_obligatorio=manual.motivo_obligatorio,
+            tiene_permiso=manual.tiene_permiso,
+            tope=None if manual.tope is None else str(manual.tope),
+            puede_autorizar=manual.puede_autorizar,
+        ),
+        credito=CreditoContextoResponse(puede_superar=datos.puede_superar_credito),
+        motivos=[MotivoContextoResponse(id=m.id, nombre=m.nombre) for m in datos.motivos],
+        autorizadores=[
+            AutorizadorContextoResponse(
+                id=a.usuario_id,
+                nombre=a.nombre,
+                puede_autorizar_descuento=a.puede_autorizar_descuento,
+                puede_superar_credito=a.puede_superar_credito,
+            )
+            for a in datos.autorizadores
+        ],
+    )
+
+
+@router.get("/descuentos-aplicables", response_model=DescuentosAplicablesResponse)
+def obtener_descuentos_aplicables(
+    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso(PERMISO_VENDER))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> DescuentosAplicablesResponse:
+    """Change 18b, apply del 2026-10-23 (DSC-01, DSC-05, ADR-050): las reglas activas y vigentes
+    ahora, con su nombre y sus alcances, para que la pantalla de venta muestre los descuentos
+    automáticos antes de confirmar. `VENDER` (no `GESTIONAR_DESCUENTOS`, DSC-04). Sin parámetros:
+    la organización sale del token."""
+    reglas = ventas_queries.descuentos_aplicables(
+        contexto.organizacion_id, sesion, ahora=SystemClock().now()
+    )
+    return DescuentosAplicablesResponse(
+        items=[
+            ReglaAplicableResponse(
+                id=UUID(item.regla.id),
+                nombre=item.nombre,
+                tipo=item.regla.tipo,
+                medida=item.regla.medida,
+                operador=item.regla.operador,
+                umbral=str(item.regla.umbral),
+                accion_tipo=item.regla.accion_tipo,
+                accion_porcentaje=_texto_o_nulo(item.regla.accion_porcentaje),
+                accion_importe=_texto_o_nulo(item.regla.accion_importe),
+                acumulable=item.regla.acumulable,
+                prioridad=item.regla.prioridad,
+                alcances=[
+                    AlcanceDeReglaResponse(tipo=a.tipo, entidad_id=UUID(a.entidad_id))
+                    for a in item.regla.alcances
+                ],
+            )
+            for item in reglas
+        ]
+    )
+
+
+@router.get("/credito", response_model=CreditoParaVenderResponse)
+def obtener_credito_para_vender(
+    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso(PERMISO_VENDER))],
+    sesion: Annotated[Session, Depends(get_session)],
+    cliente_id: UUID,
+) -> CreditoParaVenderResponse:
+    """Change 18b, D16 (CRE-01, `01` §19): límite, saldo, disponible, política y tolerancia
+    aplicables del cliente, con la herencia de la organización resuelta. `VENDER`. Cliente de otra
+    organización o inexistente, 404."""
+    credito = ventas_queries.credito_para_vender(
+        contexto.organizacion_id, sesion, cliente_id=cliente_id
+    )
+    return CreditoParaVenderResponse(
+        cliente_id=credito.cliente_id,
+        limite=None if credito.limite is None else str(credito.limite),
+        saldo=str(credito.saldo),
+        disponible=None if credito.disponible is None else str(credito.disponible),
+        politica=credito.politica,
+        tolerancia_tipo=credito.tolerancia_tipo,
+        tolerancia_valor=None
+        if credito.tolerancia_valor is None
+        else str(credito.tolerancia_valor),
     )
 
 
@@ -419,6 +495,20 @@ def obtener_venta(
                 importe_iva=str(item.linea.importe_iva),
                 costo_unitario=_texto_o_nulo(item.costo_unitario),
                 costo_total=_texto_o_nulo(item.costo_total),
+                descuentos=[
+                    VentaLineaDescuentoResponse(
+                        origen=d.descuento.origen,
+                        regla_id=d.descuento.regla_id,
+                        regla_nombre=d.regla_nombre,
+                        porcentaje=_texto_o_nulo(d.descuento.porcentaje),
+                        importe=str(d.descuento.importe),
+                        motivo_id=d.descuento.motivo_id,
+                        motivo_nombre=d.motivo_nombre,
+                        autorizador_id=d.descuento.autorizador_id,
+                        autorizador_nombre=d.autorizador_nombre,
+                    )
+                    for d in item.descuentos
+                ],
             )
             for item in detalle.lineas
         ],
@@ -430,4 +520,18 @@ def obtener_venta(
             )
             for o in observaciones
         ],
+        credito=(
+            None
+            if detalle.credito is None
+            else VentaCreditoResponse(
+                limite=_texto_o_nulo(detalle.credito.limite),
+                saldo_considerado=_texto_o_nulo(detalle.credito.saldo_considerado),
+                disponible=_texto_o_nulo(detalle.credito.disponible),
+                exceso=_texto_o_nulo(detalle.credito.exceso),
+                politica=detalle.credito.politica,
+                resolucion=detalle.credito.resolucion,
+                autorizador_id=detalle.credito.autorizador_id,
+                autorizador_nombre=detalle.credito.autorizador_nombre,
+            )
+        ),
     )

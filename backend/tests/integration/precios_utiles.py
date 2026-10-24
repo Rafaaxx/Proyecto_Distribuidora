@@ -441,9 +441,9 @@ class Entorno:
         )
 
     def informar_costo_por_comando(self, producto_id: UUID, valor: str) -> None:
-        """`COSTO_INFORMAR` por el bus, con un usuario que puede registrar compras."""
+        """`COSTO_INFORMAR` por el bus, con un usuario con `EDITAR_COSTOS` (como exige la ruta)."""
         usuario, dispositivo = self.usuario_id, self.dispositivo_id
-        self.actuar_con_permisos(frozenset({"REGISTRAR_COMPRA"}))
+        self.actuar_con_permisos(frozenset({"EDITAR_COSTOS"}))
         try:
             self.enviar(
                 "COSTO_INFORMAR",

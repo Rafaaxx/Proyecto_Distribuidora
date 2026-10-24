@@ -116,7 +116,9 @@ def manejar_jornada_abrir(
 
 
 registrar_handler("JORNADA_ABRIR", 1, JornadaAbrirContenidoV1)(manejar_jornada_abrir)
-declarar_tipo("JORNADA_ABRIR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "JORNADA_ABRIR", admite_online=True, admite_offline=False, permisos=("ABRIR_JORNADA",)
+)
 
 
 class JornadaTransicionContenidoV1(BaseModel):
@@ -165,9 +167,13 @@ def manejar_jornada_cerrar(
 
 
 registrar_handler("JORNADA_RENDIR", 1, JornadaTransicionContenidoV1)(manejar_jornada_rendir)
-declarar_tipo("JORNADA_RENDIR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "JORNADA_RENDIR", admite_online=True, admite_offline=False, permisos=("RENDIR_JORNADA",)
+)
 registrar_handler("JORNADA_CERRAR", 1, JornadaTransicionContenidoV1)(manejar_jornada_cerrar)
-declarar_tipo("JORNADA_CERRAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "JORNADA_CERRAR", admite_online=True, admite_offline=False, permisos=("RENDIR_JORNADA",)
+)
 
 
 class JornadaLiberarContenidoV1(BaseModel):
@@ -210,4 +216,6 @@ def manejar_jornada_liberar(
 
 
 registrar_handler("JORNADA_LIBERAR", 1, JornadaLiberarContenidoV1)(manejar_jornada_liberar)
-declarar_tipo("JORNADA_LIBERAR", admite_online=True, admite_offline=False)
+declarar_tipo(
+    "JORNADA_LIBERAR", admite_online=True, admite_offline=False, permisos=("LIBERAR_UBICACION",)
+)

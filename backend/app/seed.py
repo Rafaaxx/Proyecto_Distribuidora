@@ -122,6 +122,17 @@ siembra los mismos nombres en las organizaciones existentes. Sin alguno de estos
 organización no podría vender con otra lista o con una versión anterior cuando la configuración
 exige motivo."""
 
+MOTIVOS_DESCUENTO_MANUAL_INICIALES = (
+    "Cliente frecuente",
+    "Negociación por volumen",
+    "Producto próximo a vencer",
+    "Compensación por reclamo",
+    "Otro",
+)
+"""Change 18b (DSC-06, `design.md` D13, aprobados el 2026-10-21). La migración `b6c7d8e9f0a1`
+siembra los mismos nombres en las organizaciones existentes. Sin alguno de estos motivos la
+organización no podría elegir uno cuando exige motivo en el descuento manual."""
+
 
 class BaseSinMigrarError(RuntimeError):
     """La siembra corrió contra una base sin las migraciones de este change
@@ -248,6 +259,11 @@ def sembrar(sesion: Session, reloj: Clock, *, password_administrador: str) -> Or
     for nombre in MOTIVOS_LISTA_ANTERIOR_INICIALES:
         configuracion_service.crear_motivo(
             organizacion.id, sesion, reloj, ambito="LISTA_ANTERIOR", nombre=nombre
+        )
+
+    for nombre in MOTIVOS_DESCUENTO_MANUAL_INICIALES:
+        configuracion_service.crear_motivo(
+            organizacion.id, sesion, reloj, ambito="DESCUENTO_MANUAL", nombre=nombre
         )
 
     roles = identidad_service.crear_plantillas_de_rol_iniciales(organizacion.id, sesion, reloj)

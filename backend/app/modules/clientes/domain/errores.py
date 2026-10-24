@@ -190,3 +190,51 @@ class CursorInvalidoError(DomainError):
 
     codigo = "CURSOR_INVALIDO"
     status_http = 422
+
+
+class ExcesoCreditoSinAceptarError(DomainError):
+    """ADVERTIR con exceso y sin `acepta_exceso` en el contenido (CRE-04, D6): el servidor no
+    puede saber si quien vende vio el aviso, así que no confirma."""
+
+    codigo = "EXCESO_CREDITO_SIN_ACEPTAR"
+    status_http = 409
+
+
+class CreditoExcedidoError(DomainError):
+    """BLOQUEAR con exceso, o AUTORIZAR sin conexión que supera la tolerancia y no tiene permiso
+    propio ni PIN: se comporta como BLOQUEAR (CRE-06, CRE-07, D6). Sin excepción de permiso."""
+
+    codigo = "CREDITO_EXCEDIDO"
+    status_http = 409
+
+
+class AutorizacionCreditoRequeridaError(DomainError):
+    """AUTORIZAR con conexión y exceso, sin permiso propio ni autorizador (CRE-05, D6)."""
+
+    codigo = "AUTORIZACION_CREDITO_REQUERIDA"
+    status_http = 403
+
+
+class AutorizadorSinPermisoError(DomainError):
+    """El autorizador indicado no tiene `SUPERAR_CREDITO` (CRE-05, SEG-05, SEG-06)."""
+
+    codigo = "AUTORIZADOR_SIN_PERMISO"
+    status_http = 403
+
+
+class ModoDeCreditoInvalidoError(DomainError):
+    """El modo de evaluación no es `CON_CONEXION` ni `SIN_CONEXION` (CRE-06)."""
+
+    codigo = "MODO_CREDITO_INVALIDO"
+    status_http = 422
+
+
+class CreditoInconsistenteError(DomainError):
+    """Sin conexión, la evaluación de crédito que trae la venta no es coherente consigo misma:
+    falta un dato obligatorio, la resolución no corresponde al exceso que dan sus propios valores,
+    o `PIN_SUPERVISOR` / `PERMISO_PROPIO` llegan sin autorizador (SYN-06, CRE-09; change 18b,
+    D7). Es contenido malformado, no un rechazo por crédito: el servidor nunca rechaza por
+    crédito sin conexión (SYN-05, INV-17)."""
+
+    codigo = "CREDITO_INCONSISTENTE"
+    status_http = 422

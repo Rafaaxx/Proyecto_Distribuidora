@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 
+import type { CredencialDePin } from '../../domain/ventas/autorizacionDeVenta'
 import type { VentaConfirmarDatos } from '../../domain/ventas/formularioVenta'
 import { useMutacionConOperationId } from '../compras/hooks'
 import {
@@ -7,6 +8,9 @@ import {
   confirmarVenta,
   listarVentas,
   listarVersionesElegibles,
+  listarDescuentosAplicables,
+  obtenerContextoDeVenta,
+  obtenerCreditoParaVender,
   obtenerNumeracion,
   obtenerVenta,
   type VentaConfirmarResultado,
@@ -95,12 +99,58 @@ function useInvalidarTrasVender() {
   }
 }
 
-/** Confirmar mueve ventas, saldo del cliente, cobranzas, stock y su estado de cuenta. */
-export function useConfirmarVenta() {
+/**
+ * Tope, motivos y autorizadores de quien vende (D15). Se pide una vez por pantalla y se relee al
+ * volver: los permisos y los PIN pueden cambiar entre venta y venta.
+ */
+export function useContextoDeVenta(habilitado: boolean) {
+  return useQuery({
+    queryKey: clavesVentas.contexto(),
+    queryFn: obtenerContextoDeVenta,
+    enabled: habilitado,
+    staleTime: 0,
+    retry: false,
+  })
+}
+
+/**
+ * Reglas de descuento vigentes ahora, para mostrar los automáticos antes de confirmar (DSC-05).
+ * Se relee al volver: una regla puede pausarse o activarse entre venta y venta. Si falla, la
+ * pantalla sigue sin ellos y el servidor decide (`DESCUENTO_DIFIERE`).
+ */
+export function useDescuentosAplicables(habilitado: boolean) {
+  return useQuery({
+    queryKey: clavesVentas.descuentosAplicables(),
+    queryFn: listarDescuentosAplicables,
+    enabled: habilitado,
+    staleTime: 0,
+    retry: false,
+  })
+}
+
+/** Crédito del cliente elegido (D16); se vuelve a pedir cada vez que se confirma una venta. */
+export function useCreditoParaVender(clienteId: string | undefined) {
+  return useQuery({
+    queryKey: clavesVentas.credito(clienteId ?? ''),
+    queryFn: () => obtenerCreditoParaVender(clienteId as string),
+    enabled: clienteId !== undefined && clienteId !== '',
+    staleTime: 0,
+    retry: false,
+  })
+}
+
+/**
+ * Confirmar mueve ventas, saldo del cliente, cobranzas, stock y su estado de cuenta.
+ *
+ * `leerCredenciales` entrega el PIN de quien autoriza SOLO en el momento de enviar: el PIN no
+ * viaja en las variables de la mutación (TanStack Query las conserva en memoria) ni se guarda en
+ * ningún almacenamiento (D2, D20). Quien llama lo tiene en una referencia que borra al terminar.
+ */
+export function useConfirmarVenta(leerCredenciales: () => readonly CredencialDePin[] = () => []) {
   const invalidar = useInvalidarTrasVender()
   return useMutacionConOperationId<VariablesConfirmarVenta, VentaConfirmarResultado>((variables, operationId) => {
     const datos: VentaConfirmarDatos & { operationId?: string } = { ...variables }
     delete datos.operationId
-    return confirmarVenta(datos, operationId)
+    return confirmarVenta(datos, operationId, leerCredenciales())
   }, invalidar)
 }

@@ -26,6 +26,7 @@ from app.core.db import crear_engine, crear_session_factory
 from app.core.ids import nuevo_id
 from app.core.seguridad import hashear_password
 from app.modules.identidad import repository
+from app.modules.identidad.domain.clave_intento import clave_de_intento_login
 from app.modules.identidad.models import Organizacion
 
 MOMENTO = datetime(2026, 1, 1, tzinfo=UTC)
@@ -108,6 +109,7 @@ def test_los_intentos_fallidos_se_cuentan_igual_repartidos_entre_conexiones(
                 sesion_worker,
                 intento_id=nuevo_id(),
                 usuario_id=usuario.id,
+                clave_intento=clave_de_intento_login(organizacion.slug, usuario.usuario),
                 ip="10.0.0.1",
                 exito=False,
                 momento=MOMENTO,
@@ -123,11 +125,17 @@ def test_los_intentos_fallidos_se_cuentan_igual_repartidos_entre_conexiones(
 
     sesion_verificacion = _sesion_independiente(database_url)
     try:
-        total_por_usuario = repository.contar_intentos_fallidos_por_usuario(
-            sesion_verificacion, usuario_id=usuario.id, desde=MOMENTO - timedelta(minutes=15)
+        total_por_usuario = repository.contar_fallos_de_login_en_ventana(
+            sesion_verificacion,
+            clave_intento=clave_de_intento_login(organizacion.slug, usuario.usuario),
+            desde_exclusivo=MOMENTO - timedelta(minutes=15),
+            hasta_inclusivo=MOMENTO,
         )
-        total_por_ip = repository.contar_intentos_fallidos_por_ip(
-            sesion_verificacion, ip="10.0.0.1", desde=MOMENTO - timedelta(minutes=15)
+        total_por_ip = repository.contar_fallos_de_login_en_ventana(
+            sesion_verificacion,
+            ip="10.0.0.1",
+            desde_exclusivo=MOMENTO - timedelta(minutes=15),
+            hasta_inclusivo=MOMENTO,
         )
     finally:
         sesion_verificacion.close()
@@ -170,6 +178,7 @@ def test_el_limite_se_alcanza_con_la_misma_cantidad_total_repartido_entre_conexi
             sesion_conexion_a,
             intento_id=nuevo_id(),
             usuario_id=usuario.id,
+            clave_intento=clave_de_intento_login(organizacion.slug, usuario.usuario),
             ip="10.0.0.2",
             exito=False,
             momento=MOMENTO,
@@ -183,6 +192,7 @@ def test_el_limite_se_alcanza_con_la_misma_cantidad_total_repartido_entre_conexi
             sesion_conexion_b,
             intento_id=nuevo_id(),
             usuario_id=usuario.id,
+            clave_intento=clave_de_intento_login(organizacion.slug, usuario.usuario),
             ip="10.0.0.2",
             exito=False,
             momento=MOMENTO,
@@ -208,3 +218,84 @@ def test_el_limite_se_alcanza_con_la_misma_cantidad_total_repartido_entre_conexi
     finally:
         sesion_login.rollback()
         sesion_login.close()
+
+
+@pytest.mark.parametrize(
+    "nombre_escrito", ["vendedor1", "fantasma"], ids=["usuario_real", "par_inexistente"]
+)
+def test_adr057_el_limite_se_alcanza_con_el_mismo_total_en_un_par_inexistente_y_en_uno_real(
+    database_url: str, _engine_de_sesion, nombre_escrito: str
+) -> None:
+    """ADR-057 punto 11, SEG-01: fallos reales del login repartidos entre conexiones
+    independientes, cada una confirmando sus propias transacciones. Contra un usuario real y
+    contra un par que no corresponde a nadie el límite se alcanza con el MISMO total: con cuatro
+    fallos el quinto todavía prueba credenciales y el sexto intento recibe el 429."""
+    from app.core.clock import FixedClock
+    from app.modules.identidad import service as identidad_service
+    from app.modules.identidad.domain.usuarios import (
+        CredencialesInvalidasError,
+        LoginBloqueadoPorIntentosError,
+    )
+
+    sesion_setup = _sesion_independiente(database_url)
+    organizacion = Organizacion(
+        id=nuevo_id(),
+        nombre="Organización de prueba",
+        slug=f"org-concurrencia-p57-{nombre_escrito}",
+        cuit=None,
+        moneda="ARS",
+        zona_horaria="America/Argentina/Mendoza",
+        estado="ACTIVA",
+        creado_en=MOMENTO,
+        actualizado_en=MOMENTO,
+        actualizado_por_id=None,
+    )
+    sesion_setup.add(organizacion)
+    sesion_setup.flush()
+    _crear_usuario(sesion_setup, organizacion.id)
+    sesion_setup.close()
+
+    def _intentar(numero: int, password: str):
+        sesion = _sesion_independiente(database_url)
+        try:
+            identidad_service.iniciar_sesion(
+                sesion,
+                FixedClock(MOMENTO),
+                organizacion_slug=organizacion.slug,
+                nombre_usuario=nombre_escrito,
+                password=password,
+                dispositivo_id=nuevo_id(),
+                nombre_dispositivo="Tablet",
+                jwt_secreto="secreto-de-prueba",
+                jwt_kid="1",
+                ip=f"10.57.0.{numero}",
+            )
+        except CredencialesInvalidasError:
+            sesion.commit()  # el fallo queda en `intento_login` (como el login real).
+            raise
+        finally:
+            sesion.rollback()
+            sesion.close()
+
+    resultados: list[str] = []
+
+    def _worker(inicio: int) -> None:
+        for numero in (inicio, inicio + 1):
+            try:
+                _intentar(numero, "mal")
+            except CredencialesInvalidasError:
+                resultados.append("fallo")
+
+    hilos = [threading.Thread(target=_worker, args=(i,)) for i in (1, 3)]  # 2 + 2 fallos
+    for hilo in hilos:
+        hilo.start()
+    for hilo in hilos:
+        hilo.join()
+    assert resultados == ["fallo"] * 4
+
+    with pytest.raises(CredencialesInvalidasError):  # el quinto todavía prueba credenciales
+        _intentar(5, PASSWORD if nombre_escrito == "fantasma" else "mal")
+    with pytest.raises(LoginBloqueadoPorIntentosError) as bloqueado:
+        _intentar(6, PASSWORD)  # el sexto: 429, también con la contraseña correcta
+    assert bloqueado.value.codigo == "IDENTIDAD_LOGIN_BLOQUEADO_POR_INTENTOS"
+    assert str(bloqueado.value).startswith("Demasiados intentos. Probá de nuevo a las ")

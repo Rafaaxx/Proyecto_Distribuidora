@@ -249,3 +249,16 @@ def test_prc23_lineas_con_versiones_distintas_son_version_no_permitida() -> None
 def test_prc23_la_cabecera_distinta_de_las_lineas_es_version_no_permitida() -> None:
     with pytest.raises(VersionNoPermitidaError):
         verificar_version_uniforme(VERSION_4, [VERSION_3, VERSION_3])
+
+
+def test_d18_comparar_precios_de_lineas_ignora_el_total_y_exige_los_precios() -> None:
+    """Change 18b: la primera parte de la comparación mira solo las líneas; el total (con los
+    descuentos) se compara después."""
+    from app.modules.ventas.domain.comparacion import comparar_precios_de_lineas
+
+    esperada = _valores()
+    comparar_precios_de_lineas([esperada], [esperada], Decimal("999.99"))  # no lanza
+
+    otra = _valores(bruto="1.00")
+    with pytest.raises(PrecioDifiereError):
+        comparar_precios_de_lineas([esperada], [otra], Decimal("999.99"))

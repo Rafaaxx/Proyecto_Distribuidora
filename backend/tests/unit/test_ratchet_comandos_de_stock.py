@@ -45,6 +45,7 @@ TIPOS_CON_MOTIVO_DE_AUDITORIA = frozenset(
         "JORNADA_LIBERAR",
         "COBRANZA_ANULAR",
         "VENTA_CONFIRMAR",
+        "VENTA_ANULAR",
     }
 )
 NOMBRE_DEL_DATO = "DatosDeAuditoria"
@@ -77,11 +78,13 @@ def tipos_que_devuelven_motivo_de_auditoria() -> frozenset[str]:
     )
 
 
-def test_exactamente_seis_comandos_devuelven_el_motivo_para_la_auditoria() -> None:
+def test_exactamente_siete_comandos_devuelven_el_motivo_para_la_auditoria() -> None:
     """Change 17, tarea 10.2 (D15, AUD-02): el ratchet pasó de cuatro a cinco con
     `COBRANZA_ANULAR`; `COBRANZA_REGISTRAR` queda auditado solo por la fila del bus. Change 18a,
     tarea 10.1 (D20, AUD-01): pasa a seis con `VENTA_CONFIRMAR` (otra lista o versión no vigente;
-    la fila lleva el motivo y la observación con lista y versión)."""
+    la fila lleva el motivo y la observación con lista y versión). Change 19, tarea 7.6 (D15,
+    AUD-01, AUD-02): pasa a siete con `VENTA_ANULAR` (motivo de la anulación y, en la observación,
+    la cobranza anulada)."""
     assert tipos_que_devuelven_motivo_de_auditoria() == TIPOS_CON_MOTIVO_DE_AUDITORIA
 
 
@@ -99,14 +102,16 @@ TIPOS_CON_CONSTANCIA_DE_UBICACION_TOMADA = frozenset(
         "COMPRA_ANULAR",
         "IMPORTACION_REGISTRAR",
         "VENTA_CONFIRMAR",
+        "VENTA_ANULAR",
     }
 )
 
 
-def test_exactamente_nueve_comandos_pueden_devolver_la_constancia_de_ubicacion_tomada() -> None:
+def test_exactamente_diez_comandos_pueden_devolver_la_constancia_de_ubicacion_tomada() -> None:
     """Change 15, tarea 8.5 (D8): los cinco de stock que mueven mercadería, `COMPRA_CONFIRMAR`,
     `COMPRA_ANULAR` e `IMPORTACION_REGISTRAR`; change 18a, tarea 10.1 (STK-09, decisión del
-    2026-10-20): también `VENTA_CONFIRMAR`. Un handler nuevo que la devuelva (o uno que
+    2026-10-20): también `VENTA_CONFIRMAR`; change 19, tarea 7.6 (D6, D15): también `VENTA_ANULAR`
+    (la excepción de `LIBERAR_UBICACION` al reingresar). Un handler nuevo que la devuelva (o uno que
     deje de hacerlo) rompe esta prueba y obliga a revisar ADR-022 y ADR-049."""
     devuelven = frozenset(
         registrado.tipo

@@ -3,7 +3,9 @@ import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstac
 import type { CredencialDePin } from '../../domain/ventas/autorizacionDeVenta'
 import type { VentaConfirmarDatos } from '../../domain/ventas/formularioVenta'
 import { useMutacionConOperationId } from '../compras/hooks'
+import { clavesCostoPromedio } from '../stock/claves'
 import {
+  anularVenta,
   buscarPreciosParaVender,
   confirmarVenta,
   listarVentas,
@@ -13,6 +15,7 @@ import {
   obtenerCreditoParaVender,
   obtenerNumeracion,
   obtenerVenta,
+  type VentaAnularResultado,
   type VentaConfirmarResultado,
 } from './api'
 import { clavesVentas, type ContextoDePrecios, type FiltrosVentas } from './claves'
@@ -97,6 +100,41 @@ function useInvalidarTrasVender() {
     void queryClient.invalidateQueries({ queryKey: ['stock'] })
     void queryClient.invalidateQueries({ queryKey: ['cuentas-corrientes'] })
   }
+}
+
+type VariablesAnularVenta = {
+  ventaId: string
+  motivo_id: string
+  observacion: string | null
+  devuelve_dinero: boolean | null
+  operationId?: string
+}
+
+/**
+ * Anular mueve la venta, el saldo, la cobranza (si se devuelve el dinero), el stock y el estado
+ * de cuenta (change 19): invalida lo mismo que confirmar, incluido el detalle y el listado.
+ */
+export function useAnularVenta() {
+  const queryClient = useQueryClient()
+  const invalidarTrasVender = useInvalidarTrasVender()
+  const invalidar = () => {
+    invalidarTrasVender()
+    // El reingreso con costo recalcula el costo promedio (CST-11).
+    void queryClient.invalidateQueries({ queryKey: clavesCostoPromedio.raiz() })
+  }
+  return useMutacionConOperationId<VariablesAnularVenta, VentaAnularResultado>(
+    (variables, operationId) =>
+      anularVenta(
+        variables.ventaId,
+        {
+          motivo_id: variables.motivo_id,
+          observacion: variables.observacion,
+          devuelve_dinero: variables.devuelve_dinero,
+        },
+        operationId,
+      ),
+    invalidar,
+  )
 }
 
 /**

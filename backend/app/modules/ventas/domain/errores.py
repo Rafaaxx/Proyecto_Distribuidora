@@ -152,11 +152,39 @@ class VersionNoPermitidaError(DomainError):
     status_http = 409
 
 
+class VentaYaAnuladaError(DomainError):
+    """La venta ya fue anulada (VTA-20, VTA-21; `design.md` D10)."""
+
+    codigo = "VENTA_YA_ANULADA"
+    status_http = 409
+
+
+class DevolucionInvalidaError(DomainError):
+    """No corresponde devolver dinero en este caso (VTA-22, D2, D3, D10)."""
+
+    codigo = "DEVOLUCION_INVALIDA"
+    status_http = 422
+
+
+class ConsumidorFinalSinDevolucionError(DomainError):
+    """Al consumidor final no se le devuelve dinero (CLI-03, VTA-22, D3)."""
+
+    codigo = "CONSUMIDOR_FINAL_SIN_DEVOLUCION"
+    status_http = 409
+
+
 class MotivoInvalidoError(DomainError):
     """Falta el motivo de `LISTA_ANTERIOR` que la organización exige, o el motivo no es uno
     activo de ese ámbito (PRC-21, `01` §4; `design.md` D6)."""
 
     codigo = "MOTIVO_INVALIDO"
+    status_http = 422
+
+
+class ObservacionInvalidaError(DomainError):
+    """La observación de la anulación supera los 500 caracteres (VTA-20, `design.md` D1)."""
+
+    codigo = "OBSERVACION_INVALIDA"
     status_http = 422
 
 

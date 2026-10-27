@@ -728,7 +728,9 @@ def test_un_ingreso_de_rendicion_sigue_siendo_tipo_invalido() -> None:
         validar_lineas_de_movimiento([_movimiento(5, None, tipo="DIFERENCIA_RENDICION")])
 
 
-@pytest.mark.parametrize("tipo", ["STOCK_INICIAL", "COMPRA", "ANULACION_VENTA"])
+# `ANULACION_VENTA` ya no está: desde el change 19 (D5) una línea vendida sin costo se revierte
+# sin costo (CST-12); lo cubre `test_stock_domain_movimientos.py`.
+@pytest.mark.parametrize("tipo", ["STOCK_INICIAL", "COMPRA"])
 def test_los_ingresos_que_recalculan_siguen_exigiendo_costo(tipo: str) -> None:
     with pytest.raises(CostoInvalidoError):
         validar_lineas_de_movimiento([_movimiento(5, None, tipo=tipo)])

@@ -1314,6 +1314,39 @@ def test_motivos_de_anulacion_de_cobranza_devuelve_solo_los_activos_de_la_organi
     assert cliente.get(URL_MOTIVOS, params={"ambito": "ANULACION_COBRANZA"}).status_code == 401
 
 
+# Escenario: "Motivos de anulación de venta por API"
+def test_motivos_de_anulacion_de_venta_devuelve_solo_los_activos_de_la_organizacion(
+    cliente: TestClient, sesion: Session
+) -> None:
+    """Change 19, tarea 4.1 (VTA-20, TR-09, INV-21; spec `organizacion/catalogos-configurables`):
+    `GET /configuracion/motivos?ambito=ANULACION_VENTA` sirve a cualquier sesion (sin permiso)
+    solo los activos de ese ambito de la organizacion del token, ordenados por nombre, sin los
+    de `ANULACION_COBRANZA`."""
+    entorno = Entorno(sesion, permisos=frozenset())
+    devolucion = entorno.crear_motivo("ANULACION_VENTA", "Devolución del cliente")
+    error_de_carga = entorno.crear_motivo("ANULACION_VENTA", "Error de carga")
+    entorno.crear_motivo("ANULACION_COBRANZA", "Pago rechazado o no acreditado")
+    sesion.execute(
+        text(
+            "INSERT INTO motivo (id, organizacion_id, ambito, nombre, activo, creado_en, "
+            "actualizado_en) VALUES (:id, :org, 'ANULACION_VENTA', 'Viejo', false, :m, :m)"
+        ),
+        {"id": uuid4(), "org": entorno.org, "m": MOMENTO},
+    )
+    ajena = Entorno(sesion, usuario="otro")
+    ajena.crear_motivo("ANULACION_VENTA", "Ajeno")
+    headers = entorno.entrar(cliente)
+
+    respuesta = cliente.get(URL_MOTIVOS, params={"ambito": "ANULACION_VENTA"}, headers=headers)
+
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["items"] == [
+        {"id": str(devolucion), "nombre": "Devolución del cliente"},
+        {"id": str(error_de_carga), "nombre": "Error de carga"},
+    ]
+    assert cliente.get(URL_MOTIVOS, params={"ambito": "ANULACION_VENTA"}).status_code == 401
+
+
 @pytest.mark.parametrize("ambito", ["ANULACION_TRANSFERENCIA", "ANULACION_AJUSTE"])
 def test_motivos_de_anulacion_de_stock_responden_a_cualquier_sesion(
     cliente: TestClient, sesion: Session, ambito: str

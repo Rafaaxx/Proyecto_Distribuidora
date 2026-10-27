@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.ventas.domain.consultas import codificar_cursor, decodificar_cursor
 from app.modules.ventas.domain.errores import NumeroDuplicadoError
-from app.modules.ventas.models import Venta, VentaLinea, VentaLineaDescuento
+from app.modules.ventas.models import Venta, VentaAnulacion, VentaLinea, VentaLineaDescuento
 
 
 def presentacion_figura_en_alguna_linea(
@@ -82,6 +82,7 @@ def listar_ventas_paginado(
     ubicacion_id: UUID | None,
     desde: datetime | None,
     hasta: datetime | None,
+    estado: str | None = None,
 ) -> tuple[list[Venta], str | None]:
     """Ventas de la organización de la más reciente a la más vieja, por cursor
     `(occurred_at, id)` descendente (índices `ix_venta__occurred_at`, `ix_venta__cliente` e
@@ -96,6 +97,8 @@ def listar_ventas_paginado(
         consulta = consulta.where(Venta.jornada_id == jornada_id)
     if ubicacion_id is not None:
         consulta = consulta.where(Venta.ubicacion_id == ubicacion_id)
+    if estado is not None:
+        consulta = consulta.where(Venta.estado == estado)
     if desde is not None:
         consulta = consulta.where(Venta.occurred_at >= desde)
     if hasta is not None:
@@ -117,6 +120,44 @@ def obtener_venta(organizacion_id: UUID, venta_id: UUID, sesion: Session) -> Ven
     """La venta de la organización sin bloquearla (INV-21: la de otra organización no existe)."""
     return sesion.scalar(
         select(Venta).where(Venta.organizacion_id == organizacion_id, Venta.id == venta_id)
+    )
+
+
+def tomar_venta_para_actualizar(
+    organizacion_id: UUID, venta_id: UUID, sesion: Session
+) -> Venta | None:
+    """La venta `FOR UPDATE` (change 19, D10: primera fila que toma la anulación). Relee el estado
+    con la fila tomada (`populate_existing`): la lectura previa sin candado pudo ser anterior a
+    una anulación concurrente."""
+    return sesion.scalar(
+        select(Venta)
+        .where(Venta.organizacion_id == organizacion_id, Venta.id == venta_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+
+
+def insertar_anulacion(sesion: Session, anulacion: VentaAnulacion) -> None:
+    """La anulación de la venta (`UNIQUE (organizacion_id, venta_id)`, D11)."""
+    sesion.add(anulacion)
+    sesion.flush()
+
+
+def marcar_venta_anulada(sesion: Session, venta: Venta) -> None:
+    """El único `UPDATE` sobre `venta` (D11): `estado` pasa a `ANULADA`. `app_runtime` solo tiene
+    `UPDATE (estado)`; ninguna otra columna se toca (INV-10)."""
+    venta.estado = "ANULADA"
+    sesion.flush()
+
+
+def obtener_anulacion_de_venta(
+    organizacion_id: UUID, venta_id: UUID, sesion: Session
+) -> VentaAnulacion | None:
+    """La anulación de la venta, o `None` si no está anulada (D11: una por venta)."""
+    return sesion.scalar(
+        select(VentaAnulacion).where(
+            VentaAnulacion.organizacion_id == organizacion_id, VentaAnulacion.venta_id == venta_id
+        )
     )
 
 

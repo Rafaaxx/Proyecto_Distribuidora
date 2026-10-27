@@ -176,10 +176,14 @@ def test_los_seis_motivos_de_ajuste_stock_se_listan_por_ambito_y_ninguno_de_otro
     }
     assert all(motivo.ambito == "AJUSTE_STOCK" for motivo in motivos)
 
+    # Un ámbito distinto (change 19: `ANULACION_VENTA` ya está sembrado) no mezcla sus nombres.
     motivos_de_otro_ambito = configuracion_service.listar_motivos_por_ambito(
         organizacion.id, db_session, "ANULACION_VENTA"
     )
-    assert motivos_de_otro_ambito == []
+    assert all(motivo.ambito == "ANULACION_VENTA" for motivo in motivos_de_otro_ambito)
+    assert {motivo.nombre for motivo in motivos_de_otro_ambito}.isdisjoint(
+        {"Rotura", "Vencimiento"}
+    )
 
 
 def test_una_organizacion_nueva_tiene_los_tres_motivos_de_anulacion_de_compra(
@@ -312,6 +316,40 @@ def test_sembrar_dos_veces_no_duplica_los_motivos_de_anulacion_de_cobranza(
 
     cantidad = db_session.execute(
         text("SELECT count(*) FROM motivo WHERE ambito = 'ANULACION_COBRANZA'")
+    ).scalar_one()
+    assert cantidad == 3
+
+
+def test_una_organizacion_nueva_tiene_los_tres_motivos_de_anulacion_de_venta(
+    db_session: Session,
+) -> None:
+    """Change 19, tarea 4.1 (VTA-20, TR-09, `design.md` D12, aprobada el 2026-10-24): los mismos
+    nombres que siembra la migración `d9e0f1a2b3c4`; sin ellos no se podría anular ninguna venta
+    (`VENTA_ANULAR` exige un motivo del ámbito)."""
+    organizacion = sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+    assert organizacion is not None
+
+    motivos = configuracion_service.listar_motivos_por_ambito(
+        organizacion.id, db_session, "ANULACION_VENTA"
+    )
+
+    assert sorted(motivo.nombre for motivo in motivos) == [
+        "Devolución del cliente",
+        "Error de carga",
+        "Otro",
+    ]
+    assert all(motivo.ambito == "ANULACION_VENTA" and motivo.activo for motivo in motivos)
+
+
+def test_sembrar_dos_veces_no_duplica_los_motivos_de_anulacion_de_venta(
+    db_session: Session,
+) -> None:
+    """Change 19, tarea 4.1 (VTA-20): la siembra es idempotente."""
+    sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA)
+    assert sembrar(db_session, RELOJ, password_administrador=PASSWORD_ADMIN_DE_PRUEBA) is None
+
+    cantidad = db_session.execute(
+        text("SELECT count(*) FROM motivo WHERE ambito = 'ANULACION_VENTA'")
     ).scalar_one()
     assert cantidad == 3
 

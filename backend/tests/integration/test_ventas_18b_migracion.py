@@ -38,7 +38,7 @@ from ventas_utiles import MOMENTO, VentaSembrada, insertar_sql, sembrar_venta_sq
 
 REVISION = "b6c7d8e9f0a1"
 REVISION_ANTERIOR = "a2b3c4d5e6f7"  # `ventas`, la última del change 18a.
-REVISION_HEAD = "c8d9e0f1a2b3"  # `intento_login.clave_intento` (ADR-057), la cabeza actual.
+REVISION_HEAD = "d9e0f1a2b3c4"  # `venta_anulacion` (change 19), la cabeza actual.
 
 AMBITO = "DESCUENTO_MANUAL"
 MOTIVOS_SEMBRADOS = {

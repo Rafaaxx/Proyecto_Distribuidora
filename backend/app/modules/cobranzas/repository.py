@@ -299,3 +299,18 @@ def obtener_anulacion(
             CobranzaAnulacion.cobranza_id == cobranza_id,
         )
     )
+
+
+def tomar_cobranza_de_venta(
+    organizacion_id: UUID, venta_id: UUID, sesion: Session
+) -> Cobranza | None:
+    """Toma con FOR UPDATE la cobranza origen VENTA de la venta (D9)."""
+    return sesion.scalar(
+        select(Cobranza)
+        .where(
+            Cobranza.organizacion_id == organizacion_id,
+            Cobranza.venta_id == venta_id,
+            Cobranza.origen == "VENTA",
+        )
+        .with_for_update()
+    )

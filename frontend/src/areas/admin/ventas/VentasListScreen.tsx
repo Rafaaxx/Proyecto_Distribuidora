@@ -22,6 +22,10 @@ import { VentasSinPermiso } from './VentasSinPermiso'
 const CLASE_CONTROL = 'rounded-md border border-border px-2 py-1 text-sm'
 const TITULO = 'Ventas'
 
+function opcionDeEstado(valor: string): FiltrosVentas['estado'] {
+  return valor === 'CONFIRMADA' || valor === 'ANULADA' ? valor : undefined
+}
+
 /**
  * Listado de ventas de `/admin/ventas` (change 18a, tarea 12.3; spec `administracion-de-ventas`).
  * Lo ve quien tiene `VENDER` o `ANULAR_VENTA` (D19); "Nueva venta" solo con `VENDER`. Los filtros
@@ -138,6 +142,21 @@ function VentasListado() {
                   {u.nombre}
                 </option>
               ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="filtro-estado" className="text-sm text-primary">
+              Estado
+            </label>
+            <select
+              id="filtro-estado"
+              className={CLASE_CONTROL}
+              value={filtros.estado ?? ''}
+              onChange={(e) => cambiar({ estado: opcionDeEstado(e.target.value) })}
+            >
+              <option value="">Todas</option>
+              <option value="CONFIRMADA">Confirmadas</option>
+              <option value="ANULADA">Anuladas</option>
             </select>
           </div>
           <div className="flex flex-col gap-1">

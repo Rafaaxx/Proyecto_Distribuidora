@@ -111,6 +111,16 @@ MOTIVOS_ANULACION_COBRANZA_INICIALES = (
 siembra los mismos nombres en las organizaciones existentes. Sin alguno de estos motivos la
 organización no podría anular una cobranza (`COBRANZA_ANULAR` exige uno)."""
 
+MOTIVOS_ANULACION_VENTA_INICIALES = (
+    "Error de carga",
+    "Devolución del cliente",
+    "Otro",
+)
+"""Change 19 (VTA-20, `design.md` D12, aprobados el 2026-10-24). La migración `d9e0f1a2b3c4`
+siembra los mismos nombres en las organizaciones existentes que no tengan ninguno del ámbito.
+Sin alguno de estos motivos la organización no podría anular una venta (`VENTA_ANULAR` exige
+uno)."""
+
 
 MOTIVOS_LISTA_ANTERIOR_INICIALES = (
     "Precio acordado con el cliente",
@@ -254,6 +264,11 @@ def sembrar(sesion: Session, reloj: Clock, *, password_administrador: str) -> Or
     for nombre in MOTIVOS_ANULACION_COBRANZA_INICIALES:
         configuracion_service.crear_motivo(
             organizacion.id, sesion, reloj, ambito="ANULACION_COBRANZA", nombre=nombre
+        )
+
+    for nombre in MOTIVOS_ANULACION_VENTA_INICIALES:
+        configuracion_service.crear_motivo(
+            organizacion.id, sesion, reloj, ambito="ANULACION_VENTA", nombre=nombre
         )
 
     for nombre in MOTIVOS_LISTA_ANTERIOR_INICIALES:

@@ -14,6 +14,9 @@ import { errorDesdeRespuesta } from './errores'
  */
 
 export type VentaConfirmarResultado = components['schemas']['VentaConfirmarResponse']
+export type VentaAnularResultado = components['schemas']['VentaAnularResponse']
+export type VentaAnularDatos = components['schemas']['VentaAnularRequest']
+export type VentaAnulacion = components['schemas']['VentaAnulacionResponse']
 export type VentaResumen = components['schemas']['VentaResumenResponse']
 export type VentaDetalle = components['schemas']['VentaDetalleResponse']
 export type VentaLinea = components['schemas']['VentaLineaResponse']
@@ -44,6 +47,7 @@ function paramsVentas(cursor: string | undefined, limite: number, filtros: Filtr
   if (filtros.usuarioId) params.set('usuario_id', filtros.usuarioId)
   if (filtros.jornadaId) params.set('jornada_id', filtros.jornadaId)
   if (filtros.ubicacionId) params.set('ubicacion_id', filtros.ubicacionId)
+  if (filtros.estado) params.set('estado', filtros.estado)
   if (filtros.desde) params.set('desde', filtros.desde)
   if (filtros.hasta) params.set('hasta', filtros.hasta)
   return params.toString()
@@ -127,6 +131,23 @@ export async function confirmarVenta(
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Operation-Id': operationId },
     body: JSON.stringify(cuerpo),
+  })
+  return leerJsonOLanzar(respuesta)
+}
+
+/**
+ * `POST /ventas/{id}/anulacion` (change 19, VTA-20). `devuelve_dinero` va nulo si la venta no tiene
+ * su cobranza confirmada (D2). El `Operation-Id` lo genera y conserva quien llama (INV-06).
+ */
+export async function anularVenta(
+  ventaId: string,
+  datos: VentaAnularDatos,
+  operationId: string,
+): Promise<VentaAnularResultado> {
+  const respuesta = await apiFetch(`/ventas/${ventaId}/anulacion`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Operation-Id': operationId },
+    body: JSON.stringify(datos),
   })
   return leerJsonOLanzar(respuesta)
 }

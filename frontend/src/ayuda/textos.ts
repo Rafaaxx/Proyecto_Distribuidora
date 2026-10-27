@@ -530,7 +530,7 @@ export const AYUDAS = {
   'cobranzas.anulacion': {
     titulo: 'Anular una cobranza',
     texto:
-      'Deja el pago sin efecto: el cliente vuelve a deber lo mismo que antes. No se borra: queda como anulado, con el motivo y quién lo anuló. Se anula entero; si te equivocaste en un medio, anulalo y cargalo de nuevo.',
+      'Deja el pago sin efecto: el cliente vuelve a deber lo mismo que antes. No se borra: queda como anulado, con el motivo y quién lo anuló. Se anula entero; si te equivocaste en un medio, anulalo y cargalo de nuevo. El cobro de una venta se anula anulando la venta.',
     ejemplo: 'Ej.: un cheque de $20.000 de Almacén Don Pedro vuelve rechazado → lo anulás y su deuda sube $20.000.',
     reglas: ['COB-05', 'CC-02'],
   },
@@ -702,6 +702,42 @@ export const AYUDAS = {
       'Depende de la política del cliente o, si no tiene, la de la empresa. Advertir: te avisa y podés confirmar; la venta queda marcada para revisar. Autorizar: hace falta tu permiso o el PIN de un supervisor. Bloquear: no se confirma; podés cobrar más o sacar productos.',
     reglas: ['CRE-03', 'CRE-04', 'CRE-05', 'CRE-07'],
     verMas: 'credito',
+  },
+
+  // --- Anulación de una venta (change 19, D18; textos aprobados el 2026-10-24, sin ejemplos) ---
+  'ventas.anulacion': {
+    titulo: 'Anular una venta',
+    texto:
+      'Deja la venta sin efecto: la mercadería vuelve a la ubicación de donde salió y al cliente se le descuenta de su cuenta el total de la venta. No se borra: queda como anulada, con el motivo y quién la anuló. Se anula entera y una sola vez.',
+    reglas: ['VTA-20', 'VTA-21', 'INV-19', 'TR-06'],
+  },
+  'ventas.devolverDinero': {
+    titulo: '¿Devolvés lo que cobraste?',
+    texto:
+      'Si le devolvés al cliente lo que pagó con esta venta, el cobro también se anula y su cuenta queda como antes de la venta. Si no se lo devolvés, ese pago le queda a favor para lo próximo que compre.',
+    reglas: ['VTA-22', 'COB-05', 'ADR-058'],
+  },
+  'ventas.motivoAnulacion': {
+    titulo: 'Motivo',
+    texto: 'Elegí por qué anulás. Queda guardado en la venta y en la auditoría.',
+    reglas: ['VTA-20', 'AUD-01', 'AUD-02'],
+  },
+  'ventas.consumidorFinalAnulacion': {
+    titulo: 'Consumidor final',
+    texto: 'Al cliente sin nombre siempre se le devuelve lo que pagó: no tiene cuenta donde dejarle saldo a favor.',
+    reglas: ['CLI-03', 'VTA-22', 'ADR-058'],
+  },
+  'ventas.reingresoUbicacion': {
+    titulo: 'Adónde vuelve la mercadería',
+    texto:
+      'Vuelve a la ubicación de donde salió. Si esa camioneta está ahora en la jornada de otro vendedor, solo puede anular quien tiene permiso para mover una ubicación tomada.',
+    reglas: ['VTA-21', 'STK-09', 'ADR-058'],
+  },
+  'ventas.costoAnulacion': {
+    titulo: 'Costo de lo que vuelve',
+    texto:
+      'La mercadería vuelve al mismo costo con que salió en la venta, y el costo promedio del producto se recalcula como en una compra.',
+    reglas: ['VTA-21', 'CST-11', 'CST-13'],
   },
 
   // --- Configuración del descuento manual y del crédito (change 18b, D22) ---

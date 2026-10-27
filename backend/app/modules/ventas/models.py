@@ -1,12 +1,12 @@
-"""Modelos SQLAlchemy de `ventas`: `Venta`, `VentaLinea` y `VentaLineaDescuento`
-(`docs/03-modelo-de-datos.md` §12; migraciones `a2b3c4d5e6f7` y `b6c7d8e9f0a1`, `design.md` D16
-y, del 18b, D12).
+"""Modelos SQLAlchemy de `ventas`: `Venta`, `VentaLinea`, `VentaLineaDescuento` y
+`VentaAnulacion` (`docs/03-modelo-de-datos.md` §12; migraciones `a2b3c4d5e6f7`,
+`b6c7d8e9f0a1`, `d9e0f1a2b3c4`, `design.md` D16 y D11).
 
 `id` se genera con UUIDv7 (`core/ids.py`); las ventas lo reciben de quien las origina (el
 dispositivo). Los momentos son `timestamptz`. De solo inserción para `app_runtime` (INV-05,
-INV-10, TR-06: sin `UPDATE` ni `DELETE`; el change 19 agrega el `UPDATE` de `estado`). Este
-módulo no declara `relationship()` alguna (`CLAUDE.md` §4: carga explícita); toda lectura pasa
-por consultas explícitas de `ventas/repository.py`.
+INV-10, TR-06: sin `UPDATE` ni `DELETE`; el change 19 agrega el `UPDATE` de `estado` de
+`venta`). Este módulo no declara `relationship()` alguna (`CLAUDE.md` §4: carga explícita);
+toda lectura pasa por consultas explícitas de `ventas/repository.py`.
 """
 
 from __future__ import annotations
@@ -41,7 +41,10 @@ def _fk(tabla: str, nombre: str, columna: str, destino: str) -> ForeignKeyConstr
 
 
 class Venta(Base):
-    """Cabecera de una venta confirmada (VTA-03, VTA-12). Los totales cumplen INV-14."""
+    """Cabecera de una venta confirmada (VTA-03, VTA-12). Los totales cumplen INV-14.
+
+    `app_runtime` solo puede actualizar `estado` (`CONFIRMADA` -> `ANULADA`, change 19, D11);
+    todo lo demás queda congelado (INV-10)."""
 
     __tablename__ = "venta"
     __table_args__ = (
@@ -153,6 +156,43 @@ class Venta(Base):
     credito_politica: Mapped[str | None] = mapped_column(Text, nullable=True)
     credito_resolucion: Mapped[str | None] = mapped_column(Text, nullable=True)
     credito_autorizador_id: Mapped[UUID | None] = mapped_column(nullable=True)
+
+
+class VentaAnulacion(Base):
+    """Anulación de una venta (change 19, D11). Una fila por venta anulada."""
+
+    __tablename__ = "venta_anulacion"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organizacion_id"], ["organizacion.id"], name="fk_venta_anulacion__organizacion"
+        ),
+        _fk("venta_anulacion", "venta", "venta_id", "venta"),
+        _fk("venta_anulacion", "motivo", "motivo_id", "motivo"),
+        _fk("venta_anulacion", "jornada", "jornada_id", "jornada"),
+        _fk("venta_anulacion", "usuario", "usuario_id", "usuario"),
+        _fk("venta_anulacion", "dispositivo", "dispositivo_id", "dispositivo"),
+        UniqueConstraint("organizacion_id", "id", name="ux_venta_anulacion__org_id"),
+        UniqueConstraint("organizacion_id", "venta_id", name="ux_venta_anulacion__venta"),
+        Index(
+            "ix_venta_anulacion__occurred_at",
+            "organizacion_id",
+            text("occurred_at DESC"),
+            text("id DESC"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=nuevo_id)
+    organizacion_id: Mapped[UUID] = mapped_column(nullable=False)
+    venta_id: Mapped[UUID] = mapped_column(nullable=False)
+    motivo_id: Mapped[UUID] = mapped_column(nullable=False)
+    observacion: Mapped[str | None] = mapped_column(Text, nullable=True)
+    devuelve_dinero: Mapped[bool | None] = mapped_column(nullable=True)
+    jornada_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    operation_id: Mapped[UUID] = mapped_column(nullable=False)
+    usuario_id: Mapped[UUID] = mapped_column(nullable=False)
+    dispositivo_id: Mapped[UUID] = mapped_column(nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class VentaLinea(Base):

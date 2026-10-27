@@ -19,7 +19,7 @@ y `GET /ventas/numeracion` con `VENDER`; `GET /ventas/versiones` con `USAR_LISTA
 from __future__ import annotations
 
 from datetime import date
-from typing import Annotated, cast
+from typing import Annotated, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -57,6 +57,9 @@ from app.modules.ventas.schemas import (
     PresentacionParaVenderResponse,
     ProductoParaVenderResponse,
     ReglaAplicableResponse,
+    VentaAnulacionResponse,
+    VentaAnularRequest,
+    VentaAnularResponse,
     VentaCobranzaResponse,
     VentaConfirmarRequest,
     VentaConfirmarResponse,
@@ -143,6 +146,69 @@ def confirmar_venta(
     )
 
 
+@router.post("/{venta_id}/anulacion", response_model=VentaAnularResponse)
+def anular_venta(
+    venta_id: UUID,
+    datos: VentaAnularRequest,
+    entrada: Annotated[
+        EntradaComandoOnline, Depends(requiere_comando_online(PERMISO_ANULAR_VENTA))
+    ],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> VentaAnularResponse:
+    """`POST /ventas/{id}/anulacion` (change 19, tarea 7.5; VTA-20, `design.md` D1). El resultado
+    sale de `comando.resultado`: un reenvío idempotente del mismo `Operation-Id` devuelve lo mismo
+    (INV-06), con el saldo como string (INV-03). Si la venta ya está anulada, el motivo o la
+    indicación del dinero no sirven o la ubicación no admite el reingreso, lo decide el servicio con
+    su código estable y el Problem Details (`02` §11). Una venta de otra organización es 404."""
+    reloj = SystemClock()
+    contenido: dict[str, ContenidoComando] = {
+        "venta_id": str(venta_id),
+        "motivo_id": str(datos.motivo_id),
+        "observacion": datos.observacion,
+        "devuelve_dinero": datos.devuelve_dinero,
+    }
+    sobre = construir_sobre_online(
+        operation_id=entrada.operation_id,
+        tipo="VENTA_ANULAR",
+        version=1,
+        modo="ONLINE",
+        organizacion_id=entrada.contexto.organizacion_id,
+        usuario_id=entrada.contexto.usuario_id,
+        dispositivo_id=entrada.contexto.dispositivo_id,
+        occurred_at=reloj.now(),
+        secuencia=1,
+        app_version="server",
+        contenido=contenido,
+    )
+    huella = calcular_huella(sobre.contenido)
+    handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
+    contenido_validado = cast(
+        ventas_commands.VentaAnularContenidoV1,
+        registro.validar_contenido(handler_registrado, sobre.contenido),
+    )
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandlerConAuditoria:
+        return ventas_commands.manejar_venta_anular(
+            sobre, contenido_validado, sesion=sesion_protegida, reloj=reloj
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    resultado = comando.resultado
+    assert resultado is not None
+    cobranza_id = resultado["cobranza_id"]
+    return VentaAnularResponse(
+        venta_id=UUID(str(resultado["venta_id"])),
+        estado=str(resultado["estado"]),
+        saldo=str(resultado["saldo"]),
+        cobranza_id=None if cobranza_id is None else UUID(str(cobranza_id)),
+        cobranza_anulada=bool(resultado["cobranza_anulada"]),
+    )
+
+
 # --- lecturas (change 18a, tareas 9.1 y 9.2; `design.md` D19) ---------------------------------
 
 
@@ -183,6 +249,7 @@ def listar_ventas(
     ubicacion_id: UUID | None = None,
     desde: date | None = None,
     hasta: date | None = None,
+    estado: Literal["CONFIRMADA", "ANULADA"] | None = None,
     cursor: str | None = None,
     limite: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> PaginaVentas:
@@ -190,7 +257,8 @@ def listar_ventas(
     por el usuario el 2026-10-20): `VENDER` o `ANULAR_VENTA`, todas las de la organización.
     `desde` y `hasta` son fechas de negocio inclusivas en la zona de la organización (TR-04); un
     `limite` fuera de 1 a 200 es 422, y un rango invertido o un cursor ilegible también, con su
-    código."""
+    código. `estado` (change 19, D14, REP-02) filtra por `CONFIRMADA` o `ANULADA`; otro valor es
+    422."""
     pagina = ventas_queries.listar_ventas(
         contexto.organizacion_id,
         sesion,
@@ -200,6 +268,7 @@ def listar_ventas(
         ubicacion_id=ubicacion_id,
         desde=desde,
         hasta=hasta,
+        estado=estado,
         cursor=cursor,
         limite=limite,
     )
@@ -450,6 +519,7 @@ def obtener_venta(
     motivo = detalle.motivo_lista
     return VentaDetalleResponse(
         **_resumen_de(detalle.resumen).model_dump(),
+        cliente_es_consumidor_final=detalle.cliente_es_consumidor_final,
         registered_at=venta.registered_at,
         dispositivo_id=venta.dispositivo_id,
         lista_id=venta.lista_id,
@@ -520,6 +590,19 @@ def obtener_venta(
             )
             for o in observaciones
         ],
+        anulacion=(
+            None
+            if detalle.anulacion is None
+            else VentaAnulacionResponse(
+                anulada_en=detalle.anulacion.anulada_en,
+                usuario_id=detalle.anulacion.usuario_id,
+                usuario_nombre=detalle.anulacion.usuario_nombre,
+                motivo_id=detalle.anulacion.motivo_id,
+                motivo_nombre=detalle.anulacion.motivo_nombre,
+                observacion=detalle.anulacion.observacion,
+                devuelve_dinero=detalle.anulacion.devuelve_dinero,
+            )
+        ),
         credito=(
             None
             if detalle.credito is None

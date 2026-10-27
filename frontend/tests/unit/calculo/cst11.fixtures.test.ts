@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { calcularEgreso, calcularIngreso } from '../../../src/domain/costeo/costoPromedio'
+import { calcularEgreso, calcularIngreso, calcularIngresoSinRecalculo } from '../../../src/domain/costeo/costoPromedio'
 import { descubrirCasos } from './cargador'
 
 // Las operaciones `reversion` (CMP-06, change 11) las ejecuta `cst11.reversion.fixtures.test.ts`.
@@ -31,10 +31,19 @@ interface EntradaCst11 {
   stock_previo: number
   promedio_previo: string | null
   cantidad: number
-  costo_ingreso?: string
+  costo_ingreso?: string | null
 }
 
 function ejecutar(entrada: EntradaCst11): Record<string, unknown> {
+  if (entrada.operacion === 'ingreso' && (entrada.costo_ingreso === null || entrada.costo_ingreso === undefined)) {
+    // CST-12, VTA-21: la línea vendida sin costo ingresa sin recalcular el promedio.
+    const sinCosto = calcularIngresoSinRecalculo(entrada.stock_previo, entrada.promedio_previo, entrada.cantidad)
+    return {
+      promedio_nuevo: sinCosto.promedio === null ? null : sinCosto.promedio.toFixed(6),
+      stock_nuevo: sinCosto.stockNuevo,
+    }
+  }
+
   if (entrada.operacion === 'ingreso') {
     const ingreso = calcularIngreso(
       entrada.stock_previo,

@@ -8,6 +8,8 @@ export interface FiltrosVentas {
   usuarioId?: string
   jornadaId?: string
   ubicacionId?: string
+  /** `CONFIRMADA` o `ANULADA` (change 19, D14); sin valor, todas. */
+  estado?: 'CONFIRMADA' | 'ANULADA'
   /** Fecha de negocio `aaaa-mm-dd` (TR-04), inclusive. */
   desde?: string
   hasta?: string

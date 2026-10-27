@@ -54,7 +54,7 @@ from ventas_utiles import (
 REVISION = "a2b3c4d5e6f7"
 # La del change 18b: el `head`. Un `downgrade` que aborta en la revisión de este change revierte
 # toda la corrida (Alembic corre en una sola transacción), así que la base queda en `head`.
-REVISION_HEAD = "c8d9e0f1a2b3"
+REVISION_HEAD = "d9e0f1a2b3c4"  # `venta_anulacion` (change 19), la cabeza actual.
 REVISION_ANTERIOR = "f8a9b0c1d2e3"  # `medios_de_pago_administrables`, la previa a este change.
 
 AMBITO = "LISTA_ANTERIOR"
@@ -745,9 +745,12 @@ def _columnas_con_update(motor: Engine, tabla: str) -> set[str]:
 
 @pytest.mark.parametrize("tabla", TABLAS)
 def test_inv05_app_runtime_solo_lee_e_inserta(app_runtime_engine: Engine, tabla: str) -> None:
-    """INV-05, INV-10, TR-06, D16: sin `UPDATE` ni `DELETE` (el 19 agrega el de `estado`)."""
+    """INV-05, INV-10, TR-06, D16: sin `DELETE`; el único `UPDATE` es el de `venta.estado`
+    (change 19, D11: la anulación de la venta)."""
     assert _privilegios_de_tabla(app_runtime_engine, tabla) == {"SELECT", "INSERT"}
-    assert _columnas_con_update(app_runtime_engine, tabla) == set()
+    assert _columnas_con_update(app_runtime_engine, tabla) == (
+        {"estado"} if tabla == "venta" else set()
+    )
 
 
 @pytest.mark.parametrize("tabla", TABLAS)
@@ -762,7 +765,6 @@ def test_inv05_app_runtime_no_puede_borrar(app_runtime_engine: Engine, tabla: st
 @pytest.mark.parametrize(
     ("tabla", "columna", "valor"),
     [
-        ("venta", "estado", "'ANULADA'"),
         ("venta", "total", "1"),
         ("venta", "importe_facturado", "1"),
         ("venta_linea", "importe_neto", "1"),

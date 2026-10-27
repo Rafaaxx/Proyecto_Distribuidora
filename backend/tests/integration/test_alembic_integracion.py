@@ -659,6 +659,7 @@ def test_downgrade_menos_uno_y_upgrade_corren_limpios_con_datos_de_catalogo_semb
 # --- ADR-057 (change 18b, tarea 24.3): `intento_login.clave_intento` -----------------------------
 
 REVISION_CLAVE_INTENTO = "c8d9e0f1a2b3"
+REVISION_HEAD_ACTUAL = "d9e0f1a2b3c4"  # `venta_anulacion` (change 19)
 REVISION_ANTERIOR_A_CLAVE_INTENTO = "b6c7d8e9f0a1"
 INDICE_CLAVE_INTENTO = "ix_intento_login__clave_intento_creado_en"
 
@@ -831,7 +832,7 @@ def test_adr057_la_migracion_es_la_cabeza_y_el_ciclo_corre_limpio(
         with _engine_de_sesion.connect() as conexion:
             assert (
                 conexion.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-                == REVISION_CLAVE_INTENTO
+                == REVISION_HEAD_ACTUAL
             )
     finally:
         _dejar_en_head_y_limpio(database_url, _engine_de_sesion)

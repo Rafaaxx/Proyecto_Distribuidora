@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  calcularIngresoSinRecalculo,
   CantidadInvalidaError,
   CostoInvalidoError,
   PromedioInconsistenteError,
@@ -129,5 +130,23 @@ describe('calcularEgreso (CST-12)', () => {
 
   it('no valida el stock suficiente: eso es de stock', () => {
     expect(calcularEgreso(3, '10.000000', 5).stockNuevo).toBe(-2)
+  })
+})
+
+describe('calcularIngresoSinRecalculo (CST-12, VTA-21: línea de venta sin costo al anular)', () => {
+  it('sube el stock y deja el promedio como está', () => {
+    const r = calcularIngresoSinRecalculo(48, '1050.000000', 10)
+    expect(r.stockNuevo).toBe(58)
+    expect(r.promedio?.toFixed(6)).toBe('1050.000000')
+  })
+
+  it('sin promedio queda sin promedio, con stock previo negativo', () => {
+    const r = calcularIngresoSinRecalculo(-5, null, 3)
+    expect(r.stockNuevo).toBe(-2)
+    expect(r.promedio).toBeNull()
+  })
+
+  it('rechaza una cantidad no positiva', () => {
+    expect(() => calcularIngresoSinRecalculo(10, '1.000000', 0)).toThrow()
   })
 })

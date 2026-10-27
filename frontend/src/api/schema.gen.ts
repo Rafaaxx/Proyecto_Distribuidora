@@ -2232,7 +2232,8 @@ export interface paths {
          *     por el usuario el 2026-10-20): `VENDER` o `ANULAR_VENTA`, todas las de la organización.
          *     `desde` y `hasta` son fechas de negocio inclusivas en la zona de la organización (TR-04); un
          *     `limite` fuera de 1 a 200 es 422, y un rango invertido o un cursor ilegible también, con su
-         *     código.
+         *     código. `estado` (change 19, D14, REP-02) filtra por `CONFIRMADA` o `ANULADA`; otro valor es
+         *     422.
          */
         get: operations["listar_ventas_api_v1_ventas_get"];
         put?: never;
@@ -2242,6 +2243,30 @@ export interface paths {
          *     (INV-06); los importes viajan y vuelven como string (INV-03).
          */
         post: operations["confirmar_venta_api_v1_ventas_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ventas/{venta_id}/anulacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anular Venta
+         * @description `POST /ventas/{id}/anulacion` (change 19, tarea 7.5; VTA-20, `design.md` D1). El resultado
+         *     sale de `comando.resultado`: un reenvío idempotente del mismo `Operation-Id` devuelve lo mismo
+         *     (INV-06), con el saldo como string (INV-03). Si la venta ya está anulada, el motivo o la
+         *     indicación del dinero no sirven o la ubicación no admite el reingreso, lo decide el servicio con
+         *     su código estable y el Problem Details (`02` §11). Una venta de otra organización es 404.
+         */
+        post: operations["anular_venta_api_v1_ventas__venta_id__anulacion_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6709,6 +6734,76 @@ export interface components {
             ctx?: Record<string, never>;
         };
         /**
+         * VentaAnulacionResponse
+         * @description El bloque de anulación del detalle (change 19, D14): cuándo, quién (con su nombre), con qué
+         *     motivo (con su nombre), la observación y si se devolvió el dinero (nulo si no había cobro).
+         */
+        VentaAnulacionResponse: {
+            /**
+             * Anulada En
+             * Format: date-time
+             */
+            anulada_en: string;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /** Usuario Nombre */
+            usuario_nombre: string | null;
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+            /** Motivo Nombre */
+            motivo_nombre: string | null;
+            /** Observacion */
+            observacion: string | null;
+            /** Devuelve Dinero */
+            devuelve_dinero: boolean | null;
+        };
+        /**
+         * VentaAnularRequest
+         * @description `POST /ventas/{venta_id}/anulacion` (change 19, VTA-20; `design.md` D1). `venta_id` va en
+         *     la ruta y la organización sale del token (INV-21, TR-08): un campo extra se rechaza con 422.
+         *     La observación es opcional y de hasta 500 caracteres (la valida el dominio:
+         *     `OBSERVACION_INVALIDA`); `devuelve_dinero` es un booleano estricto, obligatorio solo si la
+         *     venta tiene su cobranza confirmada (D2).
+         */
+        VentaAnularRequest: {
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+            /** Observacion */
+            observacion?: string | null;
+            /** Devuelve Dinero */
+            devuelve_dinero?: boolean | null;
+        };
+        /**
+         * VentaAnularResponse
+         * @description Sale de `comando.resultado` (INV-06). `saldo` es el saldo del cliente después de anular
+         *     (string, INV-03); `cobranza_id` es la cobranza de la venta, si existía, y `cobranza_anulada`
+         *     dice si quedó anulada (D1).
+         */
+        VentaAnularResponse: {
+            /**
+             * Venta Id
+             * Format: uuid
+             */
+            venta_id: string;
+            /** Estado */
+            estado: string;
+            /** Saldo */
+            saldo: string;
+            /** Cobranza Id */
+            cobranza_id: string | null;
+            /** Cobranza Anulada */
+            cobranza_anulada: boolean;
+        };
+        /**
          * VentaCobranzaMedioRequest
          * @description Un medio de la cobranza en el acto (D12).
          */
@@ -6886,6 +6981,11 @@ export interface components {
             /** Modo Confirmacion */
             modo_confirmacion: string;
             /**
+             * Cliente Es Consumidor Final
+             * @default false
+             */
+            cliente_es_consumidor_final: boolean;
+            /**
              * Registered At
              * Format: date-time
              */
@@ -6924,6 +7024,7 @@ export interface components {
             /** Observaciones */
             observaciones: components["schemas"]["VentaObservacionResponse"][];
             credito?: components["schemas"]["VentaCreditoResponse"] | null;
+            anulacion?: components["schemas"]["VentaAnulacionResponse"] | null;
         };
         /**
          * VentaLineaDescuentoResponse
@@ -11730,6 +11831,7 @@ export interface operations {
                 ubicacion_id?: string | null;
                 desde?: string | null;
                 hasta?: string | null;
+                estado?: ("CONFIRMADA" | "ANULADA") | null;
                 cursor?: string | null;
                 limite?: number;
             };
@@ -11784,6 +11886,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VentaConfirmarResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    anular_venta_api_v1_ventas__venta_id__anulacion_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                venta_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VentaAnularRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VentaAnularResponse"];
                 };
             };
             /** @description Validation Error */

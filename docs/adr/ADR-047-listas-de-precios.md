@@ -71,7 +71,7 @@ La distribuidora es monotributista (ADR-045): el modo impositivo es `A`, el prec
 - INV-11 depende del servicio y de sus pruebas: `app_runtime` puede modificar `precio_item`. Un defecto futuro en una escritura fuera de `escribir_precios` no lo detendría la base.
 - Dado que no se siembra la lista "General", una organización nueva no tiene lista predeterminada hasta que un administrador la crea y la define; mientras tanto los clientes sin lista asignada no tienen precio y la pantalla de configuración lo advierte.
 - El change 18a (venta) consume `precios/service.py` sin tocar `precios`; el `13b` recibe la deuda del importador `PRECIOS`.
-- Deuda: redondeo por defecto de la organización (`01` §4, "a definir"): no hay comando que lo defina; solo precargaría el formulario de una lista nueva. Sin change asignado; se hace si molesta.
+- Deuda: redondeo por defecto de la organización (`01` §4, "a definir"): no hay comando que lo defina; solo precargaría el formulario de una lista nueva. Sin change asignado; se hace si molesta. *(Actualizado el 2026-10-24: lo asume el change 20c, `catalogos-de-configuracion`, por decisión del usuario.)*
 - Decidido (usuario, Lote 3, 2026-10-06): un precio manual sobre un producto sin presentación de referencia se rechaza (404).
 
 ## Alternativas consideradas

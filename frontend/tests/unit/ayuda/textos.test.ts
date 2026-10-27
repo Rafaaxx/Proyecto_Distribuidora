@@ -11,8 +11,8 @@ const claves = Object.keys(AYUDAS) as ClaveDeAyuda[]
 const temas = Object.keys(TEMAS) as TemaDeAyuda[]
 
 describe('AYUDAS: cada entrada tiene título, texto y regla citada', () => {
-  it('tiene las 58 claves aprobadas (27 del 16b, 5 de cobranzas, 5 de medios de pago y roles, 9 de ventas y 12 del 18b; la de "Operador" se eliminó)', () => {
-    expect(claves).toHaveLength(58)
+  it('tiene las 64 claves aprobadas (27 del 16b, 5 de cobranzas, 5 de medios de pago y roles, 9 de ventas, 12 del 18b y 6 de la anulación de venta del 19; la de "Operador" se eliminó)', () => {
+    expect(claves).toHaveLength(64)
     expect(claves).not.toContain('descuentos.operador')
   })
 
@@ -285,5 +285,48 @@ describe('ClaveDeAyuda: el compilador rechaza una clave inexistente', () => {
     // @ts-expect-error `descuentos.medidda` no existe en AYUDAS
     const mala: ClaveDeAyuda = 'descuentos.medidda'
     expect(claves).not.toContain(mala)
+  })
+})
+
+describe('ayuda de la anulación de venta (change 19, D18; textos aprobados el 2026-10-24, sin ejemplos)', () => {
+  const clavesDeAnulacion = [
+    'ventas.anulacion',
+    'ventas.devolverDinero',
+    'ventas.motivoAnulacion',
+    'ventas.consumidorFinalAnulacion',
+    'ventas.reingresoUbicacion',
+    'ventas.costoAnulacion',
+  ] as const
+
+  it('las seis claves existen y citan las reglas aprobadas', () => {
+    expect(clavesDeAnulacion.map((clave) => [clave, [...AYUDAS[clave].reglas]])).toEqual([
+      ['ventas.anulacion', ['VTA-20', 'VTA-21', 'INV-19', 'TR-06']],
+      ['ventas.devolverDinero', ['VTA-22', 'COB-05', 'ADR-058']],
+      ['ventas.motivoAnulacion', ['VTA-20', 'AUD-01', 'AUD-02']],
+      ['ventas.consumidorFinalAnulacion', ['CLI-03', 'VTA-22', 'ADR-058']],
+      ['ventas.reingresoUbicacion', ['VTA-21', 'STK-09', 'ADR-058']],
+      ['ventas.costoAnulacion', ['VTA-21', 'CST-11', 'CST-13']],
+    ])
+  })
+
+  it.each([
+    ['ventas.anulacion', 'Anular una venta', 'Deja la venta sin efecto: la mercadería vuelve a la ubicación de donde salió y al cliente se le descuenta de su cuenta el total de la venta. No se borra: queda como anulada, con el motivo y quién la anuló. Se anula entera y una sola vez.'],
+    ['ventas.devolverDinero', '¿Devolvés lo que cobraste?', 'Si le devolvés al cliente lo que pagó con esta venta, el cobro también se anula y su cuenta queda como antes de la venta. Si no se lo devolvés, ese pago le queda a favor para lo próximo que compre.'],
+    ['ventas.motivoAnulacion', 'Motivo', 'Elegí por qué anulás. Queda guardado en la venta y en la auditoría.'],
+    ['ventas.consumidorFinalAnulacion', 'Consumidor final', 'Al cliente sin nombre siempre se le devuelve lo que pagó: no tiene cuenta donde dejarle saldo a favor.'],
+    ['ventas.reingresoUbicacion', 'Adónde vuelve la mercadería', 'Vuelve a la ubicación de donde salió. Si esa camioneta está ahora en la jornada de otro vendedor, solo puede anular quien tiene permiso para mover una ubicación tomada.'],
+    ['ventas.costoAnulacion', 'Costo de lo que vuelve', 'La mercadería vuelve al mismo costo con que salió en la venta, y el costo promedio del producto se recalcula como en una compra.'],
+  ] as const)('%s lleva el título y el texto aprobados, sin ejemplo', (clave, titulo, texto) => {
+    const entrada: { titulo: string; texto: string; ejemplo?: string } = AYUDAS[clave]
+    expect(entrada.titulo).toBe(titulo)
+    expect(entrada.texto).toBe(texto)
+    expect(entrada.ejemplo).toBeUndefined()
+  })
+
+  it('"Anular una cobranza" aclara que el cobro de una venta se anula anulando la venta, y conserva su texto', () => {
+    const { texto, reglas } = AYUDAS['cobranzas.anulacion']
+    expect(texto).toContain('El cobro de una venta se anula anulando la venta.')
+    expect(texto).toContain('Se anula entero; si te equivocaste en un medio, anulalo y cargalo de nuevo.')
+    expect(reglas).toEqual(['COB-05', 'CC-02'])
   })
 })

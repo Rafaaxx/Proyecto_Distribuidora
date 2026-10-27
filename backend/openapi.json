@@ -10081,7 +10081,7 @@
           "ventas"
         ],
         "summary": "Listar Ventas",
-        "description": "Ventas de la organización de la más reciente a la más vieja, por cursor (D19, aprobada\npor el usuario el 2026-10-20): `VENDER` o `ANULAR_VENTA`, todas las de la organización.\n`desde` y `hasta` son fechas de negocio inclusivas en la zona de la organización (TR-04); un\n`limite` fuera de 1 a 200 es 422, y un rango invertido o un cursor ilegible también, con su\ncódigo.",
+        "description": "Ventas de la organización de la más reciente a la más vieja, por cursor (D19, aprobada\npor el usuario el 2026-10-20): `VENDER` o `ANULAR_VENTA`, todas las de la organización.\n`desde` y `hasta` son fechas de negocio inclusivas en la zona de la organización (TR-04); un\n`limite` fuera de 1 a 200 es 422, y un rango invertido o un cursor ilegible también, con su\ncódigo. `estado` (change 19, D14, REP-02) filtra por `CONFIRMADA` o `ANULADA`; otro valor es\n422.",
         "operationId": "listar_ventas_api_v1_ventas_get",
         "parameters": [
           {
@@ -10187,6 +10187,26 @@
             }
           },
           {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "CONFIRMADA",
+                    "ANULADA"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Estado"
+            }
+          },
+          {
             "name": "cursor",
             "in": "query",
             "required": false,
@@ -10238,6 +10258,92 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PaginaVentas"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ventas/{venta_id}/anulacion": {
+      "post": {
+        "tags": [
+          "ventas"
+        ],
+        "summary": "Anular Venta",
+        "description": "`POST /ventas/{id}/anulacion` (change 19, tarea 7.5; VTA-20, `design.md` D1). El resultado\nsale de `comando.resultado`: un reenvío idempotente del mismo `Operation-Id` devuelve lo mismo\n(INV-06), con el saldo como string (INV-03). Si la venta ya está anulada, el motivo o la\nindicación del dinero no sirven o la ubicación no admite el reingreso, lo decide el servicio con\nsu código estable y el Problem Details (`02` §11). Una venta de otra organización es 404.",
+        "operationId": "anular_venta_api_v1_ventas__venta_id__anulacion_post",
+        "parameters": [
+          {
+            "name": "venta_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Venta Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VentaAnularRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VentaAnularResponse"
                 }
               }
             }
@@ -20521,6 +20627,162 @@
         ],
         "title": "ValidationError"
       },
+      "VentaAnulacionResponse": {
+        "properties": {
+          "anulada_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Anulada En"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "usuario_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usuario Nombre"
+          },
+          "motivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Motivo Id"
+          },
+          "motivo_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Nombre"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          },
+          "devuelve_dinero": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Devuelve Dinero"
+          }
+        },
+        "type": "object",
+        "required": [
+          "anulada_en",
+          "usuario_id",
+          "usuario_nombre",
+          "motivo_id",
+          "motivo_nombre",
+          "observacion",
+          "devuelve_dinero"
+        ],
+        "title": "VentaAnulacionResponse",
+        "description": "El bloque de anulación del detalle (change 19, D14): cuándo, quién (con su nombre), con qué\nmotivo (con su nombre), la observación y si se devolvió el dinero (nulo si no había cobro)."
+      },
+      "VentaAnularRequest": {
+        "properties": {
+          "motivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Motivo Id"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          },
+          "devuelve_dinero": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Devuelve Dinero"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "motivo_id"
+        ],
+        "title": "VentaAnularRequest",
+        "description": "`POST /ventas/{venta_id}/anulacion` (change 19, VTA-20; `design.md` D1). `venta_id` va en\nla ruta y la organización sale del token (INV-21, TR-08): un campo extra se rechaza con 422.\nLa observación es opcional y de hasta 500 caracteres (la valida el dominio:\n`OBSERVACION_INVALIDA`); `devuelve_dinero` es un booleano estricto, obligatorio solo si la\nventa tiene su cobranza confirmada (D2)."
+      },
+      "VentaAnularResponse": {
+        "properties": {
+          "venta_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Venta Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "saldo": {
+            "type": "string",
+            "title": "Saldo"
+          },
+          "cobranza_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cobranza Id"
+          },
+          "cobranza_anulada": {
+            "type": "boolean",
+            "title": "Cobranza Anulada"
+          }
+        },
+        "type": "object",
+        "required": [
+          "venta_id",
+          "estado",
+          "saldo",
+          "cobranza_id",
+          "cobranza_anulada"
+        ],
+        "title": "VentaAnularResponse",
+        "description": "Sale de `comando.resultado` (INV-06). `saldo` es el saldo del cliente después de anular\n(string, INV-03); `cobranza_id` es la cobranza de la venta, si existía, y `cobranza_anulada`\ndice si quedó anulada (D1)."
+      },
       "VentaCobranzaMedioRequest": {
         "properties": {
           "medio_pago_id": {
@@ -21002,6 +21264,11 @@
             "type": "string",
             "title": "Modo Confirmacion"
           },
+          "cliente_es_consumidor_final": {
+            "type": "boolean",
+            "title": "Cliente Es Consumidor Final",
+            "default": false
+          },
           "registered_at": {
             "type": "string",
             "format": "date-time",
@@ -21098,6 +21365,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/VentaCreditoResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "anulacion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VentaAnulacionResponse"
               },
               {
                 "type": "null"

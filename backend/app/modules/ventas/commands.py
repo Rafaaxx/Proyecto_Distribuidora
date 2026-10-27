@@ -59,6 +59,7 @@ _PATRON_DECIMAL = r"^-?\d+(\.\d+)?$"
 se rechaza (INV-03)."""
 
 PERMISO_VENDER = "VENDER"
+PERMISO_ANULAR_VENTA = "ANULAR_VENTA"
 
 
 def _exigir_permiso(
@@ -350,4 +351,82 @@ declarar_tipo(
     admite_offline=True,
     permisos=(PERMISO_VENDER,),
     operacion_offline=OperacionObservable("VENTA", "venta_id"),
+)
+
+
+# --- VENTA_ANULAR (VTA-20, VTA-21, VTA-22; D1, D10, D15, D19) ---------------------------------
+
+
+class VentaAnularContenidoV1(BaseModel):
+    """`extra="forbid"`: `organizacion_id` sale del token (INV-21, TR-08). Anulación total: no hay
+    importe. `venta_id` es el identificador que generó el dispositivo al confirmarla (D1).
+    `observacion` opcional: su largo lo valida el dominio (`OBSERVACION_INVALIDA`, 422) y no un
+    422 genérico de Pydantic. `devuelve_dinero` es un booleano estricto, obligatorio solo si la
+    venta tiene su cobranza confirmada y omitido si no (D2)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    venta_id: UUID
+    motivo_id: UUID
+    observacion: str | None = None
+    devuelve_dinero: StrictBool | None = None
+
+
+def manejar_venta_anular(
+    sobre: SobreComando,
+    contenido: VentaAnularContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+) -> ResultadoHandlerConAuditoria:
+    """Anula una venta con conexión (`ANULAR_VENTA`). Devuelve el resultado que se reenvía ante un
+    doble envío (INV-06), con los importes como string (INV-03), y el dato de auditoría del bus:
+    el motivo (AUD-02) y, en la observación, la cobranza anulada y la constancia de la ubicación
+    tomada (D15, STK-09)."""
+    permisos = _exigir_permiso(sobre, sesion, PERMISO_ANULAR_VENTA)
+    resultado = ventas_service.anular_venta(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        venta_id=contenido.venta_id,
+        motivo_id=contenido.motivo_id,
+        observacion=contenido.observacion,
+        devuelve_dinero=contenido.devuelve_dinero,
+        puede_liberar_ubicacion="LIBERAR_UBICACION" in permisos,
+        operation_id=sobre.operation_id,
+        usuario_id=sobre.usuario_id,
+        dispositivo_id=sobre.dispositivo_id,
+        occurred_at=sobre.occurred_at,
+    )
+    cobranza_anulada = (
+        f"cobranza anulada {resultado.cobranza_id}"
+        if resultado.cobranza_anulada and resultado.cobranza_id is not None
+        else None
+    )
+    return (
+        "ACEPTADO",
+        {
+            "venta_id": str(resultado.venta.id),
+            "estado": resultado.venta.estado,
+            "saldo": str(resultado.saldo),
+            "cobranza_id": None if resultado.cobranza_id is None else str(resultado.cobranza_id),
+            "cobranza_anulada": resultado.cobranza_anulada,
+        },
+        None,
+        (),
+        DatosDeAuditoria(
+            motivo_id=contenido.motivo_id,
+            observacion=unir_observaciones(
+                cobranza_anulada, observacion_de_ubicacion_tomada(resultado.jornadas_tomadas)
+            ),
+        ),
+    )
+
+
+registrar_handler("VENTA_ANULAR", 1, VentaAnularContenidoV1)(manejar_venta_anular)
+declarar_tipo(
+    "VENTA_ANULAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=(PERMISO_ANULAR_VENTA,),
 )

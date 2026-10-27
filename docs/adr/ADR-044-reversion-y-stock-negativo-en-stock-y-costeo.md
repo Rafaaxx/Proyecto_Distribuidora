@@ -33,3 +33,7 @@ ADR-039 hace de `stock/service.py::registrar_movimientos` el único camino para 
 - **`stock.revertir_origen(origen_tipo, origen_id)` que lea los movimientos originales (B de D9):** descartada: acopla el libro de stock a un origen y a líneas que no son suyas.
 - **Sin fila de historia cuando no recalcula (C de D9):** descartada: CST-13 pide que el promedio sea reconstruible y quedaría sin rastro de por qué no cambió.
 - **Admitir stock negativo para cualquier egreso desde ya (B de D10):** descartada: más superficie sin dueño; los changes 14 y 18a lo decidirán por su cuenta.
+
+## Enmienda del change 19 (ADR-058)
+
+El punto 5 («Reversión con producto inactivo») alcanza también a `ANULACION_VENTA`: revertir una venta no es una operación nueva (CAT-05), así que el ingreso de la anulación se acepta aunque el producto esté inactivo; los demás tipos lo siguen rechazando y una ubicación inactiva bloquea siempre. El ingreso de `ANULACION_VENTA` nunca deja stock negativo, por lo que no usa `permitir_negativo` (punto 4).

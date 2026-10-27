@@ -79,6 +79,7 @@ from app.modules.stock.domain.kardex import (
 from app.modules.stock.domain.movimientos import (
     AJUSTE,
     ANULACION_COMPRA,
+    ANULACION_VENTA,
     ORIGEN_AJUSTE,
     ORIGEN_TRANSFERENCIA,
     STOCK_INICIAL,
@@ -571,10 +572,15 @@ def _aplicar(
                 except ProductoSinCostoError as error:
                     error.extension = {"producto_id": str(linea.producto_id)}
                     raise
-            if linea.tipo in TIPOS_QUE_INGRESAN_SIN_COSTO:
+            anulacion_de_venta_sin_costo = (
+                linea.tipo == ANULACION_VENTA and linea.costo_unitario is None
+            )
+            if linea.tipo in TIPOS_QUE_INGRESAN_SIN_COSTO or anulacion_de_venta_sin_costo:
                 # CST-12, D9: no recalcula ni deja historia; se valoriza al promedio
                 # vigente, salvo el inverso de una anulación, que repite el costo del
                 # movimiento original (D5.2) y descarta el valor que devuelve `costeo`.
+                # Change 19 (D5): una anulación de venta de una línea vendida sin costo
+                # también sube solo el stock total y el movimiento queda con costo nulo.
                 promedio_vigente = costeo_service.aplicar_ingreso_sin_recalculo(
                     organizacion_id,
                     sesion,
@@ -582,9 +588,14 @@ def _aplicar(
                     producto_id=linea.producto_id,
                     cantidad=linea.cantidad_base,
                 )
-                costo_unitario = (
-                    _costo_original(linea) if lleva_el_costo_original(linea) else promedio_vigente
-                )
+                if anulacion_de_venta_sin_costo:
+                    costo_unitario = None
+                else:
+                    costo_unitario = (
+                        _costo_original(linea)
+                        if lleva_el_costo_original(linea)
+                        else promedio_vigente
+                    )
             else:
                 costeo_service.aplicar_ingreso(
                     organizacion_id,

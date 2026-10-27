@@ -164,6 +164,26 @@ export function calcularIngreso(
   return { promedioNuevo: redondearCosto(ponderado), stockNuevo }
 }
 
+export interface ResultadoDeIngresoSinRecalculo {
+  promedio: Importe | null
+  stockNuevo: number
+}
+
+/**
+ * CST-12, VTA-21: un ingreso sin costo (la línea de una venta vendida sin costo, al anularla) sube
+ * el stock total y deja el promedio como está; no mira el stock previo, que puede ser cero o
+ * negativo. Gemela de `calcular_ingreso_sin_recalculo` del backend.
+ */
+export function calcularIngresoSinRecalculo(
+  stockPrevio: number,
+  promedioPrevio: string | null,
+  cantidad: number,
+): ResultadoDeIngresoSinRecalculo {
+  const cantidadValidada = validarCantidad(cantidad)
+  const stockNuevo = validarStock(stockPrevio + cantidadValidada)
+  return { promedio: promedioPrevio === null ? null : parsearImporteDesdeApi(promedioPrevio), stockNuevo }
+}
+
 /**
  * CST-12: un egreso no modifica el promedio y se valoriza al promedio vigente.
  * `cantidad` es la magnitud (`> 0`); el stock resultante puede ser negativo: la

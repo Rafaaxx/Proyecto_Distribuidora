@@ -155,6 +155,9 @@ export function ventaDetalle(campos: Partial<Record<string, unknown>> = {}) {
     observaciones: [],
     // Change 18b: nulo en una venta anterior al change (sin snapshot de crédito).
     credito: null,
+    // Change 19: la pantalla de anulación fija la devolución del consumidor final (D3).
+    cliente_es_consumidor_final: false,
+    anulacion: null,
     ...campos,
   }
 }

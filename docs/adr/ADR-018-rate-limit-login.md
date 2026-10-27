@@ -17,7 +17,7 @@ Tabla `intento_login` en PostgreSQL con columnas `usuario_id` (nulo si el usuari
 - **Por usuario:** 5 intentos fallidos en los últimos 15 minutos → 429 con momento de desbloqueo.
 - **Por IP:** 20 intentos fallidos en los últimos 15 minutos → 429.
 
-Desbloqueo automático al vencer la ventana. Un usuario con `ADMIN_USUARIOS` puede desbloquear manualmente registrando un intento de desbloqueo. Una tarea de limpieza borra registros con más de 24 horas.
+Desbloqueo automático al vencer la ventana. Un usuario con `ADMIN_USUARIOS` puede desbloquear manualmente registrando un intento de desbloqueo. Una tarea de limpieza borra registros con más de 24 horas. *(Actualizado el 2026-10-24: la limpieza no está implementada; la asume el change 28, `aceptacion-y-endurecimiento`, ver ADR-057 punto 9.)*
 
 Si el usuario está bloqueado, la respuesta no revela si la cuenta existe.
 

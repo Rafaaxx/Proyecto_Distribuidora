@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, SecretStr, StrictBool, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, StrictBool, StrictInt
 
 _PATRON_DECIMAL = r"^-?\d+(\.\d+)?$"
 
@@ -199,6 +199,32 @@ class VentaConfirmarResponse(BaseModel):
     cobranza_id: UUID | None
 
 
+class VentaAnularRequest(BaseModel):
+    """`POST /ventas/{venta_id}/anulacion` (change 19, VTA-20; `design.md` D1). `venta_id` va en
+    la ruta y la organización sale del token (INV-21, TR-08): un campo extra se rechaza con 422.
+    La observación es opcional y de hasta 500 caracteres (la valida el dominio:
+    `OBSERVACION_INVALIDA`); `devuelve_dinero` es un booleano estricto, obligatorio solo si la
+    venta tiene su cobranza confirmada (D2)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    motivo_id: UUID
+    observacion: str | None = None
+    devuelve_dinero: StrictBool | None = None
+
+
+class VentaAnularResponse(BaseModel):
+    """Sale de `comando.resultado` (INV-06). `saldo` es el saldo del cliente después de anular
+    (string, INV-03); `cobranza_id` es la cobranza de la venta, si existía, y `cobranza_anulada`
+    dice si quedó anulada (D1)."""
+
+    venta_id: UUID
+    estado: str
+    saldo: str
+    cobranza_id: UUID | None
+    cobranza_anulada: bool
+
+
 # --- lecturas (change 18a, tareas 9.1 y 9.2; `design.md` D19) ---------------------------------
 
 
@@ -290,6 +316,19 @@ class VentaMotivoResponse(BaseModel):
     nombre: str | None
 
 
+class VentaAnulacionResponse(BaseModel):
+    """El bloque de anulación del detalle (change 19, D14): cuándo, quién (con su nombre), con qué
+    motivo (con su nombre), la observación y si se devolvió el dinero (nulo si no había cobro)."""
+
+    anulada_en: datetime
+    usuario_id: UUID
+    usuario_nombre: str | None
+    motivo_id: UUID
+    motivo_nombre: str | None
+    observacion: str | None
+    devuelve_dinero: bool | None
+
+
 class VentaObservacionResponse(BaseModel):
     codigo: str
     estado: str
@@ -299,6 +338,7 @@ class VentaObservacionResponse(BaseModel):
 class VentaDetalleResponse(VentaResumenResponse):
     """La venta como quedó congelada (VTA-03, VTA-12)."""
 
+    cliente_es_consumidor_final: bool = False
     registered_at: datetime
     dispositivo_id: UUID
     lista_id: UUID
@@ -315,6 +355,8 @@ class VentaDetalleResponse(VentaResumenResponse):
     observaciones: list[VentaObservacionResponse]
     credito: VentaCreditoResponse | None = None
     """Nulo en una venta anterior al change 18b."""
+    anulacion: VentaAnulacionResponse | None = None
+    """Nulo si la venta no está anulada (change 19)."""
 
 
 class PresentacionParaVenderResponse(BaseModel):

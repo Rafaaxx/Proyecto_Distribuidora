@@ -1,11 +1,14 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { Alert } from '../../../components/ui/Alert'
 import { Ayuda } from '../../../components/ui/Ayuda'
 import { Badge } from '../../../components/ui/Badge'
+import { Boton } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { PageHeader } from '../../../components/ui/PageHeader'
-import { formatearMonto } from '../../../domain/cuentas-corrientes/presentacion'
+import { formatearMonto, textoDeSaldo } from '../../../domain/cuentas-corrientes/presentacion'
+import { puedeAnularVenta } from '../../../domain/ventas/anulacion'
 import {
   detalleDeObservacionDeVenta,
   etiquetaDeEstadoDeFacturacion,
@@ -22,11 +25,12 @@ import {
 } from '../../../domain/ventas/presentacion'
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { usePermisos } from '../../../features/identidad/usePermisos'
-import type { VentaDetalle } from '../../../features/ventas/api'
+import type { VentaAnularResultado, VentaDetalle } from '../../../features/ventas/api'
 import { ErrorDeVentas, PermisoRequeridoVentasError } from '../../../features/ventas/errores'
 import { useVenta } from '../../../features/ventas/hooks'
 import { formatearFechaHora } from '../../../lib/fecha'
 import { formatearCosto, parsearImporteDesdeApi } from '../../../lib/money'
+import { DialogoDeAnulacion } from './DialogoDeAnulacion'
 import { VentasSinPermiso } from './VentasSinPermiso'
 
 const TITULO = 'Venta'
@@ -70,11 +74,14 @@ function DetalleDeVenta() {
       </main>
     )
   }
-  return <VentaCompleta datos={venta.data} />
+  return <VentaCompleta datos={venta.data} refrescar={() => void venta.refetch()} />
 }
 
-function VentaCompleta({ datos }: { datos: VentaDetalle }) {
+function VentaCompleta({ datos, refrescar }: { datos: VentaDetalle; refrescar: () => void }) {
   const { tiene } = usePermisos()
+  const [abierto, setAbierto] = useState(false)
+  const [anulada, setAnulada] = useState<VentaAnularResultado | null>(null)
+  const [rechazo, setRechazo] = useState<string | null>(null)
   const veCostos = tiene('VER_COSTOS')
   const puedeLeerCobranzas = tiene('REGISTRAR_COBRANZA') || tiene('ANULAR_COBRANZA')
   const observaciones: ObservacionDeVenta[] = datos.observaciones
@@ -82,7 +89,38 @@ function VentaCompleta({ datos }: { datos: VentaDetalle }) {
 
   return (
     <main className="flex flex-col gap-4">
-      <PageHeader titulo={`${TITULO} ${datos.numero}`} />
+      <PageHeader
+        titulo={`${TITULO} ${datos.numero}`}
+        acciones={
+          puedeAnularVenta(datos.estado, tiene('ANULAR_VENTA')) ? (
+            <span className="flex items-center gap-1">
+              <Boton variante="peligro" onClick={() => setAbierto(true)}>
+                Anular venta
+              </Boton>
+              <Ayuda clave="ventas.anulacion" />
+            </span>
+          ) : undefined
+        }
+      />
+      <DialogoDeAnulacion
+        venta={datos}
+        abierto={abierto}
+        alCerrar={() => setAbierto(false)}
+        alAnular={setAnulada}
+        alYaAnulada={(mensaje) => {
+          setRechazo(mensaje)
+          refrescar()
+        }}
+      />
+
+      {rechazo && <Alert>{rechazo}</Alert>}
+      {anulada && (
+        <Card data-testid="venta-anulada" className="flex flex-col gap-1 text-sm text-primary">
+          <p className="font-medium">La venta quedó anulada.</p>
+          <p data-testid="saldo-tras-anular">Saldo del cliente después de anular: {textoDeSaldo('CLIENTE', anulada.saldo)}</p>
+          {anulada.cobranza_anulada && <p>El cobro de la venta también se anuló: el dinero se devolvió.</p>}
+        </Card>
+      )}
 
       <Card data-testid="cabecera-de-la-venta" className="flex flex-col gap-1 text-sm text-primary">
         <p>
@@ -201,6 +239,18 @@ function VentaCompleta({ datos }: { datos: VentaDetalle }) {
           </p>
         )}
       </Card>
+
+      {datos.anulacion != null && (
+        <Card data-testid="anulacion-de-la-venta" className="flex flex-col gap-1 text-sm text-primary">
+          <h2 className="text-base font-semibold">Anulación</h2>
+          <p>Motivo: {datos.anulacion.motivo_nombre ?? datos.anulacion.motivo_id}</p>
+          {datos.anulacion.observacion && <p>Observación: {datos.anulacion.observacion}</p>}
+          <p>Usuario: {datos.anulacion.usuario_nombre ?? datos.anulacion.usuario_id}</p>
+          <p>Anulada el {formatearFechaHora(datos.anulacion.anulada_en)}</p>
+          {datos.anulacion.devuelve_dinero === true && <p>Se devolvió el dinero cobrado.</p>}
+          {datos.anulacion.devuelve_dinero === false && <p>No se devolvió el dinero: quedó a favor del cliente.</p>}
+        </Card>
+      )}
 
       {generales.length > 0 && (
         <Card data-testid="observaciones-generales" className="flex flex-col gap-2 text-sm text-primary">

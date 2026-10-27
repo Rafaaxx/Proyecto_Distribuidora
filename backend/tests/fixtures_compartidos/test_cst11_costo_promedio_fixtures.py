@@ -18,7 +18,11 @@ from typing import Any
 import pytest
 from cargador import descubrir_casos
 
-from app.modules.costeo.domain.costo_promedio import calcular_egreso, calcular_ingreso
+from app.modules.costeo.domain.costo_promedio import (
+    calcular_egreso,
+    calcular_ingreso,
+    calcular_ingreso_sin_recalculo,
+)
 
 _CASOS_CST11 = [
     caso
@@ -43,6 +47,14 @@ def _ejecutar(entrada: dict[str, Any]) -> dict[str, Any]:
     """Corre la operación del caso y devuelve la salida con el mismo formato
     (cadenas para los costos) que `salida_esperada`."""
     if entrada["operacion"] == "ingreso":
+        if entrada.get("costo_ingreso") is None:
+            ingreso = calcular_ingreso_sin_recalculo(
+                stock_previo=entrada["stock_previo"],
+                promedio_previo=_decimal_o_none(entrada["promedio_previo"]),
+                cantidad=entrada["cantidad"],
+            )
+            promedio = None if ingreso.promedio is None else str(ingreso.promedio)
+            return {"promedio_nuevo": promedio, "stock_nuevo": ingreso.stock_nuevo}
         ingreso = calcular_ingreso(
             stock_previo=entrada["stock_previo"],
             promedio_previo=_decimal_o_none(entrada["promedio_previo"]),

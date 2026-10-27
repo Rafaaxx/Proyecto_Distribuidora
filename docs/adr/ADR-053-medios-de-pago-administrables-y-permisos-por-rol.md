@@ -39,7 +39,7 @@ Lo que `docs/` no resolvía: quién administra los medios (`01` §19 no los nomb
 
 ### Fuera de alcance
 
-13. **Motivos y alícuotas (D10).** Sin pantalla en este change; deuda sin dueño en `04` (los motivos sembrados alcanzan para la etapa 1; la alícuota casi no cambia con el monotributo).
+13. **Motivos y alícuotas (D10).** Sin pantalla en este change; deuda en `04`, asignada al change 20c el 2026-10-24 (los motivos sembrados alcanzan para la etapa 1; la alícuota casi no cambia con el monotributo).
 
 ### Ayuda
 
@@ -51,17 +51,17 @@ Lo que `docs/` no resolvía: quién administra los medios (`01` §19 no los nomb
 - El nombre de un medio ya no puede repetirse; un medio de baja sigue ocupando su nombre.
 - Siempre queda al menos un medio activo y al menos un usuario activo que pueda administrar usuarios y roles.
 - Cada comando de medios deja dos filas de auditoría; las consultas de auditoría por entidad deben tenerlo en cuenta.
-- Un rol nuevo todavía no puede crearse desde la aplicación; mientras no exista el change de usuarios y roles, la organización trabaja con las cinco plantillas.
+- Un rol nuevo todavía no puede crearse desde la aplicación; mientras no exista el change de usuarios y roles (20b, `usuarios-roles-y-cartera`, asignado el 2026-10-24), la organización trabaja con las cinco plantillas.
 
 ## Enmiendas a ADR y documentos anteriores
 
-- **ADR-028 (sesión exige usuario y rol activos), nota D9.5:** este change **no** trae la baja de usuarios ni de roles. Cuando llegue (change de usuarios y roles), debe aplicar la misma regla del punto 11 (la baja de un usuario, la de un rol o el cambio de rol de un usuario no pueden dejar la organización sin un usuario activo con `ADMIN_USUARIOS`).
+- **ADR-028 (sesión exige usuario y rol activos), nota D9.5:** este change **no** trae la baja de usuarios ni de roles. Cuando llegue (change de usuarios y roles, 20b), debe aplicar la misma regla del punto 11 (la baja de un usuario, la de un rol o el cambio de rol de un usuario no pueden dejar la organización sin un usuario activo con `ADMIN_USUARIOS`).
 - **ADR-022 (auditoría por comando):** los comandos de medios de pago dejan la fila genérica y la de la entidad (punto 8), igual que la condición de IVA.
 - **ADR-011 (PIN de autorización):** la invalidación del PIN al quitar el último permiso de autorización sigue igual; el rechazo por el punto 11 no la dispara.
 - Los cambios exactos a `docs/01` a `docs/04` están en `openspec/changes/17b-medios-de-pago-y-roles/propuesta-docs.md` y se aplicaron el 2026-10-17 con el visto bueno del usuario.
 
 ## Deudas nominadas
 
-1. **Change de usuarios y roles (sin número):** pantalla de usuarios, alta y cambio de rol, baja de usuarios y de roles con revocación de sesiones (ADR-028 D9.5), creación de roles; todo con la regla del punto 11.
-2. **Sin dueño:** pantalla de motivos (alta y baja por ámbito) y de alícuotas (TR-09).
+1. **Change de usuarios y roles (asignado el 2026-10-24 al change 20b, `usuarios-roles-y-cartera`):** pantalla de usuarios, alta y cambio de rol, baja de usuarios y de roles con revocación de sesiones (ADR-028 D9.5), creación de roles; todo con la regla del punto 11.
+2. **Change 20c, `catalogos-de-configuracion` (antes "sin dueño"; asignado el 2026-10-24):** pantalla de motivos (alta y baja por ámbito) y de alícuotas (TR-09).
 3. **Al change 18a (`ventas`):** depende del 17b solo para contar con medios administrables y las marcas de referencia.

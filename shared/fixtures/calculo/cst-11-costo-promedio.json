@@ -269,16 +269,68 @@
     "salida_esperada": { "promedio_nuevo": "1050.000000", "stock_nuevo": -12, "recalculado": false }
   },
   {
-    "id": "CST11-reversion-promedio-resultante-no-positivo-mantiene",
-    "reglas": ["CMP-06", "CST-13"],
+    "id": "CST11-stock-previo-negativo-toma-el-costo-del-ingreso",
+    "reglas": ["CST-11"],
     "entrada": {
       "motor": "cst11",
-      "operacion": "reversion",
-      "stock_previo": 65,
-      "promedio_previo": "1728.571429",
+      "operacion": "ingreso",
+      "stock_previo": -5,
+      "promedio_previo": "1050.000000",
       "cantidad": 60,
-      "costo_ingreso": "2000.000000"
+      "costo_ingreso": "1200.000000"
     },
-    "salida_esperada": { "promedio_nuevo": "1728.571429", "stock_nuevo": 5, "recalculado": false }
+    "salida_esperada": { "promedio_nuevo": "1200.000000", "stock_nuevo": 55 }
+  },
+  {
+    "id": "CST11-anulacion-venta-ejemplo-d5-108-con-1133-mas-72-a-1050",
+    "reglas": ["CST-11", "CST-13", "VTA-21"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "ingreso",
+      "stock_previo": 108,
+      "promedio_previo": "1133.333333",
+      "cantidad": 72,
+      "costo_ingreso": "1050.000000"
+    },
+    "salida_esperada": { "promedio_nuevo": "1100.000000", "stock_nuevo": 180 }
+  },
+  {
+    "id": "CST11-anulacion-venta-stock-total-previo-0",
+    "reglas": ["CST-11", "CST-13", "VTA-21"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "ingreso",
+      "stock_previo": 0,
+      "promedio_previo": null,
+      "cantidad": 72,
+      "costo_ingreso": "1050.000000"
+    },
+    "salida_esperada": { "promedio_nuevo": "1050.000000", "stock_nuevo": 72 }
+  },
+  {
+    "id": "CST11-anulacion-venta-stock-total-previo-negativo",
+    "reglas": ["CST-11", "CST-13", "VTA-21"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "ingreso",
+      "stock_previo": -5,
+      "promedio_previo": "1000.000000",
+      "cantidad": 72,
+      "costo_ingreso": "1050.000000"
+    },
+    "salida_esperada": { "promedio_nuevo": "1050.000000", "stock_nuevo": 67 }
+  },
+  {
+    "id": "CST11-anulacion-venta-linea-sin-costo-no-recalcula",
+    "reglas": ["CST-12", "VTA-21"],
+    "entrada": {
+      "motor": "cst11",
+      "operacion": "ingreso",
+      "stock_previo": 48,
+      "promedio_previo": "1050.000000",
+      "cantidad": 10,
+      "costo_ingreso": null
+    },
+    "salida_esperada": { "promedio_nuevo": "1050.000000", "stock_nuevo": 58 }
   }
 ]

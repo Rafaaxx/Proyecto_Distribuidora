@@ -35,6 +35,7 @@ from app.modules.stock.domain.kardex import DiferenciaDeStock
 STOCK_INICIAL = "STOCK_INICIAL"
 ANULACION_COMPRA = "ANULACION_COMPRA"
 VENTA = "VENTA"
+ANULACION_VENTA = "ANULACION_VENTA"
 
 TIPOS_DE_MOVIMIENTO = frozenset(
     {
@@ -42,7 +43,7 @@ TIPOS_DE_MOVIMIENTO = frozenset(
         "COMPRA",
         ANULACION_COMPRA,
         "VENTA",
-        "ANULACION_VENTA",
+        ANULACION_VENTA,
         "TRANSFERENCIA_SALIDA",
         "TRANSFERENCIA_ENTRADA",
         "AJUSTE",
@@ -61,7 +62,7 @@ ORIGEN_AJUSTE = "AJUSTE_STOCK"
 ORIGEN_ANULACION_TRANSFERENCIA = "ANULACION_TRANSFERENCIA"
 ORIGEN_ANULACION_AJUSTE = "ANULACION_AJUSTE_STOCK"
 
-TIPOS_QUE_INGRESAN_CON_COSTO = frozenset({STOCK_INICIAL, "COMPRA", "ANULACION_VENTA"})
+TIPOS_QUE_INGRESAN_CON_COSTO = frozenset({STOCK_INICIAL, "COMPRA", ANULACION_VENTA})
 """Los tipos cuyo ingreso con costo recalcula el promedio (CST-11: compra, stock
 inicial y anulación de venta). `ANULACION_COMPRA` es un egreso (lo define el change 11,
 CMP-06)."""
@@ -178,6 +179,14 @@ def validar_lineas_de_movimiento(
             raise TipoDeMovimientoInvalidoError(
                 f"Un ingreso de tipo {linea.tipo} todavía no tiene reglas de costo."
             )
+        if linea.tipo == ANULACION_VENTA:
+            # Change 19, D5: solo ingresa; con el costo congelado de la línea vendida o, si
+            # se vendió sin costo, sin él (CST-12).
+            if cantidad < 0:
+                raise TipoDeMovimientoInvalidoError(
+                    "Una anulación de venta solo ingresa stock: la cantidad no puede ser negativa."
+                )
+            continue
         if lleva_el_costo_original(linea):
             continue
         if cantidad > 0 and linea.tipo in TIPOS_QUE_INGRESAN_SIN_COSTO:
@@ -217,12 +226,15 @@ def productos_que_exigen_estar_activos(
 ) -> set[UUID]:
     """CAT-05, D11: un producto cuyas líneas son todas `ANULACION_COMPRA` puede
     estar inactivo (revertir no es una operación nueva); si tiene alguna línea de
-    otro tipo debe estar activo.
+    otro tipo debe estar activo. Change 19 (D5, D7): las líneas de `ANULACION_VENTA`
+    (ingreso por anulación) también permiten producto inactivo.
 
     Change 18a (tarea 11.2, D1 punto 5, SYN-05, INV-17): con `venta_sin_conexion` el egreso
     `VENTA` tampoco lo exige. La mercadería de una venta recibida sin conexión ya se entregó;
     un producto desactivado después del bootstrap no la rechaza."""
-    exentos = {ANULACION_COMPRA, VENTA} if venta_sin_conexion else {ANULACION_COMPRA}
+    exentos = {ANULACION_COMPRA, ANULACION_VENTA}
+    if venta_sin_conexion:
+        exentos.add(VENTA)
     return {linea.producto_id for linea in lineas if linea.tipo not in exentos}
 
 

@@ -88,6 +88,33 @@ describe('VentasListScreen (tarea 12.3)', () => {
     expect(ultimaConsulta()?.get('cliente_id')).toBe(CLIENTE_ID)
   })
 
+  // Escenario: "Listado de ventas anuladas" (change 19, tarea 9.2; D14, REP-02)
+  it('filtra por estado Confirmadas o Anuladas y lo pide al servidor; "Todas" lo quita', async () => {
+    montarApi(apiFetchMock, [listado(() => ({ items: [ventaResumen()], cursor_siguiente: null }))])
+    const usuario = userEvent.setup()
+    renderPantalla()
+    await screen.findByText('V01-000042')
+    expect(ultimaConsulta()?.has('estado')).toBe(false)
+
+    await usuario.selectOptions(screen.getByLabelText(/^estado$/i), 'ANULADA')
+    await waitFor(() => expect(ultimaConsulta()?.get('estado')).toBe('ANULADA'))
+
+    await usuario.selectOptions(screen.getByLabelText(/^estado$/i), 'CONFIRMADA')
+    await waitFor(() => expect(ultimaConsulta()?.get('estado')).toBe('CONFIRMADA'))
+
+    await usuario.selectOptions(screen.getByLabelText(/^estado$/i), '')
+    await waitFor(() => expect(ultimaConsulta()?.has('estado')).toBe(false))
+  })
+
+  it('las opciones del filtro de estado son Todas, Confirmadas y Anuladas', async () => {
+    montarApi(apiFetchMock, [listado(() => ({ items: [], cursor_siguiente: null }))])
+    renderPantalla()
+    await screen.findByText(/todav[ií]a no hay ventas/i)
+
+    const opciones = within(screen.getByLabelText(/^estado$/i)).getAllByRole('option').map((o) => o.textContent)
+    expect(opciones).toEqual(['Todas', 'Confirmadas', 'Anuladas'])
+  })
+
   it('los filtros de usuario y jornada llegan por la URL y se pueden quitar', async () => {
     montarApi(apiFetchMock, [listado(() => ({ items: [ventaResumen()], cursor_siguiente: null }))])
     const usuario = userEvent.setup()

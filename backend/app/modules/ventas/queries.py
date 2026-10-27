@@ -108,6 +108,21 @@ class CreditoDelDetalle:
 
 
 @dataclass(frozen=True)
+class AnulacionDelDetalle:
+    """El bloque de anulación del detalle (change 19, D14): momento, usuario y motivo con sus
+    nombres (nulos si la referencia ya no se puede resolver), observación y si se devolvió el
+    dinero (`None` si la venta no tenía cobro)."""
+
+    anulada_en: datetime
+    usuario_id: UUID
+    usuario_nombre: str | None
+    motivo_id: UUID
+    motivo_nombre: str | None
+    observacion: str | None
+    devuelve_dinero: bool | None
+
+
+@dataclass(frozen=True)
 class DetalleDeVenta:
     resumen: VentaDelListado
     lista_nombre: str | None
@@ -117,6 +132,11 @@ class DetalleDeVenta:
     lineas: list[LineaDelDetalle]
     credito: CreditoDelDetalle | None = None
     """`None` en una venta anterior al change 18b (sin snapshot de crédito)."""
+    anulacion: AnulacionDelDetalle | None = None
+    """`None` si la venta no está anulada (change 19)."""
+    cliente_es_consumidor_final: bool = False
+    """Marca del cliente de la venta (change 19, D16): la pantalla de anulación fija la devolución
+    del consumidor final y quien solo tiene `ANULAR_VENTA` no lee `/clientes`."""
 
 
 def _con_nombres(
@@ -152,12 +172,14 @@ def listar_ventas(
     ubicacion_id: UUID | None = None,
     desde: date | None = None,
     hasta: date | None = None,
+    estado: str | None = None,
     cursor: str | None = None,
     limite: int | None = None,
 ) -> PaginaDeVentas:
     """Ventas de la organización, de la más reciente a la más vieja, paginadas por cursor.
 
-    Filtrable por cliente, usuario, jornada, ubicación y rango de fechas (de negocio, en la zona
+    Filtrable por cliente, usuario, jornada, ubicación, estado (change 19, D14: `CONFIRMADA` o
+    `ANULADA`, lo valida la API) y rango de fechas (de negocio, en la zona
     de la organización, `hasta` inclusivo: TR-04). `desde` posterior a `hasta` es
     `RANGO_DE_FECHAS_INVALIDO` y un cursor ilegible es `CURSOR_INVALIDO`. `limite` va de 1 a 200
     (la API responde 422 fuera de rango; acá solo se acota por seguridad)."""
@@ -176,6 +198,7 @@ def listar_ventas(
         ubicacion_id=ubicacion_id,
         desde=inicio,
         hasta=fin,
+        estado=estado,
     )
     return PaginaDeVentas(
         items=_con_nombres(organizacion_id, sesion, filas), cursor_siguiente=cursor_siguiente
@@ -197,6 +220,27 @@ def _linea_del_detalle(
         costo_unitario=linea.costo_unitario if con_costos else None,
         costo_total=linea.costo_total if con_costos else None,
         descuentos=descuentos,
+    )
+
+
+def _anulacion_del_detalle(
+    organizacion_id: UUID, sesion: Session, venta_id: UUID
+) -> AnulacionDelDetalle | None:
+    anulacion = repository.obtener_anulacion_de_venta(organizacion_id, venta_id, sesion)
+    if anulacion is None:
+        return None
+    usuarios = identidad_service.obtener_nombres_de_usuarios(
+        organizacion_id, {anulacion.usuario_id}, sesion
+    )
+    motivo = configuracion_service.obtener_motivo(organizacion_id, anulacion.motivo_id, sesion)
+    return AnulacionDelDetalle(
+        anulada_en=anulacion.occurred_at,
+        usuario_id=anulacion.usuario_id,
+        usuario_nombre=usuarios.get(anulacion.usuario_id),
+        motivo_id=anulacion.motivo_id,
+        motivo_nombre=None if motivo is None else motivo.nombre,
+        observacion=anulacion.observacion,
+        devuelve_dinero=anulacion.devuelve_dinero,
     )
 
 
@@ -274,7 +318,10 @@ def obtener_detalle_de_venta(
             ),
         )
     )
+    cliente = clientes_service.obtener_cliente_por_id(organizacion_id, venta.cliente_id, sesion)
     return DetalleDeVenta(
+        anulacion=_anulacion_del_detalle(organizacion_id, sesion, venta.id),
+        cliente_es_consumidor_final=cliente is not None and cliente.es_consumidor_final,
         resumen=_con_nombres(organizacion_id, sesion, [venta])[0],
         lista_nombre=None if version is None else version.lista_nombre,
         version_numero=None if version is None else version.numero,

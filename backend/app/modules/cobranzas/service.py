@@ -28,6 +28,7 @@ from app.modules.clientes import service as clientes_service
 from app.modules.cobranzas import repository
 from app.modules.cobranzas.domain.cobranza import (
     CODIGO_JORNADA_LIBERADA,
+    ESTADO_ANULADA,
     ORIGEN_INDEPENDIENTE,
     ORIGEN_VENTA,
     MedioResuelto,
@@ -40,6 +41,7 @@ from app.modules.cobranzas.domain.cobranza import (
 )
 from app.modules.cobranzas.domain.errores import (
     CobranzaDuplicadaError,
+    CobranzaYaAnuladaError,
     JornadaAjenaError,
     MedioPagoInactivoError,
     MotivoInvalidoError,
@@ -55,7 +57,9 @@ __all__ = [
     "ResultadoDeCobranza",
     "ResultadoDeAnulacion",
     "anular_cobranza",
+    "anular_cobranza_de_venta",
     "registrar_cobranza",
+    "tomar_cobranza_de_venta",
 ]
 
 _CUENTA_CLIENTE = "CLIENTE"
@@ -419,6 +423,72 @@ def anular_cobranza(
             cobranza_id=cobranza.id,
             motivo_id=motivo_id,
             observacion=observacion_a_guardar,
+            operation_id=operation_id,
+            usuario_id=usuario_id,
+            dispositivo_id=dispositivo_id,
+            occurred_at=occurred_at,
+            registered_at=reloj.now(),
+        ),
+    )
+    movimiento = cuentas_corrientes_service.registrar_movimiento(
+        organizacion_id,
+        sesion,
+        reloj,
+        cuenta_tipo=_CUENTA_CLIENTE,
+        entidad_id=cobranza.cliente_id,
+        tipo=_TIPO_MOVIMIENTO_ANULACION,
+        sentido="AUMENTA",
+        importe=cobranza.importe,
+        origen_tipo=_ORIGEN_TIPO_COBRANZA,
+        origen_id=cobranza.id,
+        occurred_at=occurred_at,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        operation_id=operation_id,
+    )
+    return ResultadoDeAnulacion(cobranza=cobranza, saldo=movimiento.saldo)
+
+
+def tomar_cobranza_de_venta(
+    organizacion_id: UUID, sesion: Session, venta_id: UUID
+) -> Cobranza | None:
+    """Toma `FOR UPDATE` la cobranza de origen `VENTA` de la venta, o `None` (change 19, D9,
+    D10: va después de la venta y antes de `saldo_cuenta`)."""
+    return repository.tomar_cobranza_de_venta(organizacion_id, venta_id, sesion)
+
+
+def anular_cobranza_de_venta(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    cobranza: Cobranza,
+    motivo_id: UUID,
+    observacion: str | None,
+    operation_id: UUID,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+    occurred_at: datetime,
+) -> ResultadoDeAnulacion:
+    """Anula la cobranza de una venta que se anula con devolución (change 19, D9; VTA-22,
+    COB-05, CC-02, INV-05, INV-13). La llama `ventas` dentro de su transacción con la cobranza
+    ya tomada `FOR UPDATE` (`tomar_cobranza_de_venta`). Usa el motivo y la observación de la
+    venta (ADR-046 punto 2: sin validar el ámbito `ANULACION_COBRANZA`) y registra
+    `ANULACION_COBRANZA` `AUMENTA` por el importe completo. `anular_cobranza`
+    (`COBRANZA_ANULAR`) sigue rechazando las de origen `VENTA` con `COBRANZA_DE_VENTA`."""
+    if cobranza.estado == ESTADO_ANULADA:
+        raise CobranzaYaAnuladaError("La cobranza ya está anulada.")
+    cuentas_corrientes_service.bloquear_saldo(
+        organizacion_id, sesion, reloj, cuenta_tipo=_CUENTA_CLIENTE, entidad_id=cobranza.cliente_id
+    )
+    repository.marcar_anulada(
+        organizacion_id,
+        sesion,
+        cobranza=cobranza,
+        anulacion=repository.DatosDeAnulacion(
+            cobranza_id=cobranza.id,
+            motivo_id=motivo_id,
+            observacion=observacion,
             operation_id=operation_id,
             usuario_id=usuario_id,
             dispositivo_id=dispositivo_id,

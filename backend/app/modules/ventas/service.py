@@ -92,6 +92,12 @@ from app.modules.precios import service as precios_service
 from app.modules.stock import service as stock_service
 from app.modules.stock.service import LineaDeMovimiento
 from app.modules.ventas import repository
+from app.modules.ventas.domain.anulacion import (
+    lineas_de_reingreso,
+    validar_devolucion,
+    validar_observacion,
+    validar_venta_anulable,
+)
 from app.modules.ventas.domain.auditoria import observacion_de_lista
 from app.modules.ventas.domain.calculo import (
     LineaCalculo,
@@ -145,7 +151,7 @@ from app.modules.ventas.domain.observaciones import (
     CODIGO_UBICACION_TOMADA_AL_SINCRONIZAR,
     ObservacionDeVenta,
 )
-from app.modules.ventas.models import Venta, VentaLinea, VentaLineaDescuento
+from app.modules.ventas.models import Venta, VentaAnulacion, VentaLinea, VentaLineaDescuento
 
 __all__ = [
     "CobranzaDeVenta",
@@ -153,7 +159,9 @@ __all__ = [
     "DatosDeVenta",
     "LineaDeVenta",
     "PermisosDeVenta",
+    "ResultadoDeAnulacionDeVenta",
     "ResultadoDeVenta",
+    "anular_venta",
     "confirmar_venta",
     "presentacion_usada_en_venta",
 ]
@@ -164,6 +172,10 @@ _ORIGEN_TIPO_VENTA = "VENTA"
 _MODO_ONLINE = "ONLINE"
 _MODO_OFFLINE = "OFFLINE"
 _AMBITO_LISTA_ANTERIOR = "LISTA_ANTERIOR"
+_AMBITO_ANULACION_VENTA = "ANULACION_VENTA"
+_TIPO_MOVIMIENTO_ANULACION_VENTA = "ANULACION_VENTA"
+_TIPO_STOCK_ANULACION_VENTA = "ANULACION_VENTA"
+_ESTADO_COBRANZA_CONFIRMADA = "CONFIRMADA"
 _AMBITO_DESCUENTO_MANUAL = "DESCUENTO_MANUAL"
 _ACCION_DESCUENTO_MANUAL = "DESCUENTO_MANUAL"
 _ACCION_AUTORIZACION_CREDITO = "AUTORIZACION_CREDITO"
@@ -1734,5 +1746,184 @@ def confirmar_venta(
         cobranza_id=cobranza_id,
         observaciones=tuple(observaciones_de_venta),
         observacion_de_lista=elegidos.observacion_de_lista,
+        jornadas_tomadas=stock_service.jornadas_tomadas_de(movimientos),
+    )
+
+
+@dataclass(frozen=True)
+class ResultadoDeAnulacionDeVenta:
+    """Lo que `VENTA_ANULAR` devuelve al bus (D1, D15): la venta anulada, el saldo del cliente
+    después de anular, la cobranza de la venta (si existía) y si quedó anulada, y las jornadas de
+    las ubicaciones tomadas que se movieron por la excepción de `LIBERAR_UBICACION` (STK-09)."""
+
+    venta: Venta
+    saldo: Decimal
+    cobranza_id: UUID | None
+    cobranza_anulada: bool
+    jornadas_tomadas: tuple[UUID, ...]
+
+
+def _validar_motivo_de_anulacion_de_venta(
+    organizacion_id: UUID, sesion: Session, motivo_id: UUID
+) -> None:
+    """VTA-20, TR-09, INV-21: el motivo existe en la organización (404 si no) y es un motivo
+    activo del ámbito `ANULACION_VENTA` (`MOTIVO_INVALIDO` si no)."""
+    motivo = configuracion_service.obtener_motivo(organizacion_id, motivo_id, sesion)
+    if motivo is None:
+        raise RecursoNoEncontradoError(f"El motivo {motivo_id} no existe en esta organización.")
+    if not motivo.activo or motivo.ambito != _AMBITO_ANULACION_VENTA:
+        raise MotivoInvalidoError(
+            f"El motivo {motivo_id} no es un motivo activo del ámbito {_AMBITO_ANULACION_VENTA}."
+        )
+
+
+def anular_venta(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    venta_id: UUID,
+    motivo_id: UUID,
+    observacion: str | None,
+    devuelve_dinero: bool | None,
+    puede_liberar_ubicacion: bool,
+    operation_id: UUID,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+    occurred_at: datetime,
+) -> ResultadoDeAnulacionDeVenta:
+    """`VENTA_ANULAR` con conexión (VTA-20, VTA-21, VTA-22, INV-01, INV-05, INV-12, INV-13,
+    INV-19, INV-21; `design.md` D1 a D10, opción A de D10 aprobada por el usuario el 2026-10-27).
+
+    Anula una venta `CONFIRMADA` entera: reingresa cada línea a la ubicación de la venta al costo
+    congelado, acredita el total en la cuenta del cliente y, con devolución, anula la cobranza de
+    la venta. No borra ni modifica nada de la venta salvo su `estado`.
+
+    Orden dentro de la transacción del bus (`02` §7.3): 0) contenido en puro; 1) la venta leída sin
+    bloquear (404) y tomada `FOR UPDATE`, revalidada `CONFIRMADA` (`VENTA_YA_ANULADA`); 2) su
+    cobranza de origen `VENTA` `FOR UPDATE`, si la hay; 3) motivo y dinero cobrado; 4) nivel 1:
+    `saldo_cuenta` del cliente; 5) niveles 2 a 5: ingresos `ANULACION_VENTA` (`UBICACION_INACTIVA`,
+    `UBICACION_TOMADA`); 6) escrituras: `venta_anulacion`, estado, `ANULACION_VENTA` `REDUCE` por
+    el total y, con devolución, la anulación de la cobranza; 7) resultado al bus, que audita y
+    confirma. Un error revierte todo. Precedencia de rechazos: contenido, venta, motivo,
+    devolución, ubicación."""
+    # 0) Contenido.
+    observacion_a_guardar = validar_observacion(observacion)
+
+    # 1) La venta: sin bloquear (404 si no es de la organización) y luego `FOR UPDATE`.
+    if repository.obtener_venta(organizacion_id, venta_id, sesion) is None:
+        raise RecursoNoEncontradoError(f"La venta {venta_id} no existe en esta organización.")
+    venta = repository.tomar_venta_para_actualizar(organizacion_id, venta_id, sesion)
+    assert venta is not None  # recién se leyó; las ventas no se borran (INV-05)
+    validar_venta_anulable(venta.estado)
+
+    # 2) Su cobranza de origen `VENTA`, si existe, antes que `saldo_cuenta` (D10).
+    cobranza = cobranzas_service.tomar_cobranza_de_venta(organizacion_id, sesion, venta.id)
+    con_cobranza = cobranza is not None and cobranza.estado == _ESTADO_COBRANZA_CONFIRMADA
+
+    # 3) Motivo y dinero cobrado.
+    _validar_motivo_de_anulacion_de_venta(organizacion_id, sesion, motivo_id)
+    cliente = clientes_service.obtener_cliente_por_id(organizacion_id, venta.cliente_id, sesion)
+    assert cliente is not None  # clave foránea compuesta (INV-02)
+    validar_devolucion(con_cobranza, devuelve_dinero, cliente.es_consumidor_final)
+
+    # 4) Nivel 1: `saldo_cuenta` del cliente (la anulación de la cobranza lo vuelve a pedir ya
+    # tomado, sin esperar ni cambiar el orden).
+    cuentas_corrientes_service.bloquear_saldo(
+        organizacion_id, sesion, reloj, cuenta_tipo=_CUENTA_CLIENTE, entidad_id=venta.cliente_id
+    )
+
+    # 5) Niveles 2 a 5: un ingreso por línea, en el orden de la venta, al costo congelado (D5).
+    reingresos = lineas_de_reingreso(
+        {
+            "producto_id": linea.producto_id,
+            "presentacion_id": linea.presentacion_id,
+            "cantidad_unidad_base": linea.cantidad_base,
+            "costo_unitario": linea.costo_unitario,
+        }
+        for linea in repository.listar_lineas_de_venta(organizacion_id, venta.id, sesion)
+    )
+    movimientos = stock_service.registrar_movimientos(
+        organizacion_id,
+        sesion,
+        reloj,
+        lineas=[
+            LineaDeMovimiento(
+                producto_id=UUID(reingreso.producto_id),
+                ubicacion_id=venta.ubicacion_id,
+                cantidad_base=reingreso.cantidad_unidad_base,
+                tipo=_TIPO_STOCK_ANULACION_VENTA,
+                costo_unitario=reingreso.costo_unitario,
+                origen_tipo=_ORIGEN_TIPO_VENTA,
+                origen_id=venta.id,
+            )
+            for reingreso in reingresos
+        ],
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        operation_id=operation_id,
+        occurred_at=occurred_at,
+        puede_operar_ubicacion_tomada=puede_liberar_ubicacion,
+    )
+
+    # 6) Escrituras. La jornada de la anulación sale del movimiento de stock (D8, STK-09).
+    repository.insertar_anulacion(
+        sesion,
+        VentaAnulacion(
+            id=nuevo_id(),
+            organizacion_id=organizacion_id,
+            venta_id=venta.id,
+            motivo_id=motivo_id,
+            observacion=observacion_a_guardar,
+            devuelve_dinero=devuelve_dinero if con_cobranza else None,
+            jornada_id=movimientos[0].movimiento.jornada_id,
+            operation_id=operation_id,
+            usuario_id=usuario_id,
+            dispositivo_id=dispositivo_id,
+            occurred_at=occurred_at,
+            registered_at=reloj.now(),
+        ),
+    )
+    repository.marcar_venta_anulada(sesion, venta)
+    acreditacion = cuentas_corrientes_service.registrar_movimiento(
+        organizacion_id,
+        sesion,
+        reloj,
+        cuenta_tipo=_CUENTA_CLIENTE,
+        entidad_id=venta.cliente_id,
+        tipo=_TIPO_MOVIMIENTO_ANULACION_VENTA,
+        sentido="REDUCE",
+        importe=venta.total,
+        origen_tipo=_ORIGEN_TIPO_VENTA,
+        origen_id=venta.id,
+        occurred_at=occurred_at,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        operation_id=operation_id,
+    )
+    saldo = acreditacion.saldo
+    cobranza_anulada = False
+    if cobranza is not None and con_cobranza and devuelve_dinero:
+        resultado_cobranza = cobranzas_service.anular_cobranza_de_venta(
+            organizacion_id,
+            sesion,
+            reloj,
+            cobranza=cobranza,
+            motivo_id=motivo_id,
+            observacion=observacion_a_guardar,
+            operation_id=operation_id,
+            usuario_id=usuario_id,
+            dispositivo_id=dispositivo_id,
+            occurred_at=occurred_at,
+        )
+        saldo = resultado_cobranza.saldo
+        cobranza_anulada = True
+
+    # 7) Resultado al bus.
+    return ResultadoDeAnulacionDeVenta(
+        venta=venta,
+        saldo=saldo,
+        cobranza_id=None if cobranza is None else cobranza.id,
+        cobranza_anulada=cobranza_anulada,
         jornadas_tomadas=stock_service.jornadas_tomadas_de(movimientos),
     )

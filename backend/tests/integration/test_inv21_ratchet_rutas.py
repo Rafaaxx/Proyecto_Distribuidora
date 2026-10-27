@@ -406,6 +406,10 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("get", "/api/v1/ventas/precios"),
         ("get", "/api/v1/ventas/numeracion"),
         ("get", "/api/v1/ventas/versiones"),
+        # Change 19, tarea 7.5: `POST /ventas/{venta_id}/anulacion` (`VENTA_ANULAR`). Prueba real
+        # de aislamiento en `test_ventas_anular_api.py::test_inv21_*` (login real de dos
+        # organizaciones; la venta o el motivo de otra organizacion responde 404 sin efectos).
+        ("post", "/api/v1/ventas/{venta_id}/anulacion"),
         # Change 18b, grupo 5 (tareas 5.1 y 5.2): las cuatro rutas de parámetros de la
         # organización (descuento manual y crédito: lectura y escritura dedicada). Pruebas
         # reales de aislamiento en `test_descuento_manual_configurar.py` y

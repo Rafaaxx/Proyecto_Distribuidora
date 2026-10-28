@@ -114,6 +114,8 @@ ESCRITURAS_QUE_DEBEN_IR_POR_EL_BUS: frozenset[tuple[str, str]] = frozenset(
         # (dedicadas, `identidad/api.py`).
         ("POST", "/api/v1/configuracion/descuento-manual"),
         ("POST", "/api/v1/configuracion/credito"),
+        # Change 20, grupo 5: `NOTA_VENTA_CONFIGURAR` (dedicada, `identidad/api.py`).
+        ("POST", "/api/v1/configuracion/nota-de-venta"),
     }
 )
 

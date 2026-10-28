@@ -31,6 +31,7 @@ import { useVenta } from '../../../features/ventas/hooks'
 import { formatearFechaHora } from '../../../lib/fecha'
 import { formatearCosto, parsearImporteDesdeApi } from '../../../lib/money'
 import { DialogoDeAnulacion } from './DialogoDeAnulacion'
+import { NotaDeVentaAcciones } from './NotaDeVentaAcciones'
 import { VentasSinPermiso } from './VentasSinPermiso'
 
 const TITULO = 'Venta'
@@ -112,6 +113,8 @@ function VentaCompleta({ datos, refrescar }: { datos: VentaDetalle; refrescar: (
           refrescar()
         }}
       />
+
+      <NotaDeVentaAcciones ventaId={datos.venta_id} />
 
       {rechazo && <Alert>{rechazo}</Alert>}
       {anulada && (

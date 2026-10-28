@@ -51,6 +51,13 @@ from app.modules.ventas.schemas import (
     DescuentoManualContextoResponse,
     DescuentosAplicablesResponse,
     MotivoContextoResponse,
+    NotaAnulacionResponse,
+    NotaClienteResponse,
+    NotaCobranzaResponse,
+    NotaDeVentaResponse,
+    NotaLineaResponse,
+    NotaMedioResponse,
+    NotaOrganizacionResponse,
     NumeracionResponse,
     PaginaVentas,
     PreciosParaVenderResponse,
@@ -488,6 +495,89 @@ def listar_versiones_elegibles(
             )
             for v in versiones
         ]
+    )
+
+
+@router.get("/{venta_id}/nota", response_model=NotaDeVentaResponse)
+def obtener_nota_de_venta(
+    venta_id: UUID,
+    contexto: Annotated[
+        ContextoAutenticado,
+        Depends(requiere_algun_permiso(PERMISO_VENDER, PERMISO_ANULAR_VENTA)),
+    ],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> NotaDeVentaResponse:
+    """Los datos de la nota de venta (VTA-13, change 20 D2, D13): una sola lectura con lo que
+    imprime la nota, idéntica al original y a la reimpresión. `VENDER` o `ANULAR_VENTA`. Sin
+    costos ni crédito. 404 si es de otra organización o no existe (INV-21, SEG-07)."""
+    nota = ventas_queries.obtener_nota_de_venta(contexto.organizacion_id, venta_id, sesion)
+    venta = nota.venta
+    cobranza = nota.cobranza
+    anulacion = nota.anulacion
+    return NotaDeVentaResponse(
+        organizacion=NotaOrganizacionResponse(
+            nombre=nota.organizacion.nombre,
+            cuit=nota.organizacion.cuit,
+            domicilio=nota.organizacion.domicilio,
+            telefono=nota.organizacion.telefono,
+        ),
+        zona_horaria=nota.zona_horaria,
+        muestra_saldo=nota.muestra_saldo,
+        cliente=NotaClienteResponse(
+            nombre=nota.cliente.nombre,
+            razon_social=nota.cliente.razon_social,
+            documento_tipo=nota.cliente.documento_tipo,
+            documento_numero=nota.cliente.documento_numero,
+            direccion=nota.cliente.direccion,
+            es_consumidor_final=nota.cliente.es_consumidor_final,
+        ),
+        numero=venta.numero,
+        occurred_at=venta.occurred_at,
+        vendedor_nombre=nota.vendedor_nombre,
+        modo_impositivo=venta.modo_impositivo,
+        estado=venta.estado,
+        lineas=[
+            NotaLineaResponse(
+                orden=item.linea.orden,
+                producto_nombre=item.producto_nombre,
+                presentacion_nombre=item.presentacion_nombre,
+                cantidad=item.linea.cantidad,
+                unidades_presentacion=item.linea.unidades_presentacion,
+                precio_referencia=str(item.linea.precio_referencia),
+                unidades_referencia=item.linea.unidades_referencia,
+                importe_bruto=str(item.linea.importe_bruto),
+                importe_descuento=str(item.linea.importe_descuento),
+                importe_neto=str(item.linea.importe_neto),
+                alicuota=str(item.linea.alicuota),
+                importe_iva=str(item.linea.importe_iva),
+            )
+            for item in nota.lineas
+        ],
+        total_neto=str(venta.total_neto),
+        total_iva=str(venta.total_iva),
+        total=str(venta.total),
+        cobranza=(
+            None
+            if cobranza is None
+            else NotaCobranzaResponse(
+                importe=str(cobranza.importe),
+                estado=cobranza.estado,
+                medios=[
+                    NotaMedioResponse(nombre=m.nombre, importe=str(m.importe))
+                    for m in cobranza.medios
+                ],
+            )
+        ),
+        saldo_resultante=_texto_o_nulo(nota.saldo_resultante),
+        anulacion=(
+            None
+            if anulacion is None
+            else NotaAnulacionResponse(
+                anulada_en=anulacion.anulada_en,
+                motivo_nombre=anulacion.motivo_nombre,
+                devuelve_dinero=anulacion.devuelve_dinero,
+            )
+        ),
     )
 
 

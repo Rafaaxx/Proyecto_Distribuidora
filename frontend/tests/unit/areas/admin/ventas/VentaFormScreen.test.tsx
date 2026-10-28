@@ -4,8 +4,13 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }))
+const { apiFetchMock, guardarArchivoMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn(), guardarArchivoMock: vi.fn() }))
 vi.mock('../../../../../src/lib/api/httpClient', () => ({ apiFetch: apiFetchMock }))
+// La nota (change 20, 7.2): el PDF real no hace falta acá; se verifica que se guarda con su nombre.
+vi.mock('../../../../../src/lib/descarga', () => ({ guardarArchivo: guardarArchivoMock }))
+vi.mock('../../../../../src/lib/nota/pdf', () => ({
+  generarPdfDeNota: vi.fn().mockResolvedValue(new Blob(['%PDF-1.7'], { type: 'application/pdf' })),
+}))
 
 import { VentaFormScreen } from '../../../../../src/areas/admin/ventas/VentaFormScreen'
 import { llamadas, type ReglaDeApi } from '../../../utils/enrutarApi'
@@ -30,6 +35,7 @@ import {
   VERSION_ID,
   VINO_ID,
   montarApi,
+  notaDeVenta,
 } from './ventasDePrueba'
 
 function renderPantalla(rol: RolDePrueba = 'VEN') {
@@ -615,5 +621,43 @@ describe('VentaFormScreen (tarea 12.2)', () => {
     await usuario.click(screen.getByRole('button', { name: /cargar otra venta/i }))
     await waitFor(() => expect(screen.getByLabelText(/^n[uú]mero de venta$/i)).toHaveValue('V01-000043'))
     expect(screen.queryByTestId(`item-${VINO_ID}`)).not.toBeInTheDocument()
+  })
+
+  // Change 20, tarea 7.2 (VTA-13, ADR-008, D6): la nota al registrar la venta.
+  it('"Venta registrada" ofrece "Descargar nota" y la guarda con el número de la venta (VTA-13, D6)', async () => {
+    montarApi(apiFetchMock, [
+      confirmarOk,
+      { metodo: 'GET', ruta: `/ventas/${VENTA_ID}/nota`, responder: () => ({ status: 200, cuerpo: notaDeVenta() }) },
+    ])
+    guardarArchivoMock.mockReset()
+    const usuario = userEvent.setup()
+    renderPantalla()
+    await ventaLista(usuario)
+    await cargarEfectivo(usuario, '20000')
+    await waitFor(() => expect(botonConfirmar()).toBeEnabled())
+    await usuario.click(botonConfirmar())
+
+    await usuario.click(await screen.findByRole('button', { name: /^descargar nota$/i }))
+
+    expect(guardarArchivoMock).toHaveBeenCalledWith(expect.any(Blob), 'nota-de-venta-V01-000042.pdf')
+    expect(screen.getByText(/la venta V01-000042 quedó confirmada/i)).toBeInTheDocument()
+  })
+
+  it('si la lectura de la nota falla, la venta registrada se conserva y se ofrece "Reintentar" (D6)', async () => {
+    montarApi(apiFetchMock, [
+      confirmarOk,
+      { metodo: 'GET', ruta: `/ventas/${VENTA_ID}/nota`, responder: () => ({ status: 500, cuerpo: { title: 'Falla', codigo: 'ERROR' } }) },
+    ])
+    const usuario = userEvent.setup()
+    renderPantalla()
+    await ventaLista(usuario)
+    await cargarEfectivo(usuario, '20000')
+    await waitFor(() => expect(botonConfirmar()).toBeEnabled())
+    await usuario.click(botonConfirmar())
+
+    expect(await screen.findByText(/no se pudo preparar la nota de venta/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^reintentar$/i })).toBeInTheDocument()
+    expect(screen.getByText(/la venta V01-000042 quedó confirmada/i)).toBeInTheDocument()
+    expect(screen.getByTestId('saldo-final')).toHaveTextContent('Nos debe $ 161.250,00')
   })
 })

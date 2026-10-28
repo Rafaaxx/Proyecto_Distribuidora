@@ -1410,6 +1410,254 @@
         }
       }
     },
+    "/api/v1/configuracion/nota-de-venta": {
+      "get": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Obtener Nota De Venta De La Organizacion",
+        "description": "Los parámetros de la nota de venta de la organización (VTA-13).",
+        "operationId": "obtener_nota_de_venta_de_la_organizacion_api_v1_configuracion_nota_de_venta_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotaVentaConfiguracionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Configurar Nota De Venta De La Organizacion",
+        "description": "`NOTA_VENTA_CONFIGURAR` (D10). La respuesta sale de `comando.resultado` (INV-06).",
+        "operationId": "configurar_nota_de_venta_de_la_organizacion_api_v1_configuracion_nota_de_venta_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotaVentaConfigurarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotaVentaConfiguracionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/configuracion/organizacion": {
+      "get": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Obtener Datos De La Organizacion",
+        "description": "El nombre y el CUIT de la organización del token (VTA-13).",
+        "operationId": "obtener_datos_de_la_organizacion_api_v1_configuracion_organizacion_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizacionDatosResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Configurar Datos De La Organizacion",
+        "description": "`ORGANIZACION_DATOS_CONFIGURAR` (D15). La respuesta sale de `comando.resultado` (INV-06).",
+        "operationId": "configurar_datos_de_la_organizacion_api_v1_configuracion_organizacion_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizacionDatosConfigurarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizacionDatosResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/importaciones/{tipo}": {
       "post": {
         "tags": [
@@ -10811,6 +11059,66 @@
         }
       }
     },
+    "/api/v1/ventas/{venta_id}/nota": {
+      "get": {
+        "tags": [
+          "ventas"
+        ],
+        "summary": "Obtener Nota De Venta",
+        "description": "Los datos de la nota de venta (VTA-13, change 20 D2, D13): una sola lectura con lo que\nimprime la nota, idéntica al original y a la reimpresión. `VENDER` o `ANULAR_VENTA`. Sin\ncostos ni crédito. 404 si es de otra organización o no existe (INV-21, SEG-07).",
+        "operationId": "obtener_nota_de_venta_api_v1_ventas__venta_id__nota_get",
+        "parameters": [
+          {
+            "name": "venta_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Venta Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotaDeVentaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/ventas/{venta_id}": {
       "get": {
         "tags": [
@@ -16597,6 +16905,478 @@
         "title": "MovimientoEstadoDeCuentaResponse",
         "description": "Un movimiento del estado de cuenta con su saldo acumulado real (CC-07)."
       },
+      "NotaAnulacionResponse": {
+        "properties": {
+          "anulada_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Anulada En"
+          },
+          "motivo_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Nombre"
+          },
+          "devuelve_dinero": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Devuelve Dinero"
+          }
+        },
+        "type": "object",
+        "required": [
+          "anulada_en",
+          "motivo_nombre",
+          "devuelve_dinero"
+        ],
+        "title": "NotaAnulacionResponse"
+      },
+      "NotaClienteResponse": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "razon_social": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Razon Social"
+          },
+          "documento_tipo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documento Tipo"
+          },
+          "documento_numero": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documento Numero"
+          },
+          "direccion": {
+            "type": "string",
+            "title": "Direccion"
+          },
+          "es_consumidor_final": {
+            "type": "boolean",
+            "title": "Es Consumidor Final"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "razon_social",
+          "documento_tipo",
+          "documento_numero",
+          "direccion",
+          "es_consumidor_final"
+        ],
+        "title": "NotaClienteResponse"
+      },
+      "NotaCobranzaResponse": {
+        "properties": {
+          "importe": {
+            "type": "string",
+            "title": "Importe"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "medios": {
+            "items": {
+              "$ref": "#/components/schemas/NotaMedioResponse"
+            },
+            "type": "array",
+            "title": "Medios"
+          }
+        },
+        "type": "object",
+        "required": [
+          "importe",
+          "estado",
+          "medios"
+        ],
+        "title": "NotaCobranzaResponse"
+      },
+      "NotaDeVentaResponse": {
+        "properties": {
+          "organizacion": {
+            "$ref": "#/components/schemas/NotaOrganizacionResponse"
+          },
+          "zona_horaria": {
+            "type": "string",
+            "title": "Zona Horaria"
+          },
+          "muestra_saldo": {
+            "type": "boolean",
+            "title": "Muestra Saldo"
+          },
+          "cliente": {
+            "$ref": "#/components/schemas/NotaClienteResponse"
+          },
+          "numero": {
+            "type": "string",
+            "title": "Numero"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "vendedor_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendedor Nombre"
+          },
+          "modo_impositivo": {
+            "type": "string",
+            "title": "Modo Impositivo"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/NotaLineaResponse"
+            },
+            "type": "array",
+            "title": "Lineas"
+          },
+          "total_neto": {
+            "type": "string",
+            "title": "Total Neto"
+          },
+          "total_iva": {
+            "type": "string",
+            "title": "Total Iva"
+          },
+          "total": {
+            "type": "string",
+            "title": "Total"
+          },
+          "cobranza": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NotaCobranzaResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "saldo_resultante": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Saldo Resultante"
+          },
+          "anulacion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NotaAnulacionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "organizacion",
+          "zona_horaria",
+          "muestra_saldo",
+          "cliente",
+          "numero",
+          "occurred_at",
+          "vendedor_nombre",
+          "modo_impositivo",
+          "estado",
+          "lineas",
+          "total_neto",
+          "total_iva",
+          "total",
+          "cobranza",
+          "saldo_resultante",
+          "anulacion"
+        ],
+        "title": "NotaDeVentaResponse",
+        "description": "Todo lo que imprime la nota de venta (VTA-13, change 20 D2): los valores congelados de la\nventa, los datos de la organización y del cliente, la cobranza con sus medios, el saldo\nresultante si corresponde y la anulación. Importes como string (INV-03). Sin costos ni\ncrédito."
+      },
+      "NotaLineaResponse": {
+        "properties": {
+          "orden": {
+            "type": "integer",
+            "title": "Orden"
+          },
+          "producto_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Producto Nombre"
+          },
+          "presentacion_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presentacion Nombre"
+          },
+          "cantidad": {
+            "type": "integer",
+            "title": "Cantidad"
+          },
+          "unidades_presentacion": {
+            "type": "integer",
+            "title": "Unidades Presentacion"
+          },
+          "precio_referencia": {
+            "type": "string",
+            "title": "Precio Referencia"
+          },
+          "unidades_referencia": {
+            "type": "integer",
+            "title": "Unidades Referencia"
+          },
+          "importe_bruto": {
+            "type": "string",
+            "title": "Importe Bruto"
+          },
+          "importe_descuento": {
+            "type": "string",
+            "title": "Importe Descuento"
+          },
+          "importe_neto": {
+            "type": "string",
+            "title": "Importe Neto"
+          },
+          "alicuota": {
+            "type": "string",
+            "title": "Alicuota"
+          },
+          "importe_iva": {
+            "type": "string",
+            "title": "Importe Iva"
+          }
+        },
+        "type": "object",
+        "required": [
+          "orden",
+          "producto_nombre",
+          "presentacion_nombre",
+          "cantidad",
+          "unidades_presentacion",
+          "precio_referencia",
+          "unidades_referencia",
+          "importe_bruto",
+          "importe_descuento",
+          "importe_neto",
+          "alicuota",
+          "importe_iva"
+        ],
+        "title": "NotaLineaResponse",
+        "description": "Una línea congelada de la nota (VTA-03). Sin costos ni descuentos detallados (D2)."
+      },
+      "NotaMedioResponse": {
+        "properties": {
+          "nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nombre"
+          },
+          "importe": {
+            "type": "string",
+            "title": "Importe"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "importe"
+        ],
+        "title": "NotaMedioResponse"
+      },
+      "NotaOrganizacionResponse": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "cuit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cuit"
+          },
+          "domicilio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domicilio"
+          },
+          "telefono": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telefono"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "cuit",
+          "domicilio",
+          "telefono"
+        ],
+        "title": "NotaOrganizacionResponse"
+      },
+      "NotaVentaConfiguracionResponse": {
+        "properties": {
+          "muestra_saldo": {
+            "type": "boolean",
+            "title": "Muestra Saldo"
+          },
+          "domicilio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domicilio"
+          },
+          "telefono": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telefono"
+          }
+        },
+        "type": "object",
+        "required": [
+          "muestra_saldo",
+          "domicilio",
+          "telefono"
+        ],
+        "title": "NotaVentaConfiguracionResponse"
+      },
+      "NotaVentaConfigurarRequest": {
+        "properties": {
+          "muestra_saldo": {
+            "type": "boolean",
+            "title": "Muestra Saldo"
+          },
+          "domicilio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domicilio"
+          },
+          "telefono": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telefono"
+          }
+        },
+        "type": "object",
+        "required": [
+          "muestra_saldo",
+          "domicilio",
+          "telefono"
+        ],
+        "title": "NotaVentaConfigurarRequest",
+        "description": "`muestra_saldo` booleano estricto; domicilio y teléfono obligatorios (vacíos son `null` o\ntexto en blanco). El largo se valida en el dominio: `DATO_DE_NOTA_INVALIDO` (422)."
+      },
       "NumeracionResponse": {
         "properties": {
           "prefijo": {
@@ -16620,6 +17400,57 @@
         ],
         "title": "NumeracionResponse",
         "description": "Prefijo del dispositivo de la sesión, último correlativo y el número que sigue (D4)."
+      },
+      "OrganizacionDatosConfigurarRequest": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "cuit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cuit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "cuit"
+        ],
+        "title": "OrganizacionDatosConfigurarRequest",
+        "description": "`nombre` y `cuit` obligatorios en el cuerpo (el CUIT vacío es `null` o texto en blanco).\nLa normalización y el largo se validan en el dominio: `NOMBRE_DE_ORGANIZACION_INVALIDO` y\n`CUIT_INVALIDO` (422)."
+      },
+      "OrganizacionDatosResponse": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "cuit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cuit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "cuit"
+        ],
+        "title": "OrganizacionDatosResponse"
       },
       "OrganizacionYoResponse": {
         "properties": {

@@ -41,6 +41,7 @@ from app.modules.ventas.domain.errores import (
     RecursoNoEncontradoError,
     VersionNoPermitidaError,
 )
+from app.modules.ventas.domain.nota import saldo_de_la_nota
 from app.modules.ventas.domain.numero import armar_numero
 from app.modules.ventas.models import Venta, VentaLinea, VentaLineaDescuento
 
@@ -342,6 +343,136 @@ def obtener_detalle_de_venta(
             for linea in lineas
         ],
         credito=credito,
+    )
+
+
+@dataclass(frozen=True)
+class OrganizacionDeLaNota:
+    nombre: str
+    cuit: str | None
+    domicilio: str | None
+    telefono: str | None
+
+
+@dataclass(frozen=True)
+class ClienteDeLaNota:
+    nombre: str
+    razon_social: str | None
+    documento_tipo: str | None
+    documento_numero: str | None
+    direccion: str
+    es_consumidor_final: bool
+
+
+@dataclass(frozen=True)
+class LineaDeLaNota:
+    """Una línea congelada tal como la imprime la nota: sin costos (D2)."""
+
+    linea: VentaLinea
+    producto_nombre: str | None
+    presentacion_nombre: str | None
+
+
+@dataclass(frozen=True)
+class CobranzaDeLaNota:
+    importe: Decimal
+    estado: str
+    medios: list[cobranzas_service.MedioDeCobranza]
+
+
+@dataclass(frozen=True)
+class NotaDeVenta:
+    """Todo lo que la nota de venta imprime (change 20, D2), en una sola lectura. Los valores de
+    la venta son los congelados (INV-10); nunca se recalcula ni se rechaza por modo (D14)."""
+
+    venta: Venta
+    organizacion: OrganizacionDeLaNota
+    zona_horaria: str
+    muestra_saldo: bool
+    cliente: ClienteDeLaNota
+    vendedor_nombre: str | None
+    lineas: list[LineaDeLaNota]
+    cobranza: CobranzaDeLaNota | None
+    saldo_resultante: Decimal | None
+    anulacion: AnulacionDelDetalle | None
+
+
+def obtener_nota_de_venta(organizacion_id: UUID, venta_id: UUID, sesion: Session) -> NotaDeVenta:
+    """Los datos de la nota de venta de `venta_id` (VTA-13, D2): la organización con su domicilio
+    y teléfono, el cliente, las líneas congeladas en su orden, la cobranza con sus medios, el
+    saldo resultante (D4) y la anulación (D5). 404 si la venta no existe en la organización
+    (INV-21, SEG-07). Los datos ajenos se leen por el `service.py` de su módulo."""
+    venta = repository.obtener_venta(organizacion_id, venta_id, sesion)
+    if venta is None:
+        raise RecursoNoEncontradoError(f"La venta {venta_id} no existe en esta organización.")
+    organizacion = identidad_service.obtener_organizacion(organizacion_id, sesion)
+    configuracion = identidad_service.obtener_configuracion(organizacion_id, sesion)
+    cliente = clientes_service.obtener_cliente_por_id(organizacion_id, venta.cliente_id, sesion)
+    if organizacion is None or configuracion is None or cliente is None:
+        raise RecursoNoEncontradoError(f"La venta {venta_id} no existe en esta organización.")
+
+    lineas = repository.listar_lineas_de_venta(organizacion_id, venta.id, sesion)
+    productos = catalogo_service.nombres_de_productos(
+        organizacion_id, {linea.producto_id for linea in lineas}, sesion
+    )
+    presentaciones = catalogo_service.nombres_de_presentaciones(
+        organizacion_id, {linea.presentacion_id for linea in lineas}, sesion
+    )
+    usuarios = identidad_service.obtener_nombres_de_usuarios(
+        organizacion_id, {venta.usuario_id}, sesion
+    )
+    cobranza_de_venta = cobranzas_service.cobranza_de_venta(
+        organizacion_id, sesion, venta_id=venta.id
+    )
+    cobranza = (
+        None
+        if cobranza_de_venta is None
+        else CobranzaDeLaNota(
+            importe=cobranza_de_venta.importe,
+            estado=cobranza_de_venta.estado,
+            medios=cobranzas_service.medios_de_cobranza(
+                organizacion_id, sesion, cobranza_id=cobranza_de_venta.cobranza_id
+            ),
+        )
+    )
+    cobrado = Decimal("0.00") if cobranza is None else cobranza.importe
+    return NotaDeVenta(
+        venta=venta,
+        organizacion=OrganizacionDeLaNota(
+            nombre=organizacion.nombre,
+            cuit=organizacion.cuit,
+            domicilio=configuracion.nota_venta_domicilio,
+            telefono=configuracion.nota_venta_telefono,
+        ),
+        zona_horaria=organizacion.zona_horaria,
+        muestra_saldo=configuracion.nota_venta_muestra_saldo,
+        cliente=ClienteDeLaNota(
+            nombre=cliente.nombre,
+            razon_social=cliente.razon_social,
+            documento_tipo=cliente.documento_tipo,
+            documento_numero=cliente.documento_numero,
+            direccion=cliente.direccion,
+            es_consumidor_final=cliente.es_consumidor_final,
+        ),
+        vendedor_nombre=usuarios.get(venta.usuario_id),
+        lineas=[
+            LineaDeLaNota(
+                linea=linea,
+                producto_nombre=productos.get(linea.producto_id),
+                presentacion_nombre=presentaciones.get(linea.presentacion_id),
+            )
+            for linea in lineas
+        ],
+        cobranza=cobranza,
+        saldo_resultante=saldo_de_la_nota(
+            configuracion.nota_venta_muestra_saldo,
+            cliente.es_consumidor_final,
+            venta.estado,
+            venta.credito_saldo_considerado,
+            venta.total,
+            cobrado,
+        ),
+        anulacion=_anulacion_del_detalle(organizacion_id, sesion, venta.id),
     )
 
 

@@ -122,9 +122,9 @@ facturacion      factura · factura_venta · factura_alicuota · ajuste_iva_abso
 | Columna | Tipo | Notas |
 | --- | --- | --- |
 | `id` | `uuid` | PK |
-| `nombre` | `text` | |
+| `nombre` | `text` | Editable con `ORGANIZACION_DATOS_CONFIGURAR` |
 | `slug` | `text` | `UNIQUE`. Resuelve la organización en el login antes de que exista un token (`ADR-021`) |
-| `cuit` | `text` | Opcional |
+| `cuit` | `text` | Opcional; 11 dígitos normalizados; editable con `ORGANIZACION_DATOS_CONFIGURAR` |
 | `moneda` | `text` | ISO 4217 |
 | `zona_horaria` | `text` | IANA |
 | `estado` | `text` | `ACTIVA`, `SUSPENDIDA` |
@@ -150,6 +150,9 @@ Una fila por organización (`01` §4).
 | `permite_consumidor_final` | `boolean` | |
 | `cliente_consumidor_final_id` | `uuid` | Opcional |
 | `estado_facturacion_default` | `text` | `NO_REQUIERE`, `PENDIENTE` |
+| `nota_venta_muestra_saldo` | `boolean` | `NOT NULL DEFAULT false`; si la nota imprime el saldo resultante (VTA-13, CRE-02) |
+| `nota_venta_domicilio` | `text` | Nulo si no se cargó; `CHECK` de no vacío y de hasta 200 caracteres |
+| `nota_venta_telefono` | `text` | Nulo si no se cargó; `CHECK` de no vacío y de hasta 50 caracteres |
 | `modalidad_iva_default` | `text` | `CLIENTE`, `ABSORBIDO`; nulo si no es responsable inscripto |
 | `intentos_pin_max` | `integer` | |
 | `desvio_reloj_max_segundos` | `integer` | `02` §9 |

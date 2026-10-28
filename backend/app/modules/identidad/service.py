@@ -36,6 +36,11 @@ from app.core.seguridad import (
 )
 from app.modules.identidad import repository
 from app.modules.identidad.domain.clave_intento import clave_de_intento_login
+from app.modules.identidad.domain.nota import normalizar_datos_de_nota
+from app.modules.identidad.domain.organizacion import (
+    normalizar_cuit_de_organizacion,
+    normalizar_nombre_de_organizacion,
+)
 from app.modules.identidad.domain.permisos import (
     ADMINISTRADOR,
     PERMISOS_DEL_CATALOGO,
@@ -419,6 +424,121 @@ def configurar_credito_organizacion(
             "tolerancia_offline_tipo": tipo,
             "tolerancia_offline_valor": _importe(valor),
         },
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+    return actualizada
+
+
+def configurar_nota_de_venta(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    muestra_saldo: bool,
+    domicilio: str | None,
+    telefono: str | None,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> ConfiguracionOrganizacion | None:
+    """`NOTA_VENTA_CONFIGURAR` (change 20, D10, VTA-13): fija si la nota de venta muestra el
+    saldo y el domicilio y el teléfono de la organización que se imprimen en ella.
+
+    Normaliza y valida ANTES de bloquear ni escribir (`DATO_DE_NOTA_INVALIDO`). Toma la fila
+    `FOR UPDATE`, escribe UNA auditoría con el valor anterior y el nuevo (`origen='COMANDO'`,
+    AUD-01) y devuelve la configuración, o `None` si la organización no tiene. Sin `commit`."""
+    domicilio_normal, telefono_normal = normalizar_datos_de_nota(domicilio, telefono)
+
+    configuracion = repository.obtener_configuracion_bloqueada(
+        organizacion_id, sesion, exclusivo=True
+    )
+    if configuracion is None:
+        return None
+
+    antes: dict[str, object] = {
+        "nota_venta_muestra_saldo": configuracion.nota_venta_muestra_saldo,
+        "nota_venta_domicilio": configuracion.nota_venta_domicilio,
+        "nota_venta_telefono": configuracion.nota_venta_telefono,
+    }
+    momento = reloj.now()
+    actualizada = repository.actualizar_configuracion(
+        organizacion_id,
+        sesion,
+        momento=momento,
+        actualizado_por_id=actor_id,
+        nota_venta_muestra_saldo=muestra_saldo,
+        nota_venta_domicilio=domicilio_normal,
+        nota_venta_telefono=telefono_normal,
+    )
+    assert actualizada is not None  # la fila existe: se acaba de bloquear.
+
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="NOTA_VENTA_CONFIGURAR",
+        entidad="configuracion_organizacion",
+        entidad_id=organizacion_id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        antes=antes,
+        despues={
+            "nota_venta_muestra_saldo": muestra_saldo,
+            "nota_venta_domicilio": domicilio_normal,
+            "nota_venta_telefono": telefono_normal,
+        },
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+    return actualizada
+
+
+def configurar_datos_de_organizacion(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    nombre: str,
+    cuit: str | None,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> Organizacion | None:
+    """`ORGANIZACION_DATOS_CONFIGURAR` (change 20, D15, VTA-13): fija el nombre y el CUIT de la
+    organización.
+
+    Normaliza y valida AMBOS antes de bloquear ni escribir (`NOMBRE_DE_ORGANIZACION_INVALIDO`,
+    `CUIT_INVALIDO`): si uno falla no se guarda ninguno. Toma la fila `FOR UPDATE`, escribe UNA
+    auditoría con el valor anterior y el nuevo (`origen='COMANDO'`, AUD-01) y devuelve la
+    organización, o `None` si no existe. Sin `commit`."""
+    nombre_normal = normalizar_nombre_de_organizacion(nombre)
+    cuit_normal = normalizar_cuit_de_organizacion(cuit)
+
+    organizacion = repository.obtener_organizacion_bloqueada(organizacion_id, sesion)
+    if organizacion is None:
+        return None
+
+    antes: dict[str, object] = {"nombre": organizacion.nombre, "cuit": organizacion.cuit}
+    momento = reloj.now()
+    actualizada = repository.actualizar_datos_de_organizacion(
+        organizacion_id, sesion, nombre=nombre_normal, cuit=cuit_normal, momento=momento
+    )
+    assert actualizada is not None  # la fila existe: se acaba de bloquear.
+
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="ORGANIZACION_DATOS_CONFIGURAR",
+        entidad="organizacion",
+        entidad_id=organizacion_id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        antes=antes,
+        despues={"nombre": nombre_normal, "cuit": cuit_normal},
         operation_id=operation_id,
         origen="COMANDO",
     )

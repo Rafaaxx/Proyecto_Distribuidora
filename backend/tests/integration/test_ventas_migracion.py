@@ -54,7 +54,7 @@ from ventas_utiles import (
 REVISION = "a2b3c4d5e6f7"
 # La del change 18b: el `head`. Un `downgrade` que aborta en la revisión de este change revierte
 # toda la corrida (Alembic corre en una sola transacción), así que la base queda en `head`.
-REVISION_HEAD = "d9e0f1a2b3c4"  # `venta_anulacion` (change 19), la cabeza actual.
+REVISION_HEAD = "e0f1a2b3c4d5"  # `nota_venta_configuracion` (change 20), la cabeza actual.
 REVISION_ANTERIOR = "f8a9b0c1d2e3"  # `medios_de_pago_administrables`, la previa a este change.
 
 AMBITO = "LISTA_ANTERIOR"

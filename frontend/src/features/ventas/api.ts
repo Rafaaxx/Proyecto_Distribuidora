@@ -29,6 +29,7 @@ export type VersionElegible = components['schemas']['VersionElegibleResponse']
 export type ContextoDeVentaDeApi = components['schemas']['ContextoDeVentaResponse']
 export type ReglaAplicable = components['schemas']['ReglaAplicableResponse']
 export type CreditoParaVender = components['schemas']['CreditoParaVenderResponse']
+export type NotaDeVenta = components['schemas']['NotaDeVentaResponse']
 
 const LIMITE_DE_PRECIOS = 20
 
@@ -60,6 +61,12 @@ export async function listarVentas(filtros: FiltrosVentas = {}, cursor?: string,
 
 export async function obtenerVenta(ventaId: string): Promise<VentaDetalle> {
   const respuesta = await apiFetch(`/ventas/${ventaId}`)
+  return leerJsonOLanzar(respuesta)
+}
+
+/** Lo que imprime la nota de venta (VTA-13, change 20): una sola lectura, igual al original y a la reimpresión. */
+export async function obtenerNotaDeVenta(ventaId: string): Promise<NotaDeVenta> {
+  const respuesta = await apiFetch(`/ventas/${ventaId}/nota`)
   return leerJsonOLanzar(respuesta)
 }
 

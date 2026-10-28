@@ -106,6 +106,38 @@ def obtener_organizacion_por_id(organizacion_id: UUID, sesion: Session) -> Organ
     return sesion.get(Organizacion, organizacion_id)
 
 
+def obtener_organizacion_bloqueada(organizacion_id: UUID, sesion: Session) -> Organizacion | None:
+    """La fila de `organizacion` con `FOR UPDATE` (change 20, D15): filtra por su propio `id`.
+    Refresca los valores: nunca devuelve un estado en caché."""
+    consulta = (
+        select(Organizacion)
+        .where(Organizacion.id == organizacion_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return sesion.scalars(consulta).one_or_none()
+
+
+def actualizar_datos_de_organizacion(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    nombre: str,
+    cuit: str | None,
+    momento: datetime,
+) -> Organizacion | None:
+    """Fija nombre y CUIT de `organizacion_id` (change 20, D15). `None` sin tocar nada si la
+    organización no existe."""
+    organizacion = sesion.get(Organizacion, organizacion_id)
+    if organizacion is None:
+        return None
+    organizacion.nombre = nombre
+    organizacion.cuit = cuit
+    organizacion.actualizado_en = momento
+    sesion.flush()
+    return organizacion
+
+
 def crear_configuracion(
     organizacion_id: UUID,
     sesion: Session,

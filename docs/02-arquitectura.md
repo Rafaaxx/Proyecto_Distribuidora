@@ -638,9 +638,10 @@ Agrupación de endpoints de la etapa 1:
 
 ### 13.6 Nota de venta
 
-- Se genera en el dispositivo con pdfmake, con fuentes embebidas, a partir de los datos locales de la venta (VTA-13).
-- Se comparte con Web Share API (archivos) cuando está disponible; si no, se descarga.
-- La misma función genera la nota desde administración para reimpresión.
+- El contenido de la nota lo arma una función pura (`domain/ventas/notaDeVenta.ts`) a partir de un tipo neutro con los valores congelados de la venta; otra función lo convierte en la definición del documento (`lib/nota/documento.ts`, A4 vertical). Cada origen de datos tiene su adaptador: la API en administración (`GET /api/v1/ventas/{id}/nota`, con `VENDER` o `ANULAR_VENTA`) y, en `/ruta`, Dexie (change 22a). Nada del armado conoce pdfmake ni React.
+- El PDF se genera en el dispositivo con pdfmake (versión exacta) y sus fuentes embebidas, cargados con `import()` dinámico solo al generar la nota: no pesan en el bundle inicial.
+- Se comparte con Web Share API (archivos) solo si el navegador comparte archivos (`navigator.canShare`); la descarga está siempre. Archivo `nota-de-venta-{numero}.pdf`.
+- La nota no se guarda: cada generación sale de los datos congelados. La misma función sirve al original y a la reimpresión.
 
 ## 14. Datos
 

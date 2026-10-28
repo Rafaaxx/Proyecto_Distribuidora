@@ -659,7 +659,8 @@ def test_downgrade_menos_uno_y_upgrade_corren_limpios_con_datos_de_catalogo_semb
 # --- ADR-057 (change 18b, tarea 24.3): `intento_login.clave_intento` -----------------------------
 
 REVISION_CLAVE_INTENTO = "c8d9e0f1a2b3"
-REVISION_HEAD_ACTUAL = "d9e0f1a2b3c4"  # `venta_anulacion` (change 19)
+REVISION_HEAD_ACTUAL = "e0f1a2b3c4d5"  # `nota_venta_configuracion` (change 20)
+REVISION_ANTERIOR_A_NOTA = "d9e0f1a2b3c4"  # `venta_anulacion` (change 19)
 REVISION_ANTERIOR_A_CLAVE_INTENTO = "b6c7d8e9f0a1"
 INDICE_CLAVE_INTENTO = "ix_intento_login__clave_intento_creado_en"
 
@@ -834,5 +835,138 @@ def test_adr057_la_migracion_es_la_cabeza_y_el_ciclo_corre_limpio(
                 conexion.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
                 == REVISION_HEAD_ACTUAL
             )
+    finally:
+        _dejar_en_head_y_limpio(database_url, _engine_de_sesion)
+
+
+def _columna_de_configuracion(conexion, nombre: str):
+    return conexion.execute(
+        text(
+            "SELECT data_type, is_nullable, column_default FROM information_schema.columns "
+            "WHERE table_name = 'configuracion_organizacion' AND column_name = :c"
+        ),
+        {"c": nombre},
+    ).one_or_none()
+
+
+def test_vta13_la_configuracion_tiene_las_tres_columnas_de_la_nota(
+    database_url: str, _engine_de_sesion
+) -> None:
+    """VTA-13 (`04` §2.1 punto 4; change 20, D10): `nota_venta_muestra_saldo` booleana no nula
+    con default falso; `nota_venta_domicilio` y `nota_venta_telefono` de texto nulables."""
+    with _engine_de_sesion.connect() as conexion:
+        saldo = _columna_de_configuracion(conexion, "nota_venta_muestra_saldo")
+        domicilio = _columna_de_configuracion(conexion, "nota_venta_domicilio")
+        telefono = _columna_de_configuracion(conexion, "nota_venta_telefono")
+    assert saldo is not None and tuple(saldo) == ("boolean", "NO", "false")
+    assert domicilio is not None and tuple(domicilio)[:2] == ("text", "YES")
+    assert telefono is not None and tuple(telefono)[:2] == ("text", "YES")
+
+
+@pytest.mark.parametrize(
+    ("columna", "valor", "valido"),
+    [
+        ("nota_venta_domicilio", "x" * 200, True),
+        ("nota_venta_domicilio", "x" * 201, False),
+        ("nota_venta_domicilio", "", False),
+        ("nota_venta_telefono", "y" * 50, True),
+        ("nota_venta_telefono", "y" * 51, False),
+        ("nota_venta_telefono", "", False),
+    ],
+    ids=[
+        "domicilio_200",
+        "domicilio_201",
+        "domicilio_vacio",
+        "telefono_50",
+        "telefono_51",
+        "telefono_vacio",
+    ],
+)
+def test_vta13_los_check_de_longitud_y_de_no_vacio_de_la_nota(
+    database_url: str, _engine_de_sesion, columna: str, valor: str, valido: bool
+) -> None:
+    from cuentas_corrientes_utiles import crear_organizacion
+    from sqlalchemy.exc import IntegrityError
+    from sqlalchemy.orm import Session
+
+    with Session(_engine_de_sesion) as sesion:
+        organizacion_id = crear_organizacion(sesion).id
+        sesion.commit()
+    try:
+        sentencia = text(
+            f"UPDATE configuracion_organizacion SET {columna} = :v WHERE organizacion_id = :o"
+        )
+        if valido:
+            with _engine_de_sesion.begin() as conexion:
+                conexion.execute(sentencia, {"v": valor, "o": organizacion_id})
+        else:
+            with pytest.raises(IntegrityError), _engine_de_sesion.begin() as conexion:
+                conexion.execute(sentencia, {"v": valor, "o": organizacion_id})
+    finally:
+        with _engine_de_sesion.begin() as conexion:
+            conexion.execute(text("TRUNCATE TABLE organizacion CASCADE"))
+
+
+def test_vta13_las_organizaciones_existentes_quedan_con_falso_y_nulos_y_el_ciclo_es_limpio(
+    database_url: str, _engine_de_sesion
+) -> None:
+    """VTA-13: una organización que existía antes de la migración queda con
+    `nota_venta_muestra_saldo` falso y domicilio y teléfono nulos; baja y vuelve a subir sin
+    perder el resto de la configuración (`04` §2.1 punto 4). El ciclo con ventas sembradas lo
+    cubre `test_downgrade_y_upgrade_corren_limpios_con_datos_representativos`."""
+    from uuid import uuid4
+
+    try:
+        bajada = _alembic("downgrade", REVISION_ANTERIOR_A_NOTA, database_url=database_url)
+        assert bajada.returncode == 0, bajada.stderr
+        with _engine_de_sesion.connect() as conexion:
+            assert _columna_de_configuracion(conexion, "nota_venta_muestra_saldo") is None
+            assert _columna_de_configuracion(conexion, "nota_venta_domicilio") is None
+            assert _columna_de_configuracion(conexion, "nota_venta_telefono") is None
+        # Con la base en la revisión anterior el modelo ORM ya conoce las columnas nuevas: la
+        # organización se inserta por SQL, como existía antes de la migración.
+        organizacion_id = uuid4()
+        with _engine_de_sesion.begin() as conexion:
+            conexion.execute(
+                text(
+                    "INSERT INTO organizacion (id, nombre, slug, moneda, zona_horaria, estado, "
+                    "creado_en, actualizado_en) VALUES (:id, 'Previa', :slug, 'ARS', "
+                    "'America/Argentina/Mendoza', 'ACTIVA', now(), now())"
+                ),
+                {"id": organizacion_id, "slug": f"previa-{organizacion_id.hex[:8]}"},
+            )
+            conexion.execute(
+                text(
+                    "INSERT INTO configuracion_organizacion (organizacion_id, condicion_iva, "
+                    "modo_impositivo, politica_credito_default, descuento_manual_habilitado, "
+                    "motivo_obligatorio_lista, estado_facturacion_default, intentos_pin_max, "
+                    "creado_en, actualizado_en) VALUES (:id, 'MONOTRIBUTO', 'A', 'BLOQUEAR', "
+                    "false, true, 'NO_REQUIERE', 3, now(), now())"
+                ),
+                {"id": organizacion_id},
+            )
+        with _engine_de_sesion.connect() as conexion:
+            politica_antes = conexion.execute(
+                text(
+                    "SELECT politica_credito_default FROM configuracion_organizacion "
+                    "WHERE organizacion_id = :o"
+                ),
+                {"o": organizacion_id},
+            ).scalar_one()
+
+        subida = _alembic("upgrade", "head", database_url=database_url)
+        assert subida.returncode == 0, subida.stderr
+        with _engine_de_sesion.connect() as conexion:
+            fila = conexion.execute(
+                text(
+                    "SELECT nota_venta_muestra_saldo, nota_venta_domicilio, nota_venta_telefono, "
+                    "politica_credito_default FROM configuracion_organizacion "
+                    "WHERE organizacion_id = :o"
+                ),
+                {"o": organizacion_id},
+            ).one()
+            version = conexion.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        assert tuple(fila) == (False, None, None, politica_antes)
+        assert version == REVISION_HEAD_ACTUAL
     finally:
         _dejar_en_head_y_limpio(database_url, _engine_de_sesion)

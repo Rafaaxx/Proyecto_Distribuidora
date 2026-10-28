@@ -1,7 +1,10 @@
 import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMemo } from 'react'
 
 import type { CredencialDePin } from '../../domain/ventas/autorizacionDeVenta'
 import type { VentaConfirmarDatos } from '../../domain/ventas/formularioVenta'
+import { armarNotaDeVenta, NotaNoDisponibleParaModoC } from '../../domain/ventas/notaDeVenta'
+import { generarPdfDeNota } from '../../lib/nota/pdf'
 import { useMutacionConOperationId } from '../compras/hooks'
 import { clavesCostoPromedio } from '../stock/claves'
 import {
@@ -13,12 +16,14 @@ import {
   listarDescuentosAplicables,
   obtenerContextoDeVenta,
   obtenerCreditoParaVender,
+  obtenerNotaDeVenta,
   obtenerNumeracion,
   obtenerVenta,
   type VentaAnularResultado,
   type VentaConfirmarResultado,
 } from './api'
 import { clavesVentas, type ContextoDePrecios, type FiltrosVentas } from './claves'
+import { datosDeNotaDesdeApi } from './nota'
 
 /**
  * Lecturas y escritura de ventas (change 18a, tarea 12.2). TanStack Query solo en `/admin`
@@ -191,4 +196,44 @@ export function useConfirmarVenta(leerCredenciales: () => readonly CredencialDeP
     delete datos.operationId
     return confirmarVenta(datos, operationId, leerCredenciales())
   }, invalidar)
+}
+
+export type EstadoDeNotaDeVenta =
+  | { estado: 'cargando' }
+  | { estado: 'error'; reintentar: () => void }
+  | { estado: 'no-disponible' }
+  | { estado: 'lista'; numero: string; anulada: boolean; generarPdf: () => Promise<Blob> }
+
+/**
+ * La nota de una venta (change 20, tarea 7.1; VTA-13, D14): lee los datos congelados y arma el
+ * contenido; el PDF se genera solo al pedirlo (`generarPdf`), con pdfmake cargado en diferido. Una
+ * venta de modo C expone `no-disponible` (deuda de la etapa 4), no un error genérico. Sin
+ * `habilitada` no pide nada.
+ */
+export function useNotaDeVenta(ventaId: string | undefined, habilitada = true): EstadoDeNotaDeVenta {
+  const consulta = useQuery({
+    queryKey: clavesVentas.nota(ventaId ?? ''),
+    queryFn: async () => datosDeNotaDesdeApi(await obtenerNotaDeVenta(ventaId as string)),
+    enabled: habilitada && ventaId !== undefined,
+  })
+  const datos = consulta.data
+  const armado = useMemo(() => {
+    if (datos === undefined) return null
+    try {
+      return { contenido: armarNotaDeVenta(datos), noDisponible: false, fallo: false }
+    } catch (error) {
+      return { contenido: null, noDisponible: error instanceof NotaNoDisponibleParaModoC, fallo: !(error instanceof NotaNoDisponibleParaModoC) }
+    }
+  }, [datos])
+
+  if (consulta.isError || armado?.fallo === true) return { estado: 'error', reintentar: () => void consulta.refetch() }
+  if (datos === undefined || armado === null) return { estado: 'cargando' }
+  if (armado.noDisponible || armado.contenido === null) return { estado: 'no-disponible' }
+  const contenido = armado.contenido
+  return {
+    estado: 'lista',
+    numero: datos.numero,
+    anulada: datos.estado === 'ANULADA',
+    generarPdf: () => generarPdfDeNota(contenido),
+  }
 }

@@ -403,6 +403,10 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         # de la sesion, sin parametros de organizacion ni de recurso.
         ("get", "/api/v1/ventas"),
         ("get", "/api/v1/ventas/{venta_id}"),
+        # Change 20, tarea 6.3: `GET /ventas/{venta_id}/nota`. Prueba real de aislamiento en
+        # `test_ventas_nota.py::test_inv21_*` (login real de dos organizaciones; la venta de
+        # otra organizacion responde 404).
+        ("get", "/api/v1/ventas/{venta_id}/nota"),
         ("get", "/api/v1/ventas/precios"),
         ("get", "/api/v1/ventas/numeracion"),
         ("get", "/api/v1/ventas/versiones"),
@@ -420,6 +424,14 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("post", "/api/v1/configuracion/descuento-manual"),
         ("get", "/api/v1/configuracion/credito"),
         ("post", "/api/v1/configuracion/credito"),
+        # Change 20, grupo 5: parametros de la nota de venta. Prueba real de aislamiento en
+        # `test_nota_venta_configurar.py::test_inv21_http_*` (login real de dos organizaciones).
+        ("get", "/api/v1/configuracion/nota-de-venta"),
+        ("post", "/api/v1/configuracion/nota-de-venta"),
+        # Change 20, D15 (grupo 12): nombre y CUIT de la organizacion. Prueba real de aislamiento
+        # en `test_organizacion_cuit_configurar.py::test_inv21_http_*` (dos organizaciones).
+        ("get", "/api/v1/configuracion/organizacion"),
+        ("post", "/api/v1/configuracion/organizacion"),
         # Change 18b, tarea 6.5 (`identidad/api.py::router_yo`): "Mi PIN". Todo sale del token (el
         # cuerpo no acepta `usuario_id` ni `organizacion_id`); prueba real de aislamiento en
         # `test_identidad_pin_propio_definir.py::test_inv21_definir_el_pin_propio_no_toca_a_los_

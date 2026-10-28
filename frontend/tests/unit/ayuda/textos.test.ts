@@ -11,9 +11,49 @@ const claves = Object.keys(AYUDAS) as ClaveDeAyuda[]
 const temas = Object.keys(TEMAS) as TemaDeAyuda[]
 
 describe('AYUDAS: cada entrada tiene título, texto y regla citada', () => {
-  it('tiene las 64 claves aprobadas (27 del 16b, 5 de cobranzas, 5 de medios de pago y roles, 9 de ventas, 12 del 18b y 6 de la anulación de venta del 19; la de "Operador" se eliminó)', () => {
-    expect(claves).toHaveLength(64)
+  it('tiene las 68 claves aprobadas (27 del 16b, 5 de cobranzas, 5 de medios de pago y roles, 9 de ventas, 12 del 18b y 6 de la anulación de venta del 19 y 4 de la nota de venta del 20; la de "Operador" y la de compartir la nota se eliminaron)', () => {
+    expect(claves).toHaveLength(68)
     expect(claves).not.toContain('descuentos.operador')
+    expect(claves).not.toContain('ventas.compartirNota')
+    expect(claves).toEqual(
+      expect.arrayContaining([
+        'ventas.notaDeVenta',
+        'ventas.notaAnulada',
+        'configuracion.notaMuestraSaldo',
+        'configuracion.notaDatosOrganizacion',
+      ]),
+    )
+  })
+
+  // Change 20, spec `sistema/ayuda-contextual` (VTA-13, CRE-02, ADR-008, ADR-058, ADR-059): sin ejemplos.
+  it('la ayuda de la nota explica que es interna, que no es factura y que sale igual al reimprimirla', () => {
+    const { texto, reglas } = AYUDAS['ventas.notaDeVenta']
+    expect(texto).toMatch(/comprobante interno/i)
+    expect(texto).toMatch(/no es una factura/i)
+    expect(texto).toMatch(/sale igual que la original/i)
+    expect(reglas).toEqual(expect.arrayContaining(['VTA-13', 'ADR-008']))
+  })
+
+  it('la ayuda de "mostrar saldo" dice que es el de la venta y que no va al consumidor final ni a una anulada', () => {
+    const { texto, reglas } = AYUDAS['configuracion.notaMuestraSaldo']
+    expect(texto).toMatch(/momento de la venta/i)
+    expect(texto).toMatch(/consumidor final/i)
+    expect(texto).toMatch(/anulada/i)
+    expect(reglas).toEqual(expect.arrayContaining(['VTA-13', 'CRE-02']))
+  })
+
+  it('la ayuda de la nota anulada nombra la marca, la fecha y el motivo', () => {
+    const { texto, reglas } = AYUDAS['ventas.notaAnulada']
+    expect(texto).toMatch(/marca ANULADA/)
+    expect(texto).toMatch(/fecha/i)
+    expect(texto).toMatch(/motivo/i)
+    expect(reglas).toEqual(expect.arrayContaining(['ADR-058', 'ADR-059']))
+  })
+
+  it('los cuatro textos de la nota no llevan ejemplo', () => {
+    for (const clave of ['ventas.notaDeVenta', 'ventas.notaAnulada', 'configuracion.notaMuestraSaldo', 'configuracion.notaDatosOrganizacion'] as const) {
+      expect(AYUDAS[clave]).not.toHaveProperty('ejemplo')
+    }
   })
 
   it.each(claves)('%s: título y texto no vacíos', (clave) => {

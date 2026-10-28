@@ -359,6 +359,80 @@ class VentaDetalleResponse(VentaResumenResponse):
     """Nulo si la venta no está anulada (change 19)."""
 
 
+class NotaOrganizacionResponse(BaseModel):
+    nombre: str
+    cuit: str | None
+    domicilio: str | None
+    telefono: str | None
+
+
+class NotaClienteResponse(BaseModel):
+    nombre: str
+    razon_social: str | None
+    documento_tipo: str | None
+    documento_numero: str | None
+    direccion: str
+    es_consumidor_final: bool
+
+
+class NotaLineaResponse(BaseModel):
+    """Una línea congelada de la nota (VTA-03). Sin costos ni descuentos detallados (D2)."""
+
+    orden: int
+    producto_nombre: str | None
+    presentacion_nombre: str | None
+    cantidad: int
+    unidades_presentacion: int
+    precio_referencia: str
+    unidades_referencia: int
+    importe_bruto: str
+    importe_descuento: str
+    importe_neto: str
+    alicuota: str
+    importe_iva: str
+
+
+class NotaMedioResponse(BaseModel):
+    nombre: str | None
+    importe: str
+
+
+class NotaCobranzaResponse(BaseModel):
+    importe: str
+    estado: str
+    medios: list[NotaMedioResponse]
+
+
+class NotaAnulacionResponse(BaseModel):
+    anulada_en: datetime
+    motivo_nombre: str | None
+    devuelve_dinero: bool | None
+
+
+class NotaDeVentaResponse(BaseModel):
+    """Todo lo que imprime la nota de venta (VTA-13, change 20 D2): los valores congelados de la
+    venta, los datos de la organización y del cliente, la cobranza con sus medios, el saldo
+    resultante si corresponde y la anulación. Importes como string (INV-03). Sin costos ni
+    crédito."""
+
+    organizacion: NotaOrganizacionResponse
+    zona_horaria: str
+    muestra_saldo: bool
+    cliente: NotaClienteResponse
+    numero: str
+    occurred_at: datetime
+    vendedor_nombre: str | None
+    modo_impositivo: str
+    estado: str
+    lineas: list[NotaLineaResponse]
+    total_neto: str
+    total_iva: str
+    total: str
+    cobranza: NotaCobranzaResponse | None
+    saldo_resultante: str | None
+    anulacion: NotaAnulacionResponse | None
+
+
 class PresentacionParaVenderResponse(BaseModel):
     presentacion_id: UUID
     nombre: str

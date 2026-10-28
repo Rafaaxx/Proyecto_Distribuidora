@@ -463,6 +463,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/configuracion/nota-de-venta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Nota De Venta De La Organizacion
+         * @description Los parámetros de la nota de venta de la organización (VTA-13).
+         */
+        get: operations["obtener_nota_de_venta_de_la_organizacion_api_v1_configuracion_nota_de_venta_get"];
+        put?: never;
+        /**
+         * Configurar Nota De Venta De La Organizacion
+         * @description `NOTA_VENTA_CONFIGURAR` (D10). La respuesta sale de `comando.resultado` (INV-06).
+         */
+        post: operations["configurar_nota_de_venta_de_la_organizacion_api_v1_configuracion_nota_de_venta_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/configuracion/organizacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Datos De La Organizacion
+         * @description El nombre y el CUIT de la organización del token (VTA-13).
+         */
+        get: operations["obtener_datos_de_la_organizacion_api_v1_configuracion_organizacion_get"];
+        put?: never;
+        /**
+         * Configurar Datos De La Organizacion
+         * @description `ORGANIZACION_DATOS_CONFIGURAR` (D15). La respuesta sale de `comando.resultado` (INV-06).
+         */
+        post: operations["configurar_datos_de_la_organizacion_api_v1_configuracion_organizacion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/importaciones/{tipo}": {
         parameters: {
             query?: never;
@@ -2404,6 +2452,28 @@ export interface paths {
          *     404.
          */
         get: operations["listar_versiones_elegibles_api_v1_ventas_versiones_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ventas/{venta_id}/nota": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Nota De Venta
+         * @description Los datos de la nota de venta (VTA-13, change 20 D2, D13): una sola lectura con lo que
+         *     imprime la nota, idéntica al original y a la reimpresión. `VENDER` o `ANULAR_VENTA`. Sin
+         *     costos ni crédito. 404 si es de otra organización o no existe (INV-21, SEG-07).
+         */
+        get: operations["obtener_nota_de_venta_api_v1_ventas__venta_id__nota_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4993,6 +5063,152 @@ export interface components {
             /** Saldo Acumulado */
             saldo_acumulado: string;
         };
+        /** NotaAnulacionResponse */
+        NotaAnulacionResponse: {
+            /**
+             * Anulada En
+             * Format: date-time
+             */
+            anulada_en: string;
+            /** Motivo Nombre */
+            motivo_nombre: string | null;
+            /** Devuelve Dinero */
+            devuelve_dinero: boolean | null;
+        };
+        /** NotaClienteResponse */
+        NotaClienteResponse: {
+            /** Nombre */
+            nombre: string;
+            /** Razon Social */
+            razon_social: string | null;
+            /** Documento Tipo */
+            documento_tipo: string | null;
+            /** Documento Numero */
+            documento_numero: string | null;
+            /** Direccion */
+            direccion: string;
+            /** Es Consumidor Final */
+            es_consumidor_final: boolean;
+        };
+        /** NotaCobranzaResponse */
+        NotaCobranzaResponse: {
+            /** Importe */
+            importe: string;
+            /** Estado */
+            estado: string;
+            /** Medios */
+            medios: components["schemas"]["NotaMedioResponse"][];
+        };
+        /**
+         * NotaDeVentaResponse
+         * @description Todo lo que imprime la nota de venta (VTA-13, change 20 D2): los valores congelados de la
+         *     venta, los datos de la organización y del cliente, la cobranza con sus medios, el saldo
+         *     resultante si corresponde y la anulación. Importes como string (INV-03). Sin costos ni
+         *     crédito.
+         */
+        NotaDeVentaResponse: {
+            organizacion: components["schemas"]["NotaOrganizacionResponse"];
+            /** Zona Horaria */
+            zona_horaria: string;
+            /** Muestra Saldo */
+            muestra_saldo: boolean;
+            cliente: components["schemas"]["NotaClienteResponse"];
+            /** Numero */
+            numero: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Vendedor Nombre */
+            vendedor_nombre: string | null;
+            /** Modo Impositivo */
+            modo_impositivo: string;
+            /** Estado */
+            estado: string;
+            /** Lineas */
+            lineas: components["schemas"]["NotaLineaResponse"][];
+            /** Total Neto */
+            total_neto: string;
+            /** Total Iva */
+            total_iva: string;
+            /** Total */
+            total: string;
+            cobranza: components["schemas"]["NotaCobranzaResponse"] | null;
+            /** Saldo Resultante */
+            saldo_resultante: string | null;
+            anulacion: components["schemas"]["NotaAnulacionResponse"] | null;
+        };
+        /**
+         * NotaLineaResponse
+         * @description Una línea congelada de la nota (VTA-03). Sin costos ni descuentos detallados (D2).
+         */
+        NotaLineaResponse: {
+            /** Orden */
+            orden: number;
+            /** Producto Nombre */
+            producto_nombre: string | null;
+            /** Presentacion Nombre */
+            presentacion_nombre: string | null;
+            /** Cantidad */
+            cantidad: number;
+            /** Unidades Presentacion */
+            unidades_presentacion: number;
+            /** Precio Referencia */
+            precio_referencia: string;
+            /** Unidades Referencia */
+            unidades_referencia: number;
+            /** Importe Bruto */
+            importe_bruto: string;
+            /** Importe Descuento */
+            importe_descuento: string;
+            /** Importe Neto */
+            importe_neto: string;
+            /** Alicuota */
+            alicuota: string;
+            /** Importe Iva */
+            importe_iva: string;
+        };
+        /** NotaMedioResponse */
+        NotaMedioResponse: {
+            /** Nombre */
+            nombre: string | null;
+            /** Importe */
+            importe: string;
+        };
+        /** NotaOrganizacionResponse */
+        NotaOrganizacionResponse: {
+            /** Nombre */
+            nombre: string;
+            /** Cuit */
+            cuit: string | null;
+            /** Domicilio */
+            domicilio: string | null;
+            /** Telefono */
+            telefono: string | null;
+        };
+        /** NotaVentaConfiguracionResponse */
+        NotaVentaConfiguracionResponse: {
+            /** Muestra Saldo */
+            muestra_saldo: boolean;
+            /** Domicilio */
+            domicilio: string | null;
+            /** Telefono */
+            telefono: string | null;
+        };
+        /**
+         * NotaVentaConfigurarRequest
+         * @description `muestra_saldo` booleano estricto; domicilio y teléfono obligatorios (vacíos son `null` o
+         *     texto en blanco). El largo se valida en el dominio: `DATO_DE_NOTA_INVALIDO` (422).
+         */
+        NotaVentaConfigurarRequest: {
+            /** Muestra Saldo */
+            muestra_saldo: boolean;
+            /** Domicilio */
+            domicilio: string | null;
+            /** Telefono */
+            telefono: string | null;
+        };
         /**
          * NumeracionResponse
          * @description Prefijo del dispositivo de la sesión, último correlativo y el número que sigue (D4).
@@ -5004,6 +5220,25 @@ export interface components {
             ultimo_correlativo: number;
             /** Siguiente Numero */
             siguiente_numero: string;
+        };
+        /**
+         * OrganizacionDatosConfigurarRequest
+         * @description `nombre` y `cuit` obligatorios en el cuerpo (el CUIT vacío es `null` o texto en blanco).
+         *     La normalización y el largo se validan en el dominio: `NOMBRE_DE_ORGANIZACION_INVALIDO` y
+         *     `CUIT_INVALIDO` (422).
+         */
+        OrganizacionDatosConfigurarRequest: {
+            /** Nombre */
+            nombre: string;
+            /** Cuit */
+            cuit: string | null;
+        };
+        /** OrganizacionDatosResponse */
+        OrganizacionDatosResponse: {
+            /** Nombre */
+            nombre: string;
+            /** Cuit */
+            cuit: string | null;
         };
         /** OrganizacionYoResponse */
         OrganizacionYoResponse: {
@@ -8099,6 +8334,140 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CreditoOrganizacionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_nota_de_venta_de_la_organizacion_api_v1_configuracion_nota_de_venta_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotaVentaConfiguracionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    configurar_nota_de_venta_de_la_organizacion_api_v1_configuracion_nota_de_venta_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotaVentaConfigurarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotaVentaConfiguracionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_datos_de_la_organizacion_api_v1_configuracion_organizacion_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizacionDatosResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    configurar_datos_de_la_organizacion_api_v1_configuracion_organizacion_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizacionDatosConfigurarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizacionDatosResponse"];
                 };
             };
             /** @description Validation Error */
@@ -12123,6 +12492,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VersionesElegiblesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_nota_de_venta_api_v1_ventas__venta_id__nota_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                venta_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotaDeVentaResponse"];
                 };
             };
             /** @description Validation Error */

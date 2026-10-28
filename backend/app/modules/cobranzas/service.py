@@ -367,6 +367,39 @@ def cobranza_de_venta(
     return CobranzaDeVenta(cobranza.id, cobranza.importe, cobranza.estado)
 
 
+@dataclass(frozen=True)
+class MedioDeCobranza:
+    """Un medio de una cobranza como lo imprime la nota de venta (change 20, D2): su nombre y su
+    importe. No lleva la referencia (número de operación, comprobante): no se imprime."""
+
+    nombre: str | None
+    importe: Decimal
+
+
+def medios_de_cobranza(
+    organizacion_id: UUID, sesion: Session, *, cobranza_id: UUID
+) -> list[MedioDeCobranza]:
+    """Los medios de la cobranza en el orden en que se cargaron (COB-02), con el nombre del
+    medio de pago (`None` si ya no se puede resolver). Solo lectura; una cobranza de otra
+    organización no tiene medios visibles (INV-21)."""
+    return [
+        MedioDeCobranza(
+            nombre=(
+                None
+                if (
+                    medio := configuracion_service.obtener_medio_pago(
+                        organizacion_id, fila.medio_pago_id, sesion
+                    )
+                )
+                is None
+                else medio.nombre
+            ),
+            importe=fila.importe,
+        )
+        for fila in repository.listar_medios_de_cobranza(organizacion_id, cobranza_id, sesion)
+    ]
+
+
 def _validar_motivo_de_anulacion(organizacion_id: UUID, sesion: Session, motivo_id: UUID) -> None:
     """COB-05, TR-09, INV-21: el motivo existe en la organización (404 si no) y es un motivo
     activo del ámbito `ANULACION_COBRANZA` (`MOTIVO_INVALIDO` si no)."""

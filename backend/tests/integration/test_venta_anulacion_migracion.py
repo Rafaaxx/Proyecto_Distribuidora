@@ -34,6 +34,7 @@ from ventas_utiles import MOMENTO, insertar_sql, sembrar_venta_sql
 
 REVISION = "d9e0f1a2b3c4"
 REVISION_ANTERIOR = "c8d9e0f1a2b3"
+REVISION_HEAD = "e0f1a2b3c4d5"  # `nota_venta_configuracion` (change 20), la cabeza actual.
 AMBITO = "ANULACION_VENTA"
 MOTIVOS_SEMBRADOS = ["Devolución del cliente", "Error de carga", "Otro"]
 
@@ -324,7 +325,7 @@ def test_baja_y_sube_limpia_sobre_una_base_con_ventas_confirmadas(
 
         subida = _alembic(database_url, "upgrade", "head")
         assert subida.returncode == 0, subida.stderr
-        assert _revision_actual(_engine_de_sesion) == REVISION
+        assert _revision_actual(_engine_de_sesion) == REVISION_HEAD
         with _engine_de_sesion.connect() as conexion:
             assert conexion.execute(text("SELECT count(*) FROM venta_anulacion")).scalar_one() == 0
     finally:
@@ -369,7 +370,7 @@ def test_el_downgrade_aborta_con_mensaje_claro_si_hay_una_venta_anulada(
         abortada = _alembic(database_url, "downgrade", REVISION_ANTERIOR)
         assert abortada.returncode != 0
         assert "ANULADA" in abortada.stderr
-        assert _revision_actual(_engine_de_sesion) == REVISION
+        assert _revision_actual(_engine_de_sesion) == REVISION_HEAD
         with _engine_de_sesion.connect() as conexion:
             assert conexion.execute(text("SELECT count(*) FROM venta_anulacion")).scalar_one() == 1
 

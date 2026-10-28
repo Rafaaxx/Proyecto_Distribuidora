@@ -11,4 +11,6 @@ export const clavesConfiguracion = {
   resumenReglaIva: () => ['costos', 'resumen-regla-iva'] as const,
   descuentoManual: () => ['configuracion', 'descuento-manual'] as const,
   credito: () => ['configuracion', 'credito'] as const,
+  notaVenta: () => ['configuracion', 'nota-venta'] as const,
+  datosOrganizacion: () => ['configuracion', 'organizacion'] as const,
 }

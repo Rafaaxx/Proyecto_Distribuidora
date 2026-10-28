@@ -144,3 +144,36 @@ export async function configurarCreditoOrganizacion(
 ): Promise<CreditoOrganizacion> {
   return leerFiscalOLanzar(await apiFetch('/configuracion/credito', escritura(operationId, datos)))
 }
+
+// --- nota de venta (change 20, D10) ----------------------------------------------------------
+
+export type NotaVentaConfig = components['schemas']['NotaVentaConfiguracionResponse']
+export type NotaVentaConfigurarDatos = components['schemas']['NotaVentaConfigurarRequest']
+
+/** `GET /configuracion/nota-de-venta`: si la nota muestra el saldo, domicilio y teléfono. */
+export async function obtenerNotaVentaConfig(): Promise<NotaVentaConfig> {
+  return leerFiscalOLanzar(await apiFetch('/configuracion/nota-de-venta'))
+}
+
+/** `POST /configuracion/nota-de-venta` (`NOTA_VENTA_CONFIGURAR`, `ADMIN_CONFIGURACION`). */
+export async function configurarNotaVenta(datos: NotaVentaConfigurarDatos, operationId: string): Promise<NotaVentaConfig> {
+  return leerFiscalOLanzar(await apiFetch('/configuracion/nota-de-venta', escritura(operationId, datos)))
+}
+
+// --- datos de la organización (change 20, D15) ------------------------------------------------
+
+export type OrganizacionDatos = components['schemas']['OrganizacionDatosResponse']
+export type OrganizacionDatosConfigurar = components['schemas']['OrganizacionDatosConfigurarRequest']
+
+/** `GET /configuracion/organizacion`: nombre y CUIT de la organización. */
+export async function obtenerOrganizacionDatos(): Promise<OrganizacionDatos> {
+  return leerFiscalOLanzar(await apiFetch('/configuracion/organizacion'))
+}
+
+/** `POST /configuracion/organizacion` (`ORGANIZACION_DATOS_CONFIGURAR`, `ADMIN_CONFIGURACION`). */
+export async function configurarOrganizacionDatos(
+  datos: OrganizacionDatosConfigurar,
+  operationId: string,
+): Promise<OrganizacionDatos> {
+  return leerFiscalOLanzar(await apiFetch('/configuracion/organizacion', escritura(operationId, datos)))
+}

@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from app.core.ids import nuevo_id
@@ -59,31 +59,56 @@ def agregar_configuracion(sesion: Session, organizacion_id: UUID) -> None:
     """La fila de configuración de una organización creada a mano (responsable inscripto,
     modo B con modalidad `CLIENTE`): `COSTO_INFORMAR` y `COMPRA_CONFIRMAR` leen de ella la
     regla de crédito fiscal (change 11b)."""
-    sesion.add(
-        ConfiguracionOrganizacion(
-            organizacion_id=organizacion_id,
-            condicion_iva="RESPONSABLE_INSCRIPTO",
-            modo_impositivo="B",
-            lista_precio_default_id=None,
-            politica_credito_default="ADVERTIR",
-            tolerancia_offline_tipo=None,
-            tolerancia_offline_valor=None,
-            descuento_manual_habilitado=False,
-            motivo_obligatorio_descuento=None,
-            motivo_obligatorio_lista=True,
-            redondeo_multiplo=None,
-            redondeo_direccion=None,
-            permite_consumidor_final=None,
-            cliente_consumidor_final_id=None,
-            estado_facturacion_default="PENDIENTE",
-            modalidad_iva_default="CLIENTE",
-            intentos_pin_max=3,
-            desvio_reloj_max_segundos=None,
-            creado_en=MOMENTO,
-            actualizado_en=MOMENTO,
-            actualizado_por_id=None,
-        )
+    configuracion = ConfiguracionOrganizacion(
+        organizacion_id=organizacion_id,
+        condicion_iva="RESPONSABLE_INSCRIPTO",
+        modo_impositivo="B",
+        lista_precio_default_id=None,
+        politica_credito_default="ADVERTIR",
+        tolerancia_offline_tipo=None,
+        tolerancia_offline_valor=None,
+        descuento_manual_habilitado=False,
+        motivo_obligatorio_descuento=None,
+        motivo_obligatorio_lista=True,
+        redondeo_multiplo=None,
+        redondeo_direccion=None,
+        permite_consumidor_final=None,
+        cliente_consumidor_final_id=None,
+        estado_facturacion_default="PENDIENTE",
+        modalidad_iva_default="CLIENTE",
+        intentos_pin_max=3,
+        desvio_reloj_max_segundos=None,
+        creado_en=MOMENTO,
+        actualizado_en=MOMENTO,
+        actualizado_por_id=None,
     )
+    _insertar_segun_el_esquema_vigente(sesion, configuracion)
+
+
+def _insertar_segun_el_esquema_vigente(
+    sesion: Session, configuracion: ConfiguracionOrganizacion
+) -> None:
+    """Inserta la fila con las columnas que la base tiene HOY.
+
+    Las pruebas de migración crean organizaciones con la base en una revisión anterior a la
+    cabeza (`downgrade` a la revisión previa de su change): el modelo, que ya tiene las columnas
+    de los changes posteriores (por ejemplo las de la nota de venta, change 20), no puede
+    insertarse completo. Con la base en la cabeza se usa el modelo tal cual.
+    """
+    tabla = ConfiguracionOrganizacion.__table__
+    existentes = {
+        columna["name"] for columna in inspect(sesion.connection()).get_columns(tabla.name)
+    }
+    if {columna.name for columna in tabla.columns} <= existentes:
+        sesion.add(configuracion)
+        sesion.flush()
+        return
+    valores = {
+        columna.name: getattr(configuracion, columna.key)
+        for columna in tabla.columns
+        if columna.name in existentes
+    }
+    sesion.execute(tabla.insert().values(valores))
     sesion.flush()
 
 

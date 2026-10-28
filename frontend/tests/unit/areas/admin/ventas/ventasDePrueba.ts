@@ -162,6 +162,49 @@ export function ventaDetalle(campos: Partial<Record<string, unknown>> = {}) {
   }
 }
 
+/** La respuesta de `GET /ventas/{id}/nota` (change 20) de la venta de prueba, en modo A. */
+export function notaDeVenta(campos: Partial<Record<string, unknown>> = {}) {
+  return {
+    organizacion: { nombre: 'Distribuidora Norte', cuit: '30-12345678-9', domicilio: 'Av. Siempreviva 742', telefono: null },
+    zona_horaria: 'America/Argentina/Mendoza',
+    muestra_saldo: false,
+    cliente: {
+      nombre: 'Kiosco La Esquina',
+      razon_social: null,
+      documento_tipo: null,
+      documento_numero: null,
+      direccion: '',
+      es_consumidor_final: false,
+    },
+    numero: 'V01-000042',
+    occurred_at: MOMENTO,
+    vendedor_nombre: 'Juan Vendedor',
+    modo_impositivo: 'A',
+    estado: 'CONFIRMADA',
+    lineas: [LINEA_CAJAS, LINEA_BOTELLAS].map((l, orden) => ({
+      orden,
+      producto_nombre: l.producto_nombre,
+      presentacion_nombre: l.presentacion_nombre,
+      cantidad: l.cantidad,
+      unidades_presentacion: l.unidades_presentacion,
+      precio_referencia: l.precio_referencia,
+      unidades_referencia: l.unidades_referencia,
+      importe_bruto: l.importe_bruto,
+      importe_descuento: l.importe_descuento,
+      importe_neto: l.importe_neto,
+      alicuota: l.alicuota,
+      importe_iva: l.importe_iva,
+    })),
+    total_neto: '31250.00',
+    total_iva: '0.00',
+    total: '31250.00',
+    cobranza: { importe: '20000.00', estado: 'CONFIRMADA', medios: [{ nombre: 'Efectivo', importe: '20000.00' }] },
+    saldo_resultante: null,
+    anulacion: null,
+    ...campos,
+  }
+}
+
 export const UBICACIONES = {
   items: [
     { id: UBICACION_ID, nombre: 'Depósito central', tipo: 'DEPOSITO', requiere_toma: false, activo: true, actualizado_en: MOMENTO, jornada: null },

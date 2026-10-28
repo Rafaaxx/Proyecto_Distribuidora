@@ -767,6 +767,32 @@ export const AYUDAS = {
       'Es el PIN con el que aprobás, en la pantalla de otra persona, un descuento o una venta que se pasa del crédito. Para cambiarlo te pedimos tu contraseña. Tiene que tener al menos 6 números y no puede ser fácil de adivinar, como 123456 o 111111. Es distinto del PIN con el que desbloqueás el teléfono. Cuando lo cambiás, el anterior deja de servir.',
     reglas: ['SEG-05', 'ADR-011', 'ADR-019'],
   },
+
+  // --- Nota de venta (change 20, D11; textos aprobados el 2026-10-27, sin ejemplos) ---
+  'ventas.notaDeVenta': {
+    titulo: 'Nota de venta',
+    texto:
+      'Es un comprobante interno de la venta, para entregarle al cliente. No es una factura. Al volver a imprimirla sale igual que la original, aunque después cambien los precios o los datos del cliente.',
+    reglas: ['VTA-13', 'ADR-008'],
+  },
+  'ventas.notaAnulada': {
+    titulo: 'Nota de una venta anulada',
+    texto:
+      'La nota sale con la marca ANULADA, la fecha y el motivo de la anulación, y si se devolvió lo cobrado. No muestra el saldo de la cuenta.',
+    reglas: ['VTA-13', 'ADR-058', 'ADR-059'],
+  },
+  'configuracion.notaMuestraSaldo': {
+    titulo: 'Saldo en la nota',
+    texto:
+      'Si lo activás, la nota muestra cuánto debe el cliente después de esa venta, sumando lo que ya debía, el total y restando lo cobrado en el acto. Ese saldo es el del momento de la venta y no cambia al volver a imprimirla. No se muestra al consumidor final ni en una venta anulada.',
+    reglas: ['VTA-13', 'CRE-02'],
+  },
+  'configuracion.notaDatosOrganizacion': {
+    titulo: 'Domicilio y teléfono',
+    texto:
+      'Salen en el encabezado de todas las notas, junto al nombre y el CUIT de la empresa. Son opcionales: si los dejás vacíos, la nota no los muestra.',
+    reglas: ['VTA-13'],
+  },
 } as const satisfies Record<string, EntradaDeAyuda>
 
 export type ClaveDeAyuda = keyof typeof AYUDAS

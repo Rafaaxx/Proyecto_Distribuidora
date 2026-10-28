@@ -27,6 +27,7 @@ export const clavesVentas = {
   raiz: () => ['ventas'] as const,
   listado: (filtros: FiltrosVentas = {}) => ['ventas', 'listado', filtros] as const,
   detalle: (ventaId: string) => ['ventas', 'detalle', ventaId] as const,
+  nota: (ventaId: string) => ['ventas', 'nota', ventaId] as const,
   precios: (contexto: ContextoDePrecios, texto: string) => ['ventas', 'precios', contexto, texto] as const,
   preciosDeProducto: (contexto: ContextoDePrecios, productoId: string) =>
     ['ventas', 'precios', 'producto', contexto, productoId] as const,

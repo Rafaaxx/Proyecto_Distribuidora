@@ -102,6 +102,7 @@ import { BuscadorDeProductos } from './BuscadorDeProductos'
 import { DescuentosDeLaVenta } from './DescuentosDeLaVenta'
 import { DialogoDeAutorizacion } from './DialogoDeAutorizacion'
 import { ItemDeVenta } from './ItemDeVenta'
+import { NotaDeVentaAcciones } from './NotaDeVentaAcciones'
 import { PanelDeCreditoDeVenta } from './PanelDeCreditoDeVenta'
 import { SIN_PERMISO_PARA_VENDER, VentasSinPermiso } from './VentasSinPermiso'
 
@@ -644,6 +645,7 @@ function VentaFormulario() {
             La venta {registrada.numero} quedó confirmada por {formatearMonto(registrada.total)}.
           </p>
           <p data-testid="saldo-final">{textoDeSaldo('CLIENTE', registrada.saldo)}</p>
+          <NotaDeVentaAcciones ventaId={registrada.venta_id} />
           <div className="flex flex-wrap gap-3">
             <Link to={`/admin/ventas/${registrada.venta_id}`} className="text-primary/70 hover:text-primary hover:underline">
               Ver la venta

@@ -993,3 +993,138 @@ def configurar_credito_de_la_organizacion(
     if comando.estado == "RECHAZADO" or comando.resultado is None:
         raise RecursoNoEncontradoError("La organización no tiene configuración.")
     return CreditoOrganizacionResponse.model_validate(comando.resultado)
+
+
+class NotaVentaConfiguracionResponse(BaseModel):
+    muestra_saldo: bool
+    domicilio: str | None
+    telefono: str | None
+
+
+class NotaVentaConfigurarRequest(BaseModel):
+    """`muestra_saldo` booleano estricto; domicilio y teléfono obligatorios (vacíos son `null` o
+    texto en blanco). El largo se valida en el dominio: `DATO_DE_NOTA_INVALIDO` (422)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    muestra_saldo: StrictBool
+    domicilio: str | None
+    telefono: str | None
+
+
+@router_parametros.get("/nota-de-venta", response_model=NotaVentaConfiguracionResponse)
+def obtener_nota_de_venta_de_la_organizacion(
+    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso("ADMIN_CONFIGURACION"))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> NotaVentaConfiguracionResponse:
+    """Los parámetros de la nota de venta de la organización (VTA-13)."""
+    configuracion = identidad_service.obtener_configuracion(contexto.organizacion_id, sesion)
+    if configuracion is None:
+        raise RecursoNoEncontradoError("La organización no tiene configuración.")
+    return NotaVentaConfiguracionResponse(
+        muestra_saldo=configuracion.nota_venta_muestra_saldo,
+        domicilio=configuracion.nota_venta_domicilio,
+        telefono=configuracion.nota_venta_telefono,
+    )
+
+
+@router_parametros.post("/nota-de-venta", response_model=NotaVentaConfiguracionResponse)
+def configurar_nota_de_venta_de_la_organizacion(
+    datos: NotaVentaConfigurarRequest,
+    entrada: Annotated[
+        EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_CONFIGURACION"))
+    ],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> NotaVentaConfiguracionResponse:
+    """`NOTA_VENTA_CONFIGURAR` (D10). La respuesta sale de `comando.resultado` (INV-06)."""
+    reloj = SystemClock()
+    sobre, huella, handler_registrado, contenido_validado = _preparar_comando_online(
+        entrada,
+        "NOTA_VENTA_CONFIGURAR",
+        {
+            "muestra_saldo": datos.muestra_saldo,
+            "domicilio": datos.domicilio,
+            "telefono": datos.telefono,
+        },
+        reloj,
+    )
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_nota_venta_configurar(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO" or comando.resultado is None:
+        raise RecursoNoEncontradoError("La organización no tiene configuración.")
+    return NotaVentaConfiguracionResponse.model_validate(comando.resultado)
+
+
+class OrganizacionDatosResponse(BaseModel):
+    nombre: str
+    cuit: str | None
+
+
+class OrganizacionDatosConfigurarRequest(BaseModel):
+    """`nombre` y `cuit` obligatorios en el cuerpo (el CUIT vacío es `null` o texto en blanco).
+    La normalización y el largo se validan en el dominio: `NOMBRE_DE_ORGANIZACION_INVALIDO` y
+    `CUIT_INVALIDO` (422)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    nombre: str
+    cuit: str | None
+
+
+@router_parametros.get("/organizacion", response_model=OrganizacionDatosResponse)
+def obtener_datos_de_la_organizacion(
+    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso("ADMIN_CONFIGURACION"))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> OrganizacionDatosResponse:
+    """El nombre y el CUIT de la organización del token (VTA-13)."""
+    organizacion = identidad_service.obtener_organizacion(contexto.organizacion_id, sesion)
+    if organizacion is None:
+        raise RecursoNoEncontradoError("La organización no existe.")
+    return OrganizacionDatosResponse(nombre=organizacion.nombre, cuit=organizacion.cuit)
+
+
+@router_parametros.post("/organizacion", response_model=OrganizacionDatosResponse)
+def configurar_datos_de_la_organizacion(
+    datos: OrganizacionDatosConfigurarRequest,
+    entrada: Annotated[
+        EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_CONFIGURACION"))
+    ],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> OrganizacionDatosResponse:
+    """`ORGANIZACION_DATOS_CONFIGURAR` (D15). La respuesta sale de `comando.resultado` (INV-06)."""
+    reloj = SystemClock()
+    sobre, huella, handler_registrado, contenido_validado = _preparar_comando_online(
+        entrada,
+        "ORGANIZACION_DATOS_CONFIGURAR",
+        {"nombre": datos.nombre, "cuit": datos.cuit},
+        reloj,
+    )
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_organizacion_datos_configurar(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO" or comando.resultado is None:
+        raise RecursoNoEncontradoError("La organización no existe.")
+    return OrganizacionDatosResponse.model_validate(comando.resultado)

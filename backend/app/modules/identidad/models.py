@@ -82,6 +82,12 @@ class ConfiguracionOrganizacion(Base):
     modalidad_iva_default: Mapped[str | None] = mapped_column(Text, nullable=True)
     intentos_pin_max: Mapped[int] = mapped_column(Integer, nullable=False)
     desvio_reloj_max_segundos: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Change 20 (D10, VTA-13): parámetros de la nota de venta.
+    nota_venta_muestra_saldo: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    nota_venta_domicilio: Mapped[str | None] = mapped_column(Text, nullable=True)
+    nota_venta_telefono: Mapped[str | None] = mapped_column(Text, nullable=True)
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     actualizado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     actualizado_por_id: Mapped[UUID | None] = mapped_column(nullable=True)

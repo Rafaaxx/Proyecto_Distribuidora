@@ -637,3 +637,125 @@ declarar_tipo(
     admite_offline=False,
     permisos=("ADMIN_CONFIGURACION",),
 )
+
+
+# --- NOTA_VENTA_CONFIGURAR (change 20, D10, VTA-13, envuelve
+# `identidad_service.configurar_nota_de_venta`) --------------------------------
+
+
+class NotaVentaConfigurarContenidoV1(BaseModel):
+    """Parámetros de la nota de venta. Los tres campos son obligatorios (domicilio y teléfono
+    vacíos se expresan con `null` o con texto en blanco, que se normaliza a nulo): así un comando
+    nunca borra un dato por omisión. `muestra_saldo` es booleano estricto."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    muestra_saldo: StrictBool
+    domicilio: str | None
+    telefono: str | None
+
+
+def manejar_nota_venta_configurar(
+    sobre: SobreComando,
+    contenido: NotaVentaConfigurarContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+) -> ResultadoHandler:
+    """Handler de `NOTA_VENTA_CONFIGURAR` v1 (D10). Permiso `ADMIN_CONFIGURACION` primero
+    (SEG-06). El resultado lleva la configuración vigente tras el cambio (INV-06)."""
+    permisos = identidad_service.listar_permisos_del_usuario(
+        sobre.organizacion_id, sobre.usuario_id, sesion
+    )
+    if "ADMIN_CONFIGURACION" not in permisos:
+        raise PermisoRequeridoError("Falta el permiso ADMIN_CONFIGURACION.")
+
+    configuracion = identidad_service.configurar_nota_de_venta(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        muestra_saldo=contenido.muestra_saldo,
+        domicilio=contenido.domicilio,
+        telefono=contenido.telefono,
+        actor_id=sobre.usuario_id,
+        dispositivo_id_actor=sobre.dispositivo_id,
+        operation_id=sobre.operation_id,
+    )
+    if configuracion is None:
+        return "RECHAZADO", None, "ORGANIZACION_NO_ENCONTRADA"
+    return (
+        "ACEPTADO",
+        {
+            "muestra_saldo": configuracion.nota_venta_muestra_saldo,
+            "domicilio": configuracion.nota_venta_domicilio,
+            "telefono": configuracion.nota_venta_telefono,
+        },
+        None,
+    )
+
+
+registrar_handler("NOTA_VENTA_CONFIGURAR", 1, NotaVentaConfigurarContenidoV1)(
+    manejar_nota_venta_configurar
+)
+declarar_tipo(
+    "NOTA_VENTA_CONFIGURAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("ADMIN_CONFIGURACION",),
+)
+
+
+# --- ORGANIZACION_DATOS_CONFIGURAR (change 20, D15, VTA-13, envuelve
+# `identidad_service.configurar_datos_de_organizacion`) -----------------------
+
+
+class OrganizacionDatosConfigurarContenidoV1(BaseModel):
+    """Nombre y CUIT de la organización. Ambos son obligatorios en el contenido (el CUIT vacío
+    se expresa con `null` o con texto en blanco, que se normaliza a nulo): así un comando nunca
+    borra un dato por omisión. `organizacion_id` sale del sobre (token), nunca del contenido."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    nombre: str
+    cuit: str | None
+
+
+def manejar_organizacion_datos_configurar(
+    sobre: SobreComando,
+    contenido: OrganizacionDatosConfigurarContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+) -> ResultadoHandler:
+    """Handler de `ORGANIZACION_DATOS_CONFIGURAR` v1 (D15). Permiso `ADMIN_CONFIGURACION`
+    primero (SEG-06). El resultado lleva el nombre y el CUIT vigentes tras el cambio (INV-06)."""
+    permisos = identidad_service.listar_permisos_del_usuario(
+        sobre.organizacion_id, sobre.usuario_id, sesion
+    )
+    if "ADMIN_CONFIGURACION" not in permisos:
+        raise PermisoRequeridoError("Falta el permiso ADMIN_CONFIGURACION.")
+
+    organizacion = identidad_service.configurar_datos_de_organizacion(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        nombre=contenido.nombre,
+        cuit=contenido.cuit,
+        actor_id=sobre.usuario_id,
+        dispositivo_id_actor=sobre.dispositivo_id,
+        operation_id=sobre.operation_id,
+    )
+    if organizacion is None:
+        return "RECHAZADO", None, "ORGANIZACION_NO_ENCONTRADA"
+    return "ACEPTADO", {"nombre": organizacion.nombre, "cuit": organizacion.cuit}, None
+
+
+registrar_handler("ORGANIZACION_DATOS_CONFIGURAR", 1, OrganizacionDatosConfigurarContenidoV1)(
+    manejar_organizacion_datos_configurar
+)
+declarar_tipo(
+    "ORGANIZACION_DATOS_CONFIGURAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("ADMIN_CONFIGURACION",),
+)

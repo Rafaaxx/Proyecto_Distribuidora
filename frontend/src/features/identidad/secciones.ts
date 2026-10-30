@@ -74,7 +74,12 @@ export const SECCIONES: readonly SeccionAdmin[] = [
   { ruta: '/admin/descuentos', etiqueta: 'Descuentos', permiso: 'GESTIONAR_DESCUENTOS' },
   { ruta: '/admin/stock', etiqueta: 'Stock', permiso: 'TRANSFERIR_STOCK' },
   { ruta: '/admin/importacion', etiqueta: 'Importación', permiso: 'IMPORTAR_DATOS' },
-  { ruta: '/admin/configuracion', etiqueta: 'Configuración', permiso: 'ADMIN_CONFIGURACION' },
+  {
+    ruta: '/admin/configuracion',
+    etiqueta: 'Configuración',
+    permiso: 'ADMIN_CONFIGURACION',
+    otrosPermisos: ['GESTIONAR_LISTAS', 'PUBLICAR_LISTAS'],
+  },
   { ruta: '/admin/usuarios', etiqueta: 'Usuarios', permiso: 'ADMIN_USUARIOS' },
   { ruta: '/admin/roles', etiqueta: 'Roles y permisos', permiso: 'ADMIN_USUARIOS' },
   { ruta: '/admin/dispositivos', etiqueta: 'Dispositivos', permiso: 'GESTIONAR_DISPOSITIVOS' },

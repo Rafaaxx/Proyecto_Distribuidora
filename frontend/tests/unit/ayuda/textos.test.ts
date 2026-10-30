@@ -11,8 +11,8 @@ const claves = Object.keys(AYUDAS) as ClaveDeAyuda[]
 const temas = Object.keys(TEMAS) as TemaDeAyuda[]
 
 describe('AYUDAS: cada entrada tiene título, texto y regla citada', () => {
-  it('tiene las 74 claves aprobadas (27 del 16b, 5 de cobranzas, 5 de medios de pago y roles, 9 de ventas, 12 del 18b, 6 de la anulación de venta del 19, 4 de la nota de venta del 20 y 6 de usuarios, roles y cartera del 20b; la de "Operador" y la de compartir la nota se eliminaron)', () => {
-    expect(claves).toHaveLength(74)
+  it('tiene las 80 claves aprobadas (27 del 16b, 5 de cobranzas, 5 de medios de pago y roles, 9 de ventas, 12 del 18b, 6 de la anulación de venta del 19, 4 de la nota de venta del 20 y 6 de usuarios, roles y cartera del 20b y 6 de motivos, alícuotas y redondeo por defecto del 20c; la de "Operador" y la de compartir la nota se eliminaron)', () => {
+    expect(claves).toHaveLength(80)
     expect(claves).not.toContain('descuentos.operador')
     expect(claves).not.toContain('ventas.compartirNota')
     expect(claves).toEqual(
@@ -411,5 +411,22 @@ describe('ayuda de usuarios, roles y cartera (change 20b, D18; textos aprobados 
     expect(entrada.texto).toContain('dar de baja a ese usuario o a su rol')
     expect(entrada.texto).toContain('cambiarle el rol')
     expect(entrada.ejemplo).toBeUndefined()
+  })
+})
+
+describe('AYUDAS: motivos, alícuotas y redondeo por defecto (change 20c, D14, aprobados el 2026-10-30; sin ejemplos)', () => {
+  it.each([
+    ['motivos.ambito', 'Cada motivo sirve para un solo tipo de operación: los de un ámbito solo se ofrecen en esa operación. El ámbito no se cambia después de crear el motivo.', ['TR-09', 'ADR-061']],
+    ['motivos.nombre', 'Si le cambiás el nombre, las operaciones anteriores que lo usaron muestran el nombre nuevo. No puede haber dos motivos con el mismo nombre en un ámbito.', ['ADR-061']],
+    ['motivos.baja', 'Deja de ofrecerse en operaciones nuevas. No se borra: las anteriores lo siguen mostrando y lo podés volver a activar. Cada ámbito tiene que conservar al menos un motivo activo.', ['CAT-05', 'TR-06', 'ADR-061']],
+    ['alicuotas.valor', 'El porcentaje no se cambia una vez creada la alícuota. Si cambia la tasa, creá una nueva, pasá los productos a ella y dá de baja la anterior. Las compras y ventas ya hechas conservan el porcentaje con que se hicieron.', ['TR-02', 'CAT-01', 'ADR-061']],
+    ['alicuotas.baja', 'Deja de ofrecerse al crear o editar productos. No se puede dar de baja mientras la use un producto activo, ni si es la última activa.', ['CAT-05', 'ADR-061']],
+    ['configuracion.redondeoPorDefecto', 'Es el redondeo que aparece cargado al crear una lista de precios nueva; en cada lista lo podés cambiar. Cambiarlo no modifica las listas que ya existen ni sus precios. Sin definir, la lista nueva empieza con el redondeo vacío.', ['PRC-01', 'PRC-14', 'ADR-061']],
+  ] as const)('%s lleva el texto aprobado, cita sus reglas, sin ejemplo ni "Ver más"', (clave, texto, reglas) => {
+    const entrada: { texto: string; ejemplo?: string; verMas?: string; reglas: readonly string[] } = AYUDAS[clave]
+    expect(entrada.texto).toBe(texto)
+    expect([...entrada.reglas]).toEqual(reglas)
+    expect(entrada.ejemplo).toBeUndefined()
+    expect(entrada.verMas).toBeUndefined()
   })
 })

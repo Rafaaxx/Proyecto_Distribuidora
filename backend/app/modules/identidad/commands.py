@@ -712,6 +712,70 @@ declarar_tipo(
 )
 
 
+# --- REDONDEO_POR_DEFECTO_DEFINIR (change 20c, D10, PRC-01, envuelve
+# `identidad_service.definir_redondeo_por_defecto`) ---------------------------------
+
+
+class RedondeoPorDefectoDefinirContenidoV1(BaseModel):
+    """Los dos campos son obligatorios y pueden ser nulos: los dos nulos quitan el redondeo por
+    defecto. El múltiplo viaja como string (INV-03); un número JSON se rechaza. La coherencia
+    (los dos o ninguno, dominio, decimales) la valida el dominio: `REDONDEO_INVALIDO`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    multiplo: str | None
+    direccion: str | None
+
+
+def manejar_redondeo_por_defecto_definir(
+    sobre: SobreComando,
+    contenido: RedondeoPorDefectoDefinirContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+) -> ResultadoHandler:
+    """Handler de `REDONDEO_POR_DEFECTO_DEFINIR` v1 (D10). Permiso `ADMIN_CONFIGURACION` primero
+    (SEG-06). El resultado lleva el redondeo vigente tras el cambio (INV-06)."""
+    permisos = identidad_service.listar_permisos_del_usuario(
+        sobre.organizacion_id, sobre.usuario_id, sesion
+    )
+    if "ADMIN_CONFIGURACION" not in permisos:
+        raise PermisoRequeridoError("Falta el permiso ADMIN_CONFIGURACION.")
+
+    configuracion = identidad_service.definir_redondeo_por_defecto(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        multiplo=contenido.multiplo,
+        direccion=contenido.direccion,
+        actor_id=sobre.usuario_id,
+        dispositivo_id_actor=sobre.dispositivo_id,
+        operation_id=sobre.operation_id,
+    )
+    if configuracion is None:
+        return "RECHAZADO", None, "ORGANIZACION_NO_ENCONTRADA"
+    multiplo = configuracion.redondeo_multiplo
+    return (
+        "ACEPTADO",
+        {
+            "multiplo": None if multiplo is None else format(multiplo, ".2f"),
+            "direccion": configuracion.redondeo_direccion,
+        },
+        None,
+    )
+
+
+registrar_handler("REDONDEO_POR_DEFECTO_DEFINIR", 1, RedondeoPorDefectoDefinirContenidoV1)(
+    manejar_redondeo_por_defecto_definir
+)
+declarar_tipo(
+    "REDONDEO_POR_DEFECTO_DEFINIR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("ADMIN_CONFIGURACION",),
+)
+
+
 # --- ORGANIZACION_DATOS_CONFIGURAR (change 20, D15, VTA-13, envuelve
 # `identidad_service.configurar_datos_de_organizacion`) -----------------------
 

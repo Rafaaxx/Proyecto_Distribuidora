@@ -62,6 +62,16 @@ class ConfiguracionOrganizacion(Base):
             ["lista_precio.organizacion_id", "lista_precio.id"],
             name="fk_configuracion_organizacion__lista_precio_default",
         ),
+        # Change 20c (D10): el redondeo por defecto se define completo o no se define, y el
+        # múltiplo es positivo (PRC-01, PRC-14).
+        CheckConstraint(
+            "(redondeo_multiplo IS NULL) = (redondeo_direccion IS NULL)",
+            name="ck_configuracion_organizacion__redondeo_coherente",
+        ),
+        CheckConstraint(
+            "redondeo_multiplo > 0",
+            name="ck_configuracion_organizacion__redondeo_multiplo_positivo",
+        ),
     )
 
     organizacion_id: Mapped[UUID] = mapped_column(ForeignKey("organizacion.id"), primary_key=True)

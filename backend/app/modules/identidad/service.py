@@ -90,6 +90,7 @@ from app.modules.identidad.domain.valores import (
     validar_estado_organizacion,
     validar_modo_impositivo,
     validar_politica_credito_default,
+    validar_redondeo_por_defecto,
     validar_slug_organizacion,
     validar_tolerancia_offline_de_organizacion,
 )
@@ -444,6 +445,74 @@ def configurar_credito_organizacion(
         origen="COMANDO",
     )
     return actualizada
+
+
+def definir_redondeo_por_defecto(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    multiplo: str | None,
+    direccion: str | None,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> ConfiguracionOrganizacion | None:
+    """`REDONDEO_POR_DEFECTO_DEFINIR` (change 20c, D10; PRC-01, PRC-14): fija o quita (los dos
+    nulos) el múltiplo y la dirección con que se precarga el formulario de una lista nueva. No
+    toca listas existentes ni su cálculo.
+
+    Valida ANTES de bloquear ni escribir (`REDONDEO_INVALIDO`). Toma la fila `FOR UPDATE`, escribe
+    UNA auditoría con el valor anterior y el nuevo (`origen='COMANDO'`, AUD-01) y devuelve la
+    configuración, o `None` si la organización no tiene. Sin `commit`."""
+    definido = validar_redondeo_por_defecto(multiplo, direccion)
+    multiplo_nuevo = definido[0] if definido is not None else None
+    direccion_nueva = definido[1] if definido is not None else None
+
+    configuracion = repository.obtener_configuracion_bloqueada(
+        organizacion_id, sesion, exclusivo=True
+    )
+    if configuracion is None:
+        return None
+
+    antes = _redondeo_para_auditoria(
+        configuracion.redondeo_multiplo, configuracion.redondeo_direccion
+    )
+    momento = reloj.now()
+    actualizada = repository.actualizar_configuracion(
+        organizacion_id,
+        sesion,
+        momento=momento,
+        actualizado_por_id=actor_id,
+        redondeo_multiplo=multiplo_nuevo,
+        redondeo_direccion=direccion_nueva,
+    )
+    assert actualizada is not None  # la fila existe: se acaba de bloquear.
+
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="REDONDEO_POR_DEFECTO_DEFINIR",
+        entidad="configuracion_organizacion",
+        entidad_id=organizacion_id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        antes=antes,
+        despues=_redondeo_para_auditoria(multiplo_nuevo, direccion_nueva),
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+    return actualizada
+
+
+def _redondeo_para_auditoria(multiplo: Decimal | None, direccion: str | None) -> dict[str, object]:
+    """Múltiplo como string con dos decimales (INV-03) y dirección, o los dos nulos."""
+    return {
+        "redondeo_multiplo": None if multiplo is None else format(multiplo, ".2f"),
+        "redondeo_direccion": direccion,
+    }
 
 
 def configurar_nota_de_venta(

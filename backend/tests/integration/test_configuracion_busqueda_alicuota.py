@@ -57,16 +57,22 @@ def test_busca_la_alicuota_por_valor_exacto(db_session: Session) -> None:
     assert _ids(por_105) == {diez_y_medio}
 
 
-def test_incluye_las_inactivas_y_devuelve_todas_las_coincidencias(db_session: Session) -> None:
+def test_incluye_las_inactivas_y_nunca_hay_mas_de_una_coincidencia(db_session: Session) -> None:
+    # Desde el change 20c el valor es único por organización (IMP-04): la importación por
+    # porcentaje no es ambigua; una inactiva sigue encontrándose (el alta de producto la rechaza).
     org = crear_organizacion(db_session).id
-    activa = _alicuota(db_session, org, "0.210000")
+    activa = _alicuota(db_session, org, "0.105000")
     inactiva = _alicuota(db_session, org, "0.210000", activo=False)
 
-    encontradas = configuracion_service.buscar_alicuotas_por_valor(
+    por_inactiva = configuracion_service.buscar_alicuotas_por_valor(
         org, Decimal("0.210000"), db_session
     )
+    por_activa = configuracion_service.buscar_alicuotas_por_valor(
+        org, Decimal("0.105000"), db_session
+    )
 
-    assert _ids(encontradas) == {activa, inactiva}
+    assert _ids(por_inactiva) == {inactiva}
+    assert _ids(por_activa) == {activa}
 
 
 def test_no_devuelve_las_de_otra_organizacion_ni_valores_distintos(db_session: Session) -> None:

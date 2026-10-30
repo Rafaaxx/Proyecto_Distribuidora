@@ -24,7 +24,7 @@ from uuid import UUID, uuid4
 import pytest
 from cuentas_corrientes_utiles import agregar_configuracion
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.api_v1 import sistema
@@ -239,7 +239,12 @@ def _crear_producto_con_presentacion_de_compra(
     unidades_base: int = 12,
 ):
     categoria = _crear_categoria(sesion, organizacion_id, nombre=f"Categoria-{codigo}")
-    alicuota = _crear_alicuota(sesion, organizacion_id, nombre=f"Alicuota-{codigo}", valor="0")
+    # Valor único por organización (`ux_alicuota_iva__valor`, 20c): se reutiliza la del 0 %.
+    alicuota = sesion.scalar(
+        select(AlicuotaIva).where(
+            AlicuotaIva.organizacion_id == organizacion_id, AlicuotaIva.valor == 0
+        )
+    ) or _crear_alicuota(sesion, organizacion_id, nombre=f"Alicuota-{codigo}", valor="0")
     producto = catalogo_repository.crear_producto(
         organizacion_id,
         sesion,

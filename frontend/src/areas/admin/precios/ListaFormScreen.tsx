@@ -14,6 +14,7 @@ import {
   type DatosListaEdicion,
   type DatosListaEdicionEntrada,
 } from '../../../domain/precios/listaSchema'
+import { useRedondeoPorDefecto } from '../../../features/configuracion/useRedondeoPorDefecto'
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { ErrorDePrecios } from '../../../features/precios/errores'
 import { useCrearLista, useListaDetalle, useModificarLista } from '../../../features/precios/hooks'
@@ -99,6 +100,7 @@ function FormularioDeLista({
         </Campo>
         <Campo id="redondeo_direccion" etiqueta="Dirección del redondeo" error={errors.redondeo_direccion?.message}>
           <select id="redondeo_direccion" className={CLASE_CONTROL} {...register('redondeo_direccion')}>
+            <option value="">Elegí una dirección</option>
             {DIRECCIONES_REDONDEO.map((direccion) => (
               <option key={direccion} value={direccion}>
                 {ETIQUETA_DE_DIRECCION[direccion]}
@@ -125,15 +127,35 @@ function FormularioDeLista({
   )
 }
 
+/**
+ * Alta de una lista. El redondeo por defecto de la organización (change 20c, D11; `01` §4) precarga el
+ * múltiplo y la dirección; sin definir —o si no se pudo leer— quedan vacíos y son obligatorios (PRC-01).
+ */
 function ListaAlta() {
   const navigate = useNavigate()
   const crear = useCrearLista()
+  const porDefecto = useRedondeoPorDefecto()
+
+  if (porDefecto.isPending) {
+    return (
+      <main>
+        <p>Cargando…</p>
+      </main>
+    )
+  }
+  const redondeo = porDefecto.data
+  const valores: DatosListaEdicionEntrada = {
+    nombre: '',
+    redondeo_multiplo: redondeo?.multiplo ?? '',
+    redondeo_direccion: (redondeo?.direccion ?? '') as DatosListaEdicionEntrada['redondeo_direccion'],
+    activo: true,
+  }
 
   return (
     <main className="flex flex-col gap-4">
       <PageHeader titulo="Nueva lista de precios" />
       <FormularioDeLista
-        valores={{ nombre: '', redondeo_multiplo: '100', redondeo_direccion: 'ARRIBA', activo: true }}
+        valores={valores}
         esEdicion={false}
         enviando={crear.isPending}
         textoDelBoton="Crear lista"

@@ -10,7 +10,17 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Numeric, Text, UniqueConstraint, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Numeric,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -19,7 +29,13 @@ from app.core.ids import nuevo_id
 
 class AlicuotaIva(Base):
     __tablename__ = "alicuota_iva"
-    __table_args__ = (UniqueConstraint("organizacion_id", "id", name="ux_alicuota_iva__org_id"),)
+    __table_args__ = (
+        UniqueConstraint("organizacion_id", "id", name="ux_alicuota_iva__org_id"),
+        # Change 20c (D7, INV-02): nombre y valor únicos por organización, activa o no.
+        Index("ux_alicuota_iva__nombre", "organizacion_id", text("lower(nombre)"), unique=True),
+        Index("ux_alicuota_iva__valor", "organizacion_id", "valor", unique=True),
+        CheckConstraint("valor >= 0 AND valor < 1", name="ck_alicuota_iva__valor"),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=nuevo_id)
     organizacion_id: Mapped[UUID] = mapped_column(ForeignKey("organizacion.id"), nullable=False)
@@ -51,7 +67,17 @@ class MedioPago(Base):
 
 class Motivo(Base):
     __tablename__ = "motivo"
-    __table_args__ = (UniqueConstraint("organizacion_id", "id", name="ux_motivo__org_id"),)
+    __table_args__ = (
+        UniqueConstraint("organizacion_id", "id", name="ux_motivo__org_id"),
+        # Change 20c (D3, INV-02): nombre único por organización y ámbito, activo o no.
+        Index(
+            "ux_motivo__nombre",
+            "organizacion_id",
+            "ambito",
+            text("lower(nombre)"),
+            unique=True,
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=nuevo_id)
     organizacion_id: Mapped[UUID] = mapped_column(ForeignKey("organizacion.id"), nullable=False)

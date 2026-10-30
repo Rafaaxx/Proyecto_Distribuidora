@@ -829,6 +829,44 @@ export const AYUDAS = {
       'Salen en el encabezado de todas las notas, junto al nombre y el CUIT de la empresa. Son opcionales: si los dejás vacíos, la nota no los muestra.',
     reglas: ['VTA-13'],
   },
+
+  // --- Motivos, alícuotas y redondeo por defecto (change 20c, D14; textos aprobados el 2026-10-30, sin ejemplos) ---
+  'motivos.ambito': {
+    titulo: 'Ámbito del motivo',
+    texto:
+      'Cada motivo sirve para un solo tipo de operación: los de un ámbito solo se ofrecen en esa operación. El ámbito no se cambia después de crear el motivo.',
+    reglas: ['TR-09', 'ADR-061'],
+  },
+  'motivos.nombre': {
+    titulo: 'Nombre del motivo',
+    texto:
+      'Si le cambiás el nombre, las operaciones anteriores que lo usaron muestran el nombre nuevo. No puede haber dos motivos con el mismo nombre en un ámbito.',
+    reglas: ['ADR-061'],
+  },
+  'motivos.baja': {
+    titulo: 'Dar de baja un motivo',
+    texto:
+      'Deja de ofrecerse en operaciones nuevas. No se borra: las anteriores lo siguen mostrando y lo podés volver a activar. Cada ámbito tiene que conservar al menos un motivo activo.',
+    reglas: ['CAT-05', 'TR-06', 'ADR-061'],
+  },
+  'alicuotas.valor': {
+    titulo: 'Porcentaje de la alícuota',
+    texto:
+      'El porcentaje no se cambia una vez creada la alícuota. Si cambia la tasa, creá una nueva, pasá los productos a ella y dá de baja la anterior. Las compras y ventas ya hechas conservan el porcentaje con que se hicieron.',
+    reglas: ['TR-02', 'CAT-01', 'ADR-061'],
+  },
+  'alicuotas.baja': {
+    titulo: 'Dar de baja una alícuota',
+    texto:
+      'Deja de ofrecerse al crear o editar productos. No se puede dar de baja mientras la use un producto activo, ni si es la última activa.',
+    reglas: ['CAT-05', 'ADR-061'],
+  },
+  'configuracion.redondeoPorDefecto': {
+    titulo: 'Redondeo por defecto',
+    texto:
+      'Es el redondeo que aparece cargado al crear una lista de precios nueva; en cada lista lo podés cambiar. Cambiarlo no modifica las listas que ya existen ni sus precios. Sin definir, la lista nueva empieza con el redondeo vacío.',
+    reglas: ['PRC-01', 'PRC-14', 'ADR-061'],
+  },
 } as const satisfies Record<string, EntradaDeAyuda>
 
 export type ClaveDeAyuda = keyof typeof AYUDAS

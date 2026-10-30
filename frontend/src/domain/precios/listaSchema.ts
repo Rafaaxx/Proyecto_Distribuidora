@@ -19,7 +19,7 @@ export const ETIQUETA_DE_DIRECCION: Record<DireccionRedondeo, string> = {
 }
 
 /** Múltiplo de redondeo: mayor que cero, con hasta dos decimales (D9). */
-const multiplo = z
+export const multiplo = z
   .string()
   .transform(normalizarDecimal)
   .refine(

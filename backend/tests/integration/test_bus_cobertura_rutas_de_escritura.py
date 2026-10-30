@@ -116,6 +116,11 @@ ESCRITURAS_QUE_DEBEN_IR_POR_EL_BUS: frozenset[tuple[str, str]] = frozenset(
         ("POST", "/api/v1/configuracion/credito"),
         # Change 20, grupo 5: `NOTA_VENTA_CONFIGURAR` (dedicada, `identidad/api.py`).
         ("POST", "/api/v1/configuracion/nota-de-venta"),
+        # Change 20c, grupos 4 y 5: `ALICUOTA_CREAR`, `ALICUOTA_MODIFICAR` (`configuracion/api.py`)
+        # y `REDONDEO_POR_DEFECTO_DEFINIR` (`identidad/api.py`).
+        ("POST", "/api/v1/configuracion/alicuotas"),
+        ("PUT", "/api/v1/configuracion/alicuotas/{alicuota_id}"),
+        ("POST", "/api/v1/configuracion/redondeo-por-defecto"),
     }
 )
 

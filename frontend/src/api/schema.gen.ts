@@ -705,6 +705,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/configuracion/redondeo-por-defecto": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Redondeo Por Defecto
+         * @description El redondeo por defecto de la organización del token (PRC-01, `design.md` D11): lo lee
+         *     quien administra la configuración y quien crea listas.
+         */
+        get: operations["obtener_redondeo_por_defecto_api_v1_configuracion_redondeo_por_defecto_get"];
+        put?: never;
+        /**
+         * Definir Redondeo Por Defecto
+         * @description `REDONDEO_POR_DEFECTO_DEFINIR` (D10). La respuesta sale de `comando.resultado` (INV-06).
+         */
+        post: operations["definir_redondeo_por_defecto_api_v1_configuracion_redondeo_por_defecto_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/configuracion/organizacion": {
         parameters: {
             query?: never;
@@ -1297,7 +1322,8 @@ export interface paths {
         /** Listar Alicuotas */
         get: operations["listar_alicuotas_api_v1_configuracion_alicuotas_get"];
         put?: never;
-        post?: never;
+        /** Crear Alicuota */
+        post: operations["crear_alicuota_api_v1_configuracion_alicuotas_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1366,6 +1392,58 @@ export interface paths {
         /** Listar Motivos */
         get: operations["listar_motivos_api_v1_configuracion_motivos_get"];
         put?: never;
+        /** Crear Motivo */
+        post: operations["crear_motivo_api_v1_configuracion_motivos_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/configuracion/motivos/todos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Motivos Todos */
+        get: operations["listar_motivos_todos_api_v1_configuracion_motivos_todos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/configuracion/motivos/{motivo_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Modificar Motivo */
+        put: operations["modificar_motivo_api_v1_configuracion_motivos__motivo_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/configuracion/alicuotas/{alicuota_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Modificar Alicuota */
+        put: operations["modificar_alicuota_api_v1_configuracion_alicuotas__alicuota_id__put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2952,6 +3030,30 @@ export interface components {
             entidad_id: string;
             /** Nombre */
             nombre: string;
+        };
+        /**
+         * AlicuotaCrearRequest
+         * @description Cuerpo de `POST /configuracion/alicuotas` (change 20c, D6): el valor es un string decimal
+         *     (INV-03, un número JSON se rechaza); nace activa y la organización sale del token.
+         */
+        AlicuotaCrearRequest: {
+            /** Nombre */
+            nombre: string;
+            /** Valor */
+            valor: string;
+        };
+        /**
+         * AlicuotaModificarRequest
+         * @description Reemplazo completo de `PUT /configuracion/alicuotas/{id}` (D6): el valor debe ser el
+         *     guardado (`VALOR_NO_MODIFICABLE` si no).
+         */
+        AlicuotaModificarRequest: {
+            /** Nombre */
+            nombre: string;
+            /** Valor */
+            valor: string;
+            /** Activo */
+            activo: boolean;
         };
         /** AlicuotaResponse */
         AlicuotaResponse: {
@@ -5056,6 +5158,11 @@ export interface components {
             /** Items */
             items: components["schemas"]["MotivoResponse"][];
         };
+        /** ListaMotivosAdmin */
+        ListaMotivosAdmin: {
+            /** Items */
+            items: components["schemas"]["MotivoAdminResponse"][];
+        };
         /**
          * ListaOpcionResponse
          * @description Lectura reducida de una lista activa: identificador y nombre (`design.md` D12).
@@ -5314,6 +5421,28 @@ export interface components {
              */
             password_actual: string;
         };
+        /**
+         * MotivoAdminResponse
+         * @description Un motivo activo o no, con su ámbito, para la administración (change 20c, D12).
+         */
+        MotivoAdminResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Ambito */
+            ambito: string;
+            /** Nombre */
+            nombre: string;
+            /** Activo */
+            activo: boolean;
+            /**
+             * Actualizado En
+             * Format: date-time
+             */
+            actualizado_en: string;
+        };
         /** MotivoContextoResponse */
         MotivoContextoResponse: {
             /**
@@ -5323,6 +5452,27 @@ export interface components {
             id: string;
             /** Nombre */
             nombre: string;
+        };
+        /**
+         * MotivoCrearRequest
+         * @description Cuerpo de `POST /configuracion/motivos`: el motivo nace activo y la organización sale del
+         *     token (`extra="forbid"`).
+         */
+        MotivoCrearRequest: {
+            /** Ambito */
+            ambito: string;
+            /** Nombre */
+            nombre: string;
+        };
+        /**
+         * MotivoModificarRequest
+         * @description Reemplazo de nombre y estado (D2). El ámbito no se modifica: un campo `ambito` se rechaza.
+         */
+        MotivoModificarRequest: {
+            /** Nombre */
+            nombre: string;
+            /** Activo */
+            activo: boolean;
         };
         /** MotivoResponse */
         MotivoResponse: {
@@ -6514,6 +6664,24 @@ export interface components {
             direccion: string;
             /** Activo */
             activo: boolean;
+        };
+        /**
+         * RedondeoPorDefectoDefinirRequest
+         * @description `multiplo` (string decimal, INV-03) y `direccion`, obligatorios en el cuerpo y nulos los dos
+         *     para quitarlo. La coherencia y el dominio se validan en el dominio: `REDONDEO_INVALIDO`.
+         */
+        RedondeoPorDefectoDefinirRequest: {
+            /** Multiplo */
+            multiplo: string | null;
+            /** Direccion */
+            direccion: string | null;
+        };
+        /** RedondeoPorDefectoResponse */
+        RedondeoPorDefectoResponse: {
+            /** Multiplo */
+            multiplo: string | null;
+            /** Direccion */
+            direccion: string | null;
         };
         /** RefreshRequest */
         RefreshRequest: {
@@ -9329,6 +9497,73 @@ export interface operations {
             };
         };
     };
+    obtener_redondeo_por_defecto_api_v1_configuracion_redondeo_por_defecto_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RedondeoPorDefectoResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    definir_redondeo_por_defecto_api_v1_configuracion_redondeo_por_defecto_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RedondeoPorDefectoDefinirRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RedondeoPorDefectoResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     obtener_datos_de_la_organizacion_api_v1_configuracion_organizacion_get: {
         parameters: {
             query?: never;
@@ -10618,6 +10853,42 @@ export interface operations {
             };
         };
     };
+    crear_alicuota_api_v1_configuracion_alicuotas_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlicuotaCrearRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlicuotaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     listar_medios_pago_api_v1_configuracion_medios_pago_get: {
         parameters: {
             query?: never;
@@ -10774,6 +11045,151 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ListaMotivos"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_motivo_api_v1_configuracion_motivos_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MotivoCrearRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MotivoAdminResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_motivos_todos_api_v1_configuracion_motivos_todos_get: {
+        parameters: {
+            query?: {
+                ambito?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListaMotivosAdmin"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    modificar_motivo_api_v1_configuracion_motivos__motivo_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                motivo_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MotivoModificarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MotivoAdminResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    modificar_alicuota_api_v1_configuracion_alicuotas__alicuota_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                alicuota_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlicuotaModificarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlicuotaResponse"];
                 };
             };
             /** @description Validation Error */

@@ -177,3 +177,68 @@ export async function configurarOrganizacionDatos(
 ): Promise<OrganizacionDatos> {
   return leerFiscalOLanzar(await apiFetch('/configuracion/organizacion', escritura(operationId, datos)))
 }
+
+// --- motivos, alícuotas y redondeo por defecto administrables (change 20c, D12) ----------------
+
+export type MotivoAdmin = components['schemas']['MotivoAdminResponse']
+export type MotivoCrearDatos = components['schemas']['MotivoCrearRequest']
+export type MotivoModificarDatos = components['schemas']['MotivoModificarRequest']
+
+/** `GET /configuracion/motivos/todos?ambito=` (`ADMIN_CONFIGURACION`): activos e inactivos del ámbito. */
+export async function listarMotivosAdmin(ambito: string): Promise<MotivoAdmin[]> {
+  const lista = await leerFiscalOLanzar<{ items: MotivoAdmin[] }>(
+    await apiFetch(`/configuracion/motivos/todos?${new URLSearchParams({ ambito }).toString()}`),
+  )
+  return lista.items
+}
+
+/** `POST /configuracion/motivos` (`MOTIVO_CREAR`). El `Operation-Id` lo conserva quien llama. */
+export async function crearMotivo(datos: MotivoCrearDatos, operationId: string): Promise<MotivoAdmin> {
+  return leerFiscalOLanzar(await apiFetch('/configuracion/motivos', escrituraDeMedio('POST', operationId, datos)))
+}
+
+/** `PUT /configuracion/motivos/{id}` (`MOTIVO_MODIFICAR`): reemplazo de nombre y estado. */
+export async function modificarMotivo(
+  motivoId: string,
+  datos: MotivoModificarDatos,
+  operationId: string,
+): Promise<MotivoAdmin> {
+  return leerFiscalOLanzar(
+    await apiFetch(`/configuracion/motivos/${motivoId}`, escrituraDeMedio('PUT', operationId, datos)),
+  )
+}
+
+export type AlicuotaCrearDatos = components['schemas']['AlicuotaCrearRequest']
+export type AlicuotaModificarDatos = components['schemas']['AlicuotaModificarRequest']
+
+/** `POST /configuracion/alicuotas` (`ALICUOTA_CREAR`): el valor viaja como string (INV-03). */
+export async function crearAlicuota(datos: AlicuotaCrearDatos, operationId: string): Promise<Alicuota> {
+  return leerFiscalOLanzar(await apiFetch('/configuracion/alicuotas', escrituraDeMedio('POST', operationId, datos)))
+}
+
+/** `PUT /configuracion/alicuotas/{id}` (`ALICUOTA_MODIFICAR`): reemplazo completo; el valor no cambia. */
+export async function modificarAlicuota(
+  alicuotaId: string,
+  datos: AlicuotaModificarDatos,
+  operationId: string,
+): Promise<Alicuota> {
+  return leerFiscalOLanzar(
+    await apiFetch(`/configuracion/alicuotas/${alicuotaId}`, escrituraDeMedio('PUT', operationId, datos)),
+  )
+}
+
+export type RedondeoPorDefecto = components['schemas']['RedondeoPorDefectoResponse']
+export type RedondeoPorDefectoDatos = components['schemas']['RedondeoPorDefectoDefinirRequest']
+
+/** `GET /configuracion/redondeo-por-defecto` (`ADMIN_CONFIGURACION` o `GESTIONAR_LISTAS`). */
+export async function obtenerRedondeoPorDefecto(): Promise<RedondeoPorDefecto> {
+  return leerFiscalOLanzar(await apiFetch('/configuracion/redondeo-por-defecto'))
+}
+
+/** `POST /configuracion/redondeo-por-defecto` (`REDONDEO_POR_DEFECTO_DEFINIR`); los dos nulos lo quitan. */
+export async function definirRedondeoPorDefecto(
+  datos: RedondeoPorDefectoDatos,
+  operationId: string,
+): Promise<RedondeoPorDefecto> {
+  return leerFiscalOLanzar(await apiFetch('/configuracion/redondeo-por-defecto', escritura(operationId, datos)))
+}

@@ -183,6 +183,24 @@ def existen_productos_activos_en_categoria(
     return int(sesion.execute(consulta).scalar_one()) > 0
 
 
+def contar_productos_activos_con_alicuota(
+    organizacion_id: UUID, alicuota_id: UUID, sesion: Session
+) -> int:
+    """Change 20c, D8 y D9: cuántos productos activos de la organización usan la alícuota; lo
+    consulta `configuracion` por el puerto que registra `catalogo/service.py`. Cuenta en la base,
+    nunca trae filas a Python."""
+    consulta = (
+        select(func.count())
+        .select_from(Producto)
+        .where(
+            Producto.organizacion_id == organizacion_id,
+            Producto.alicuota_id == alicuota_id,
+            Producto.activo.is_(True),
+        )
+    )
+    return int(sesion.execute(consulta).scalar_one())
+
+
 def existen_productos_activos_de_proveedor(
     organizacion_id: UUID, proveedor_id: UUID, sesion: Session
 ) -> bool:

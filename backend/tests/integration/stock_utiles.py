@@ -45,7 +45,13 @@ def crear_producto_sql(
     """Producto activo mínimo (categoría y alícuota propias; proveedor propio salvo que
     se pase `proveedor_id`, que el change 11 necesita para comprar a un proveedor)."""
     categoria_id = uuid4()
-    alicuota_id = uuid4()
+    # La alícuota "21%" es única por organización (`ux_alicuota_iva__valor`, change 20c): si la
+    # organización ya la tiene, el producto la reutiliza.
+    alicuota_existente = sesion.execute(
+        text("SELECT id FROM alicuota_iva WHERE organizacion_id = :org AND valor = 0.210000"),
+        {"org": organizacion_id},
+    ).scalar_one_or_none()
+    alicuota_id = alicuota_existente or uuid4()
     producto_id = uuid4()
     if proveedor_id is None:
         proveedor_id = crear_proveedor(sesion, organizacion_id)
@@ -61,13 +67,14 @@ def crear_producto_sql(
             "m": MOMENTO,
         },
     )
-    sesion.execute(
-        text(
-            "INSERT INTO alicuota_iva (id, organizacion_id, nombre, valor, activo, creado_en, "
-            "actualizado_en) VALUES (:id, :org, '21%', 0.210000, true, :m, :m)"
-        ),
-        {"id": alicuota_id, "org": organizacion_id, "m": MOMENTO},
-    )
+    if alicuota_existente is None:
+        sesion.execute(
+            text(
+                "INSERT INTO alicuota_iva (id, organizacion_id, nombre, valor, activo, "
+                "creado_en, actualizado_en) VALUES (:id, :org, '21%', 0.210000, true, :m, :m)"
+            ),
+            {"id": alicuota_id, "org": organizacion_id, "m": MOMENTO},
+        )
     sesion.execute(
         text(
             "INSERT INTO producto (id, organizacion_id, codigo, nombre, categoria_id, marca_id, "

@@ -13,6 +13,7 @@ elegir alícuota al dar de alta productos).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Annotated
 from uuid import UUID
 
@@ -22,7 +23,7 @@ from sqlalchemy.orm import Session
 from app.api_v1.dependencias import get_session
 from app.commands import registro
 from app.commands.huella import ContenidoComando, calcular_huella
-from app.commands.sobre import construir_sobre_online
+from app.commands.sobre import SobreComando, construir_sobre_online
 from app.core.autenticacion import (
     ContextoAutenticado,
     EntradaComandoOnline,
@@ -31,7 +32,7 @@ from app.core.autenticacion import (
     requiere_permiso,
     requiere_sesion,
 )
-from app.core.clock import SystemClock
+from app.core.clock import Clock, SystemClock
 from app.modules.configuracion import commands as configuracion_commands
 from app.modules.configuracion import queries as configuracion_queries
 from app.modules.configuracion import service as configuracion_service
@@ -42,14 +43,20 @@ from app.modules.configuracion.domain.valores import (
 )
 from app.modules.configuracion.repository import LIMITE_PAGINA_DEFAULT
 from app.modules.configuracion.schemas import (
+    AlicuotaCrearRequest,
+    AlicuotaModificarRequest,
     AlicuotaResponse,
     ListaMediosPago,
     ListaMediosPagoAdmin,
     ListaMotivos,
+    ListaMotivosAdmin,
     MedioPagoAdminResponse,
     MedioPagoCrearRequest,
     MedioPagoModificarRequest,
     MedioPagoResponse,
+    MotivoAdminResponse,
+    MotivoCrearRequest,
+    MotivoModificarRequest,
     MotivoResponse,
     PaginaAlicuotas,
 )
@@ -66,7 +73,8 @@ PERMISO_REGISTRAR_COMPRA = "REGISTRAR_COMPRA"
 @router.get("/alicuotas", response_model=PaginaAlicuotas)
 def listar_alicuotas(
     contexto: Annotated[
-        ContextoAutenticado, Depends(requiere_algun_permiso(PERMISO, PERMISO_REGISTRAR_COMPRA))
+        ContextoAutenticado,
+        Depends(requiere_algun_permiso(PERMISO, PERMISO_REGISTRAR_COMPRA, PERMISO_MEDIOS_PAGO)),
     ],
     sesion: Annotated[Session, Depends(get_session)],
     limite: int = LIMITE_PAGINA_DEFAULT,
@@ -243,3 +251,166 @@ def listar_motivos(
             for motivo in sorted(motivos, key=lambda motivo: motivo.nombre)
         ]
     )
+
+
+# --- administración de motivos (change 20c, `design.md` D1, D2, D12) ---------------------------
+#
+# Escrituras por el bus (`MOTIVO_CREAR`, `MOTIVO_MODIFICAR`, solo `ONLINE`) y una lectura
+# completa (activos e inactivos). Las tres exigen `ADMIN_CONFIGURACION`; la lectura de solo
+# activos por ámbito (`GET /motivos`) no cambia. Nunca hay una ruta que borre un motivo.
+
+
+def _preparar_comando(
+    entrada: EntradaComandoOnline,
+    *,
+    tipo: str,
+    contenido: dict[str, ContenidoComando],
+    manejar: Callable[..., sync_service.ResultadoHandler],
+) -> tuple[
+    Clock, SobreComando, str, Callable[[registro.SesionDeHandler], sync_service.ResultadoHandler]
+]:
+    """Arma el sobre `ONLINE`, su huella y el cierre que ejecuta el handler. La ruta lo pasa a
+    `sync_service.procesar_comando` (el bus abre y cierra la transacción)."""
+    reloj = SystemClock()
+    sobre = construir_sobre_online(
+        operation_id=entrada.operation_id,
+        tipo=tipo,
+        version=1,
+        modo="ONLINE",
+        organizacion_id=entrada.contexto.organizacion_id,
+        usuario_id=entrada.contexto.usuario_id,
+        dispositivo_id=entrada.contexto.dispositivo_id,
+        occurred_at=reloj.now(),
+        secuencia=1,
+        app_version="server",
+        contenido=contenido,
+    )
+    huella = calcular_huella(sobre.contenido)
+    handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
+    contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
+        return manejar(sobre, contenido_validado, sesion=sesion_protegida, reloj=reloj)
+
+    return reloj, sobre, huella, _ejecutar_handler
+
+
+def _motivo_o_404(organizacion_id: UUID, motivo_id: UUID, sesion: Session) -> MotivoAdminResponse:
+    motivo = configuracion_service.obtener_motivo(organizacion_id, motivo_id, sesion)
+    if motivo is None:
+        raise MedioPagoNoEncontradoError("El motivo no existe en esta organización.")
+    return MotivoAdminResponse.model_validate(motivo)
+
+
+@router.get("/motivos/todos", response_model=ListaMotivosAdmin)
+def listar_motivos_todos(
+    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso(PERMISO_MEDIOS_PAGO))],
+    sesion: Annotated[Session, Depends(get_session)],
+    ambito: str | None = None,
+) -> ListaMotivosAdmin:
+    if ambito is not None and ambito not in AMBITOS_MOTIVO:
+        raise AmbitoInvalidoError(
+            f"El ámbito {ambito!r} no es válido. Valores válidos: {', '.join(AMBITOS_MOTIVO)}."
+        )
+    motivos = configuracion_queries.listar_motivos_todos(contexto.organizacion_id, sesion, ambito)
+    return ListaMotivosAdmin(items=[MotivoAdminResponse.model_validate(m) for m in motivos])
+
+
+@router.post("/motivos", response_model=MotivoAdminResponse, status_code=201)
+def crear_motivo(
+    datos: MotivoCrearRequest,
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online(PERMISO_MEDIOS_PAGO))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> MotivoAdminResponse:
+    reloj, sobre, huella, ejecutar = _preparar_comando(
+        entrada,
+        tipo="MOTIVO_CREAR",
+        contenido={"ambito": datos.ambito, "nombre": datos.nombre},
+        manejar=configuracion_commands.manejar_motivo_crear,
+    )
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=ejecutar
+    )
+    assert comando.resultado is not None
+    motivo_id = UUID(str(comando.resultado["motivo_id"]))
+    return _motivo_o_404(entrada.contexto.organizacion_id, motivo_id, sesion)
+
+
+@router.put("/motivos/{motivo_id}", response_model=MotivoAdminResponse)
+def modificar_motivo(
+    motivo_id: UUID,
+    datos: MotivoModificarRequest,
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online(PERMISO_MEDIOS_PAGO))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> MotivoAdminResponse:
+    reloj, sobre, huella, ejecutar = _preparar_comando(
+        entrada,
+        tipo="MOTIVO_MODIFICAR",
+        contenido={"motivo_id": str(motivo_id), "nombre": datos.nombre, "activo": datos.activo},
+        manejar=configuracion_commands.manejar_motivo_modificar,
+    )
+    sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=ejecutar
+    )
+    return _motivo_o_404(entrada.contexto.organizacion_id, motivo_id, sesion)
+
+
+# --- administración de alícuotas (change 20c, `design.md` D1, D6 a D9) --------------------------
+#
+# Escrituras por el bus (`ALICUOTA_CREAR`, `ALICUOTA_MODIFICAR`, solo `ONLINE`,
+# `ADMIN_CONFIGURACION`). La lectura `GET /alicuotas` (arriba) admite también
+# `ADMIN_CONFIGURACION`. Nunca hay una ruta que borre una alícuota.
+
+
+def _alicuota_o_404(organizacion_id: UUID, alicuota_id: UUID, sesion: Session) -> AlicuotaResponse:
+    alicuota = configuracion_service.obtener_alicuota_por_id(organizacion_id, alicuota_id, sesion)
+    if alicuota is None:
+        raise MedioPagoNoEncontradoError("La alícuota no existe en esta organización.")
+    sesion.refresh(alicuota)
+    return AlicuotaResponse.model_validate(alicuota)
+
+
+@router.post("/alicuotas", response_model=AlicuotaResponse, status_code=201)
+def crear_alicuota(
+    datos: AlicuotaCrearRequest,
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online(PERMISO_MEDIOS_PAGO))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> AlicuotaResponse:
+    reloj, sobre, huella, ejecutar = _preparar_comando(
+        entrada,
+        tipo="ALICUOTA_CREAR",
+        contenido={"nombre": datos.nombre, "valor": datos.valor},
+        manejar=configuracion_commands.manejar_alicuota_crear,
+    )
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=ejecutar
+    )
+    assert comando.resultado is not None
+    alicuota_id = UUID(str(comando.resultado["alicuota_id"]))
+    return _alicuota_o_404(entrada.contexto.organizacion_id, alicuota_id, sesion)
+
+
+@router.put("/alicuotas/{alicuota_id}", response_model=AlicuotaResponse)
+def modificar_alicuota(
+    alicuota_id: UUID,
+    datos: AlicuotaModificarRequest,
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online(PERMISO_MEDIOS_PAGO))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> AlicuotaResponse:
+    reloj, sobre, huella, ejecutar = _preparar_comando(
+        entrada,
+        tipo="ALICUOTA_MODIFICAR",
+        contenido={
+            "alicuota_id": str(alicuota_id),
+            "nombre": datos.nombre,
+            "valor": datos.valor,
+            "activo": datos.activo,
+        },
+        manejar=configuracion_commands.manejar_alicuota_modificar,
+    )
+    sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=ejecutar
+    )
+    return _alicuota_o_404(entrada.contexto.organizacion_id, alicuota_id, sesion)

@@ -20,7 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.modules.configuracion.domain.valores import NombreDuplicadoError
+from app.modules.configuracion.domain.valores import NombreDuplicadoError, ValorDuplicadoError
 from app.modules.configuracion.models import AlicuotaIva, MedioPago, Motivo
 
 LIMITE_PAGINA_MAXIMO = 100
@@ -48,8 +48,79 @@ def crear_alicuota(
         actualizado_en=momento,
         actualizado_por_id=actualizado_por_id,
     )
-    sesion.add(alicuota)
-    sesion.flush()
+    with _traduciendo_alicuota_duplicada(sesion):
+        sesion.add(alicuota)
+        sesion.flush()
+    return alicuota
+
+
+@contextmanager
+def _traduciendo_alicuota_duplicada(sesion: Session) -> Iterator[None]:
+    """Ejecuta la escritura en un `SAVEPOINT` y traduce la violación de `ux_alicuota_iva__nombre`
+    a `NOMBRE_DUPLICADO` y la de `ux_alicuota_iva__valor` a `VALOR_DUPLICADO` (409, change 20c,
+    D7); cualquier otra falla de integridad sube."""
+    try:
+        with sesion.begin_nested():
+            yield
+    except IntegrityError as error:
+        causa = str(getattr(error, "orig", error))
+        if "ux_alicuota_iva__nombre" in causa:
+            raise NombreDuplicadoError(
+                "Ya existe una alícuota con ese nombre en la organización."
+            ) from error
+        if "ux_alicuota_iva__valor" in causa:
+            raise ValorDuplicadoError(
+                "Ya existe una alícuota con ese porcentaje en la organización."
+            ) from error
+        raise
+
+
+def bloquear_alicuotas(organizacion_id: UUID, sesion: Session) -> list[AlicuotaIva]:
+    """Las alícuotas de la organización con `FOR UPDATE`, en orden de `id` (change 20c, D8): dos
+    bajas simultáneas se serializan acá, y una baja espera a quien tiene la alícuota con
+    `FOR SHARE` (alta o modificación de un producto, D9)."""
+    consulta = (
+        select(AlicuotaIva)
+        .where(AlicuotaIva.organizacion_id == organizacion_id)
+        .order_by(AlicuotaIva.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return list(sesion.execute(consulta).scalars().all())
+
+
+def obtener_alicuota_para_compartir(
+    organizacion_id: UUID, sesion: Session, alicuota_id: UUID
+) -> AlicuotaIva | None:
+    """La alícuota con `FOR SHARE` (change 20c, D9): el alta o la modificación de un producto la
+    lee así, y una baja concurrente (`FOR UPDATE`) espera a que ese producto confirme."""
+    consulta = (
+        select(AlicuotaIva)
+        .where(AlicuotaIva.organizacion_id == organizacion_id, AlicuotaIva.id == alicuota_id)
+        .with_for_update(read=True)
+        .execution_options(populate_existing=True)
+    )
+    return sesion.execute(consulta).scalar_one_or_none()
+
+
+def actualizar_alicuota(
+    organizacion_id: UUID,
+    sesion: Session,
+    alicuota: AlicuotaIva,
+    *,
+    nombre: str,
+    activo: bool,
+    momento: datetime,
+    actualizado_por_id: UUID | None,
+) -> AlicuotaIva:
+    """Reemplaza nombre y estado; el valor no se toca (change 20c, D6)."""
+    assert alicuota.organizacion_id == organizacion_id
+    with _traduciendo_alicuota_duplicada(sesion):
+        alicuota.nombre = nombre
+        alicuota.activo = activo
+        alicuota.actualizado_en = momento
+        alicuota.actualizado_por_id = actualizado_por_id
+        sesion.flush()
     return alicuota
 
 
@@ -166,17 +237,20 @@ def crear_medio_pago(
 
 
 @contextmanager
-def _traduciendo_nombre_duplicado(sesion: Session) -> Iterator[None]:
-    """Ejecuta la escritura en un `SAVEPOINT` y traduce la violación de `ux_medio_pago__nombre`
-    a `NOMBRE_DUPLICADO` (409, change 17b, D3); cualquier otra falla de integridad sube."""
+def _traduciendo_nombre_duplicado(
+    sesion: Session,
+    indice: str = "ux_medio_pago__nombre",
+    mensaje: str = "Ya existe un medio de pago con ese nombre en la organización.",
+) -> Iterator[None]:
+    """Ejecuta la escritura en un `SAVEPOINT` y traduce la violación del índice único de nombre
+    (`ux_medio_pago__nombre` por omisión) a `NOMBRE_DUPLICADO` (409, change 17b, D3 y change 20c,
+    D3); cualquier otra falla de integridad sube."""
     try:
         with sesion.begin_nested():
             yield
     except IntegrityError as error:
-        if "ux_medio_pago__nombre" in str(getattr(error, "orig", error)):
-            raise NombreDuplicadoError(
-                "Ya existe un medio de pago con ese nombre en la organización."
-            ) from error
+        if indice in str(getattr(error, "orig", error)):
+            raise NombreDuplicadoError(mensaje) from error
         raise
 
 
@@ -285,8 +359,66 @@ def crear_motivo(
         actualizado_en=momento,
         actualizado_por_id=actualizado_por_id,
     )
-    sesion.add(motivo)
-    sesion.flush()
+    with _traduciendo_nombre_duplicado(sesion, *_NOMBRE_DUPLICADO_MOTIVO):
+        sesion.add(motivo)
+        sesion.flush()
+    return motivo
+
+
+_NOMBRE_DUPLICADO_MOTIVO = (
+    "ux_motivo__nombre",
+    "Ya existe un motivo con ese nombre en el ámbito de la organización.",
+)
+
+
+def listar_motivos_todos(
+    organizacion_id: UUID, sesion: Session, ambito: str | None = None
+) -> list[Motivo]:
+    """Todos los motivos de la organización, activos o no, por ámbito y nombre (change 20c,
+    D12). Con `ambito`, solo los de ese ámbito."""
+    consulta = select(Motivo).where(Motivo.organizacion_id == organizacion_id)
+    if ambito is not None:
+        consulta = consulta.where(Motivo.ambito == ambito)
+    consulta = consulta.order_by(Motivo.ambito, func.lower(Motivo.nombre), Motivo.id)
+    return list(sesion.execute(consulta).scalars().all())
+
+
+def bloquear_motivos_del_ambito(
+    organizacion_id: UUID, sesion: Session, ambito: str
+) -> list[Motivo]:
+    """Los motivos del ámbito de la organización con `FOR UPDATE`, en orden de `id` (change 20c,
+    D4): dos bajas simultáneas se serializan acá y la segunda cuenta con el estado ya confirmado
+    de la primera."""
+    consulta = (
+        select(Motivo)
+        .where(Motivo.organizacion_id == organizacion_id, Motivo.ambito == ambito)
+        .order_by(Motivo.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return list(sesion.execute(consulta).scalars().all())
+
+
+def actualizar_motivo(
+    organizacion_id: UUID,
+    sesion: Session,
+    motivo: Motivo,
+    *,
+    nombre: str,
+    activo: bool,
+    momento: datetime,
+    actualizado_por_id: UUID | None,
+) -> Motivo:
+    """Reemplazo de nombre y estado de un motivo ya leído (change 20c, D2). El ámbito no se
+    toca. Un motivo de otra organización no se modifica."""
+    if motivo.organizacion_id != organizacion_id:
+        raise ValueError("El motivo no pertenece a la organización indicada.")
+    motivo.nombre = nombre
+    motivo.activo = activo
+    motivo.actualizado_en = momento
+    motivo.actualizado_por_id = actualizado_por_id
+    with _traduciendo_nombre_duplicado(sesion, *_NOMBRE_DUPLICADO_MOTIVO):
+        sesion.flush()
     return motivo
 
 

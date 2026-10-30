@@ -43,6 +43,7 @@ from app.core.autenticacion import (
     ContextoAutenticado,
     EntradaComandoOnline,
     obtener_contexto_autenticado,
+    requiere_algun_permiso,
     requiere_comando_online,
     requiere_comando_online_algun_permiso,
     requiere_comando_online_de_sesion,
@@ -1618,6 +1619,76 @@ def configurar_nota_de_venta_de_la_organizacion(
     if comando.estado == "RECHAZADO" or comando.resultado is None:
         raise RecursoNoEncontradoError("La organización no tiene configuración.")
     return NotaVentaConfiguracionResponse.model_validate(comando.resultado)
+
+
+class RedondeoPorDefectoResponse(BaseModel):
+    multiplo: str | None
+    direccion: str | None
+
+
+class RedondeoPorDefectoDefinirRequest(BaseModel):
+    """`multiplo` (string decimal, INV-03) y `direccion`, obligatorios en el cuerpo y nulos los dos
+    para quitarlo. La coherencia y el dominio se validan en el dominio: `REDONDEO_INVALIDO`."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    multiplo: str | None
+    direccion: str | None
+
+
+@router_parametros.get("/redondeo-por-defecto", response_model=RedondeoPorDefectoResponse)
+def obtener_redondeo_por_defecto(
+    contexto: Annotated[
+        ContextoAutenticado,
+        Depends(requiere_algun_permiso("ADMIN_CONFIGURACION", "GESTIONAR_LISTAS")),
+    ],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> RedondeoPorDefectoResponse:
+    """El redondeo por defecto de la organización del token (PRC-01, `design.md` D11): lo lee
+    quien administra la configuración y quien crea listas."""
+    configuracion = identidad_service.obtener_configuracion(contexto.organizacion_id, sesion)
+    if configuracion is None:
+        raise RecursoNoEncontradoError("La organización no tiene configuración.")
+    multiplo = configuracion.redondeo_multiplo
+    return RedondeoPorDefectoResponse(
+        multiplo=None if multiplo is None else format(multiplo, ".2f"),
+        direccion=configuracion.redondeo_direccion,
+    )
+
+
+@router_parametros.post("/redondeo-por-defecto", response_model=RedondeoPorDefectoResponse)
+def definir_redondeo_por_defecto(
+    datos: RedondeoPorDefectoDefinirRequest,
+    entrada: Annotated[
+        EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_CONFIGURACION"))
+    ],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> RedondeoPorDefectoResponse:
+    """`REDONDEO_POR_DEFECTO_DEFINIR` (D10). La respuesta sale de `comando.resultado` (INV-06)."""
+    reloj = SystemClock()
+    sobre, huella, handler_registrado, contenido_validado = _preparar_comando_online(
+        entrada,
+        "REDONDEO_POR_DEFECTO_DEFINIR",
+        {"multiplo": datos.multiplo, "direccion": datos.direccion},
+        reloj,
+    )
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_redondeo_por_defecto_definir(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO" or comando.resultado is None:
+        raise RecursoNoEncontradoError("La organización no tiene configuración.")
+    return RedondeoPorDefectoResponse.model_validate(comando.resultado)
 
 
 class OrganizacionDatosResponse(BaseModel):

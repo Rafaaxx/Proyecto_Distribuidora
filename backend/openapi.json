@@ -2525,6 +2525,130 @@
         }
       }
     },
+    "/api/v1/configuracion/redondeo-por-defecto": {
+      "get": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Obtener Redondeo Por Defecto",
+        "description": "El redondeo por defecto de la organización del token (PRC-01, `design.md` D11): lo lee\nquien administra la configuración y quien crea listas.",
+        "operationId": "obtener_redondeo_por_defecto_api_v1_configuracion_redondeo_por_defecto_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedondeoPorDefectoResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Definir Redondeo Por Defecto",
+        "description": "`REDONDEO_POR_DEFECTO_DEFINIR` (D10). La respuesta sale de `comando.resultado` (INV-06).",
+        "operationId": "definir_redondeo_por_defecto_api_v1_configuracion_redondeo_por_defecto_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RedondeoPorDefectoDefinirRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedondeoPorDefectoResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/configuracion/organizacion": {
       "get": {
         "tags": [
@@ -5512,6 +5636,79 @@
             }
           }
         }
+      },
+      "post": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Crear Alicuota",
+        "operationId": "crear_alicuota_api_v1_configuracion_alicuotas_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlicuotaCrearRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlicuotaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/configuracion/medios-pago": {
@@ -5811,6 +6008,314 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ListaMotivos"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Crear Motivo",
+        "operationId": "crear_motivo_api_v1_configuracion_motivos_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MotivoCrearRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MotivoAdminResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/configuracion/motivos/todos": {
+      "get": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Listar Motivos Todos",
+        "operationId": "listar_motivos_todos_api_v1_configuracion_motivos_todos_get",
+        "parameters": [
+          {
+            "name": "ambito",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ambito"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListaMotivosAdmin"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/configuracion/motivos/{motivo_id}": {
+      "put": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Modificar Motivo",
+        "operationId": "modificar_motivo_api_v1_configuracion_motivos__motivo_id__put",
+        "parameters": [
+          {
+            "name": "motivo_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Motivo Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MotivoModificarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MotivoAdminResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/configuracion/alicuotas/{alicuota_id}": {
+      "put": {
+        "tags": [
+          "configuracion"
+        ],
+        "summary": "Modificar Alicuota",
+        "operationId": "modificar_alicuota_api_v1_configuracion_alicuotas__alicuota_id__put",
+        "parameters": [
+          {
+            "name": "alicuota_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Alicuota Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlicuotaModificarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlicuotaResponse"
                 }
               }
             }
@@ -12683,6 +13188,51 @@
         "title": "AlcanceReglaResponse",
         "description": "Un alcance con el nombre de su entidad."
       },
+      "AlicuotaCrearRequest": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "valor": {
+            "type": "string",
+            "title": "Valor"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "nombre",
+          "valor"
+        ],
+        "title": "AlicuotaCrearRequest",
+        "description": "Cuerpo de `POST /configuracion/alicuotas` (change 20c, D6): el valor es un string decimal\n(INV-03, un número JSON se rechaza); nace activa y la organización sale del token."
+      },
+      "AlicuotaModificarRequest": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "valor": {
+            "type": "string",
+            "title": "Valor"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "nombre",
+          "valor",
+          "activo"
+        ],
+        "title": "AlicuotaModificarRequest",
+        "description": "Reemplazo completo de `PUT /configuracion/alicuotas/{id}` (D6): el valor debe ser el\nguardado (`VALOR_NO_MODIFICABLE` si no)."
+      },
       "AlicuotaResponse": {
         "properties": {
           "id": {
@@ -17605,6 +18155,22 @@
         ],
         "title": "ListaMotivos"
       },
+      "ListaMotivosAdmin": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MotivoAdminResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ListaMotivosAdmin"
+      },
       "ListaOpcionResponse": {
         "properties": {
           "id": {
@@ -18088,6 +18654,42 @@
         "title": "MiPinRequest",
         "description": "`POST /yo/pin-autorizacion`. `extra=\"forbid\"`: el usuario sale del token, nunca del cuerpo\n(un `usuario_id` es un 422 sin eco del valor). Los dos secretos son `SecretStr` y no tienen\nvalidadores (D2, D21 punto 3): la ruta los separa antes de armar el contenido y la huella."
       },
+      "MotivoAdminResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "ambito": {
+            "type": "string",
+            "title": "Ambito"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          },
+          "actualizado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Actualizado En"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "ambito",
+          "nombre",
+          "activo",
+          "actualizado_en"
+        ],
+        "title": "MotivoAdminResponse",
+        "description": "Un motivo activo o no, con su ámbito, para la administración (change 20c, D12)."
+      },
       "MotivoContextoResponse": {
         "properties": {
           "id": {
@@ -18106,6 +18708,46 @@
           "nombre"
         ],
         "title": "MotivoContextoResponse"
+      },
+      "MotivoCrearRequest": {
+        "properties": {
+          "ambito": {
+            "type": "string",
+            "title": "Ambito"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ambito",
+          "nombre"
+        ],
+        "title": "MotivoCrearRequest",
+        "description": "Cuerpo de `POST /configuracion/motivos`: el motivo nace activo y la organización sale del\ntoken (`extra=\"forbid\"`)."
+      },
+      "MotivoModificarRequest": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "nombre",
+          "activo"
+        ],
+        "title": "MotivoModificarRequest",
+        "description": "Reemplazo de nombre y estado (D2). El ámbito no se modifica: un campo `ambito` se rechaza."
       },
       "MotivoResponse": {
         "properties": {
@@ -21025,6 +21667,71 @@
           "activo"
         ],
         "title": "RedondeoCategoriaResponse"
+      },
+      "RedondeoPorDefectoDefinirRequest": {
+        "properties": {
+          "multiplo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Multiplo"
+          },
+          "direccion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direccion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "multiplo",
+          "direccion"
+        ],
+        "title": "RedondeoPorDefectoDefinirRequest",
+        "description": "`multiplo` (string decimal, INV-03) y `direccion`, obligatorios en el cuerpo y nulos los dos\npara quitarlo. La coherencia y el dominio se validan en el dominio: `REDONDEO_INVALIDO`."
+      },
+      "RedondeoPorDefectoResponse": {
+        "properties": {
+          "multiplo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Multiplo"
+          },
+          "direccion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direccion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "multiplo",
+          "direccion"
+        ],
+        "title": "RedondeoPorDefectoResponse"
       },
       "RefreshRequest": {
         "properties": {

@@ -364,7 +364,12 @@ def _resolver_marca_activa(organizacion_id: UUID, marca_id: UUID | None, sesion:
 
 
 def _resolver_alicuota_activa(organizacion_id: UUID, alicuota_id: UUID, sesion: Session) -> None:
-    alicuota = configuracion_service.obtener_alicuota_por_id(organizacion_id, alicuota_id, sesion)
+    # `FOR SHARE` (change 20c, D9): la baja de la alícuota (`FOR UPDATE`) espera a que este
+    # producto confirme y, al contar, lo ve; o la baja confirma antes y este alta responde
+    # `ALICUOTA_INACTIVA`. Nunca queda un producto activo con una alícuota inactiva.
+    alicuota = configuracion_service.obtener_alicuota_para_compartir(
+        organizacion_id, alicuota_id, sesion
+    )
     if alicuota is None:
         raise RecursoNoEncontradoError(f"La alícuota {alicuota_id} no existe en esta organización.")
     if not alicuota.activo:
@@ -920,3 +925,11 @@ def presentaciones_para_venta(
             )
         )
     return por_producto
+
+
+# --- Change 20c, D9: puerto de uso de alícuotas -------------------------------------------------
+# `configuracion` no importa `catalogo`: este módulo le registra, al importarse, la función que
+# cuenta (en SQL) los productos activos que usan una alícuota (precedente ADR-023).
+configuracion_service.registrar_verificador_uso_alicuota(
+    "catalogo", repository.contar_productos_activos_con_alicuota
+)

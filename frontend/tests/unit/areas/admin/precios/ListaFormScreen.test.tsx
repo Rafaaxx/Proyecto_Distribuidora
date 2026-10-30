@@ -28,7 +28,8 @@ function renderForm(ruta: string) {
 }
 
 async function completarAlta(usuario: ReturnType<typeof userEvent.setup>, multiplo = '100') {
-  await usuario.type(screen.getByLabelText(/^nombre$/i), 'General')
+  // El formulario espera la lectura del redondeo por defecto (change 20c, D11) antes de mostrarse.
+  await usuario.type(await screen.findByLabelText(/^nombre$/i), 'General')
   await usuario.clear(screen.getByLabelText(/múltiplo de redondeo/i))
   await usuario.type(screen.getByLabelText(/múltiplo de redondeo/i), multiplo)
   await usuario.selectOptions(screen.getByLabelText(/dirección del redondeo/i), 'ARRIBA')
@@ -70,7 +71,7 @@ describe('ListaFormScreen: alta (tarea 13.1)', () => {
     await usuario.click(screen.getByRole('button', { name: /crear lista/i }))
 
     expect(await screen.findByText(/múltiplo mayor que cero, con hasta dos decimales/i)).toBeInTheDocument()
-    expect(apiFetchMock).not.toHaveBeenCalled()
+    expect(llamadas(apiFetchMock, 'POST', '/precios/listas')).toHaveLength(0)
   })
 
   it('un nombre duplicado informado por el servidor se muestra junto al nombre y conserva lo cargado', async () => {

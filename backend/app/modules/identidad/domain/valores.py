@@ -81,7 +81,12 @@ class ToleranciaOfflineInvalidaError(DomainError):
 
 
 class RedondeoDireccionInvalidaError(DomainError):
-    codigo = "IDENTIDAD_REDONDEO_DIRECCION_INVALIDA"
+    """Redondeo por defecto inválido (dirección desconocida, múltiplo no positivo o con más de
+    dos decimales, o uno sin el otro). Mismo código que usa `precios` para el redondeo de una
+    lista (PRC-01, PRC-14; change 20c, D10): 422 `REDONDEO_INVALIDO`."""
+
+    codigo = "REDONDEO_INVALIDO"
+    status_http = 422
 
 
 class EstadoFacturacionInvalidoError(DomainError):
@@ -184,6 +189,38 @@ def validar_redondeo_direccion(valor: str) -> str:
             f"Valores válidos: {REDONDEO_DIRECCIONES}."
         )
     return valor
+
+
+def validar_redondeo_por_defecto(
+    multiplo: str | None, direccion: str | None
+) -> tuple[Decimal, str] | None:
+    """Redondeo por defecto de la organización (change 20c, D10; PRC-01, PRC-14): los dos nulos
+    son "sin definir" (`None`); si no, múltiplo mayor que cero con hasta dos decimales (INV-03:
+    texto decimal exacto, no se redondea) y dirección de `REDONDEO_DIRECCIONES`. Uno sin el
+    otro, o cualquier valor fuera de dominio, es `REDONDEO_INVALIDO` (422)."""
+    if multiplo is None and direccion is None:
+        return None
+    if multiplo is None or direccion is None:
+        raise RedondeoDireccionInvalidaError(
+            "El redondeo por defecto se define completo (múltiplo y dirección) o no se define."
+        )
+    validar_redondeo_direccion(direccion)
+    try:
+        valor = Decimal(multiplo.strip())
+    except InvalidOperation as error:
+        raise RedondeoDireccionInvalidaError(
+            f"El múltiplo de redondeo no es un número decimal: {multiplo!r}."
+        ) from error
+    if not valor.is_finite() or valor <= 0:
+        raise RedondeoDireccionInvalidaError(
+            f"El múltiplo de redondeo tiene que ser mayor que cero: {multiplo!r}."
+        )
+    exponente = valor.as_tuple().exponent
+    if isinstance(exponente, int) and exponente < -2:
+        raise RedondeoDireccionInvalidaError(
+            f"El múltiplo de redondeo admite hasta 2 decimales (no se redondea): {multiplo!r}."
+        )
+    return valor, direccion
 
 
 def validar_estado_facturacion_default(valor: str) -> str:

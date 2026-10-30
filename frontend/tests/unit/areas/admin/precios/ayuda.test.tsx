@@ -50,6 +50,7 @@ describe('ayuda en el formulario de la lista', () => {
     const usuario = userEvent.setup()
     montar('/admin/precios/nueva')
 
+    await screen.findByLabelText(/múltiplo de redondeo/i)
     await usuario.click(ayuda('Redondeo'))
 
     expect(screen.getByText(/\$8\.571,43 con múltiplo 100/)).toBeVisible()

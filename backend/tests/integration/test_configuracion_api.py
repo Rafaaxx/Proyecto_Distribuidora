@@ -194,9 +194,10 @@ class TestListarAlicuotas:
     ) -> None:
         organizacion = _crear_organizacion(sesion, "org-conf-3")
         _con_gestionar_catalogo(sesion, organizacion.id, nombre_usuario="admin1")
-        for nombre in ("10,5%", "21%", "27%"):
+        # Desde el change 20c el valor es único por organización (ux_alicuota_iva__valor).
+        for nombre, valor in (("10,5%", "0.105000"), ("21%", "0.210000"), ("27%", "0.270000")):
             configuracion_repository.crear_alicuota(
-                organizacion.id, sesion, nombre=nombre, valor=Decimal("0.100000"), momento=MOMENTO
+                organizacion.id, sesion, nombre=nombre, valor=Decimal(valor), momento=MOMENTO
             )
         sesion.commit()
         access_token = _login(cliente, "org-conf-3", "admin1")

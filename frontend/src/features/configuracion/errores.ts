@@ -7,18 +7,22 @@
 export class ErrorDeConfiguracion extends Error {
   readonly codigo: string
   readonly estado: number
+  /** Cantidad de productos que informa ALICUOTA_EN_USO (change 20c, D8). */
+  readonly productos: number | undefined
 
-  constructor(codigo: string, mensaje: string, estado: number) {
+  constructor(codigo: string, mensaje: string, estado: number, productos?: number) {
     super(mensaje)
     this.name = 'ErrorDeConfiguracion'
     this.codigo = codigo
     this.estado = estado
+    this.productos = productos
   }
 }
 
 interface ProblemDetails {
   title?: string
   codigo?: string
+  productos?: number
 }
 
 const MENSAJE_GENERICO_DE_RESERVA = 'No se pudo completar la operación.'
@@ -35,5 +39,6 @@ export async function errorDesdeRespuesta(respuesta: Response): Promise<ErrorDeC
     problema.codigo ?? 'ERROR_DESCONOCIDO',
     problema.title ?? MENSAJE_GENERICO_DE_RESERVA,
     respuesta.status,
+    typeof problema.productos === 'number' ? problema.productos : undefined,
   )
 }

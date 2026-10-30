@@ -320,6 +320,21 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("put", "/api/v1/configuracion/medios-pago/{medio_pago_id}"),
         ("get", "/api/v1/configuracion/medios-pago/todos"),
         ("get", "/api/v1/configuracion/motivos"),
+        # Change 20c, grupo 3 (`configuracion/api.py`): el alta y la modificación de motivos y la
+        # lectura completa, cada una con su prueba real de aislamiento (login real de dos
+        # organizaciones; un motivo ajeno responde 404 y la lectura trae solo los de la
+        # organización del token) en `test_motivo_comandos.py` y `test_motivos_lectura.py`.
+        ("post", "/api/v1/configuracion/motivos"),
+        ("put", "/api/v1/configuracion/motivos/{motivo_id}"),
+        ("get", "/api/v1/configuracion/motivos/todos"),
+        # Change 20c, grupos 4 y 5: el alta y la modificación de alícuotas (`configuracion/api.py`)
+        # y el redondeo por defecto (`identidad/api.py`). Pruebas reales de aislamiento (login real
+        # de dos organizaciones; una alícuota ajena responde 404, el redondeo cambia solo el de la
+        # organización del token) en `test_alicuota_comandos.py` y `test_redondeo_por_defecto.py`.
+        ("post", "/api/v1/configuracion/alicuotas"),
+        ("put", "/api/v1/configuracion/alicuotas/{alicuota_id}"),
+        ("get", "/api/v1/configuracion/redondeo-por-defecto"),
+        ("post", "/api/v1/configuracion/redondeo-por-defecto"),
         # Change 12, grupo 4 (`proveedores/api.py`, tarea 4.3): la escritura dedicada de
         # `PAGO_PROVEEDOR_REGISTRAR`, con su prueba real de aislamiento (login real de dos
         # organizaciones en ambos sentidos: el proveedor y el medio de la otra

@@ -225,7 +225,7 @@ def test_cc02_una_cobranza_ya_anulada_responde_cobranza_ya_anulada_y_no_escribe_
 def test_cob05_anular_cobranza_sigue_respondiendo_cobranza_de_venta(entorno: Entorno) -> None:
     """Escenario "Por su propio comando": el camino del comando no cambió y nada se escribe."""
     _, cobranza_id = _venta_y_cobranza(entorno)
-    motivo = entorno.crear_motivo("ANULACION_COBRANZA", "Error de carga")
+    motivo = entorno.motivo_id  # ya trae "Error de carga" de este ámbito (ux_motivo__nombre)
 
     with pytest.raises(CobranzaDeVentaError) as error:
         cobranzas_service.anular_cobranza(

@@ -33,6 +33,27 @@ class PaginaAlicuotas(BaseModel):
     cursor_siguiente: str | None
 
 
+class AlicuotaCrearRequest(BaseModel):
+    """Cuerpo de `POST /configuracion/alicuotas` (change 20c, D6): el valor es un string decimal
+    (INV-03, un número JSON se rechaza); nace activa y la organización sale del token."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    nombre: str
+    valor: str
+
+
+class AlicuotaModificarRequest(BaseModel):
+    """Reemplazo completo de `PUT /configuracion/alicuotas/{id}` (D6): el valor debe ser el
+    guardado (`VALOR_NO_MODIFICABLE` si no)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    nombre: str
+    valor: str
+    activo: bool
+
+
 class MedioPagoResponse(BaseModel):
     """Un medio de pago activo con su indicador de referencia obligatoria."""
 
@@ -93,3 +114,38 @@ class MotivoResponse(BaseModel):
 
 class ListaMotivos(BaseModel):
     items: list[MotivoResponse]
+
+
+class MotivoAdminResponse(BaseModel):
+    """Un motivo activo o no, con su ámbito, para la administración (change 20c, D12)."""
+
+    id: UUID
+    ambito: str
+    nombre: str
+    activo: bool
+    actualizado_en: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ListaMotivosAdmin(BaseModel):
+    items: list[MotivoAdminResponse]
+
+
+class MotivoCrearRequest(BaseModel):
+    """Cuerpo de `POST /configuracion/motivos`: el motivo nace activo y la organización sale del
+    token (`extra="forbid"`)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ambito: str
+    nombre: str
+
+
+class MotivoModificarRequest(BaseModel):
+    """Reemplazo de nombre y estado (D2). El ámbito no se modifica: un campo `ambito` se rechaza."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    nombre: str
+    activo: bool

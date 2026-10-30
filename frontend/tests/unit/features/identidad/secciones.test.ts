@@ -42,4 +42,14 @@ describe('sección "Configuración" del menú (change 11b, D7, tarea 7.4)', () =
       seccionesPermitidas(conPermisos('GESTIONAR_CATALOGO', 'REGISTRAR_COMPRA')).map((s) => s.etiqueta),
     ).not.toContain('Configuración')
   })
+
+  it.each([['GESTIONAR_LISTAS'], ['PUBLICAR_LISTAS']])('se ofrece con solo %s (change 20c, 14.2)', (permiso) => {
+    expect(seccionesPermitidas(conPermisos(permiso)).map((s) => s.etiqueta)).toContain('Configuración')
+  })
+
+  it('no se ofrece al vendedor (change 20c, 14.2)', () => {
+    expect(
+      seccionesPermitidas(conPermisos('VENDER', 'TRANSFERIR_STOCK', 'REGISTRAR_COBRANZA')).map((s) => s.etiqueta),
+    ).not.toContain('Configuración')
+  })
 })

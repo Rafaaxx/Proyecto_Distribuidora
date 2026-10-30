@@ -77,7 +77,7 @@ La columna **Etapa** indica cuándo se implementa la regla. Las reglas marcadas 
 | Zona horaria | IANA | America/Argentina/Mendoza | 1 |
 | Condición frente al IVA | RESPONSABLE_INSCRIPTO / MONOTRIBUTO / EXENTO | MONOTRIBUTO (ADR-045) | 1 |
 | Modo impositivo | A / B / C (solo A si la condición no es RESPONSABLE_INSCRIPTO) | A | 1 (B y C: 4) |
-| Alícuotas de IVA disponibles | Lista | 21%, 10,5%, 0% | 1 |
+| Alícuotas de IVA disponibles | Lista; nombre y porcentaje únicos en la organización; el porcentaje (de 0 a menos de 100 %) no cambia una vez creada; se dan de baja y se reactivan, nunca se borran; no se da de baja una que use un producto activo ni la última activa; la administra `ADMIN_CONFIGURACION` con `ALICUOTA_CREAR` y `ALICUOTA_MODIFICAR` (ADR-061) | 21%, 10,5%, 0% | 1 |
 | Modalidad de IVA por defecto al facturar | CLIENTE / ABSORBIDO (solo si la condición es RESPONSABLE_INSCRIPTO; sin definir en otro caso) | No aplica (monotributo) | Facturación |
 | Lista de precios por defecto | Lista | **Sin definir**: no se siembra ninguna lista; un usuario con `ADMIN_CONFIGURACION` la elige entre las activas con `LISTA_PRECIO_PREDETERMINADA_DEFINIR` (ADR-047) | 1 |
 | Política de crédito por defecto | ADVERTIR / AUTORIZAR / BLOQUEAR; la define `CREDITO_ORGANIZACION_CONFIGURAR` (`ADMIN_CONFIGURACION`) | AUTORIZAR | 1 |
@@ -87,7 +87,7 @@ La columna **Etapa** indica cuándo se implementa la regla. Las reglas marcadas 
 | Motivo obligatorio en descuento manual | Sí / no | A definir; mientras esté sin definir, el motivo no es obligatorio. Lo define `DESCUENTO_MANUAL_CONFIGURAR` (`ADMIN_CONFIGURACION`), junto con la habilitación (ADR-055) | 1 |
 | Motivo obligatorio al usar lista no asignada o versión anterior | Sí / no | Sí | 1 |
 | Desvío máximo del reloj del dispositivo en operaciones con conexión | Segundos | 300 si la organización no lo define (aprobado el 2026-10-17, ADR-054) | 1 |
-| Redondeo por defecto | Múltiplo y dirección | A definir; lo define el change 20c (`catalogos-de-configuracion`) | 1 |*solo precarga el formulario de una lista nueva cuando esté definido; la lista siempre tiene su propio redondeo (PRC-01)* |
+| Redondeo por defecto | Múltiplo y dirección, los dos o ninguno, con el dominio de PRC-01 y PRC-14; lo define `REDONDEO_POR_DEFECTO_DEFINIR` (`ADMIN_CONFIGURACION`, solo con conexión, auditado); se lee con `ADMIN_CONFIGURACION` o `GESTIONAR_LISTAS` (ADR-061) | Sin definir | 1 |*solo precarga el formulario de una lista nueva cuando está definido; sin definir, el formulario empieza vacío; no cambia las listas existentes; la lista siempre tiene su propio redondeo (PRC-01)* |
 | Venta a consumidor final genérico | Sí / no | A definir | 1 |
 | Estado de facturación inicial por defecto | NO_REQUIERE / PENDIENTE | NO_REQUIERE | 1 |
 | Medios de pago | Lista con indicador de referencia obligatoria; nombre único en la organización sin distinguir mayúsculas; se dan de baja y se reactivan, nunca se borran, y siempre queda al menos uno activo (ADR-053) | Efectivo, transferencia (con referencia), cheque (con referencia), billetera, tarjeta (con referencia) | 1 |
@@ -97,6 +97,7 @@ La columna **Etapa** indica cuándo se implementa la regla. Las reglas marcadas 
 | Nombre de la organización | Obligatorio, recortado, hasta 200 caracteres; lo define `ORGANIZACION_DATOS_CONFIGURAR` (`ADMIN_CONFIGURACION`, solo con conexión, auditado); se imprime en el encabezado de la nota | El sembrado | 1 |
 | CUIT de la organización | 11 dígitos, opcional; vacío = nulo; mismo comando; se imprime en el encabezado de la nota si está cargado | Sin cargar (nulo) | 1 |
 | Motivos de ajuste de stock | Lista | Rotura, vencimiento, muestra, consumo interno, diferencia de inventario, otro | 1 |
+| Motivos (todos los ámbitos) | Lista por ámbito de la lista cerrada de `03` §4; nombre único en la organización y el ámbito sin distinguir mayúsculas; el ámbito no cambia; se dan de baja y se reactivan, nunca se borran, y cada ámbito conserva al menos uno activo; los administra `ADMIN_CONFIGURACION` con `MOTIVO_CREAR` y `MOTIVO_MODIFICAR` (ADR-061) | Los sembrados de cada ámbito (`03` §4) | 1 |
 | Intentos fallidos de PIN antes de bloquear | Número | 5; vale para el PIN de desbloqueo local y, con conexión, para los fallos de un mismo usuario contra el PIN de un mismo supervisor (`intentos_pin_max`). El tope general por supervisor (20 fallos de cualquier usuario) es una constante del código, no un parámetro (ADR-055) | 1 |
 
 ## 5. Catálogo
@@ -504,7 +505,7 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 | Permiso | Alcance | ADM | GES | SUP | VEN | CON |
 | --- | --- | :-: | :-: | :-: | :-: | :-: |
 | ADMIN_USUARIOS | Usuarios, roles y permisos: alta, edición, baja y reactivación de usuarios, cambio de rol, restablecimiento de contraseña y tope de descuento propio de cada usuario; crear, renombrar, dar de baja y reactivar roles, cambiar los permisos de cada rol, consultar el catálogo de permisos, definir el tope de descuento manual de cada rol y consultar los roles con su tope y los usuarios con su rol. Ningún cambio —baja de usuario, cambio de rol, baja de rol ni cambio de permisos— puede dejar la organización sin un usuario activo con este permiso (ADR-053, ADR-060) | ✓ | | | | |
-| ADMIN_CONFIGURACION | Configuración de la organización (incluye crear, modificar y desactivar ubicaciones, STK-02, y crear, modificar, dar de baja y reactivar medios de pago, ADR-053) | ✓ | | | | |
+| ADMIN_CONFIGURACION | Configuración de la organización (incluye crear, modificar y desactivar ubicaciones, STK-02; crear, modificar, dar de baja y reactivar medios de pago, ADR-053; motivos de cada ámbito y alícuotas de IVA, y definir el redondeo por defecto, ADR-061) | ✓ | | | | |
 | GESTIONAR_DISPOSITIVOS | Ver y revocar dispositivos | ✓ | | ✓ | | |
 | IMPORTAR_DATOS | Importaciones y puesta en marcha (incluye registrar saldos iniciales, CC-08, y stock inicial, STK-10) | ✓ | | | | |
 | GESTIONAR_CATALOGO | Productos, presentaciones, categorías | ✓ | ✓ | | | |

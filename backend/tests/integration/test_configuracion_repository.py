@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 
 import pytest
 from sqlalchemy.orm import Session
@@ -58,11 +59,14 @@ def otra_organizacion_id(db_session: Session) -> uuid.UUID:
 def _crear_alicuota(
     db_session: Session, organizacion_id: uuid.UUID, *, nombre: str, activo: bool = True
 ) -> uuid.UUID:
+    # El valor es único por organización desde el change 20c (`ux_alicuota_iva__valor`): sale
+    # del propio nombre ("10,5%" -> 0.105, "21%" -> 0.21).
+    valor = Decimal(nombre.rstrip("%").replace(",", ".")) / 100
     alicuota = configuracion_repository.crear_alicuota(
         organizacion_id,
         db_session,
         nombre=nombre,
-        valor="0.210000",  # type: ignore[arg-type]
+        valor=valor,
         momento=_MOMENTO,
         activo=activo,
     )

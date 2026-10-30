@@ -659,7 +659,7 @@ def test_downgrade_menos_uno_y_upgrade_corren_limpios_con_datos_de_catalogo_semb
 # --- ADR-057 (change 18b, tarea 24.3): `intento_login.clave_intento` -----------------------------
 
 REVISION_CLAVE_INTENTO = "c8d9e0f1a2b3"
-REVISION_HEAD_ACTUAL = "e0f1a2b3c4d5"  # `nota_venta_configuracion` (change 20)
+REVISION_HEAD_ACTUAL = "f1a2b3c4d5e6"  # `usuarios_roles_y_cartera` (change 20b)
 REVISION_ANTERIOR_A_NOTA = "d9e0f1a2b3c4"  # `venta_anulacion` (change 19)
 REVISION_ANTERIOR_A_CLAVE_INTENTO = "b6c7d8e9f0a1"
 INDICE_CLAVE_INTENTO = "ix_intento_login__clave_intento_creado_en"

@@ -152,7 +152,7 @@ def _preparar_usuario(database_url: str, organizacion_id: UUID) -> UUID:
         rol = Rol(
             id=nuevo_id(),
             organizacion_id=organizacion_id,
-            nombre="Rol de prueba",
+            nombre=f"Rol de prueba {uuid4().hex[:8]}",
             tope_descuento=Decimal("0"),
             activo=True,
             creado_en=MOMENTO,

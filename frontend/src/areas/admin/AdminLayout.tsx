@@ -11,7 +11,9 @@ const CLASE_ENLACE_ACTIVO = 'font-semibold text-primary'
 const CLASE_ENLACE = 'text-primary/70 hover:text-primary'
 const RUTA_AYUDA = '/admin/ayuda'
 const RUTA_MI_PIN = '/admin/mi-pin'
+const RUTA_MI_CONTRASENA = '/admin/mi-contrasena'
 const MENSAJE_SIN_PERMISOS = 'No se pudieron obtener tus permisos.'
+const MENSAJE_SESION_TERMINADA = 'Tu sesión terminó. Iniciá sesión de nuevo.'
 
 /**
  * "{usuario} · {organización} · {rol}" (tarea 7.5, **B4**, `design.md`
@@ -91,18 +93,28 @@ export function AdminLayout() {
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             {identificacion && <p className="text-sm text-primary/70">{identificacion}</p>}
-            {/* "Mi PIN" (change 18b, D21 parte B): solo con algún permiso de autorización. */}
-            {permisos.yo && ofreceMiPin(permisos.tiene) && (
-              <NavLink to={RUTA_MI_PIN} className={({ isActive }) => (isActive ? CLASE_ENLACE_ACTIVO : CLASE_ENLACE)}>
-                Mi PIN
-              </NavLink>
+            {/* "Mi cuenta" (change 20b, D20): "Mi PIN" y "Mi contraseña". La ve todo usuario con sesión
+                confirmada (falla cerrada como Ayuda); "Mi PIN" conserva su regla (change 18b, D21 parte B):
+                solo con algún permiso de autorización. */}
+            {permisos.yo && (
+              <nav className="flex items-center gap-3" aria-label="Mi cuenta">
+                <span className="text-sm font-medium text-primary">Mi cuenta</span>
+                {ofreceMiPin(permisos.tiene) && (
+                  <NavLink to={RUTA_MI_PIN} className={({ isActive }) => (isActive ? CLASE_ENLACE_ACTIVO : CLASE_ENLACE)}>
+                    Mi PIN
+                  </NavLink>
+                )}
+                <NavLink to={RUTA_MI_CONTRASENA} className={({ isActive }) => (isActive ? CLASE_ENLACE_ACTIVO : CLASE_ENLACE)}>
+                  Mi contraseña
+                </NavLink>
+              </nav>
             )}
           </div>
         </div>
 
         {permisos.estado === 'error' && (
           <Alert className="mt-3 flex flex-wrap items-center gap-2">
-            <span>{MENSAJE_SIN_PERMISOS}</span>
+            <span>{sesionTerminada ? MENSAJE_SESION_TERMINADA : MENSAJE_SIN_PERMISOS}</span>
             {sesionTerminada ? (
               <Link to="/admin/login" className="font-medium underline">
                 Iniciar sesión

@@ -152,7 +152,9 @@ export interface paths {
         /**
          * Listar Usuarios
          * @description Tarea 10.8, escenario "La contraseña no se puede recuperar del
-         *     sistema": ninguna vía de lectura de usuario expone `password_hash`.
+         *     sistema": ninguna vía de lectura de usuario expone `password_hash`. Change 20b (D16): suma el
+         *     nombre y el estado del rol, el tope propio y el filtro por estado; tarea 8.6: filtros `rol_id` y
+         *     `con_tope_propio`, combinables entre sí y con `estado`.
          */
         get: operations["listar_usuarios_api_v1_identidad_usuarios_get"];
         put?: never;
@@ -168,6 +170,219 @@ export interface paths {
          *     sea el estado real, no un valor cacheado del primer intento.
          */
         post: operations["crear_usuario_api_v1_identidad_usuarios_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identidad/usuarios/{usuario_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Usuario
+         * @description Change 20b (D16): el usuario de la organización del token; uno de otra organización o
+         *     inexistente responde 404 (INV-21, SEG-07). Nunca `password_hash` ni el PIN.
+         */
+        get: operations["obtener_usuario_api_v1_identidad_usuarios__usuario_id__get"];
+        /**
+         * Modificar Usuario
+         * @description `USUARIO_MODIFICAR` (D9): nombre y email.
+         */
+        put: operations["modificar_usuario_api_v1_identidad_usuarios__usuario_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identidad/usuarios/{usuario_id}/baja": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dar De Baja Usuario
+         * @description `USUARIO_BAJA` (D2): pasa el usuario a `INACTIVO`, corta sus sesiones salvo las de una
+         *     jornada no cerrada y borra su PIN.
+         */
+        post: operations["dar_de_baja_usuario_api_v1_identidad_usuarios__usuario_id__baja_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identidad/usuarios/{usuario_id}/reactivacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reactivar Usuario
+         * @description `USUARIO_REACTIVAR` (D2): vuelve el usuario a `ACTIVO`; inicia sesión de nuevo.
+         */
+        post: operations["reactivar_usuario_api_v1_identidad_usuarios__usuario_id__reactivacion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identidad/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Roles
+         * @description Los roles de la organización del token, con nombre, estado, tope y permisos (una consulta
+         *     para todos los permisos, sin N+1). Ningún rol ajeno (INV-21).
+         */
+        get: operations["listar_roles_api_v1_identidad_roles_get"];
+        put?: never;
+        /**
+         * Crear Rol
+         * @description `ROL_CREAR` (D10): un rol activo, asignable, con sus permisos y su tope.
+         */
+        post: operations["crear_rol_api_v1_identidad_roles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identidad/roles/{rol_id}/nombre": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Renombrar Rol
+         * @description `ROL_RENOMBRAR` (D10): cambia solo el nombre; las plantillas se renombran como cualquiera.
+         */
+        put: operations["renombrar_rol_api_v1_identidad_roles__rol_id__nombre_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identidad/roles/{rol_id}/baja": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dar De Baja Rol
+         * @description `ROL_BAJA` (D11): solo si el rol no tiene usuarios activos; un rol de baja no se asigna.
+         */
+        post: operations["dar_de_baja_rol_api_v1_identidad_roles__rol_id__baja_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identidad/roles/{rol_id}/reactivacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reactivar Rol
+         * @description `ROL_REACTIVAR` (D11): vuelve el rol a activo; la reactivación es libre.
+         */
+        post: operations["reactivar_rol_api_v1_identidad_roles__rol_id__reactivacion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identidad/usuarios/{usuario_id}/rol": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Cambiar Rol De Usuario
+         * @description `USUARIO_ROL_CAMBIAR` (D7): el cambio rige en la petición siguiente; sin revocar
+         *     sesiones.
+         */
+        put: operations["cambiar_rol_de_usuario_api_v1_identidad_usuarios__usuario_id__rol_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identidad/usuarios/{usuario_id}/contrasena": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restablecer Contrasena De Usuario
+         * @description `USUARIO_CONTRASENA_RESTABLECER` (D8-A): la contraseña llega al handler por clausura y no
+         *     entra al contenido, la huella ni la respuesta (204 sin cuerpo).
+         */
+        post: operations["restablecer_contrasena_de_usuario_api_v1_identidad_usuarios__usuario_id__contrasena_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identidad/usuarios/{usuario_id}/tope-descuento": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Definir Tope Descuento De Usuario
+         * @description `USUARIO_TOPE_DESCUENTO_DEFINIR` (D12): el tope propio reemplaza al del rol.
+         */
+        put: operations["definir_tope_descuento_de_usuario_api_v1_identidad_usuarios__usuario_id__tope_descuento_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -216,27 +431,6 @@ export interface paths {
          *     `crear_usuario`).
          */
         put: operations["cambiar_composicion_rol_api_v1_identidad_roles__rol_id__permisos_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/identidad/roles": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Listar Roles
-         * @description Los roles de la organización del token, con nombre, estado, tope y permisos (una consulta
-         *     para todos los permisos, sin N+1). Ningún rol ajeno (INV-21).
-         */
-        get: operations["listar_roles_api_v1_identidad_roles_get"];
-        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -367,6 +561,30 @@ export interface paths {
          *     login) llegan al handler por clausura, no por el contenido. Respuesta 204 sin cuerpo.
          */
         post: operations["definir_mi_pin_api_v1_yo_pin_autorizacion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/yo/contrasena": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cambiar Mi Contrasena
+         * @description `CONTRASENA_PROPIA_CAMBIAR` ("Mi contraseña", D20). Cualquier usuario autenticado y activo;
+         *     sin permiso especial (la ruta está exenta del ratchet de permiso por ruta, y el tipo declara
+         *     su salida justificada). Delega en el bus; las contraseñas y la IP del cliente
+         *     (`request.client.host`, la misma que usa el login) llegan al handler por clausura, no por el
+         *     contenido. Respuesta 204 sin cuerpo.
+         */
+        post: operations["cambiar_mi_contrasena_api_v1_yo_contrasena_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -778,6 +996,9 @@ export interface paths {
          *     `administracion-de-clientes`, escenarios "Buscar un cliente por texto" y
          *     "Filtrar por estado suspendido"). El `estado` se valida contra el
          *     catálogo cerrado en `domain/estado.py` y lo repite el `CHECK` de la base.
+         *
+         *     Change 20b (D15): cada cliente trae su vendedor (`vendedor_id`, `vendedor_nombre`,
+         *     `vendedor_valido`) y el listado filtra por `vendedor_id` o por `sin_vendedor=true`.
          */
         get: operations["listar_clientes_api_v1_clientes_get"];
         put?: never;
@@ -826,6 +1047,27 @@ export interface paths {
         /** Modificar Credito Cliente */
         put: operations["modificar_credito_cliente_api_v1_clientes__cliente_id__credito_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/clientes/vendedor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Asignar Vendedor
+         * @description Change 20b (D15): asigna un vendedor a uno o varios clientes, o lo quita con `null`
+         *     (`CLIENTE_VENDEDOR_ASIGNAR`, `GESTIONAR_CLIENTES`, solo con conexión, todo o nada).
+         */
+        post: operations["asignar_vendedor_api_v1_clientes_vendedor_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -881,8 +1123,35 @@ export interface paths {
          *     ni documento; solo clientes `ACTIVO` y `SUSPENDIDO`, y el consumidor final únicamente con
          *     `incluir_consumidor_final=true` (la pantalla de venta, CLI-03; aprobado el 2026-10-20).
          *     Se declara antes de `/{cliente_id}`.
+         *
+         *     Change 20b (D14): quien no tiene `GESTIONAR_CLIENTES` y tiene clientes asignados recibe sus
+         *     clientes; `alcance=todos` ("Buscar en todos los clientes") trae todos. Sin cartera, o con
+         *     `GESTIONAR_CLIENTES`, siempre todos (ADR-052).
          */
         get: operations["listar_opciones_de_clientes_api_v1_clientes_opciones_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/clientes/vendedores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Vendedores Elegibles
+         * @description Change 20b (D15): los usuarios que se pueden elegir como vendedor de un cliente (activos,
+         *     con rol activo y con `VENDER` o `REGISTRAR_COBRANZA`), para quien administra clientes sin
+         *     administrar usuarios. Solo `id` y `nombre`, de la organización del token. Se declara antes de
+         *     `/{cliente_id}`.
+         */
+        get: operations["listar_vendedores_elegibles_api_v1_clientes_vendedores_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2949,6 +3218,12 @@ export interface components {
             email: string | null;
             /** Lista Precio Id */
             lista_precio_id: string | null;
+            /** Vendedor Id */
+            vendedor_id: string | null;
+            /** Vendedor Nombre */
+            vendedor_nombre?: string | null;
+            /** Vendedor Valido */
+            vendedor_valido?: boolean | null;
             /** Limite Credito */
             limite_credito: string | null;
             /** Politica Credito */
@@ -2987,6 +3262,29 @@ export interface components {
             cliente_id: string;
             /** Saldo */
             saldo: string;
+        };
+        /**
+         * ClienteVendedorAsignarRequest
+         * @description Cuerpo de `POST /clientes/vendedor` (change 20b, D15): los clientes (1 a 500) y el vendedor,
+         *     o `null` para quitarlo. `vendedor_id` es obligatorio.
+         */
+        ClienteVendedorAsignarRequest: {
+            /** Cliente Ids */
+            cliente_ids: string[];
+            /** Vendedor Id */
+            vendedor_id: string | null;
+        };
+        /**
+         * ClienteVendedorAsignarResponse
+         * @description Lo que dejó la asignación: `cambiados` cuenta solo los clientes cuyo vendedor cambió.
+         */
+        ClienteVendedorAsignarResponse: {
+            /** Vendedor Id */
+            vendedor_id: string | null;
+            /** Cliente Ids */
+            cliente_ids: string[];
+            /** Cambiados */
+            cambiados: number;
         };
         /** CobranzaAnulacionResponse */
         CobranzaAnulacionResponse: {
@@ -4970,6 +5268,25 @@ export interface components {
             requiere_referencia: boolean;
         };
         /**
+         * MiContrasenaRequest
+         * @description `POST /yo/contrasena`. `extra="forbid"`: el usuario sale del token, nunca del cuerpo (un
+         *     `usuario_id` es un 422 sin eco del valor). Los dos secretos son `SecretStr` sin validadores
+         *     (ADR-056): la ruta los separa antes de armar el contenido y la huella. La confirmación de la
+         *     nueva es solo de interfaz.
+         */
+        MiContrasenaRequest: {
+            /**
+             * Password Actual
+             * Format: password
+             */
+            password_actual: string;
+            /**
+             * Password Nueva
+             * Format: password
+             */
+            password_nueva: string;
+        };
+        /**
          * MiPinEstadoResponse
          * @description `GET /yo/pin-autorizacion`: dos booleanos y nada más (ADR-011): ni derivación ni sal.
          */
@@ -6500,6 +6817,25 @@ export interface components {
             /** Sin Credito Fiscal */
             sin_credito_fiscal: number;
         };
+        /**
+         * RolCambioResponse
+         * @description El rol tal como quedó tras un comando.
+         */
+        RolCambioResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Activo */
+            activo: boolean;
+            /** Tope Descuento */
+            tope_descuento: string;
+            /** Permisos */
+            permisos: string[];
+        };
         /** RolConTopeResponse */
         RolConTopeResponse: {
             /**
@@ -6535,6 +6871,30 @@ export interface components {
             permisos: string[];
             /** Usuarios Activos */
             usuarios_activos: number;
+            /** Usuarios Con Tope Propio */
+            usuarios_con_tope_propio: number;
+            /** Usuarios Con Tope Propio Activos */
+            usuarios_con_tope_propio_activos: number;
+            /** Usuarios Con Tope Propio Inactivos */
+            usuarios_con_tope_propio_inactivos: number;
+        };
+        /**
+         * RolCrearRequest
+         * @description Nombre, permisos y tope (cadena, por defecto 0) del rol nuevo. Sin `organizacion_id`:
+         *     sale del token (INV-21).
+         */
+        RolCrearRequest: {
+            /** Nombre */
+            nombre: string;
+            /** Permisos */
+            permisos: string[];
+            /** Tope Descuento */
+            tope_descuento?: string | null;
+        };
+        /** RolRenombrarRequest */
+        RolRenombrarRequest: {
+            /** Nombre */
+            nombre: string;
         };
         /** RolResponse */
         RolResponse: {
@@ -6914,6 +7274,96 @@ export interface components {
             actualizado_en: string;
             jornada?: components["schemas"]["TomaDeUbicacionResponse"] | null;
         };
+        /** UsuarioBajaRequest */
+        UsuarioBajaRequest: {
+            /** Observacion */
+            observacion?: string | null;
+        };
+        /**
+         * UsuarioCambioResponse
+         * @description El usuario tal como quedó tras un comando. Sin `password_hash` ni PIN: son campos que este
+         *     modelo no declara (mismo criterio que `UsuarioResponse`).
+         */
+        UsuarioCambioResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Usuario */
+            usuario: string;
+            /** Nombre */
+            nombre: string;
+            /** Email */
+            email: string | null;
+            /**
+             * Rol Id
+             * Format: uuid
+             */
+            rol_id: string;
+            /** Estado */
+            estado: string;
+            /** Tope Descuento Override */
+            tope_descuento_override: string | null;
+        };
+        /**
+         * UsuarioContrasenaRestablecerRequest
+         * @description `contrasena: SecretStr`, sin validadores (ADR-056): el valor no aparece en un error. La
+         *     ruta la separa antes de armar el contenido y la huella.
+         */
+        UsuarioContrasenaRestablecerRequest: {
+            /**
+             * Contrasena
+             * Format: password
+             */
+            contrasena: string;
+        };
+        /**
+         * UsuarioDetalleResponse
+         * @description Change 20b, D16: el usuario con su rol y su tope propio, para las pantallas. Sigue sin
+         *     declarar `password_hash` ni las columnas del PIN: no salen por ninguna lectura.
+         */
+        UsuarioDetalleResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Usuario */
+            usuario: string;
+            /** Nombre */
+            nombre: string;
+            /** Email */
+            email: string | null;
+            /**
+             * Rol Id
+             * Format: uuid
+             */
+            rol_id: string;
+            /** Estado */
+            estado: string;
+            /**
+             * Tiene Pin Autorizacion
+             * @default false
+             */
+            tiene_pin_autorizacion: boolean;
+            /** Rol Nombre */
+            rol_nombre: string;
+            /** Rol Activo */
+            rol_activo: boolean;
+            /** Tope Descuento Override */
+            tope_descuento_override: string | null;
+        };
+        /**
+         * UsuarioModificarRequest
+         * @description Reemplazo completo de nombre y email; el nombre de inicio de sesión no se edita (D9).
+         */
+        UsuarioModificarRequest: {
+            /** Nombre */
+            nombre: string;
+            /** Email */
+            email: string | null;
+        };
         /**
          * UsuarioResponse
          * @description Tarea 10.8: sin `password_hash` ni las tres columnas del PIN de
@@ -6945,6 +7395,23 @@ export interface components {
              */
             tiene_pin_autorizacion: boolean;
         };
+        /** UsuarioRolCambiarRequest */
+        UsuarioRolCambiarRequest: {
+            /**
+             * Rol Id
+             * Format: uuid
+             */
+            rol_id: string;
+        };
+        /**
+         * UsuarioTopeDescuentoRequest
+         * @description Solo el tope propio, como cadena con hasta 6 decimales o `null` (vuelve a regir el del
+         *     rol): un número JSON responde 422 (INV-03). Sin `organizacion_id`: sale del token.
+         */
+        UsuarioTopeDescuentoRequest: {
+            /** Tope Descuento */
+            tope_descuento: string | null;
+        };
         /** UsuarioYoResponse */
         UsuarioYoResponse: {
             /**
@@ -6967,6 +7434,19 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /**
+         * VendedorElegibleResponse
+         * @description Un vendedor asignable (change 20b, D15): solo identificador y nombre.
+         */
+        VendedorElegibleResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
         };
         /**
          * VentaAnulacionResponse
@@ -7779,7 +8259,11 @@ export interface operations {
     };
     listar_usuarios_api_v1_identidad_usuarios_get: {
         parameters: {
-            query?: never;
+            query?: {
+                estado?: ("ACTIVO" | "INACTIVO") | null;
+                rol_id?: string | null;
+                con_tope_propio?: boolean | null;
+            };
             header?: {
                 authorization?: string | null;
             };
@@ -7794,7 +8278,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UsuarioResponse"][];
+                    "application/json": components["schemas"]["UsuarioDetalleResponse"][];
                 };
             };
             /** @description Validation Error */
@@ -7831,6 +8315,434 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UsuarioResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_usuario_api_v1_identidad_usuarios__usuario_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                usuario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsuarioDetalleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    modificar_usuario_api_v1_identidad_usuarios__usuario_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                usuario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UsuarioModificarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsuarioCambioResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dar_de_baja_usuario_api_v1_identidad_usuarios__usuario_id__baja_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                usuario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UsuarioBajaRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsuarioCambioResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reactivar_usuario_api_v1_identidad_usuarios__usuario_id__reactivacion_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                usuario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsuarioCambioResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_roles_api_v1_identidad_roles_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RolConTopeYPermisosResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_rol_api_v1_identidad_roles_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RolCrearRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RolCambioResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    renombrar_rol_api_v1_identidad_roles__rol_id__nombre_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                rol_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RolRenombrarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RolCambioResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dar_de_baja_rol_api_v1_identidad_roles__rol_id__baja_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                rol_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RolCambioResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reactivar_rol_api_v1_identidad_roles__rol_id__reactivacion_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                rol_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RolCambioResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cambiar_rol_de_usuario_api_v1_identidad_usuarios__usuario_id__rol_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                usuario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UsuarioRolCambiarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsuarioCambioResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restablecer_contrasena_de_usuario_api_v1_identidad_usuarios__usuario_id__contrasena_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                usuario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UsuarioContrasenaRestablecerRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    definir_tope_descuento_de_usuario_api_v1_identidad_usuarios__usuario_id__tope_descuento_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                usuario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UsuarioTopeDescuentoRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsuarioCambioResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7900,37 +8812,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RolResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    listar_roles_api_v1_identidad_roles_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RolConTopeYPermisosResponse"][];
                 };
             };
             /** @description Validation Error */
@@ -8125,6 +9006,40 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["MiPinRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cambiar_mi_contrasena_api_v1_yo_contrasena_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MiContrasenaRequest"];
             };
         };
         responses: {
@@ -9104,6 +10019,8 @@ export interface operations {
                 cursor?: string | null;
                 texto?: string | null;
                 estado?: string | null;
+                vendedor_id?: string | null;
+                sin_vendedor?: boolean;
             };
             header?: {
                 authorization?: string | null;
@@ -9278,6 +10195,42 @@ export interface operations {
             };
         };
     };
+    asignar_vendedor_api_v1_clientes_vendedor_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClienteVendedorAsignarRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClienteVendedorAsignarResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     obtener_consumidor_final_api_v1_clientes_consumidor_final_get: {
         parameters: {
             query?: never;
@@ -9352,6 +10305,7 @@ export interface operations {
                 cursor?: string | null;
                 limite?: number;
                 incluir_consumidor_final?: boolean;
+                alcance?: "todos" | null;
             };
             header?: {
                 authorization?: string | null;
@@ -9368,6 +10322,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaginaOpcionesDeClientes"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_vendedores_elegibles_api_v1_clientes_vendedores_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VendedorElegibleResponse"][];
                 };
             };
             /** @description Validation Error */

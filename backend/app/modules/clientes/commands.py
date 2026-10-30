@@ -331,3 +331,54 @@ declarar_tipo(
     admite_offline=False,
     permisos=("ADMIN_CONFIGURACION",),
 )
+
+
+# --- CLIENTE_VENDEDOR_ASIGNAR (change 20b, D15, `01` §19, ADR-056) ----------
+
+
+class ClienteVendedorAsignarContenidoV1(ContenidoClienteV1):
+    """Hasta 500 clientes y el vendedor, o `null` para quitarlo. `vendedor_id` es obligatorio
+    (sin valor por defecto): un pedido sin el campo no quita nada por descuido."""
+
+    cliente_ids: list[UUID]
+    vendedor_id: UUID | None
+
+
+def manejar_cliente_vendedor_asignar(
+    sobre: SobreComando,
+    contenido: ClienteVendedorAsignarContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+) -> ResultadoHandler:
+    _exigir_permiso(sobre, sesion, "GESTIONAR_CLIENTES")
+    resultado = clientes_service.asignar_vendedor(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        cliente_ids=contenido.cliente_ids,
+        vendedor_id=contenido.vendedor_id,
+        actor_id=sobre.usuario_id,
+        operation_id=sobre.operation_id,
+        dispositivo_id=sobre.dispositivo_id,
+    )
+    return (
+        "ACEPTADO",
+        {
+            "vendedor_id": None if resultado.vendedor_id is None else str(resultado.vendedor_id),
+            "cliente_ids": [str(c) for c in resultado.cliente_ids],
+            "cambiados": resultado.cambiados,
+        },
+        None,
+    )
+
+
+registrar_handler("CLIENTE_VENDEDOR_ASIGNAR", 1, ClienteVendedorAsignarContenidoV1)(
+    manejar_cliente_vendedor_asignar
+)
+declarar_tipo(
+    "CLIENTE_VENDEDOR_ASIGNAR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("GESTIONAR_CLIENTES",),
+)

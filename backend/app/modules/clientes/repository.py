@@ -169,6 +169,41 @@ def obtener_cliente_por_id_para_actualizar(
     return sesion.scalars(consulta).one_or_none()
 
 
+def obtener_clientes_para_actualizar(
+    organizacion_id: UUID, cliente_ids: Collection[UUID], sesion: Session
+) -> list[Cliente]:
+    """Los clientes de la organización entre `cliente_ids`, con `SELECT ... FOR UPDATE` en orden de
+    id (change 20b, D15: dos asignaciones que se cruzan toman los bloqueos en el mismo orden y no
+    se traban entre sí). Un id inexistente o de otra organización no aparece (INV-21)."""
+    if not cliente_ids:
+        return []
+    consulta = (
+        select(Cliente)
+        .where(Cliente.organizacion_id == organizacion_id, Cliente.id.in_(list(cliente_ids)))
+        .order_by(Cliente.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return list(sesion.scalars(consulta).all())
+
+
+def asignar_vendedor(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    cliente: Cliente,
+    vendedor_id: UUID | None,
+    momento: datetime,
+    actualizado_por_id: UUID | None,
+) -> None:
+    """Escribe el vendedor de un cliente ya bloqueado (change 20b, D13). Sin `commit`."""
+    assert cliente.organizacion_id == organizacion_id
+    cliente.vendedor_id = vendedor_id
+    cliente.actualizado_en = momento
+    cliente.actualizado_por_id = actualizado_por_id
+    sesion.flush()
+
+
 def obtener_consumidor_final(organizacion_id: UUID, sesion: Session) -> Cliente | None:
     """El cliente marcado como consumidor final de `organizacion_id` (D4), o
     `None` si la organización todavía no lo habilitó. Filtra por organización y
@@ -334,6 +369,8 @@ def listar_clientes_paginado(
     cursor: str | None = None,
     texto: str | None = None,
     estado: str | None = None,
+    vendedor_id: UUID | None = None,
+    sin_vendedor: bool = False,
 ) -> tuple[list[Cliente], str | None]:
     """Listado paginado por cursor del par `(nombre, id)` (tarea 2.1, D1: el
     nombre no es único, así que el orden necesita el desempate por `id` para que
@@ -346,10 +383,18 @@ def listar_clientes_paginado(
     (mismo criterio que `listar_proveedores_paginado`, contrato-api.md P5).
 
     `estado` filtra por la columna exacta; el catálogo cerrado lo valida
-    `dominio/estado.py` y lo repite el `CHECK` de la base."""
+    `dominio/estado.py` y lo repite el `CHECK` de la base.
+
+    Change 20b (D15): `vendedor_id` filtra por el vendedor asignado y `sin_vendedor` por los
+    clientes sin vendedor; juntos no coinciden con ninguno. Un `vendedor_id` de otra organización
+    no coincide con ningún cliente (INV-21)."""
     limite_efectivo = min(max(limite, 1), LIMITE_PAGINA_MAXIMO)
 
     consulta = select(Cliente).where(Cliente.organizacion_id == organizacion_id)
+    if vendedor_id is not None:
+        consulta = consulta.where(Cliente.vendedor_id == vendedor_id)
+    if sin_vendedor:
+        consulta = consulta.where(Cliente.vendedor_id.is_(None))
     if cursor is not None:
         nombre_cursor, id_cursor = _decodificar_cursor(cursor)
         consulta = consulta.where(tuple_(Cliente.nombre, Cliente.id) > (nombre_cursor, id_cursor))
@@ -388,6 +433,29 @@ def listar_clientes_paginado(
     return pagina, cursor_siguiente
 
 
+def listar_ids_de_cartera(organizacion_id: UUID, vendedor_id: UUID, sesion: Session) -> list[UUID]:
+    """Ids de los clientes asignados a `vendedor_id`, de cualquier estado, ordenados por id
+    (change 20b, D19). Filtra por organización (INV-21)."""
+    consulta = (
+        select(Cliente.id)
+        .where(Cliente.organizacion_id == organizacion_id, Cliente.vendedor_id == vendedor_id)
+        .order_by(Cliente.id)
+    )
+    return list(sesion.scalars(consulta).all())
+
+
+def contar_clientes_de_vendedor(organizacion_id: UUID, vendedor_id: UUID, sesion: Session) -> int:
+    """Cuántos clientes tiene asignados `vendedor_id`, contados en SQL (change 20b, D19)."""
+    return int(
+        sesion.scalar(
+            select(func.count())
+            .select_from(Cliente)
+            .where(Cliente.organizacion_id == organizacion_id, Cliente.vendedor_id == vendedor_id)
+        )
+        or 0
+    )
+
+
 FUNCIONES_SIN_ORGANIZACION_ID: frozenset[str] = frozenset()
 """Sin excepción (mismo criterio que `catalogo.repository.FUNCIONES_SIN_
 ORGANIZACION_ID` y `proveedores.repository.FUNCIONES_SIN_ORGANIZACION_ID`):
@@ -423,10 +491,14 @@ def listar_opciones_paginado(
     cursor: str | None = None,
     texto: str | None = None,
     incluir_consumidor_final: bool = False,
+    solo_de_vendedor_id: UUID | None = None,
 ) -> tuple[list[Cliente], str | None]:
     """Clientes `ACTIVO` y `SUSPENDIDO` por cursor `(nombre, id)`; el consumidor final solo si
     `incluir_consumidor_final` (CLI-03; lo pide la pantalla de venta). `texto` busca por nombre o
-    código. Mismo orden y cursor que `listar_clientes_paginado`."""
+    código. Mismo orden y cursor que `listar_clientes_paginado`.
+
+    Change 20b (D14): con `solo_de_vendedor_id` se ofrece la cartera de ese vendedor (y el
+    consumidor final si se pidió); sin él, todos."""
     limite_efectivo = min(max(limite, 1), LIMITE_PAGINA_MAXIMO)
     consulta = select(Cliente).where(
         Cliente.organizacion_id == organizacion_id,
@@ -434,6 +506,13 @@ def listar_opciones_paginado(
     )
     if not incluir_consumidor_final:
         consulta = consulta.where(Cliente.es_consumidor_final.is_(False))
+    if solo_de_vendedor_id is not None:
+        de_la_cartera = Cliente.vendedor_id == solo_de_vendedor_id
+        consulta = consulta.where(
+            or_(de_la_cartera, Cliente.es_consumidor_final.is_(True))
+            if incluir_consumidor_final
+            else de_la_cartera
+        )
     if cursor is not None:
         try:
             nombre_cursor, id_cursor = _decodificar_cursor(cursor)

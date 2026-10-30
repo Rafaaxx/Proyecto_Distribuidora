@@ -61,7 +61,7 @@ def _crear_usuario(sesion: Session, organizacion_id, nombre_usuario: str) -> obj
         organizacion_id,
         sesion,
         rol_id=nuevo_id(),
-        nombre="Vendedor",
+        nombre=f"Vendedor {nuevo_id()}",
         tope_descuento=Decimal("0"),
         activo=True,
         momento=MOMENTO,

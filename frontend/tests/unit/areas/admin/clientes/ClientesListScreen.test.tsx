@@ -45,7 +45,17 @@ const SIN_PERMISO_DE_CLIENTES = 'No tenés permiso para gestionar clientes.'
 /** Monta la pantalla con `['yo']` ya sembrado (auxiliar compartido de la
  * tarea 6.7 del change 06b). GES y SUP tienen `GESTIONAR_CLIENTES`
  * (`01-dominio.md` §19); VEN no tiene ninguno de administración. */
+/** El listado lee `GET /clientes/vendedores` (change 20b, 10.3): se responde una lista vacía sin
+ * pisar lo que cada prueba ya configuró para el resto de las rutas. */
+function conVendedores() {
+  const base = apiFetchMock.getMockImplementation()
+  apiFetchMock.mockImplementation((ruta: string, init?: RequestInit) =>
+    String(ruta).startsWith('/clientes/vendedores') ? Promise.resolve(respuesta(200, [])) : base?.(ruta, init),
+  )
+}
+
 function renderPantalla(rol: RolDePrueba = 'GES') {
+  conVendedores()
   return render(
     <QueryClientProvider client={queryClientConYo(rol)}>
       <MemoryRouter initialEntries={['/admin/clientes']}>
@@ -58,6 +68,7 @@ function renderPantalla(rol: RolDePrueba = 'GES') {
 /** Grupo 8, tarea 8.3: para comprobar que la fila navega hace falta una
  * ruta destino real (no alcanza con `<ClientesListScreen />` sola). */
 function renderPantallaConRutas(rol: RolDePrueba = 'GES') {
+  conVendedores()
   return render(
     <QueryClientProvider client={queryClientConYo(rol)}>
       <MemoryRouter initialEntries={['/admin/clientes']}>

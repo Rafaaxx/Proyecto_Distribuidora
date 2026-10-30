@@ -210,6 +210,18 @@ def _entrada_de_comando_online(
     return EntradaComandoOnline(contexto=contexto, operation_id=operation_id_uuid)
 
 
+def requiere_comando_online_de_sesion(
+    contexto: Annotated[ContextoAutenticado, Depends(requiere_sesion)],
+    operation_id: Annotated[str | None, Header(alias="Operation-Id")] = None,
+) -> EntradaComandoOnline:
+    """Como `requiere_comando_online`, pero SIN permiso: alcanza con una sesión válida y habilitada
+    (usuario y rol activos, ADR-028 D9.1) y el `Operation-Id` (change 20b, D20: "Mi contraseña" la
+    puede cambiar cualquier usuario autenticado). No lleva el marcador `permiso_requerido`: las
+    rutas que la usan figuran en la lista de exenciones del ratchet de permiso por ruta, y el
+    tipo de comando que envían declara `sin_permiso` en el catálogo."""
+    return _entrada_de_comando_online(contexto, operation_id)
+
+
 def requiere_comando_online(codigo_permiso: str) -> Callable[..., EntradaComandoOnline]:
     """Fábrica de dependencia (tarea 7.3, `design.md` D4): compone
     `requiere_permiso` (que ya resuelve `ContextoAutenticado` desde el

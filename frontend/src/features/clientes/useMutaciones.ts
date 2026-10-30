@@ -4,10 +4,12 @@ import { useRef } from 'react'
 import { generarOperationId } from '../../lib/api/operationId'
 import { debeReintentar } from '../../lib/api/reintentoDeRed'
 import {
+  asignarVendedor,
   configurarConsumidorFinal,
   crearCliente,
   modificarCliente,
   modificarCreditoCliente,
+  type AsignacionDeVendedorResultado,
   type Cliente,
   type ClienteCreditoModificarDatos,
   type ClienteCrearDatos,
@@ -125,5 +127,25 @@ export function useConfigurarConsumidorFinal() {
   return useMutacionConOperationId<VariablesConfigurarConsumidorFinal, Cliente>({
     ejecutar: (datos, operationId) => configurarConsumidorFinal(datos, operationId),
     onSuccess: invalidar,
+  })
+}
+
+// --- Cartera (change 20b, D15) -----------------------------------------------
+
+interface VariablesAsignarVendedor {
+  clienteIds: readonly string[]
+  vendedorId: string | null
+  operationId?: string
+}
+
+/** `CLIENTE_VENDEDOR_ASIGNAR`: relee el listado, las fichas y las opciones de clientes. */
+export function useAsignarVendedor() {
+  const queryClient = useQueryClient()
+  return useMutacionConOperationId<VariablesAsignarVendedor, AsignacionDeVendedorResultado>({
+    ejecutar: ({ clienteIds, vendedorId }, operationId) => asignarVendedor(clienteIds, vendedorId, operationId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: clavesClientes.raiz() })
+      void queryClient.invalidateQueries({ queryKey: ['clientes-opciones'] })
+    },
   })
 }

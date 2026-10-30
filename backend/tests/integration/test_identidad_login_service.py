@@ -51,7 +51,7 @@ def _crear_usuario_activo(
         organizacion_id,
         sesion,
         rol_id=nuevo_id(),
-        nombre="Vendedor",
+        nombre=f"Vendedor {nuevo_id()}",
         tope_descuento=Decimal("0"),
         activo=True,
         momento=MOMENTO,

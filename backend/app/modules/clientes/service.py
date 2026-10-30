@@ -23,6 +23,7 @@ propagar son los de `domain/errores.py`.
 from __future__ import annotations
 
 from collections.abc import Callable, Collection
+from dataclasses import dataclass
 from decimal import Decimal
 from uuid import UUID
 
@@ -31,6 +32,13 @@ from sqlalchemy.orm import Session
 from app.core.clock import Clock
 from app.core.ids import nuevo_id
 from app.modules.clientes import repository
+from app.modules.clientes.domain.cartera import (
+    ALCANCE_CARTERA,
+    ClienteAsignable,
+    alcance_de_opciones,
+    validar_asignacion,
+    validar_cantidad_a_asignar,
+)
 from app.modules.clientes.domain.credito import (
     Autorizador as Autorizador,
 )
@@ -403,6 +411,92 @@ def modificar_credito_cliente(
     return actualizado
 
 
+# --- cartera (change 20b, D13, D15) -----------------------------------------
+
+
+@dataclass(frozen=True)
+class ResultadoAsignacionDeVendedor:
+    vendedor_id: UUID | None
+    cliente_ids: list[UUID]
+    cambiados: int
+
+
+def asignar_vendedor(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    cliente_ids: list[UUID],
+    vendedor_id: UUID | None,
+    actor_id: UUID,
+    operation_id: UUID,
+    dispositivo_id: UUID | None = None,
+) -> ResultadoAsignacionDeVendedor:
+    """`CLIENTE_VENDEDOR_ASIGNAR` (`01` §19, D15): asigna `vendedor_id` (o lo quita con `None`) a
+    los clientes, todo o nada (INV-01).
+
+    Orden: la cantidad (422), los clientes bloqueados `FOR UPDATE` en orden de id (uno inexistente
+    o de otra organización es 404, INV-21), el vendedor (de otra organización o inexistente es
+    404; inactivo, sin permiso o de rol de baja es 409) y el consumidor final (409), todo ANTES de
+    escribir. Una fila de auditoría `ASIGNAR_VENDEDOR_CLIENTE` por cliente CAMBIADO, con el
+    vendedor anterior y el nuevo (AUD-01); quien ya tenía ese vendedor no se toca ni se audita.
+    El vendedor no se bloquea: si se da de baja justo después, la asignación se conserva (D6),
+    igual que si la baja ocurriera un instante más tarde."""
+    ids = list(dict.fromkeys(cliente_ids))
+    validar_cantidad_a_asignar(len(ids))
+    clientes = repository.obtener_clientes_para_actualizar(organizacion_id, ids, sesion)
+    if len(clientes) != len(ids):
+        raise RecursoNoEncontradoError("Algún cliente no existe en esta organización.")
+    vendedor_valido: bool | None = None
+    if vendedor_id is not None:
+        existe = identidad_service.obtener_nombres_de_usuarios(
+            organizacion_id, frozenset({vendedor_id}), sesion
+        )
+        if vendedor_id not in existe:
+            raise RecursoNoEncontradoError(
+                f"El usuario {vendedor_id} no existe en esta organización."
+            )
+        vendedor_valido = identidad_service.es_vendedor_valido(organizacion_id, vendedor_id, sesion)
+    validar_asignacion(
+        [ClienteAsignable(id=c.id, es_consumidor_final=c.es_consumidor_final) for c in clientes],
+        vendedor_valido,
+    )
+
+    momento = reloj.now()
+    cambiados = 0
+    for cliente in clientes:
+        anterior = cliente.vendedor_id
+        if anterior == vendedor_id:
+            continue
+        repository.asignar_vendedor(
+            organizacion_id,
+            sesion,
+            cliente=cliente,
+            vendedor_id=vendedor_id,
+            momento=momento,
+            actualizado_por_id=actor_id,
+        )
+        identidad_service.registrar_auditoria(
+            organizacion_id,
+            sesion,
+            reloj,
+            accion="ASIGNAR_VENDEDOR_CLIENTE",
+            entidad="cliente",
+            entidad_id=cliente.id,
+            ocurrido_en=momento,
+            usuario_id=actor_id,
+            dispositivo_id=dispositivo_id,
+            antes={"vendedor_id": None if anterior is None else str(anterior)},
+            despues={"vendedor_id": None if vendedor_id is None else str(vendedor_id)},
+            operation_id=operation_id,
+            origen="COMANDO",
+        )
+        cambiados += 1
+    return ResultadoAsignacionDeVendedor(
+        vendedor_id=vendedor_id, cliente_ids=ids, cambiados=cambiados
+    )
+
+
 # --- lecturas (tarea 2.2) --------------------------------------------------
 
 
@@ -467,6 +561,8 @@ def listar_clientes(
     cursor: str | None = None,
     texto: str | None = None,
     estado: str | None = None,
+    vendedor_id: UUID | None = None,
+    sin_vendedor: bool = False,
 ) -> tuple[list[Cliente], str | None]:
     """`estado` es un FILTRO, no el estado de una fila, y llega de un query
     string: se valida contra el catálogo cerrado con `validar_estado`, que
@@ -479,7 +575,14 @@ def listar_clientes(
     if estado is not None:
         validar_estado(estado)
     return repository.listar_clientes_paginado(
-        organizacion_id, sesion, limite=limite, cursor=cursor, texto=texto, estado=estado
+        organizacion_id,
+        sesion,
+        limite=limite,
+        cursor=cursor,
+        texto=texto,
+        estado=estado,
+        vendedor_id=vendedor_id,
+        sin_vendedor=sin_vendedor,
     )
 
 
@@ -589,9 +692,28 @@ def listar_opciones(
     cursor: str | None = None,
     texto: str | None = None,
     incluir_consumidor_final: bool = False,
+    usuario_id: UUID | None = None,
+    pide_todos: bool = False,
 ) -> tuple[list[Cliente], str | None]:
     """Selector de clientes de quien cobra (change 17, D14): `ACTIVO` y `SUSPENDIDO`, sin el
-    consumidor final salvo que se pida (change 18a, D5/D21)."""
+    consumidor final salvo que se pida (change 18a, D5/D21).
+
+    Change 20b (D14): con `usuario_id`, quien NO tiene `GESTIONAR_CLIENTES` y tiene clientes
+    asignados recibe su cartera (más el consumidor final si lo pidió); con `pide_todos`, sin
+    cartera o con `GESTIONAR_CLIENTES`, recibe todos (`alcance_de_opciones`, ADR-052). Sin
+    `usuario_id` no hay cartera que aplicar."""
+    solo_de_vendedor_id: UUID | None = None
+    if usuario_id is not None:
+        permisos = identidad_service.listar_permisos_del_usuario(
+            organizacion_id, usuario_id, sesion
+        )
+        alcance = alcance_de_opciones(
+            "GESTIONAR_CLIENTES" in permisos,
+            repository.contar_clientes_de_vendedor(organizacion_id, usuario_id, sesion),
+            pide_todos,
+        )
+        if alcance == ALCANCE_CARTERA:
+            solo_de_vendedor_id = usuario_id
     return repository.listar_opciones_paginado(
         organizacion_id,
         sesion,
@@ -599,4 +721,46 @@ def listar_opciones(
         cursor=cursor,
         texto=texto,
         incluir_consumidor_final=incluir_consumidor_final,
+        solo_de_vendedor_id=solo_de_vendedor_id,
     )
+
+
+@dataclass(frozen=True)
+class DatosDeVendedor:
+    nombre: str
+    valido: bool
+
+
+def datos_de_vendedores(
+    organizacion_id: UUID, vendedor_ids: Collection[UUID], sesion: Session
+) -> dict[UUID, DatosDeVendedor]:
+    """Nombre y validez (`identidad_service.es_vendedor_valido`) de cada vendedor por lote, para
+    mostrar y marcar los clientes a reasignar (change 20b, D6, D15). Un id que no existe en la
+    organización no aparece (INV-21). La validez se consulta una vez por vendedor distinto."""
+    nombres = identidad_service.obtener_nombres_de_usuarios(
+        organizacion_id, frozenset(vendedor_ids), sesion
+    )
+    return {
+        usuario_id: DatosDeVendedor(
+            nombre=nombre,
+            valido=identidad_service.es_vendedor_valido(organizacion_id, usuario_id, sesion),
+        )
+        for usuario_id, nombre in nombres.items()
+    }
+
+
+def listar_vendedores_elegibles(organizacion_id: UUID, sesion: Session) -> list[tuple[UUID, str]]:
+    """Los vendedores que se pueden asignar a un cliente (change 20b, D15), de `identidad`."""
+    return identidad_service.listar_vendedores_elegibles(organizacion_id, sesion)
+
+
+def listar_cartera(organizacion_id: UUID, usuario_id: UUID, sesion: Session) -> list[UUID]:
+    """Ids de los clientes asignados a `usuario_id`, de cualquier estado; vacío si no tiene (change
+    20b, D19). Lectura pública para el change 21: el bootstrap baja la cartera (SYN-11) y aplica
+    la regla "vacía = todos" de D14."""
+    return repository.listar_ids_de_cartera(organizacion_id, usuario_id, sesion)
+
+
+def contar_clientes_asignados(organizacion_id: UUID, usuario_id: UUID, sesion: Session) -> int:
+    """Cuántos clientes tiene asignados `usuario_id` (change 20b, D19), contados en SQL."""
+    return repository.contar_clientes_de_vendedor(organizacion_id, usuario_id, sesion)

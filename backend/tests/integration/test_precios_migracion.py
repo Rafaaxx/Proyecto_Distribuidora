@@ -43,6 +43,24 @@ REVISION = "e2f3a4b5c6d7"
 REVISION_ANTERIOR = "d1e2f3a4b5c6"  # `pagos_a_proveedores`, la previa a este change.
 MOMENTO = datetime(2026, 10, 6, 12, 0, tzinfo=UTC)
 
+
+def _crear_cliente_del_esquema_anterior(sesion: Session, organizacion_id: UUID) -> UUID:
+    """Un cliente por SQL, sin columnas posteriores a este change (`vendedor_id`, del 20b): el
+    modelo ORM actual las incluiría, y estas pruebas bajan la base a la revisión previa."""
+    cliente_id = uuid4()
+    sesion.execute(
+        text(
+            "INSERT INTO cliente (id, organizacion_id, nombre, direccion, contacto, "
+            "es_consumidor_final, estado, creado_en, actualizado_en) "
+            "VALUES (:id, :org, 'Kiosco La Esquina', 'Av. San Martín 1420', 'Rocío', false, "
+            "'ACTIVO', :m, :m)"
+        ),
+        {"id": cliente_id, "org": organizacion_id, "m": MOMENTO},
+    )
+    sesion.flush()
+    return cliente_id
+
+
 TABLAS = ("lista_precio", "regla_margen", "redondeo_categoria", "lista_version", "precio_item")
 
 # --- catálogo de columnas y claves foráneas compuestas (INV-02, D13) ---------------
@@ -1330,7 +1348,7 @@ def test_el_upgrade_aborta_con_un_mensaje_claro_si_un_cliente_apunta_a_una_lista
 
     with Session(_engine_de_sesion) as sesion:
         organizacion_id = crear_organizacion(sesion).id
-        cliente_id = crear_cliente(sesion, organizacion_id)
+        cliente_id = _crear_cliente_del_esquema_anterior(sesion, organizacion_id)
         sesion.execute(
             text("UPDATE cliente SET lista_precio_id = :l WHERE id = :c"),
             {"l": uuid4(), "c": cliente_id},
@@ -1414,7 +1432,7 @@ def test_el_ciclo_upgrade_downgrade_upgrade_con_datos_sembrados(
                 entorno, lista["id"], numero=2, version_base_id=publicada["id"], generado_en=MOMENTO
             ),
         )
-        cliente_id = crear_cliente(sesion, entorno.organizacion_id)
+        cliente_id = _crear_cliente_del_esquema_anterior(sesion, entorno.organizacion_id)
         sesion.execute(
             text("UPDATE cliente SET lista_precio_id = :l WHERE id = :c"),
             {"l": lista["id"], "c": cliente_id},

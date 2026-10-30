@@ -57,7 +57,17 @@ function envios(metodo: string): [string, RequestInit][] {
 
 const SIN_PERMISO_DE_CLIENTES = 'No tenés permiso para gestionar clientes.'
 
+/** La ficha lee `GET /clientes/vendedores` (change 20b, 10.3): se responde una lista vacía sin
+ * pisar lo que cada prueba ya configuró para el resto de las rutas. */
+function conVendedores() {
+  const base = apiFetchMock.getMockImplementation()
+  apiFetchMock.mockImplementation((ruta: string, init?: RequestInit) =>
+    String(ruta).startsWith('/clientes/vendedores') ? Promise.resolve(respuesta(200, [])) : base?.(ruta, init),
+  )
+}
+
 function renderAlta(queryClient: QueryClient = queryClientConYo('GES')) {
+  conVendedores()
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={['/admin/clientes/nuevo']}>
@@ -72,6 +82,7 @@ function renderAlta(queryClient: QueryClient = queryClientConYo('GES')) {
 }
 
 function renderEdicion(clienteId: string, queryClient: QueryClient = queryClientConYo('GES')) {
+  conVendedores()
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[`/admin/clientes/${clienteId}`]}>

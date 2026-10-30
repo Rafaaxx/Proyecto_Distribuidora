@@ -110,7 +110,7 @@ Etapa 1 — Ruta sin papel ─────────┬──> Etapa 2 — Cir
 | Capacidad | Incluye | No incluye (etapa posterior) |
 | --- | --- | --- |
 | Base técnica | Repositorio, entornos, Docker, CI, migraciones, logging estructurado, backups automáticos con restauración probada, HTTPS | Monitoreo avanzado |
-| Organización y seguridad | Organización con configuración, usuarios, roles estándar, permisos granulares, auditoría de operaciones sensibles, dispositivos registrados y revocables, desbloqueo local con PIN | Onboarding de nuevas organizaciones, roles personalizados desde UI |
+| Organización y seguridad | Organización con configuración, usuarios, roles estándar, permisos granulares, auditoría de operaciones sensibles, dispositivos registrados y revocables, desbloqueo local con PIN; administración de usuarios desde la interfaz (alta, edición, baja y reactivación, cambio de rol, contraseña y tope de descuento propio), roles personalizados (crear, renombrar, dar de baja y reactivar) y asignación de clientes a vendedores (change 20b, ADR-060) | Onboarding de nuevas organizaciones |
 | Pipeline de comandos | Comandos idempotentes con UUID generado en cliente, usado tanto online como offline | — |
 | Catálogo | Productos, categorías, marcas, presentaciones con unidades por caja, presentaciones de compra y de venta, alícuota de IVA por producto, proveedor del producto | Códigos de barras, fotos, catálogo para clientes |
 | Clientes | Ficha, lista asignada, límite y política de crédito (ADR-003), estado | Segmentos para promociones, agenda de visitas |
@@ -159,9 +159,8 @@ Hasta que este módulo esté en producción, la organización inicial factura po
 - Alta y onboarding de nuevas organizaciones; configuración de negocio desde la interfaz.
 - Modos impositivos B y C operativos (el modelo existe desde la etapa 1).
 - Imputación de cobranzas por operación como alternativa configurable.
-- Roles personalizados desde la interfaz.
 - Importadores genéricos y migración de saldos.
-- Bootstrap incremental y filtrado de datos offline por vendedor o zona.
+- Bootstrap incremental y filtrado de datos offline por zona.
 - Estrategia de costeo FIFO seleccionable desde fecha de corte.
 - Múltiples proveedores por producto.
 - Documentación de usuario completa (manual, guías de tareas, búsqueda). La **ayuda contextual** —el botón "(?)" junto a los campos con reglas no obvias y las páginas "Ver más" de temas puntuales— se adelantó a la etapa 1 con el change 16b, y cada change que trae funcionalidad no obvia suma la suya (ADR-051).

@@ -8,7 +8,9 @@ lanza un error de dominio con código estable.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from decimal import Decimal
+from uuid import UUID
 
 from app.core.errors import DomainError
 from app.core.money import redondear_costo
@@ -20,6 +22,8 @@ TOPE_DESCUENTO_MINIMO = Decimal("0.000000")
 TOPE_DESCUENTO_MAXIMO = Decimal("1.000000")
 
 PIN_AUTORIZACION_LONGITUD_MINIMA = 6
+
+NOMBRE_DE_USUARIO_LONGITUD_MAXIMA = 200
 
 # Permisos de `01` §19 cuya presencia habilita a un rol a autorizar
 # excepciones sin conexión mediante el PIN de autorización (`03` §4, spec
@@ -54,7 +58,10 @@ class EstadoUsuarioInvalidoError(DomainError):
 
 
 class TransicionEstadoUsuarioInvalidaError(DomainError):
+    """Baja de un inactivo o reactivación de un activo (change 20b, D1): 409."""
+
     codigo = "IDENTIDAD_TRANSICION_ESTADO_USUARIO_INVALIDA"
+    status_http = 409
 
 
 class EstadoDispositivoInvalidoError(DomainError):
@@ -80,6 +87,80 @@ class SinAdministradorError(DomainError):
 
     codigo = "IDENTIDAD_SIN_ADMINISTRADOR"
     status_http = 409
+
+
+class AutobajaError(DomainError):
+    """Un administrador no puede darse de baja a sí mismo (change 20b, D5-A): lo hace otro."""
+
+    codigo = "IDENTIDAD_AUTOBAJA"
+    status_http = 409
+
+
+class RolInactivoError(DomainError):
+    """Un rol de baja no se asigna, ni en el alta ni en el cambio de rol (change 20b, D7, D9)."""
+
+    codigo = "IDENTIDAD_ROL_INACTIVO"
+    status_http = 409
+
+
+class RolNoEncontradoError(DomainError):
+    """El rol no existe en la organización (o es de otra): 404 como todo recurso ajeno (INV-21,
+    SEG-07)."""
+
+    codigo = "RECURSO_NO_ENCONTRADO"
+    status_http = 404
+
+
+class UsuarioDuplicadoError(DomainError):
+    """El nombre de inicio de sesión ya existe en la organización (change 20b, D9)."""
+
+    codigo = "IDENTIDAD_USUARIO_DUPLICADO"
+    status_http = 409
+
+
+class NombreDeUsuarioInvalidoError(DomainError):
+    """El nombre de la persona está vacío o supera el largo permitido (change 20b, D9)."""
+
+    codigo = "IDENTIDAD_NOMBRE_DE_USUARIO_INVALIDO"
+    status_http = 422
+
+
+class NombreDeRolInvalidoError(DomainError):
+    """El nombre del rol está vacío o supera el largo permitido (change 20b, D10)."""
+
+    codigo = "IDENTIDAD_NOMBRE_DE_ROL_INVALIDO"
+    status_http = 422
+
+
+class NombreDeRolDuplicadoError(DomainError):
+    """Ya existe un rol con ese nombre en la organización, sin distinguir mayúsculas y estando de
+    baja o no (change 20b, D10, INV-02)."""
+
+    codigo = "IDENTIDAD_NOMBRE_DE_ROL_DUPLICADO"
+    status_http = 409
+
+
+class RolConUsuariosActivosError(DomainError):
+    """No se da de baja un rol con usuarios ACTIVO asignados (change 20b, D11-A, ADR-028 D9.4)."""
+
+    codigo = "IDENTIDAD_ROL_CON_USUARIOS_ACTIVOS"
+    status_http = 409
+
+
+class ContrasenaInvalidaError(DomainError):
+    """La contraseña nueva no cumple las reglas del alta (change 20b, D8, D20). El mensaje nunca
+    incluye el valor."""
+
+    codigo = "IDENTIDAD_CONTRASENA_INVALIDA"
+    status_http = 422
+
+
+class ContrasenaNuevaIgualAActualError(DomainError):
+    """La contraseña nueva es igual a la actual (change 20b, D20). No cuenta como intento fallido
+    de inicio de sesión. El mensaje nunca incluye ninguna de las dos."""
+
+    codigo = "IDENTIDAD_CONTRASENA_NUEVA_IGUAL_A_ACTUAL"
+    status_http = 422
 
 
 class UsuarioSinRolError(DomainError):
@@ -274,11 +355,106 @@ def validar_queda_administrador(
     """Regla pura (ADR-053): después del cambio queda al menos un usuario ACTIVO de un rol activo
     con `ADMIN_USUARIOS`. Recibe conteos hechos en SQL: los usuarios activos de roles activos,
     distintos del editado, que lo tienen; y los usuarios activos del rol editado. El rol editado
-    solo cuenta si conserva el permiso, está activo y tiene al menos un usuario activo."""
-    if administradores_en_otros_roles >= 1:
-        return
-    if conserva_el_permiso and rol_activo and usuarios_activos_del_rol >= 1:
-        return
-    raise SinAdministradorError(
-        "La organización se quedaría sin nadie que administre usuarios y roles"
-    )
+    solo cuenta si conserva el permiso, está activo y tiene al menos un usuario activo. Se apoya en
+    la regla general `queda_administrador` (change 20b, D3)."""
+    del_rol_editado = usuarios_activos_del_rol if conserva_el_permiso and rol_activo else 0
+    queda_administrador(administradores_en_otros_roles + del_rol_editado)
+
+
+def queda_administrador(administradores_despues: int) -> None:
+    """Regla generalizada de ADR-053 (change 20b, D3): el cambio se rechaza si después de él no
+    quedaría ningún usuario ACTIVO de un rol activo con `ADMIN_USUARIOS`. Recibe el conteo ya
+    hecho en SQL sobre el estado posterior al cambio."""
+    if administradores_despues < 1:
+        raise SinAdministradorError(
+            "La organización se quedaría sin nadie que administre usuarios y roles"
+        )
+
+
+def validar_baja_de_usuario(*, actor_id: UUID, usuario_id: UUID, estado: str) -> None:
+    """Change 20b, D5-A y D1: la autobaja está prohibida aunque haya otros administradores
+    (`IDENTIDAD_AUTOBAJA`) y solo se da de baja a un usuario ACTIVO (transición inválida 409).
+    Se evalúa primero la autobaja."""
+    if actor_id == usuario_id:
+        raise AutobajaError("No podés darte de baja a vos mismo; pedíselo a otro administrador.")
+    transicionar_estado_usuario(estado, "INACTIVO")
+
+
+def validar_reactivacion(estado: str) -> None:
+    """Change 20b, D1/D2: solo se reactiva a un usuario INACTIVO."""
+    transicionar_estado_usuario(estado, "ACTIVO")
+
+
+def validar_rol_asignable(activo: bool) -> None:
+    """Change 20b, D7/D9: un rol de baja no se asigna a nadie."""
+    if not activo:
+        raise RolInactivoError("El rol está de baja y no se puede asignar.")
+
+
+NOMBRE_DE_ROL_LONGITUD_MAXIMA = 100
+
+
+def normalizar_nombre_de_usuario(valor: str) -> str:
+    """Change 20b, D9: el nombre de la persona es obligatorio, se recorta y tiene hasta 200
+    caracteres (después de recortar)."""
+    recortado = valor.strip()
+    if not recortado or len(recortado) > NOMBRE_DE_USUARIO_LONGITUD_MAXIMA:
+        raise NombreDeUsuarioInvalidoError(
+            "El nombre es obligatorio y tiene hasta "
+            f"{NOMBRE_DE_USUARIO_LONGITUD_MAXIMA} caracteres."
+        )
+    return recortado
+
+
+def normalizar_nombre_de_rol(valor: str) -> str:
+    """Change 20b, D10: el nombre del rol se recorta y tiene de 1 a 100 caracteres (después de
+    recortar)."""
+    recortado = valor.strip()
+    if not recortado or len(recortado) > NOMBRE_DE_ROL_LONGITUD_MAXIMA:
+        raise NombreDeRolInvalidoError(
+            f"El nombre del rol es obligatorio y tiene hasta {NOMBRE_DE_ROL_LONGITUD_MAXIMA} "
+            "caracteres."
+        )
+    return recortado
+
+
+def normalizar_email(valor: str | None) -> str | None:
+    """Change 20b, D9: opcional; vacío o en blanco es nulo; no se verifica el dominio."""
+    if valor is None:
+        return None
+    recortado = valor.strip()
+    return recortado or None
+
+
+def debe_borrar_pin(permisos_del_rol_nuevo: Collection[str]) -> bool:
+    """Change 20b, D7 y ADR-011: el PIN de autorización se borra si el rol nuevo no tiene ningún
+    permiso de `PERMISOS_AUTORIZACION_EXCEPCION`."""
+    return not rol_confiere_autorizacion_excepcion(frozenset(permisos_del_rol_nuevo))
+
+
+CONTRASENA_LARGO_MINIMO = 8
+
+
+def validar_contrasena(valor: str) -> str:
+    """Change 20b, D9/D20: la regla común del alta, del restablecimiento y del cambio propio:
+    no estar en blanco y tener al menos 8 caracteres, sin reglas de composición. Rige solo al
+    definir una contraseña nueva; las existentes siguen sirviendo para entrar. El mensaje nunca
+    incluye el valor."""
+    if not valor.strip():
+        raise ContrasenaInvalidaError("La contraseña no puede estar en blanco.")
+    if len(valor) < CONTRASENA_LARGO_MINIMO:
+        raise ContrasenaInvalidaError(
+            f"La contraseña debe tener al menos {CONTRASENA_LARGO_MINIMO} caracteres."
+        )
+    return valor
+
+
+def validar_contrasena_nueva(actual: str, nueva: str) -> str:
+    """Change 20b, D20, ADR-018: la nueva cumple las reglas del alta y es distinta de la actual.
+    Ninguno de los dos mensajes incluye una contraseña."""
+    validar_contrasena(nueva)
+    if nueva == actual:
+        raise ContrasenaNuevaIgualAActualError(
+            "La contraseña nueva debe ser distinta de la actual."
+        )
+    return nueva

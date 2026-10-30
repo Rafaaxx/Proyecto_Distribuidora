@@ -124,7 +124,7 @@ describe('ayuda contextual de medios de pago y roles (tarea 11.1)', () => {
       const ayuda = AYUDAS['roles.ultimoAdministrador']
 
       expect(ayuda.texto).toBe(
-        'Siempre tiene que quedar al menos una persona activa que pueda administrar usuarios y roles; si no, nadie podría arreglar los permisos después. Por eso no te deja quitar este permiso si es el último que lo tiene.',
+        'Siempre tiene que quedar al menos una persona activa que pueda administrar usuarios y roles; si no, nadie podría arreglar los permisos después. Por eso no te deja quitar este permiso, dar de baja a ese usuario o a su rol, ni cambiarle el rol, si es el último que lo tiene.',
       )
       expect('ejemplo' in ayuda).toBe(false)
       expect(ayuda.reglas).toEqual(['ADR-053'])

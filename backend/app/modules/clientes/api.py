@@ -42,7 +42,7 @@ organización, así que un id ajeno es indistinguible de uno inexistente."""
 from __future__ import annotations
 
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -64,6 +64,7 @@ from app.modules.clientes import commands as clientes_commands  # noqa: F401
 from app.modules.clientes import repository as clientes_repository
 from app.modules.clientes import service as clientes_service
 from app.modules.clientes.domain.errores import RecursoNoEncontradoError
+from app.modules.clientes.models import Cliente
 from app.modules.clientes.repository import LIMITE_PAGINA_DEFAULT
 from app.modules.clientes.schemas import (
     ClienteCrearRequest,
@@ -72,10 +73,13 @@ from app.modules.clientes.schemas import (
     ClienteOpcionResponse,
     ClienteResponse,
     ClienteSaldoResponse,
+    ClienteVendedorAsignarRequest,
+    ClienteVendedorAsignarResponse,
     ConsumidorFinalConfigurarRequest,
     ConsumidorFinalResponse,
     PaginaClientes,
     PaginaOpcionesDeClientes,
+    VendedorElegibleResponse,
 )
 from app.modules.cuentas_corrientes import service as cuentas_corrientes_service
 from app.modules.cuentas_corrientes.service import EstadoDeCuentaResponse, estado_de_cuenta_response
@@ -95,11 +99,30 @@ def _resultado_de(comando: sync_service.Comando) -> dict[str, object]:
     return comando.resultado
 
 
+def _con_vendedor(
+    organizacion_id: UUID, sesion: Session, clientes: list[Cliente]
+) -> list[ClienteResponse]:
+    """Las respuestas de `clientes` con el nombre y la validez de su vendedor (change 20b, D6,
+    D15), resueltos por lote a través de `clientes/service.py`."""
+    datos = clientes_service.datos_de_vendedores(
+        organizacion_id,
+        {c.vendedor_id for c in clientes if c.vendedor_id is not None},
+        sesion,
+    )
+    respuestas = [ClienteResponse.model_validate(cliente) for cliente in clientes]
+    for respuesta in respuestas:
+        vendedor = None if respuesta.vendedor_id is None else datos.get(respuesta.vendedor_id)
+        if vendedor is not None:
+            respuesta.vendedor_nombre = vendedor.nombre
+            respuesta.vendedor_valido = vendedor.valido
+    return respuestas
+
+
 def _cliente_o_404(organizacion_id: UUID, cliente_id: UUID, sesion: Session) -> ClienteResponse:
     cliente = clientes_repository.obtener_cliente_por_id(organizacion_id, cliente_id, sesion)
     if cliente is None:
         raise RecursoNoEncontradoError(f"El cliente {cliente_id} no existe en esta organización.")
-    return ClienteResponse.model_validate(cliente)
+    return _con_vendedor(organizacion_id, sesion, [cliente])[0]
 
 
 # --- escrituras (D9, enmienda 2026-09-29) ------------------------------------
@@ -267,6 +290,52 @@ def modificar_credito_cliente(
     return _cliente_o_404(entrada.contexto.organizacion_id, cliente_id, sesion)
 
 
+@router.post("/vendedor", response_model=ClienteVendedorAsignarResponse)
+def asignar_vendedor(
+    datos: ClienteVendedorAsignarRequest,
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online(PERMISO))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> ClienteVendedorAsignarResponse:
+    """Change 20b (D15): asigna un vendedor a uno o varios clientes, o lo quita con `null`
+    (`CLIENTE_VENDEDOR_ASIGNAR`, `GESTIONAR_CLIENTES`, solo con conexión, todo o nada)."""
+    reloj = SystemClock()
+    contenido: dict[str, ContenidoComando] = {
+        "cliente_ids": [str(cliente_id) for cliente_id in datos.cliente_ids],
+        "vendedor_id": None if datos.vendedor_id is None else str(datos.vendedor_id),
+    }
+    sobre = construir_sobre_online(
+        operation_id=entrada.operation_id,
+        tipo="CLIENTE_VENDEDOR_ASIGNAR",
+        version=1,
+        modo="ONLINE",
+        organizacion_id=entrada.contexto.organizacion_id,
+        usuario_id=entrada.contexto.usuario_id,
+        dispositivo_id=entrada.contexto.dispositivo_id,
+        occurred_at=reloj.now(),
+        secuencia=1,
+        app_version="server",
+        contenido=contenido,
+    )
+    huella = calcular_huella(sobre.contenido)
+    handler_registrado = registro.resolver_handler(sobre.tipo, sobre.version)
+    contenido_validado = registro.validar_contenido(handler_registrado, sobre.contenido)
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
+        return clientes_commands.manejar_cliente_vendedor_asignar(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    return ClienteVendedorAsignarResponse.model_validate(_resultado_de(comando))
+
+
 @router.post("/consumidor-final", response_model=ClienteResponse, status_code=201)
 def configurar_consumidor_final(
     datos: ConsumidorFinalConfigurarRequest,
@@ -322,11 +391,16 @@ def listar_clientes(
     cursor: str | None = None,
     texto: str | None = None,
     estado: str | None = None,
+    vendedor_id: UUID | None = None,
+    sin_vendedor: bool = False,
 ) -> PaginaClientes:
     """Listado paginado por cursor con filtro por texto y por estado (spec
     `administracion-de-clientes`, escenarios "Buscar un cliente por texto" y
     "Filtrar por estado suspendido"). El `estado` se valida contra el
     catálogo cerrado en `domain/estado.py` y lo repite el `CHECK` de la base.
+
+    Change 20b (D15): cada cliente trae su vendedor (`vendedor_id`, `vendedor_nombre`,
+    `vendedor_valido`) y el listado filtra por `vendedor_id` o por `sin_vendedor=true`.
     """
     items, cursor_siguiente = clientes_service.listar_clientes(
         contexto.organizacion_id,
@@ -335,9 +409,11 @@ def listar_clientes(
         cursor=cursor,
         texto=texto,
         estado=estado,
+        vendedor_id=vendedor_id,
+        sin_vendedor=sin_vendedor,
     )
     return PaginaClientes(
-        items=[ClienteResponse.model_validate(item) for item in items],
+        items=_con_vendedor(contexto.organizacion_id, sesion, items),
         cursor_siguiente=cursor_siguiente,
     )
 
@@ -353,6 +429,7 @@ def listar_opciones_de_clientes(
     cursor: str | None = None,
     limite: Annotated[int, Query(ge=1, le=100)] = LIMITE_PAGINA_DEFAULT,
     incluir_consumidor_final: bool = False,
+    alcance: Literal["todos"] | None = None,
 ) -> PaginaOpcionesDeClientes:
     """Selector liviano de clientes para quien cobra (change 17, `design.md` D14, tabla de
     permisos aprobada por el usuario el 2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`;
@@ -360,7 +437,11 @@ def listar_opciones_de_clientes(
     Devuelve identificador, nombre, código, estado y la marca `es_consumidor_final`, sin crédito
     ni documento; solo clientes `ACTIVO` y `SUSPENDIDO`, y el consumidor final únicamente con
     `incluir_consumidor_final=true` (la pantalla de venta, CLI-03; aprobado el 2026-10-20).
-    Se declara antes de `/{cliente_id}`."""
+    Se declara antes de `/{cliente_id}`.
+
+    Change 20b (D14): quien no tiene `GESTIONAR_CLIENTES` y tiene clientes asignados recibe sus
+    clientes; `alcance=todos` ("Buscar en todos los clientes") trae todos. Sin cartera, o con
+    `GESTIONAR_CLIENTES`, siempre todos (ADR-052)."""
     items, cursor_siguiente = clientes_service.listar_opciones(
         contexto.organizacion_id,
         sesion,
@@ -368,11 +449,30 @@ def listar_opciones_de_clientes(
         cursor=cursor,
         texto=texto,
         incluir_consumidor_final=incluir_consumidor_final,
+        usuario_id=contexto.usuario_id,
+        pide_todos=alcance == "todos",
     )
     return PaginaOpcionesDeClientes(
         items=[ClienteOpcionResponse.model_validate(item) for item in items],
         cursor_siguiente=cursor_siguiente,
     )
+
+
+@router.get("/vendedores", response_model=list[VendedorElegibleResponse])
+def listar_vendedores_elegibles(
+    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso(PERMISO))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> list[VendedorElegibleResponse]:
+    """Change 20b (D15): los usuarios que se pueden elegir como vendedor de un cliente (activos,
+    con rol activo y con `VENDER` o `REGISTRAR_COBRANZA`), para quien administra clientes sin
+    administrar usuarios. Solo `id` y `nombre`, de la organización del token. Se declara antes de
+    `/{cliente_id}`."""
+    return [
+        VendedorElegibleResponse(id=usuario_id, nombre=nombre)
+        for usuario_id, nombre in clientes_service.listar_vendedores_elegibles(
+            contexto.organizacion_id, sesion
+        )
+    ]
 
 
 @router.get("/consumidor-final", response_model=ConsumidorFinalResponse)
@@ -416,7 +516,7 @@ def obtener_cliente(
     cliente = clientes_service.obtener_cliente_por_id(contexto.organizacion_id, cliente_id, sesion)
     if cliente is None:
         raise RecursoNoEncontradoError(f"El cliente {cliente_id} no existe en esta organización.")
-    return ClienteResponse.model_validate(cliente)
+    return _con_vendedor(contexto.organizacion_id, sesion, [cliente])[0]
 
 
 @router.get("/{cliente_id}/saldo", response_model=ClienteSaldoResponse)

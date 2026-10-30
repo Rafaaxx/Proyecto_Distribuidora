@@ -59,7 +59,7 @@ export function reglaDeMarca(campos: Partial<Record<string, unknown>> = {}) {
 }
 
 export function rol(campos: Partial<Record<string, unknown>> = {}) {
-  return { id: ROL_VENDEDOR_ID, nombre: 'Vendedor/Repartidor', activo: true, tope_descuento: '0.000000', permisos: ['DESCUENTO_MANUAL'], ...campos }
+  return { id: ROL_VENDEDOR_ID, nombre: 'Vendedor/Repartidor', activo: true, tope_descuento: '0.000000', permisos: ['DESCUENTO_MANUAL'], usuarios_activos: 0, usuarios_con_tope_propio: 0, usuarios_con_tope_propio_activos: 0, usuarios_con_tope_propio_inactivos: 0, ...campos }
 }
 
 export const ROLES = [

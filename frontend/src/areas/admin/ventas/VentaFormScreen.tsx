@@ -210,7 +210,9 @@ function VentaFormulario() {
   const credencialesRef = useRef<CredencialDePin[]>([])
 
   const textoDemorado = useTextoConDemora(textoProducto)
-  const clientes = useOpcionesDeClientes(busquedaCliente, true)
+  // Change 20b (D14): por defecto se ofrecen sus clientes asignados (o todos si no tiene ninguno).
+  const [buscarEnTodos, setBuscarEnTodos] = useState(false)
+  const clientes = useOpcionesDeClientes(busquedaCliente, true, buscarEnTodos)
   const mediosPago = useMediosPago()
   const motivos = useMotivos(AMBITO_DE_LISTA_ANTERIOR)
   const listas = useOpcionesDeListas(puedeElegirLista)
@@ -688,6 +690,19 @@ function VentaFormulario() {
               onChange={(evento) => setBusquedaCliente(evento.target.value)}
             />
           </Campo>
+          <div className="flex items-center gap-2 pb-1">
+            <input
+              id="venta-clientes-todos"
+              type="checkbox"
+              className="h-4 w-4"
+              checked={buscarEnTodos}
+              onChange={(evento) => setBuscarEnTodos(evento.target.checked)}
+            />
+            <label htmlFor="venta-clientes-todos" className="text-sm text-primary">
+              Buscar en todos los clientes
+            </label>
+            <Ayuda clave="clientes.vendedor" />
+          </div>
           <div data-testid="campo-cliente">
             <Campo id="venta-cliente" etiqueta="Cliente" error={erroresDeCampo.cliente}>
               <select

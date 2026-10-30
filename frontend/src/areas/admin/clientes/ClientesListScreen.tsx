@@ -1,17 +1,22 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { Badge, type VarianteBadge } from '../../../components/ui/Badge'
+import { Ayuda } from '../../../components/ui/Ayuda'
 import { Card } from '../../../components/ui/Card'
 import { Boton } from '../../../components/ui/Button'
 import { PageHeader } from '../../../components/ui/PageHeader'
 import { Tabla } from '../../../components/ui/Table'
+import { etiquetaDeVendedor, puedeAsignarse } from '../../../domain/clientes/cartera'
+import { useVendedoresElegibles } from '../../../features/clientes/useVendedores'
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import type { Cliente } from '../../../features/clientes/api'
 import { PermisoRequeridoClientesError } from '../../../features/clientes/errores'
 import { useClientes } from '../../../features/clientes/useListados'
+import { AsignarVendedorDialogo } from './AsignarVendedorDialogo'
 
 const SIN_PERMISO_DE_CLIENTES = 'No tenés permiso para gestionar clientes.'
+const FILTRO_SIN_VENDEDOR = 'sin'
 
 /** Estado del catálogo cerrado de `clientes/domain/estado.py`: `ACTIVO`,
  * `SUSPENDIDO`, `INACTIVO` (`01` §18). */
@@ -64,13 +69,28 @@ function ClientesListado() {
   const navigate = useNavigate()
   const [texto, setTexto] = useState('')
   const [estado, setEstado] = useState('')
+  // Change 20b (D15): el filtro de vendedor puede venir de la ficha del usuario (`?vendedor_id=`).
+  const [parametros] = useSearchParams()
+  const [vendedor, setVendedor] = useState(parametros.get('vendedor_id') ?? '')
+  const [seleccion, setSeleccion] = useState<ReadonlySet<string>>(new Set())
+  const [asignando, setAsignando] = useState(false)
+  const vendedores = useVendedoresElegibles()
 
   const clientes = useClientes({
     texto: texto.trim() || undefined,
     estado: estado || undefined,
+    vendedorId: vendedor && vendedor !== FILTRO_SIN_VENDEDOR ? vendedor : undefined,
+    sinVendedor: vendedor === FILTRO_SIN_VENDEDOR ? true : undefined,
   })
 
   const filas = clientes.data?.pages.flatMap((pagina) => pagina.items) ?? []
+
+  const alternarSeleccion = (clienteId: string) =>
+    setSeleccion((actual) => {
+      const siguiente = new Set(actual)
+      if (!siguiente.delete(clienteId)) siguiente.add(clienteId)
+      return siguiente
+    })
 
   if (clientes.isError) {
     if (clientes.error instanceof PermisoRequeridoClientesError) {
@@ -128,6 +148,32 @@ function ClientesListado() {
           </select>
         </div>
 
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1">
+            <label htmlFor="filtro-vendedor-clientes" className="text-sm text-primary">
+              Vendedor
+            </label>
+            <Ayuda clave="clientes.vendedor" />
+          </div>
+          <select
+            id="filtro-vendedor-clientes"
+            value={vendedor}
+            onChange={(evento) => setVendedor(evento.target.value)}
+            className="rounded-md border border-border px-2 py-1 text-sm"
+          >
+            <option value="">Todos</option>
+            <option value={FILTRO_SIN_VENDEDOR}>Sin vendedor</option>
+            {vendedor !== '' && vendedor !== FILTRO_SIN_VENDEDOR && !vendedores.vendedores.some((v) => v.id === vendedor) && (
+              <option value={vendedor}>Vendedor elegido</option>
+            )}
+            {vendedores.vendedores.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.nombre}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <Link
           to="/admin/clientes/nuevo"
           className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
@@ -148,6 +194,23 @@ function ClientesListado() {
         </SiTienePermiso>
       </form>
 
+      {vendedores.estado === 'sin-acceso' && (
+        <p className="text-sm text-primary/70">
+          No podés ver la lista de vendedores con tu rol: el filtro solo ofrece «Sin vendedor».
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Boton disabled={seleccion.size === 0} onClick={() => setAsignando(true)}>
+          Asignar vendedor
+        </Boton>
+        {seleccion.size > 0 && (
+          <span className="text-sm text-primary">
+            {seleccion.size === 1 ? '1 cliente marcado' : `${seleccion.size} clientes marcados`}
+          </span>
+        )}
+      </div>
+
       {clientes.isPending && <p className="text-sm text-primary/70">Cargando…</p>}
 
       {clientes.isSuccess && (
@@ -157,6 +220,20 @@ function ClientesListado() {
             obtenerClave={(cliente) => cliente.id}
             onFilaClick={(cliente) => navigate(`/admin/clientes/${cliente.id}`)}
             columnas={[
+              {
+                clave: 'seleccion',
+                encabezado: '',
+                render: (c) => (
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    aria-label={`Marcar ${c.nombre}`}
+                    disabled={!puedeAsignarse(c)}
+                    checked={seleccion.has(c.id)}
+                    onChange={() => alternarSeleccion(c.id)}
+                  />
+                ),
+              },
               {
                 clave: 'nombre',
                 encabezado: 'Nombre',
@@ -173,6 +250,15 @@ function ClientesListado() {
                 clave: 'documento',
                 encabezado: 'Documento',
                 render: (c) => (c.documento_numero ? `${c.documento_tipo} ${c.documento_numero}` : '—'),
+              },
+              {
+                clave: 'vendedor',
+                encabezado: 'Vendedor',
+                render: (c) => {
+                  if (c.es_consumidor_final) return '—'
+                  const etiqueta = etiquetaDeVendedor(c)
+                  return etiqueta.paraReasignar ? <span className="text-danger">{etiqueta.texto}</span> : etiqueta.texto
+                },
               },
               {
                 clave: 'estado',
@@ -210,6 +296,18 @@ function ClientesListado() {
             </div>
           )}
         </Card>
+      )}
+
+      {asignando && (
+        <AsignarVendedorDialogo
+          clienteIds={[...seleccion]}
+          vendedores={vendedores}
+          onCerrar={() => setAsignando(false)}
+          onAsignado={() => {
+            setAsignando(false)
+            setSeleccion(new Set())
+          }}
+        />
       )}
     </main>
   )

@@ -83,12 +83,15 @@ def test_todo_tipo_que_recibe_secretos_por_clausura_exige_credenciales_efimeras(
     )
 
 
-def test_los_tres_tipos_con_secretos_obligatorios_estan_marcados() -> None:
+def test_los_tipos_con_secretos_obligatorios_estan_marcados() -> None:
     marcados = {t.tipo for t in _CATALOGO_REAL.values() if t.exige_credenciales_efimeras}
     assert marcados == {
         "USUARIO_CREAR",
         "PIN_AUTORIZACION_ROTAR",
         "PIN_AUTORIZACION_PROPIO_DEFINIR",
+        # Change 20b: las contraseñas del restablecimiento y de "Mi contraseña" (ADR-056).
+        "USUARIO_CONTRASENA_RESTABLECER",
+        "CONTRASENA_PROPIA_CAMBIAR",
     }
 
 

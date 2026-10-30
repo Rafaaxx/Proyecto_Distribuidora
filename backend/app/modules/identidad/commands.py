@@ -62,6 +62,7 @@ from app.core.errors import PermisoRequeridoError
 from app.modules.identidad import service as identidad_service
 from app.modules.identidad.domain.usuarios import PERMISOS_AUTORIZACION_EXCEPCION
 from app.modules.identidad.domain.valores import computa_credito_fiscal
+from app.modules.identidad.models import Rol, Usuario
 
 ResultadoHandler = tuple[str, dict[str, object] | None, str | None]
 """Misma convención que `sync/service.py::ResultadoHandler`: `(estado,
@@ -106,6 +107,12 @@ def manejar_usuario_crear(
     clausura desde la ruta y `.get_secret_value()` se llama UNA sola vez, donde el servicio lo
     deriva. `auditar=False` (ADR-022): la única fila de auditoría de este comando la deja
     `sync_service.procesar_comando` (grupo 10), no este handler."""
+    # Change 20b, D4: el alta toma la exclusión mutua de identidad (y revalida a quien ejecuta)
+    # antes de leer el rol o el nombre: un alta en un rol que se está dando de baja ve el rol
+    # inactivo, y dos altas del mismo nombre se serializan.
+    identidad_service.bloquear_organizacion_para_identidad(
+        sobre.organizacion_id, sesion, actor_id=sobre.usuario_id
+    )
     usuario = identidad_service.crear_usuario(
         sobre.organizacion_id,
         sesion,
@@ -758,4 +765,513 @@ declarar_tipo(
     admite_online=True,
     admite_offline=False,
     permisos=("ADMIN_CONFIGURACION",),
+)
+
+
+# --- Administración de usuarios (change 20b, D1): un comando por acción -------------------------
+#
+# Todos `ONLINE`, `ADMIN_USUARIOS` (el bus lo exige en todo camino, ADR-056). `organizacion_id` y
+# quien ejecuta salen del sobre (token), nunca del contenido. La auditoría de entidad con antes y
+# después la escribe el servicio; la fila genérica del comando, el bus (ADR-022). Un usuario que
+# no está en la organización responde `RECHAZADO` y la ruta lo traduce a 404 (INV-21, SEG-07).
+
+
+def _resultado_de_usuario(usuario: Usuario) -> dict[str, object]:
+    """Lo que devuelven los comandos de usuario: el usuario tal como quedó, sin `password_hash` ni
+    PIN. Un reenvío idempotente devuelve exactamente esto (INV-06)."""
+    tope = usuario.tope_descuento_override
+    return {
+        "usuario_id": str(usuario.id),
+        "usuario": usuario.usuario,
+        "nombre": usuario.nombre,
+        "email": usuario.email,
+        "rol_id": str(usuario.rol_id),
+        "estado": usuario.estado,
+        "tope_descuento_override": None if tope is None else f"{tope:.6f}",
+    }
+
+
+# --- USUARIO_BAJA (D2, D3, D4, D5) --------------------------------------------------------------
+
+
+class UsuarioBajaContenidoV1(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    usuario_id: UUID
+    observacion: str | None = None
+
+
+def manejar_usuario_baja(
+    sobre: SobreComando,
+    contenido: UsuarioBajaContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+) -> ResultadoHandler:
+    """Handler de `USUARIO_BAJA` v1."""
+    usuario = identidad_service.dar_de_baja_usuario(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        usuario_id=contenido.usuario_id,
+        observacion=contenido.observacion,
+        actor_id=sobre.usuario_id,
+        dispositivo_id_actor=sobre.dispositivo_id,
+        operation_id=sobre.operation_id,
+    )
+    if usuario is None:
+        return "RECHAZADO", None, "USUARIO_NO_ENCONTRADO"
+    return "ACEPTADO", _resultado_de_usuario(usuario), None
+
+
+registrar_handler("USUARIO_BAJA", 1, UsuarioBajaContenidoV1)(manejar_usuario_baja)
+declarar_tipo(
+    "USUARIO_BAJA", admite_online=True, admite_offline=False, permisos=("ADMIN_USUARIOS",)
+)
+
+
+# --- USUARIO_REACTIVAR (D2) ---------------------------------------------------------------------
+
+
+class UsuarioReactivarContenidoV1(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    usuario_id: UUID
+
+
+def manejar_usuario_reactivar(
+    sobre: SobreComando,
+    contenido: UsuarioReactivarContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+) -> ResultadoHandler:
+    """Handler de `USUARIO_REACTIVAR` v1."""
+    usuario = identidad_service.reactivar_usuario(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        usuario_id=contenido.usuario_id,
+        actor_id=sobre.usuario_id,
+        dispositivo_id_actor=sobre.dispositivo_id,
+        operation_id=sobre.operation_id,
+    )
+    if usuario is None:
+        return "RECHAZADO", None, "USUARIO_NO_ENCONTRADO"
+    return "ACEPTADO", _resultado_de_usuario(usuario), None
+
+
+registrar_handler("USUARIO_REACTIVAR", 1, UsuarioReactivarContenidoV1)(manejar_usuario_reactivar)
+declarar_tipo(
+    "USUARIO_REACTIVAR", admite_online=True, admite_offline=False, permisos=("ADMIN_USUARIOS",)
+)
+
+
+# --- Administración de roles (change 20b, D10, D11): crear, renombrar, baja y reactivación ------
+#
+# Todos `ONLINE`, `ADMIN_USUARIOS` (el bus lo exige en todo camino, ADR-056). `organizacion_id` y
+# quien ejecuta salen del sobre (token). La auditoría de entidad la escribe el servicio; la fila
+# genérica del comando, el bus (ADR-022). Un rol que no está en la organización responde
+# `RECHAZADO` y la ruta lo traduce a 404 (INV-21, SEG-07).
+
+
+def _resultado_de_rol(
+    sobre: SobreComando, sesion: SesionDeHandler, rol: Rol, permisos: list[str] | None = None
+) -> dict[str, object]:
+    """Lo que devuelven los comandos de rol: el rol tal como quedó. Un reenvío idempotente devuelve
+    exactamente esto (INV-06)."""
+    if permisos is None:
+        permisos = sorted(
+            identidad_service.listar_permisos_de_un_rol(sobre.organizacion_id, rol.id, sesion)
+        )
+    return {
+        "rol_id": str(rol.id),
+        "nombre": rol.nombre,
+        "activo": rol.activo,
+        "tope_descuento": f"{rol.tope_descuento:.6f}",
+        "permisos": permisos,
+    }
+
+
+class RolCrearContenidoV1(BaseModel):
+    """Nombre, permisos y tope del rol nuevo (D10). El tope es un `str` (INV-03); por defecto 0."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    nombre: str
+    permisos: list[str]
+    tope_descuento: str = "0"
+
+
+def manejar_rol_crear(
+    sobre: SobreComando,
+    contenido: RolCrearContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+) -> ResultadoHandler:
+    """Handler de `ROL_CREAR` v1."""
+    rol, permisos = identidad_service.crear_rol_nuevo(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        nombre=contenido.nombre,
+        permisos=frozenset(contenido.permisos),
+        tope_descuento=contenido.tope_descuento,
+        actor_id=sobre.usuario_id,
+        dispositivo_id_actor=sobre.dispositivo_id,
+        operation_id=sobre.operation_id,
+    )
+    return "ACEPTADO", _resultado_de_rol(sobre, sesion, rol, permisos), None
+
+
+registrar_handler("ROL_CREAR", 1, RolCrearContenidoV1)(manejar_rol_crear)
+declarar_tipo("ROL_CREAR", admite_online=True, admite_offline=False, permisos=("ADMIN_USUARIOS",))
+
+
+class RolRenombrarContenidoV1(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rol_id: UUID
+    nombre: str
+
+
+def manejar_rol_renombrar(
+    sobre: SobreComando,
+    contenido: RolRenombrarContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+) -> ResultadoHandler:
+    """Handler de `ROL_RENOMBRAR` v1."""
+    rol = identidad_service.renombrar_rol(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        rol_id=contenido.rol_id,
+        nombre=contenido.nombre,
+        actor_id=sobre.usuario_id,
+        dispositivo_id_actor=sobre.dispositivo_id,
+        operation_id=sobre.operation_id,
+    )
+    if rol is None:
+        return "RECHAZADO", None, "ROL_NO_ENCONTRADO"
+    return "ACEPTADO", _resultado_de_rol(sobre, sesion, rol), None
+
+
+registrar_handler("ROL_RENOMBRAR", 1, RolRenombrarContenidoV1)(manejar_rol_renombrar)
+declarar_tipo(
+    "ROL_RENOMBRAR", admite_online=True, admite_offline=False, permisos=("ADMIN_USUARIOS",)
+)
+
+
+class RolBajaContenidoV1(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rol_id: UUID
+
+
+def manejar_rol_baja(
+    sobre: SobreComando,
+    contenido: RolBajaContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+) -> ResultadoHandler:
+    """Handler de `ROL_BAJA` v1."""
+    rol = identidad_service.dar_de_baja_rol(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        rol_id=contenido.rol_id,
+        actor_id=sobre.usuario_id,
+        dispositivo_id_actor=sobre.dispositivo_id,
+        operation_id=sobre.operation_id,
+    )
+    if rol is None:
+        return "RECHAZADO", None, "ROL_NO_ENCONTRADO"
+    return "ACEPTADO", _resultado_de_rol(sobre, sesion, rol), None
+
+
+registrar_handler("ROL_BAJA", 1, RolBajaContenidoV1)(manejar_rol_baja)
+declarar_tipo("ROL_BAJA", admite_online=True, admite_offline=False, permisos=("ADMIN_USUARIOS",))
+
+
+class RolReactivarContenidoV1(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rol_id: UUID
+
+
+def manejar_rol_reactivar(
+    sobre: SobreComando,
+    contenido: RolReactivarContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+) -> ResultadoHandler:
+    """Handler de `ROL_REACTIVAR` v1."""
+    rol = identidad_service.reactivar_rol(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        rol_id=contenido.rol_id,
+        actor_id=sobre.usuario_id,
+        dispositivo_id_actor=sobre.dispositivo_id,
+        operation_id=sobre.operation_id,
+    )
+    if rol is None:
+        return "RECHAZADO", None, "ROL_NO_ENCONTRADO"
+    return "ACEPTADO", _resultado_de_rol(sobre, sesion, rol), None
+
+
+registrar_handler("ROL_REACTIVAR", 1, RolReactivarContenidoV1)(manejar_rol_reactivar)
+declarar_tipo(
+    "ROL_REACTIVAR", admite_online=True, admite_offline=False, permisos=("ADMIN_USUARIOS",)
+)
+
+
+# --- USUARIO_MODIFICAR (D9) ---------------------------------------------------------------------
+
+
+class UsuarioModificarContenidoV1(BaseModel):
+    """Reemplazo completo de nombre y email. El nombre de inicio de sesión no se edita: un
+    contenido que lo traiga es malformado (`extra="forbid"`)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    usuario_id: UUID
+    nombre: str
+    email: str | None
+
+
+def manejar_usuario_modificar(
+    sobre: SobreComando,
+    contenido: UsuarioModificarContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+) -> ResultadoHandler:
+    """Handler de `USUARIO_MODIFICAR` v1."""
+    usuario = identidad_service.modificar_usuario(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        usuario_id=contenido.usuario_id,
+        nombre=contenido.nombre,
+        email=contenido.email,
+        actor_id=sobre.usuario_id,
+        dispositivo_id_actor=sobre.dispositivo_id,
+        operation_id=sobre.operation_id,
+    )
+    if usuario is None:
+        return "RECHAZADO", None, "USUARIO_NO_ENCONTRADO"
+    return "ACEPTADO", _resultado_de_usuario(usuario), None
+
+
+registrar_handler("USUARIO_MODIFICAR", 1, UsuarioModificarContenidoV1)(manejar_usuario_modificar)
+declarar_tipo(
+    "USUARIO_MODIFICAR", admite_online=True, admite_offline=False, permisos=("ADMIN_USUARIOS",)
+)
+
+
+# --- USUARIO_ROL_CAMBIAR (D7) -------------------------------------------------------------------
+
+
+class UsuarioRolCambiarContenidoV1(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    usuario_id: UUID
+    rol_id: UUID
+
+
+def manejar_usuario_rol_cambiar(
+    sobre: SobreComando,
+    contenido: UsuarioRolCambiarContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+) -> ResultadoHandler:
+    """Handler de `USUARIO_ROL_CAMBIAR` v1. Un rol que no es de la organización lanza
+    `RolNoEncontradoError` (404) desde el servicio."""
+    usuario = identidad_service.cambiar_rol_de_usuario(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        usuario_id=contenido.usuario_id,
+        rol_id=contenido.rol_id,
+        actor_id=sobre.usuario_id,
+        dispositivo_id_actor=sobre.dispositivo_id,
+        operation_id=sobre.operation_id,
+    )
+    if usuario is None:
+        return "RECHAZADO", None, "USUARIO_NO_ENCONTRADO"
+    return "ACEPTADO", _resultado_de_usuario(usuario), None
+
+
+registrar_handler("USUARIO_ROL_CAMBIAR", 1, UsuarioRolCambiarContenidoV1)(
+    manejar_usuario_rol_cambiar
+)
+declarar_tipo(
+    "USUARIO_ROL_CAMBIAR", admite_online=True, admite_offline=False, permisos=("ADMIN_USUARIOS",)
+)
+
+
+# --- USUARIO_CONTRASENA_RESTABLECER (D8-A) ------------------------------------------------------
+
+
+class UsuarioContrasenaRestablecerContenidoV1(BaseModel):
+    """Solo el usuario. La contraseña NO está acá (ADR-056): la ruta la separa del cuerpo antes de
+    armar el contenido y la huella y la entrega al handler por clausura como `SecretStr`. Así no
+    entra a la huella, a `comando`, a `comando_cuarentena`, a la auditoría, al resultado ni al
+    `input` de un error de validación. `extra="forbid"`: un contenido con `contrasena` adentro es
+    malformado. Ningún `field_validator` sobre el secreto."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    usuario_id: UUID
+
+
+def manejar_usuario_contrasena_restablecer(
+    sobre: SobreComando,
+    contenido: UsuarioContrasenaRestablecerContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+    password_nueva: SecretStr,
+) -> ResultadoHandler:
+    """Handler de `USUARIO_CONTRASENA_RESTABLECER` v1. `.get_secret_value()` se llama UNA vez,
+    donde el servicio la deriva. El resultado no lleva secretos."""
+    usuario = identidad_service.restablecer_contrasena_de_usuario(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        usuario_id=contenido.usuario_id,
+        password_nueva=password_nueva.get_secret_value(),
+        actor_id=sobre.usuario_id,
+        dispositivo_id_actor=sobre.dispositivo_id,
+        operation_id=sobre.operation_id,
+    )
+    if usuario is None:
+        return "RECHAZADO", None, "USUARIO_NO_ENCONTRADO"
+    return "ACEPTADO", {"usuario_id": str(usuario.id)}, None
+
+
+# Dato efímero por clausura que `HandlerFuncion` no modela: el lote nunca invoca este handler
+# porque el tipo se declara `exige_credenciales_efimeras`.
+registrar_handler("USUARIO_CONTRASENA_RESTABLECER", 1, UsuarioContrasenaRestablecerContenidoV1)(
+    manejar_usuario_contrasena_restablecer  # type: ignore[arg-type]
+)
+declarar_tipo(
+    "USUARIO_CONTRASENA_RESTABLECER",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("ADMIN_USUARIOS",),
+    exige_credenciales_efimeras=True,
+)
+
+
+# --- CONTRASENA_PROPIA_CAMBIAR ("Mi contraseña", D20) -------------------------------------------
+
+
+class ContrasenaPropiaCambiarContenidoV1(BaseModel):
+    """Contenido VACÍO (`extra="forbid"`): el usuario sale del token, nunca del cuerpo, y las dos
+    contraseñas viajan como dato efímero por clausura (ADR-056), así que no están en la huella,
+    `comando`, la auditoría, el resultado ni los registros. Ningún `field_validator` sobre los
+    secretos."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+def manejar_contrasena_propia_cambiar(
+    sobre: SobreComando,
+    contenido: ContrasenaPropiaCambiarContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+    password_actual: SecretStr,
+    password_nueva: SecretStr,
+    ip: str,
+) -> ResultadoHandler:
+    """Handler de `CONTRASENA_PROPIA_CAMBIAR` v1. `password_actual`, `password_nueva` e `ip` llegan
+    por clausura desde la ruta (`POST /api/v1/yo/contrasena`). Todo rechazo lanza una excepción de
+    dominio (nunca devuelve `RECHAZADO`). El resultado no lleva secretos."""
+    usuario = identidad_service.cambiar_contrasena_propia(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        usuario_id=sobre.usuario_id,
+        password_actual=password_actual.get_secret_value(),
+        password_nueva=password_nueva.get_secret_value(),
+        ip=ip,
+        dispositivo_id=sobre.dispositivo_id,
+        operation_id=sobre.operation_id,
+    )
+    return "ACEPTADO", {"usuario_id": str(usuario.id)}, None
+
+
+# Como `PIN_AUTORIZACION_PROPIO_DEFINIR`: parámetros efímeros que `HandlerFuncion` no modela; el
+# lote rechaza el tipo (`exige_credenciales_efimeras`). Solo `ONLINE`. Cualquier usuario
+# autenticado y activo puede cambiar SU contraseña: el bus ya exige sesión válida y usuario activo
+# y el tipo solo actúa sobre el usuario del token, así que es la única salida justificada de
+# `permisos` (D20, ADR-056; nunca en un tipo `OFFLINE`).
+registrar_handler("CONTRASENA_PROPIA_CAMBIAR", 1, ContrasenaPropiaCambiarContenidoV1)(
+    manejar_contrasena_propia_cambiar  # type: ignore[arg-type]
+)
+declarar_tipo(
+    "CONTRASENA_PROPIA_CAMBIAR",
+    admite_online=True,
+    admite_offline=False,
+    sin_permiso=(
+        "Cualquier usuario autenticado y activo cambia su propia contraseña, confirmando la "
+        "actual; solo actúa sobre el usuario del token (D20)."
+    ),
+    exige_credenciales_efimeras=True,
+)
+
+
+# --- USUARIO_TOPE_DESCUENTO_DEFINIR (D12) -------------------------------------------------------
+
+
+class UsuarioTopeDescuentoDefinirContenidoV1(BaseModel):
+    """El usuario y su tope propio nuevo. El tope es un `str` (un número JSON no es válido, INV-03)
+    o `null` para volver al del rol; el rango lo valida el dominio con su error (422)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    usuario_id: UUID
+    tope_descuento: str | None
+
+
+def manejar_usuario_tope_descuento_definir(
+    sobre: SobreComando,
+    contenido: UsuarioTopeDescuentoDefinirContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+) -> ResultadoHandler:
+    """Handler de `USUARIO_TOPE_DESCUENTO_DEFINIR` v1."""
+    usuario = identidad_service.definir_tope_descuento_de_usuario(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        usuario_id=contenido.usuario_id,
+        tope_nuevo=contenido.tope_descuento,
+        actor_id=sobre.usuario_id,
+        dispositivo_id_actor=sobre.dispositivo_id,
+        operation_id=sobre.operation_id,
+    )
+    if usuario is None:
+        return "RECHAZADO", None, "USUARIO_NO_ENCONTRADO"
+    return "ACEPTADO", _resultado_de_usuario(usuario), None
+
+
+registrar_handler("USUARIO_TOPE_DESCUENTO_DEFINIR", 1, UsuarioTopeDescuentoDefinirContenidoV1)(
+    manejar_usuario_tope_descuento_definir
+)
+declarar_tipo(
+    "USUARIO_TOPE_DESCUENTO_DEFINIR",
+    admite_online=True,
+    admite_offline=False,
+    permisos=("ADMIN_USUARIOS",),
 )

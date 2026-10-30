@@ -94,6 +94,13 @@ RUTAS_EXENTAS_DE_PERMISO = frozenset(
         # `GET /yo`: exige sesión válida y habilitada (`Depends(requiere_sesion)`), ningún
         # permiso, porque la pantalla "Mi PIN" decide con `puede_definir` si se ofrece.
         ("GET", "/api/v1/yo/pin-autorizacion"),
+        # Change 20b, tarea 4.5 (`identidad/api.py::router_yo`, D20): "Mi contraseña". La puede
+        # cambiar cualquier usuario autenticado y activo, solo la propia (el usuario sale del
+        # token): exige sesión válida y habilitada y el `Operation-Id`
+        # (`Depends(requiere_comando_online_de_sesion)`), ningún permiso. El tipo de comando que
+        # envía declara `sin_permiso` en el catálogo (`EXCEPCIONES_SIN_PERMISO` del ratchet por
+        # tipo) y el bus no exige ninguno (ADR-056).
+        ("POST", "/api/v1/yo/contrasena"),
     }
 )
 

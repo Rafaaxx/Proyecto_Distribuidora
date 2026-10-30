@@ -117,6 +117,8 @@ class Rol(Base):
             name="fk_rol__actualizado_por",
         ),
         UniqueConstraint("organizacion_id", "id", name="ux_rol__org_id"),
+        # Change 20b (D10, INV-02): nombre único por organización sin distinguir mayúsculas.
+        Index("ux_rol__nombre", "organizacion_id", text("lower(nombre)"), unique=True),
         CheckConstraint(
             "tope_descuento >= 0 AND tope_descuento <= 1", name="ck_rol__tope_descuento"
         ),

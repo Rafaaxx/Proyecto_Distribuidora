@@ -10,4 +10,6 @@ export const clavesIdentidad = {
   permisos: () => ['identidad', 'permisos'] as const,
   usuarios: () => ['identidad', 'usuarios'] as const,
   miPin: () => ['identidad', 'mi-pin'] as const,
+  usuariosDetalle: (filtros: object = {}) => ['identidad', 'usuarios', 'detalle', filtros] as const,
+  usuario: (usuarioId: string) => ['identidad', 'usuarios', 'ficha', usuarioId] as const,
 }

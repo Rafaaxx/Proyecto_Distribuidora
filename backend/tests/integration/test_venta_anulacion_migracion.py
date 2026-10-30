@@ -34,7 +34,7 @@ from ventas_utiles import MOMENTO, insertar_sql, sembrar_venta_sql
 
 REVISION = "d9e0f1a2b3c4"
 REVISION_ANTERIOR = "c8d9e0f1a2b3"
-REVISION_HEAD = "e0f1a2b3c4d5"  # `nota_venta_configuracion` (change 20), la cabeza actual.
+REVISION_HEAD = "f1a2b3c4d5e6"  # `usuarios_roles_y_cartera` (change 20b), la cabeza actual.
 AMBITO = "ANULACION_VENTA"
 MOTIVOS_SEMBRADOS = ["Devolución del cliente", "Error de carga", "Otro"]
 

@@ -238,3 +238,26 @@ class CreditoInconsistenteError(DomainError):
 
     codigo = "CREDITO_INCONSISTENTE"
     status_http = 422
+
+
+class ClienteConsumidorFinalSinVendedorError(DomainError):
+    """Se intentó asignar (o quitar) el vendedor del consumidor final: siempre es visible para
+    todos y nunca tiene vendedor (CLI-03, change 20b, D13, D15)."""
+
+    codigo = "CLIENTE_CONSUMIDOR_FINAL_SIN_VENDEDOR"
+    status_http = 409
+
+
+class VendedorInvalidoError(DomainError):
+    """El vendedor no está `ACTIVO`, su rol está de baja o no tiene `VENDER` ni
+    `REGISTRAR_COBRANZA` (change 20b, D15)."""
+
+    codigo = "VENDEDOR_INVALIDO"
+    status_http = 409
+
+
+class AsignacionDeClientesInvalidaError(DomainError):
+    """La lista de clientes a asignar está vacía o pasa del máximo por pedido (change 20b, D15)."""
+
+    codigo = "ASIGNACION_DE_CLIENTES_INVALIDA"
+    status_http = 422

@@ -61,6 +61,13 @@ class ClienteResponse(BaseModel):
     lista_precio_id: UUID | None
     """La lista de precios asignada (CLI-01, change 13, D11); `None` = la predeterminada de
     la organización (PRC-20)."""
+    vendedor_id: UUID | None
+    """El vendedor asignado (`01` §19, change 20b); `None` = sin vendedor."""
+    vendedor_nombre: str | None = None
+    """Nombre del vendedor asignado; lo completa la lectura (no sale de la fila)."""
+    vendedor_valido: bool | None = None
+    """`False` si el vendedor está de baja, su rol está de baja o ya no tiene `VENDER` ni
+    `REGISTRAR_COBRANZA`: el cliente se marca para reasignarlo (D6). `None` sin vendedor."""
     limite_credito: Decimal | None
     politica_credito: str | None
     tolerancia_offline_tipo: str | None
@@ -145,6 +152,22 @@ class ClienteCreditoModificarRequest(BaseModel):
     tolerancia_offline_valor: str | None = Field(default=None, pattern=_PATRON_DECIMAL)
 
 
+class ClienteVendedorAsignarRequest(BaseModel):
+    """Cuerpo de `POST /clientes/vendedor` (change 20b, D15): los clientes (1 a 500) y el vendedor,
+    o `null` para quitarlo. `vendedor_id` es obligatorio."""
+
+    cliente_ids: list[UUID]
+    vendedor_id: UUID | None
+
+
+class ClienteVendedorAsignarResponse(BaseModel):
+    """Lo que dejó la asignación: `cambiados` cuenta solo los clientes cuyo vendedor cambió."""
+
+    vendedor_id: UUID | None
+    cliente_ids: list[UUID]
+    cambiados: int
+
+
 class ConsumidorFinalConfigurarRequest(BaseModel):
     """Cuerpo de `POST /clientes/consumidor-final` (D4, ADR-029). Solo el
     nombre: la dirección y el contacto son genéricos y el cliente lo crea
@@ -180,6 +203,13 @@ class ClienteOpcionResponse(BaseModel):
     codigo: str | None
     estado: str
     es_consumidor_final: bool
+
+
+class VendedorElegibleResponse(BaseModel):
+    """Un vendedor asignable (change 20b, D15): solo identificador y nombre."""
+
+    id: UUID
+    nombre: str
 
 
 class PaginaOpcionesDeClientes(BaseModel):

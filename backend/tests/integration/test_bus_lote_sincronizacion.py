@@ -124,7 +124,7 @@ def _crear_usuario_y_dispositivo(
         organizacion_id,
         sesion,
         rol_id=nuevo_id(),
-        nombre="Vendedor",
+        nombre=f"Vendedor {uuid4().hex[:8]}",
         tope_descuento=Decimal("0"),
         activo=True,
         momento=MOMENTO,

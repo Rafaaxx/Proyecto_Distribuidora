@@ -80,7 +80,9 @@ function CobranzaFormulario() {
   const [confirmando, setConfirmando] = useState(false)
   const [registrada, setRegistrada] = useState<CobranzaRegistrarResultado | null>(null)
 
-  const clientes = useOpcionesDeClientes(busqueda)
+  // Change 20b (D14): por defecto se ofrecen sus clientes asignados (o todos si no tiene ninguno).
+  const [buscarEnTodos, setBuscarEnTodos] = useState(false)
+  const clientes = useOpcionesDeClientes(busqueda, false, buscarEnTodos)
   const saldo = useSaldoDelCliente(formulario.clienteId === '' ? undefined : formulario.clienteId)
   const mediosPago = useMediosPago()
   const registrar = useRegistrarCobranza()
@@ -186,6 +188,19 @@ function CobranzaFormulario() {
                 onChange={(evento) => setBusqueda(evento.target.value)}
               />
             </Campo>
+          </div>
+          <div className="flex items-center gap-2 pb-1">
+            <input
+              id="cobranza-clientes-todos"
+              type="checkbox"
+              className="h-4 w-4"
+              checked={buscarEnTodos}
+              onChange={(evento) => setBuscarEnTodos(evento.target.checked)}
+            />
+            <label htmlFor="cobranza-clientes-todos" className="text-sm text-primary">
+              Buscar en todos los clientes
+            </label>
+            <Ayuda clave="clientes.vendedor" />
           </div>
           <div data-testid="campo-cliente">
             <Campo id="cobranza-cliente" etiqueta="Cliente" error={erroresDeCampo.cliente}>

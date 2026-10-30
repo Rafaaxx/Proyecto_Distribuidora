@@ -103,7 +103,7 @@ def _crear_usuario(
         organizacion_id,
         sesion,
         rol_id=nuevo_id(),
-        nombre="Rol de prueba",
+        nombre=f"Rol de prueba {uuid4().hex[:8]}",
         tope_descuento=Decimal("0"),
         activo=True,
         momento=MOMENTO,

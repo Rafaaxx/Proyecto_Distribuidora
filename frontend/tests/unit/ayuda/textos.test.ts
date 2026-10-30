@@ -11,8 +11,8 @@ const claves = Object.keys(AYUDAS) as ClaveDeAyuda[]
 const temas = Object.keys(TEMAS) as TemaDeAyuda[]
 
 describe('AYUDAS: cada entrada tiene título, texto y regla citada', () => {
-  it('tiene las 68 claves aprobadas (27 del 16b, 5 de cobranzas, 5 de medios de pago y roles, 9 de ventas, 12 del 18b y 6 de la anulación de venta del 19 y 4 de la nota de venta del 20; la de "Operador" y la de compartir la nota se eliminaron)', () => {
-    expect(claves).toHaveLength(68)
+  it('tiene las 74 claves aprobadas (27 del 16b, 5 de cobranzas, 5 de medios de pago y roles, 9 de ventas, 12 del 18b, 6 de la anulación de venta del 19, 4 de la nota de venta del 20 y 6 de usuarios, roles y cartera del 20b; la de "Operador" y la de compartir la nota se eliminaron)', () => {
+    expect(claves).toHaveLength(74)
     expect(claves).not.toContain('descuentos.operador')
     expect(claves).not.toContain('ventas.compartirNota')
     expect(claves).toEqual(
@@ -368,5 +368,48 @@ describe('ayuda de la anulación de venta (change 19, D18; textos aprobados el 2
     expect(texto).toContain('El cobro de una venta se anula anulando la venta.')
     expect(texto).toContain('Se anula entero; si te equivocaste en un medio, anulalo y cargalo de nuevo.')
     expect(reglas).toEqual(['COB-05', 'CC-02'])
+  })
+})
+
+describe('ayuda de usuarios, roles y cartera (change 20b, D18; textos aprobados el 2026-10-28, sin ejemplos)', () => {
+  const clavesDelTwentyB = [
+    'usuarios.baja',
+    'usuarios.cambioDeRol',
+    'usuarios.topePropio',
+    'usuarios.contrasena',
+    'roles.baja',
+    'clientes.vendedor',
+  ] as const
+
+  it('las seis claves existen y citan reglas; "Mi contraseña" no tiene clave', () => {
+    expect(clavesDelTwentyB.map((clave) => [clave, [...AYUDAS[clave].reglas]])).toEqual([
+      ['usuarios.baja', ['ADR-028', 'ADR-053']],
+      ['usuarios.cambioDeRol', ['ADR-017', 'ADR-011']],
+      ['usuarios.topePropio', ['DSC-06']],
+      ['usuarios.contrasena', ['ADR-018', 'ADR-057']],
+      ['roles.baja', ['ADR-028']],
+      ['clientes.vendedor', ['ADR-052', 'CLI-03']],
+    ])
+    expect(claves.filter((clave) => clave.toLowerCase().includes('micontrasena'))).toEqual([])
+  })
+
+  it.each([
+    ['usuarios.baja', 'Al dar de baja a un usuario deja de poder entrar y se cierran sus sesiones. Si tiene una jornada abierta, su teléfono puede subir lo que vendió o cobró sin conexión, pero no puede operar. No se puede dar de baja al último usuario que administra usuarios y roles, ni a uno mismo.'],
+    ['usuarios.cambioDeRol', 'El cambio rige desde la próxima acción del usuario. Si el rol nuevo no puede autorizar excepciones, se borra su PIN de autorización.'],
+    ['usuarios.topePropio', 'Si el usuario tiene tope propio, reemplaza al de su rol, sea mayor o menor. Vacío: rige el del rol. Solo tiene efecto si su rol tiene descuento manual.'],
+    ['usuarios.contrasena', 'La contraseña nueva cierra sus sesiones abiertas y desbloquea el inicio de sesión si estaba bloqueado.'],
+    ['roles.baja', 'Un rol con usuarios activos no se puede dar de baja: primero cambiales el rol. Un rol de baja no se puede asignar.'],
+    ['clientes.vendedor', 'Los vendedores ven primero sus clientes asignados y pueden buscar en todos. Un vendedor sin clientes asignados ve todos.'],
+  ] as const)('%s lleva el texto exacto de D18, sin ejemplo', (clave, texto) => {
+    const entrada: { texto: string; ejemplo?: string } = AYUDAS[clave]
+    expect(entrada.texto).toBe(texto)
+    expect(entrada.ejemplo).toBeUndefined()
+  })
+
+  it('"Último administrador" nombra también la baja de usuarios y de roles y el cambio de rol, sin ejemplo', () => {
+    const entrada: { texto: string; ejemplo?: string } = AYUDAS['roles.ultimoAdministrador']
+    expect(entrada.texto).toContain('dar de baja a ese usuario o a su rol')
+    expect(entrada.texto).toContain('cambiarle el rol')
+    expect(entrada.ejemplo).toBeUndefined()
   })
 })

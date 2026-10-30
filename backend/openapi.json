@@ -320,9 +320,62 @@
           "identidad"
         ],
         "summary": "Listar Usuarios",
-        "description": "Tarea 10.8, escenario \"La contraseña no se puede recuperar del\nsistema\": ninguna vía de lectura de usuario expone `password_hash`.",
+        "description": "Tarea 10.8, escenario \"La contraseña no se puede recuperar del\nsistema\": ninguna vía de lectura de usuario expone `password_hash`. Change 20b (D16): suma el\nnombre y el estado del rol, el tope propio y el filtro por estado; tarea 8.6: filtros `rol_id` y\n`con_tope_propio`, combinables entre sí y con `estado`.",
         "operationId": "listar_usuarios_api_v1_identidad_usuarios_get",
         "parameters": [
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "ACTIVO",
+                    "INACTIVO"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Estado"
+            }
+          },
+          {
+            "name": "rol_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rol Id"
+            }
+          },
+          {
+            "name": "con_tope_propio",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Con Tope Propio"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -348,7 +401,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/UsuarioResponse"
+                    "$ref": "#/components/schemas/UsuarioDetalleResponse"
                   },
                   "title": "Response Listar Usuarios Api V1 Identidad Usuarios Get"
                 }
@@ -425,6 +478,929 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UsuarioResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identidad/usuarios/{usuario_id}": {
+      "get": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Obtener Usuario",
+        "description": "Change 20b (D16): el usuario de la organización del token; uno de otra organización o\ninexistente responde 404 (INV-21, SEG-07). Nunca `password_hash` ni el PIN.",
+        "operationId": "obtener_usuario_api_v1_identidad_usuarios__usuario_id__get",
+        "parameters": [
+          {
+            "name": "usuario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Usuario Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDetalleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Modificar Usuario",
+        "description": "`USUARIO_MODIFICAR` (D9): nombre y email.",
+        "operationId": "modificar_usuario_api_v1_identidad_usuarios__usuario_id__put",
+        "parameters": [
+          {
+            "name": "usuario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Usuario Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UsuarioModificarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioCambioResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identidad/usuarios/{usuario_id}/baja": {
+      "post": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Dar De Baja Usuario",
+        "description": "`USUARIO_BAJA` (D2): pasa el usuario a `INACTIVO`, corta sus sesiones salvo las de una\njornada no cerrada y borra su PIN.",
+        "operationId": "dar_de_baja_usuario_api_v1_identidad_usuarios__usuario_id__baja_post",
+        "parameters": [
+          {
+            "name": "usuario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Usuario Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UsuarioBajaRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioCambioResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identidad/usuarios/{usuario_id}/reactivacion": {
+      "post": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Reactivar Usuario",
+        "description": "`USUARIO_REACTIVAR` (D2): vuelve el usuario a `ACTIVO`; inicia sesión de nuevo.",
+        "operationId": "reactivar_usuario_api_v1_identidad_usuarios__usuario_id__reactivacion_post",
+        "parameters": [
+          {
+            "name": "usuario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Usuario Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioCambioResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identidad/roles": {
+      "post": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Crear Rol",
+        "description": "`ROL_CREAR` (D10): un rol activo, asignable, con sus permisos y su tope.",
+        "operationId": "crear_rol_api_v1_identidad_roles_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RolCrearRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RolCambioResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Listar Roles",
+        "description": "Los roles de la organización del token, con nombre, estado, tope y permisos (una consulta\npara todos los permisos, sin N+1). Ningún rol ajeno (INV-21).",
+        "operationId": "listar_roles_api_v1_identidad_roles_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RolConTopeYPermisosResponse"
+                  },
+                  "title": "Response Listar Roles Api V1 Identidad Roles Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identidad/roles/{rol_id}/nombre": {
+      "put": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Renombrar Rol",
+        "description": "`ROL_RENOMBRAR` (D10): cambia solo el nombre; las plantillas se renombran como cualquiera.",
+        "operationId": "renombrar_rol_api_v1_identidad_roles__rol_id__nombre_put",
+        "parameters": [
+          {
+            "name": "rol_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rol Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RolRenombrarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RolCambioResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identidad/roles/{rol_id}/baja": {
+      "post": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Dar De Baja Rol",
+        "description": "`ROL_BAJA` (D11): solo si el rol no tiene usuarios activos; un rol de baja no se asigna.",
+        "operationId": "dar_de_baja_rol_api_v1_identidad_roles__rol_id__baja_post",
+        "parameters": [
+          {
+            "name": "rol_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rol Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RolCambioResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identidad/roles/{rol_id}/reactivacion": {
+      "post": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Reactivar Rol",
+        "description": "`ROL_REACTIVAR` (D11): vuelve el rol a activo; la reactivación es libre.",
+        "operationId": "reactivar_rol_api_v1_identidad_roles__rol_id__reactivacion_post",
+        "parameters": [
+          {
+            "name": "rol_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rol Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RolCambioResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identidad/usuarios/{usuario_id}/rol": {
+      "put": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Cambiar Rol De Usuario",
+        "description": "`USUARIO_ROL_CAMBIAR` (D7): el cambio rige en la petición siguiente; sin revocar\nsesiones.",
+        "operationId": "cambiar_rol_de_usuario_api_v1_identidad_usuarios__usuario_id__rol_put",
+        "parameters": [
+          {
+            "name": "usuario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Usuario Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UsuarioRolCambiarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioCambioResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identidad/usuarios/{usuario_id}/contrasena": {
+      "post": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Restablecer Contrasena De Usuario",
+        "description": "`USUARIO_CONTRASENA_RESTABLECER` (D8-A): la contraseña llega al handler por clausura y no\nentra al contenido, la huella ni la respuesta (204 sin cuerpo).",
+        "operationId": "restablecer_contrasena_de_usuario_api_v1_identidad_usuarios__usuario_id__contrasena_post",
+        "parameters": [
+          {
+            "name": "usuario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Usuario Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UsuarioContrasenaRestablecerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identidad/usuarios/{usuario_id}/tope-descuento": {
+      "put": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Definir Tope Descuento De Usuario",
+        "description": "`USUARIO_TOPE_DESCUENTO_DEFINIR` (D12): el tope propio reemplaza al del rol.",
+        "operationId": "definir_tope_descuento_de_usuario_api_v1_identidad_usuarios__usuario_id__tope_descuento_put",
+        "parameters": [
+          {
+            "name": "usuario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Usuario Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UsuarioTopeDescuentoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioCambioResponse"
                 }
               }
             }
@@ -565,60 +1541,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RolResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/identidad/roles": {
-      "get": {
-        "tags": [
-          "identidad"
-        ],
-        "summary": "Listar Roles",
-        "description": "Los roles de la organización del token, con nombre, estado, tope y permisos (una consulta\npara todos los permisos, sin N+1). Ningún rol ajeno (INV-21).",
-        "operationId": "listar_roles_api_v1_identidad_roles_get",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/RolConTopeYPermisosResponse"
-                  },
-                  "title": "Response Listar Roles Api V1 Identidad Roles Get"
                 }
               }
             }
@@ -1016,6 +1938,75 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/MiPinRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/yo/contrasena": {
+      "post": {
+        "tags": [
+          "identidad"
+        ],
+        "summary": "Cambiar Mi Contrasena",
+        "description": "`CONTRASENA_PROPIA_CAMBIAR` (\"Mi contraseña\", D20). Cualquier usuario autenticado y activo;\nsin permiso especial (la ruta está exenta del ratchet de permiso por ruta, y el tipo declara\nsu salida justificada). Delega en el bus; las contraseñas y la IP del cliente\n(`request.client.host`, la misma que usa el login) llegan al handler por clausura, no por el\ncontenido. Respuesta 204 sin cuerpo.",
+        "operationId": "cambiar_mi_contrasena_api_v1_yo_contrasena_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MiContrasenaRequest"
               }
             }
           }
@@ -3132,7 +4123,7 @@
           "clientes"
         ],
         "summary": "Listar Clientes",
-        "description": "Listado paginado por cursor con filtro por texto y por estado (spec\n`administracion-de-clientes`, escenarios \"Buscar un cliente por texto\" y\n\"Filtrar por estado suspendido\"). El `estado` se valida contra el\ncatálogo cerrado en `domain/estado.py` y lo repite el `CHECK` de la base.",
+        "description": "Listado paginado por cursor con filtro por texto y por estado (spec\n`administracion-de-clientes`, escenarios \"Buscar un cliente por texto\" y\n\"Filtrar por estado suspendido\"). El `estado` se valida contra el\ncatálogo cerrado en `domain/estado.py` y lo repite el `CHECK` de la base.\n\nChange 20b (D15): cada cliente trae su vendedor (`vendedor_id`, `vendedor_nombre`,\n`vendedor_valido`) y el listado filtra por `vendedor_id` o por `sin_vendedor=true`.",
         "operationId": "listar_clientes_api_v1_clientes_get",
         "parameters": [
           {
@@ -3191,6 +4182,33 @@
                 }
               ],
               "title": "Estado"
+            }
+          },
+          {
+            "name": "vendedor_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vendedor Id"
+            }
+          },
+          {
+            "name": "sin_vendedor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Sin Vendedor"
             }
           },
           {
@@ -3462,6 +4480,82 @@
         }
       }
     },
+    "/api/v1/clientes/vendedor": {
+      "post": {
+        "tags": [
+          "clientes"
+        ],
+        "summary": "Asignar Vendedor",
+        "description": "Change 20b (D15): asigna un vendedor a uno o varios clientes, o lo quita con `null`\n(`CLIENTE_VENDEDOR_ASIGNAR`, `GESTIONAR_CLIENTES`, solo con conexión, todo o nada).",
+        "operationId": "asignar_vendedor_api_v1_clientes_vendedor_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClienteVendedorAsignarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteVendedorAsignarResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/clientes/consumidor-final": {
       "post": {
         "tags": [
@@ -3591,7 +4685,7 @@
           "clientes"
         ],
         "summary": "Listar Opciones De Clientes",
-        "description": "Selector liviano de clientes para quien cobra (change 17, `design.md` D14, tabla de\npermisos aprobada por el usuario el 2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`;\ndesde el change 18a (D19, aprobada el 2026-10-20), también `VENDER`, solo lectura.\nDevuelve identificador, nombre, código, estado y la marca `es_consumidor_final`, sin crédito\nni documento; solo clientes `ACTIVO` y `SUSPENDIDO`, y el consumidor final únicamente con\n`incluir_consumidor_final=true` (la pantalla de venta, CLI-03; aprobado el 2026-10-20).\nSe declara antes de `/{cliente_id}`.",
+        "description": "Selector liviano de clientes para quien cobra (change 17, `design.md` D14, tabla de\npermisos aprobada por el usuario el 2026-10-16): `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`;\ndesde el change 18a (D19, aprobada el 2026-10-20), también `VENDER`, solo lectura.\nDevuelve identificador, nombre, código, estado y la marca `es_consumidor_final`, sin crédito\nni documento; solo clientes `ACTIVO` y `SUSPENDIDO`, y el consumidor final únicamente con\n`incluir_consumidor_final=true` (la pantalla de venta, CLI-03; aprobado el 2026-10-20).\nSe declara antes de `/{cliente_id}`.\n\nChange 20b (D14): quien no tiene `GESTIONAR_CLIENTES` y tiene clientes asignados recibe sus\nclientes; `alcance=todos` (\"Buscar en todos los clientes\") trae todos. Sin cartera, o con\n`GESTIONAR_CLIENTES`, siempre todos (ADR-052).",
         "operationId": "listar_opciones_de_clientes_api_v1_clientes_opciones_get",
         "parameters": [
           {
@@ -3649,6 +4743,23 @@
             }
           },
           {
+            "name": "alcance",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "todos",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Alcance"
+            }
+          },
+          {
             "name": "authorization",
             "in": "header",
             "required": false,
@@ -3672,6 +4783,60 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PaginaOpcionesDeClientes"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/clientes/vendedores": {
+      "get": {
+        "tags": [
+          "clientes"
+        ],
+        "summary": "Listar Vendedores Elegibles",
+        "description": "Change 20b (D15): los usuarios que se pueden elegir como vendedor de un cliente (activos,\ncon rol activo y con `VENDER` o `REGISTRAR_COBRANZA`), para quien administra clientes sin\nadministrar usuarios. Solo `id` y `nombre`, de la organización del token. Se declara antes de\n`/{cliente_id}`.",
+        "operationId": "listar_vendedores_elegibles_api_v1_clientes_vendedores_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VendedorElegibleResponse"
+                  },
+                  "title": "Response Listar Vendedores Elegibles Api V1 Clientes Vendedores Get"
                 }
               }
             }
@@ -12174,6 +13339,40 @@
             ],
             "title": "Lista Precio Id"
           },
+          "vendedor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendedor Id"
+          },
+          "vendedor_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendedor Nombre"
+          },
+          "vendedor_valido": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendedor Valido"
+          },
           "limite_credito": {
             "anyOf": [
               {
@@ -12261,6 +13460,7 @@
           "telefono",
           "email",
           "lista_precio_id",
+          "vendedor_id",
           "limite_credito",
           "politica_credito",
           "tolerancia_offline_tipo",
@@ -12293,6 +13493,73 @@
         ],
         "title": "ClienteSaldoResponse",
         "description": "Saldo actual del cliente como string (INV-03): positivo es lo que el cliente debe y\nnegativo es saldo a favor (CC-04)."
+      },
+      "ClienteVendedorAsignarRequest": {
+        "properties": {
+          "cliente_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Cliente Ids"
+          },
+          "vendedor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendedor Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cliente_ids",
+          "vendedor_id"
+        ],
+        "title": "ClienteVendedorAsignarRequest",
+        "description": "Cuerpo de `POST /clientes/vendedor` (change 20b, D15): los clientes (1 a 500) y el vendedor,\no `null` para quitarlo. `vendedor_id` es obligatorio."
+      },
+      "ClienteVendedorAsignarResponse": {
+        "properties": {
+          "vendedor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendedor Id"
+          },
+          "cliente_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Cliente Ids"
+          },
+          "cambiados": {
+            "type": "integer",
+            "title": "Cambiados"
+          }
+        },
+        "type": "object",
+        "required": [
+          "vendedor_id",
+          "cliente_ids",
+          "cambiados"
+        ],
+        "title": "ClienteVendedorAsignarResponse",
+        "description": "Lo que dejó la asignación: `cambiados` cuenta solo los clientes cuyo vendedor cambió."
       },
       "CobranzaAnulacionResponse": {
         "properties": {
@@ -16754,6 +18021,30 @@
         "title": "MedioPagoResponse",
         "description": "Un medio de pago activo con su indicador de referencia obligatoria."
       },
+      "MiContrasenaRequest": {
+        "properties": {
+          "password_actual": {
+            "type": "string",
+            "format": "password",
+            "title": "Password Actual",
+            "writeOnly": true
+          },
+          "password_nueva": {
+            "type": "string",
+            "format": "password",
+            "title": "Password Nueva",
+            "writeOnly": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "password_actual",
+          "password_nueva"
+        ],
+        "title": "MiContrasenaRequest",
+        "description": "`POST /yo/contrasena`. `extra=\"forbid\"`: el usuario sale del token, nunca del cuerpo (un\n`usuario_id` es un 422 sin eco del valor). Los dos secretos son `SecretStr` sin validadores\n(ADR-056): la ruta los separa antes de armar el contenido y la huella. La confirmación de la\nnueva es solo de interfaz."
+      },
       "MiPinEstadoResponse": {
         "properties": {
           "puede_definir": {
@@ -20519,6 +21810,44 @@
         "title": "ResumenReglaIvaResponse",
         "description": "`GET /costos/resumen-regla-iva` (11b, D10): cuántos costos vigentes a `fecha` se\nregistraron con y sin crédito fiscal. Insumo de la confirmación del cambio de condición."
       },
+      "RolCambioResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          },
+          "tope_descuento": {
+            "type": "string",
+            "title": "Tope Descuento"
+          },
+          "permisos": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Permisos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "activo",
+          "tope_descuento",
+          "permisos"
+        ],
+        "title": "RolCambioResponse",
+        "description": "El rol tal como quedó tras un comando."
+      },
       "RolConTopeResponse": {
         "properties": {
           "id": {
@@ -20577,6 +21906,18 @@
           "usuarios_activos": {
             "type": "integer",
             "title": "Usuarios Activos"
+          },
+          "usuarios_con_tope_propio": {
+            "type": "integer",
+            "title": "Usuarios Con Tope Propio"
+          },
+          "usuarios_con_tope_propio_activos": {
+            "type": "integer",
+            "title": "Usuarios Con Tope Propio Activos"
+          },
+          "usuarios_con_tope_propio_inactivos": {
+            "type": "integer",
+            "title": "Usuarios Con Tope Propio Inactivos"
           }
         },
         "type": "object",
@@ -20586,10 +21927,61 @@
           "activo",
           "tope_descuento",
           "permisos",
-          "usuarios_activos"
+          "usuarios_activos",
+          "usuarios_con_tope_propio",
+          "usuarios_con_tope_propio_activos",
+          "usuarios_con_tope_propio_inactivos"
         ],
         "title": "RolConTopeYPermisosResponse",
         "description": "La lectura suma los permisos del rol (códigos ordenados) para que la pantalla \"Topes por\nrol\" avise solo donde el tope 0 % importa (DSC-06). La escritura no los devuelve."
+      },
+      "RolCrearRequest": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "permisos": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Permisos"
+          },
+          "tope_descuento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tope Descuento"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "nombre",
+          "permisos"
+        ],
+        "title": "RolCrearRequest",
+        "description": "Nombre, permisos y tope (cadena, por defecto 0) del rol nuevo. Sin `organizacion_id`:\nsale del token (INV-21)."
+      },
+      "RolRenombrarRequest": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "nombre"
+        ],
+        "title": "RolRenombrarRequest"
       },
       "RolResponse": {
         "properties": {
@@ -21346,6 +22738,203 @@
         ],
         "title": "UbicacionResponse"
       },
+      "UsuarioBajaRequest": {
+        "properties": {
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "UsuarioBajaRequest"
+      },
+      "UsuarioCambioResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "usuario": {
+            "type": "string",
+            "title": "Usuario"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "rol_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Rol Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "tope_descuento_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tope Descuento Override"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "usuario",
+          "nombre",
+          "email",
+          "rol_id",
+          "estado",
+          "tope_descuento_override"
+        ],
+        "title": "UsuarioCambioResponse",
+        "description": "El usuario tal como quedó tras un comando. Sin `password_hash` ni PIN: son campos que este\nmodelo no declara (mismo criterio que `UsuarioResponse`)."
+      },
+      "UsuarioContrasenaRestablecerRequest": {
+        "properties": {
+          "contrasena": {
+            "type": "string",
+            "format": "password",
+            "title": "Contrasena",
+            "writeOnly": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "contrasena"
+        ],
+        "title": "UsuarioContrasenaRestablecerRequest",
+        "description": "`contrasena: SecretStr`, sin validadores (ADR-056): el valor no aparece en un error. La\nruta la separa antes de armar el contenido y la huella."
+      },
+      "UsuarioDetalleResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "usuario": {
+            "type": "string",
+            "title": "Usuario"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "rol_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Rol Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "tiene_pin_autorizacion": {
+            "type": "boolean",
+            "title": "Tiene Pin Autorizacion",
+            "default": false
+          },
+          "rol_nombre": {
+            "type": "string",
+            "title": "Rol Nombre"
+          },
+          "rol_activo": {
+            "type": "boolean",
+            "title": "Rol Activo"
+          },
+          "tope_descuento_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tope Descuento Override"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "usuario",
+          "nombre",
+          "email",
+          "rol_id",
+          "estado",
+          "rol_nombre",
+          "rol_activo",
+          "tope_descuento_override"
+        ],
+        "title": "UsuarioDetalleResponse",
+        "description": "Change 20b, D16: el usuario con su rol y su tope propio, para las pantallas. Sigue sin\ndeclarar `password_hash` ni las columnas del PIN: no salen por ninguna lectura."
+      },
+      "UsuarioModificarRequest": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "nombre",
+          "email"
+        ],
+        "title": "UsuarioModificarRequest",
+        "description": "Reemplazo completo de nombre y email; el nombre de inicio de sesión no se edita (D9)."
+      },
       "UsuarioResponse": {
         "properties": {
           "id": {
@@ -21398,6 +22987,43 @@
         ],
         "title": "UsuarioResponse",
         "description": "Tarea 10.8: sin `password_hash` ni las tres columnas del PIN de\nautorización -- Pydantic solo serializa los campos declarados acá, así\nque omitirlos de este modelo es la garantía, no un filtro posterior."
+      },
+      "UsuarioRolCambiarRequest": {
+        "properties": {
+          "rol_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Rol Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "rol_id"
+        ],
+        "title": "UsuarioRolCambiarRequest"
+      },
+      "UsuarioTopeDescuentoRequest": {
+        "properties": {
+          "tope_descuento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tope Descuento"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tope_descuento"
+        ],
+        "title": "UsuarioTopeDescuentoRequest",
+        "description": "Solo el tope propio, como cadena con hasta 6 decimales o `null` (vuelve a regir el del\nrol): un número JSON responde 422 (INV-03). Sin `organizacion_id`: sale del token."
       },
       "UsuarioYoResponse": {
         "properties": {
@@ -21457,6 +23083,26 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VendedorElegibleResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre"
+        ],
+        "title": "VendedorElegibleResponse",
+        "description": "Un vendedor asignable (change 20b, D15): solo identificador y nombre."
       },
       "VentaAnulacionResponse": {
         "properties": {

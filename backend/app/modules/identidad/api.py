@@ -45,6 +45,7 @@ from app.core.autenticacion import (
     obtener_contexto_autenticado,
     requiere_comando_online,
     requiere_comando_online_algun_permiso,
+    requiere_comando_online_de_sesion,
     requiere_permiso,
     requiere_sesion,
 )
@@ -55,6 +56,7 @@ from app.modules.identidad import repository
 from app.modules.identidad import service as identidad_service
 from app.modules.identidad.domain.usuarios import PERMISOS_AUTORIZACION_EXCEPCION
 from app.modules.identidad.domain.valores import computa_credito_fiscal
+from app.modules.identidad.models import Rol, Usuario
 from app.modules.sync import service as sync_service
 
 router = APIRouter(prefix="/identidad", tags=["identidad"])
@@ -176,20 +178,67 @@ class CrearUsuarioRequest(BaseModel):
     rol_id: UUID
 
 
-@router.get("/usuarios", response_model=list[UsuarioResponse])
+class UsuarioDetalleResponse(UsuarioResponse):
+    """Change 20b, D16: el usuario con su rol y su tope propio, para las pantallas. Sigue sin
+    declarar `password_hash` ni las columnas del PIN: no salen por ninguna lectura."""
+
+    rol_nombre: str
+    rol_activo: bool
+    tope_descuento_override: str | None
+
+
+def _detalle_de_usuario(usuario: Usuario, rol: Rol) -> UsuarioDetalleResponse:
+    tope = usuario.tope_descuento_override
+    return UsuarioDetalleResponse(
+        id=usuario.id,
+        usuario=usuario.usuario,
+        nombre=usuario.nombre,
+        email=usuario.email,
+        rol_id=usuario.rol_id,
+        estado=usuario.estado,
+        tiene_pin_autorizacion=usuario.pin_autorizacion_hash is not None,
+        rol_nombre=rol.nombre,
+        rol_activo=rol.activo,
+        tope_descuento_override=None if tope is None else f"{tope:.6f}",
+    )
+
+
+@router.get("/usuarios", response_model=list[UsuarioDetalleResponse])
 def listar_usuarios(
     contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso("ADMIN_USUARIOS"))],
     sesion: Annotated[Session, Depends(get_session)],
-) -> list[UsuarioResponse]:
+    estado: Literal["ACTIVO", "INACTIVO"] | None = None,
+    rol_id: UUID | None = None,
+    con_tope_propio: bool | None = None,
+) -> list[UsuarioDetalleResponse]:
     """Tarea 10.8, escenario "La contraseña no se puede recuperar del
-    sistema": ninguna vía de lectura de usuario expone `password_hash`."""
-    usuarios = repository.listar_usuarios(contexto.organizacion_id, sesion)
+    sistema": ninguna vía de lectura de usuario expone `password_hash`. Change 20b (D16): suma el
+    nombre y el estado del rol, el tope propio y el filtro por estado; tarea 8.6: filtros `rol_id` y
+    `con_tope_propio`, combinables entre sí y con `estado`."""
     return [
-        UsuarioResponse.model_validate(u).model_copy(
-            update={"tiene_pin_autorizacion": u.pin_autorizacion_hash is not None}
+        _detalle_de_usuario(usuario, rol)
+        for usuario, rol in repository.listar_usuarios_con_rol(
+            contexto.organizacion_id,
+            sesion,
+            estado=estado,
+            rol_id=rol_id,
+            con_tope_propio=con_tope_propio,
         )
-        for u in usuarios
     ]
+
+
+@router.get("/usuarios/{usuario_id}", response_model=UsuarioDetalleResponse)
+def obtener_usuario(
+    usuario_id: UUID,
+    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso("ADMIN_USUARIOS"))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> UsuarioDetalleResponse:
+    """Change 20b (D16): el usuario de la organización del token; uno de otra organización o
+    inexistente responde 404 (INV-21, SEG-07). Nunca `password_hash` ni el PIN."""
+    encontrado = repository.obtener_usuario_con_rol(contexto.organizacion_id, usuario_id, sesion)
+    if encontrado is None:
+        raise RecursoNoEncontradoError(f"El usuario {usuario_id} no existe en esta organización.")
+    return _detalle_de_usuario(*encontrado)
 
 
 @router.post("/usuarios", response_model=UsuarioResponse, status_code=201)
@@ -254,6 +303,453 @@ def crear_usuario(
     )
     assert usuario is not None
     return UsuarioResponse.model_validate(usuario)
+
+
+# --- Administración de usuarios (change 20b, D1) ---------------------------------------------
+#
+# Un comando por acción, todos `ADMIN_USUARIOS`. La respuesta sale de `comando.resultado`, no de
+# una relectura: un reenvío idempotente devuelve exactamente lo mismo (INV-06). Un usuario o un
+# rol que no está en la organización del token responde 404 (INV-21, SEG-07).
+
+
+class UsuarioCambioResponse(BaseModel):
+    """El usuario tal como quedó tras un comando. Sin `password_hash` ni PIN: son campos que este
+    modelo no declara (mismo criterio que `UsuarioResponse`)."""
+
+    id: UUID
+    usuario: str
+    nombre: str
+    email: str | None
+    rol_id: UUID
+    estado: str
+    tope_descuento_override: str | None
+
+
+def _respuesta_de_usuario(resultado: dict[str, object]) -> UsuarioCambioResponse:
+    return UsuarioCambioResponse(
+        id=UUID(str(resultado["usuario_id"])),
+        usuario=str(resultado["usuario"]),
+        nombre=str(resultado["nombre"]),
+        email=None if resultado["email"] is None else str(resultado["email"]),
+        rol_id=UUID(str(resultado["rol_id"])),
+        estado=str(resultado["estado"]),
+        tope_descuento_override=(
+            None
+            if resultado["tope_descuento_override"] is None
+            else str(resultado["tope_descuento_override"])
+        ),
+    )
+
+
+class UsuarioBajaRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    observacion: str | None = None
+
+
+@router.post("/usuarios/{usuario_id}/baja", response_model=UsuarioCambioResponse)
+def dar_de_baja_usuario(
+    usuario_id: UUID,
+    datos: UsuarioBajaRequest,
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_USUARIOS"))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> UsuarioCambioResponse:
+    """`USUARIO_BAJA` (D2): pasa el usuario a `INACTIVO`, corta sus sesiones salvo las de una
+    jornada no cerrada y borra su PIN."""
+    reloj = SystemClock()
+    sobre, huella, _, contenido_validado = _preparar_comando_online(
+        entrada,
+        "USUARIO_BAJA",
+        {"usuario_id": str(usuario_id), "observacion": datos.observacion},
+        reloj,
+    )
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_usuario_baja(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO" or comando.resultado is None:
+        raise RecursoNoEncontradoError(f"El usuario {usuario_id} no existe en esta organización.")
+    return _respuesta_de_usuario(comando.resultado)
+
+
+@router.post("/usuarios/{usuario_id}/reactivacion", response_model=UsuarioCambioResponse)
+def reactivar_usuario(
+    usuario_id: UUID,
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_USUARIOS"))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> UsuarioCambioResponse:
+    """`USUARIO_REACTIVAR` (D2): vuelve el usuario a `ACTIVO`; inicia sesión de nuevo."""
+    reloj = SystemClock()
+    sobre, huella, _, contenido_validado = _preparar_comando_online(
+        entrada, "USUARIO_REACTIVAR", {"usuario_id": str(usuario_id)}, reloj
+    )
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_usuario_reactivar(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO" or comando.resultado is None:
+        raise RecursoNoEncontradoError(f"El usuario {usuario_id} no existe en esta organización.")
+    return _respuesta_de_usuario(comando.resultado)
+
+
+# --- Administración de roles (change 20b, D10, D11) ---------------------------------------------
+#
+# Crear, renombrar, dar de baja y reactivar, todos `ADMIN_USUARIOS`. La respuesta sale de
+# `comando.resultado`, no de una relectura (INV-06). Un rol de otra organización responde 404
+# (INV-21, SEG-07).
+
+
+class RolCambioResponse(BaseModel):
+    """El rol tal como quedó tras un comando."""
+
+    id: UUID
+    nombre: str
+    activo: bool
+    tope_descuento: str
+    permisos: list[str]
+
+
+def _respuesta_de_rol(resultado: dict[str, object]) -> RolCambioResponse:
+    permisos = resultado["permisos"]
+    assert isinstance(permisos, list)
+    return RolCambioResponse(
+        id=UUID(str(resultado["rol_id"])),
+        nombre=str(resultado["nombre"]),
+        activo=bool(resultado["activo"]),
+        tope_descuento=str(resultado["tope_descuento"]),
+        permisos=[str(codigo) for codigo in permisos],
+    )
+
+
+class RolCrearRequest(BaseModel):
+    """Nombre, permisos y tope (cadena, por defecto 0) del rol nuevo. Sin `organizacion_id`:
+    sale del token (INV-21)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    nombre: str
+    permisos: list[str]
+    tope_descuento: str | None = None
+
+
+@router.post("/roles", response_model=RolCambioResponse, status_code=201)
+def crear_rol(
+    datos: RolCrearRequest,
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_USUARIOS"))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> RolCambioResponse:
+    """`ROL_CREAR` (D10): un rol activo, asignable, con sus permisos y su tope."""
+    reloj = SystemClock()
+    contenido: dict[str, ContenidoComando] = {
+        "nombre": datos.nombre,
+        "permisos": list(datos.permisos),
+    }
+    if datos.tope_descuento is not None:
+        contenido["tope_descuento"] = datos.tope_descuento
+    sobre, huella, _, contenido_validado = _preparar_comando_online(
+        entrada, "ROL_CREAR", contenido, reloj
+    )
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_rol_crear(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    assert comando.resultado is not None
+    return _respuesta_de_rol(comando.resultado)
+
+
+class RolRenombrarRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    nombre: str
+
+
+@router.put("/roles/{rol_id}/nombre", response_model=RolCambioResponse)
+def renombrar_rol(
+    rol_id: UUID,
+    datos: RolRenombrarRequest,
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_USUARIOS"))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> RolCambioResponse:
+    """`ROL_RENOMBRAR` (D10): cambia solo el nombre; las plantillas se renombran como cualquiera."""
+    reloj = SystemClock()
+    sobre, huella, _, contenido_validado = _preparar_comando_online(
+        entrada, "ROL_RENOMBRAR", {"rol_id": str(rol_id), "nombre": datos.nombre}, reloj
+    )
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_rol_renombrar(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO" or comando.resultado is None:
+        raise RecursoNoEncontradoError(f"El rol {rol_id} no existe en esta organización.")
+    return _respuesta_de_rol(comando.resultado)
+
+
+@router.post("/roles/{rol_id}/baja", response_model=RolCambioResponse)
+def dar_de_baja_rol(
+    rol_id: UUID,
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_USUARIOS"))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> RolCambioResponse:
+    """`ROL_BAJA` (D11): solo si el rol no tiene usuarios activos; un rol de baja no se asigna."""
+    reloj = SystemClock()
+    sobre, huella, _, contenido_validado = _preparar_comando_online(
+        entrada, "ROL_BAJA", {"rol_id": str(rol_id)}, reloj
+    )
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_rol_baja(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO" or comando.resultado is None:
+        raise RecursoNoEncontradoError(f"El rol {rol_id} no existe en esta organización.")
+    return _respuesta_de_rol(comando.resultado)
+
+
+@router.post("/roles/{rol_id}/reactivacion", response_model=RolCambioResponse)
+def reactivar_rol(
+    rol_id: UUID,
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_USUARIOS"))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> RolCambioResponse:
+    """`ROL_REACTIVAR` (D11): vuelve el rol a activo; la reactivación es libre."""
+    reloj = SystemClock()
+    sobre, huella, _, contenido_validado = _preparar_comando_online(
+        entrada, "ROL_REACTIVAR", {"rol_id": str(rol_id)}, reloj
+    )
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_rol_reactivar(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO" or comando.resultado is None:
+        raise RecursoNoEncontradoError(f"El rol {rol_id} no existe en esta organización.")
+    return _respuesta_de_rol(comando.resultado)
+
+
+class UsuarioModificarRequest(BaseModel):
+    """Reemplazo completo de nombre y email; el nombre de inicio de sesión no se edita (D9)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    nombre: str
+    email: str | None
+
+
+@router.put("/usuarios/{usuario_id}", response_model=UsuarioCambioResponse)
+def modificar_usuario(
+    usuario_id: UUID,
+    datos: UsuarioModificarRequest,
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_USUARIOS"))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> UsuarioCambioResponse:
+    """`USUARIO_MODIFICAR` (D9): nombre y email."""
+    reloj = SystemClock()
+    sobre, huella, _, contenido_validado = _preparar_comando_online(
+        entrada,
+        "USUARIO_MODIFICAR",
+        {"usuario_id": str(usuario_id), "nombre": datos.nombre, "email": datos.email},
+        reloj,
+    )
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_usuario_modificar(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO" or comando.resultado is None:
+        raise RecursoNoEncontradoError(f"El usuario {usuario_id} no existe en esta organización.")
+    return _respuesta_de_usuario(comando.resultado)
+
+
+class UsuarioRolCambiarRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rol_id: UUID
+
+
+@router.put("/usuarios/{usuario_id}/rol", response_model=UsuarioCambioResponse)
+def cambiar_rol_de_usuario(
+    usuario_id: UUID,
+    datos: UsuarioRolCambiarRequest,
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_USUARIOS"))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> UsuarioCambioResponse:
+    """`USUARIO_ROL_CAMBIAR` (D7): el cambio rige en la petición siguiente; sin revocar
+    sesiones."""
+    reloj = SystemClock()
+    sobre, huella, _, contenido_validado = _preparar_comando_online(
+        entrada,
+        "USUARIO_ROL_CAMBIAR",
+        {"usuario_id": str(usuario_id), "rol_id": str(datos.rol_id)},
+        reloj,
+    )
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_usuario_rol_cambiar(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO" or comando.resultado is None:
+        raise RecursoNoEncontradoError(f"El usuario {usuario_id} no existe en esta organización.")
+    return _respuesta_de_usuario(comando.resultado)
+
+
+class UsuarioContrasenaRestablecerRequest(BaseModel):
+    """`contrasena: SecretStr`, sin validadores (ADR-056): el valor no aparece en un error. La
+    ruta la separa antes de armar el contenido y la huella."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    contrasena: SecretStr
+
+
+@router.post("/usuarios/{usuario_id}/contrasena", status_code=204)
+def restablecer_contrasena_de_usuario(
+    usuario_id: UUID,
+    datos: UsuarioContrasenaRestablecerRequest,
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_USUARIOS"))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> None:
+    """`USUARIO_CONTRASENA_RESTABLECER` (D8-A): la contraseña llega al handler por clausura y no
+    entra al contenido, la huella ni la respuesta (204 sin cuerpo)."""
+    reloj = SystemClock()
+    sobre, huella, _, contenido_validado = _preparar_comando_online(
+        entrada, "USUARIO_CONTRASENA_RESTABLECER", {"usuario_id": str(usuario_id)}, reloj
+    )
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_usuario_contrasena_restablecer(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+            password_nueva=datos.contrasena,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO":
+        raise RecursoNoEncontradoError(f"El usuario {usuario_id} no existe en esta organización.")
+
+
+class UsuarioTopeDescuentoRequest(BaseModel):
+    """Solo el tope propio, como cadena con hasta 6 decimales o `null` (vuelve a regir el del
+    rol): un número JSON responde 422 (INV-03). Sin `organizacion_id`: sale del token."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tope_descuento: str | None
+
+
+@router.put("/usuarios/{usuario_id}/tope-descuento", response_model=UsuarioCambioResponse)
+def definir_tope_descuento_de_usuario(
+    usuario_id: UUID,
+    datos: UsuarioTopeDescuentoRequest,
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online("ADMIN_USUARIOS"))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> UsuarioCambioResponse:
+    """`USUARIO_TOPE_DESCUENTO_DEFINIR` (D12): el tope propio reemplaza al del rol."""
+    reloj = SystemClock()
+    sobre, huella, _, contenido_validado = _preparar_comando_online(
+        entrada,
+        "USUARIO_TOPE_DESCUENTO_DEFINIR",
+        {"usuario_id": str(usuario_id), "tope_descuento": datos.tope_descuento},
+        reloj,
+    )
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_usuario_tope_descuento_definir(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+        )
+
+    comando = sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+    if comando.estado == "RECHAZADO" or comando.resultado is None:
+        raise RecursoNoEncontradoError(f"El usuario {usuario_id} no existe en esta organización.")
+    return _respuesta_de_usuario(comando.resultado)
 
 
 # --- Composición de roles (tarea 10.7) --------------------------------------
@@ -379,6 +875,9 @@ class RolConTopeYPermisosResponse(RolConTopeResponse):
 
     permisos: list[str]
     usuarios_activos: int
+    usuarios_con_tope_propio: int
+    usuarios_con_tope_propio_activos: int
+    usuarios_con_tope_propio_inactivos: int
 
 
 @router.get("/roles", response_model=list[RolConTopeYPermisosResponse])
@@ -392,6 +891,9 @@ def listar_roles(
         contexto.organizacion_id, sesion
     )
     activos_por_rol = repository.contar_usuarios_activos_por_rol(contexto.organizacion_id, sesion)
+    con_tope_propio = repository.contar_usuarios_con_tope_propio_por_rol(
+        contexto.organizacion_id, sesion
+    )
     return [
         RolConTopeYPermisosResponse(
             id=rol.id,
@@ -400,6 +902,9 @@ def listar_roles(
             tope_descuento=f"{rol.tope_descuento:.6f}",
             permisos=permisos_por_rol.get(rol.id, []),
             usuarios_activos=activos_por_rol.get(rol.id, 0),
+            usuarios_con_tope_propio=sum(con_tope_propio.get(rol.id, (0, 0))),
+            usuarios_con_tope_propio_activos=con_tope_propio.get(rol.id, (0, 0))[0],
+            usuarios_con_tope_propio_inactivos=con_tope_propio.get(rol.id, (0, 0))[1],
         )
         for rol in repository.listar_roles(contexto.organizacion_id, sesion)
     ]
@@ -717,6 +1222,54 @@ def definir_mi_pin(
             reloj=reloj,
             password_actual=datos.password_actual,
             pin=datos.pin,
+            ip=ip,
+        )
+
+    sync_service.procesar_comando(
+        sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
+    )
+
+
+class MiContrasenaRequest(BaseModel):
+    """`POST /yo/contrasena`. `extra="forbid"`: el usuario sale del token, nunca del cuerpo (un
+    `usuario_id` es un 422 sin eco del valor). Los dos secretos son `SecretStr` sin validadores
+    (ADR-056): la ruta los separa antes de armar el contenido y la huella. La confirmación de la
+    nueva es solo de interfaz."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    password_actual: SecretStr
+    password_nueva: SecretStr
+
+
+@router_yo.post("/yo/contrasena", status_code=204)
+def cambiar_mi_contrasena(
+    datos: MiContrasenaRequest,
+    request: Request,
+    entrada: Annotated[EntradaComandoOnline, Depends(requiere_comando_online_de_sesion)],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> None:
+    """`CONTRASENA_PROPIA_CAMBIAR` ("Mi contraseña", D20). Cualquier usuario autenticado y activo;
+    sin permiso especial (la ruta está exenta del ratchet de permiso por ruta, y el tipo declara
+    su salida justificada). Delega en el bus; las contraseñas y la IP del cliente
+    (`request.client.host`, la misma que usa el login) llegan al handler por clausura, no por el
+    contenido. Respuesta 204 sin cuerpo."""
+    reloj = SystemClock()
+    ip = request.client.host if request.client is not None else "desconocida"
+    sobre, huella, _, contenido_validado = _preparar_comando_online(
+        entrada, "CONTRASENA_PROPIA_CAMBIAR", {}, reloj
+    )
+
+    def _ejecutar_handler(
+        sesion_protegida: registro.SesionDeHandler,
+    ) -> sync_service.ResultadoHandler:
+        return identidad_commands.manejar_contrasena_propia_cambiar(
+            sobre,
+            contenido_validado,  # type: ignore[arg-type]
+            sesion=sesion_protegida,
+            reloj=reloj,
+            password_actual=datos.password_actual,
+            password_nueva=datos.password_nueva,
             ip=ip,
         )
 

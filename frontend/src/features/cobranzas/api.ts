@@ -61,10 +61,13 @@ export async function listarOpcionesDeClientes(
   cursor?: string,
   limite = 50,
   incluirConsumidorFinal = false,
+  buscarEnTodos = false,
 ): Promise<PaginaOpcionesDeClientes> {
   const params = new URLSearchParams()
   params.set('limite', String(limite))
   if (incluirConsumidorFinal) params.set('incluir_consumidor_final', 'true')
+  // Change 20b (D14): "Buscar en todos los clientes" trae todos aunque haya cartera asignada.
+  if (buscarEnTodos) params.set('alcance', 'todos')
   if (texto.trim() !== '') params.set('texto', texto.trim())
   if (cursor) params.set('cursor', cursor)
   const respuesta = await apiFetch(`/clientes/opciones?${params.toString()}`)

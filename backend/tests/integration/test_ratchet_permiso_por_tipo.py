@@ -32,8 +32,12 @@ from tests.integration.test_ratchet_permiso_por_ruta import (
 )
 # fmt: on
 
-EXCEPCIONES_SIN_PERMISO: frozenset[str] = frozenset()
-"""Tipos que declaran `sin_permiso` con su justificación. Vacía (ADR-056)."""
+EXCEPCIONES_SIN_PERMISO: frozenset[str] = frozenset({"CONTRASENA_PROPIA_CAMBIAR"})
+"""Tipos que declaran `sin_permiso` con su justificación (ADR-056). Único: "Mi contraseña" (change
+20b, D20): la cambia cualquier usuario autenticado y activo, solo la propia (sale del token), y
+confirma la actual con el límite de intentos del login; es `ONLINE` y `exige_credenciales_efimeras`
+(el lote lo rechaza), así que ningún permiso protegería nada que la sesión y la contraseña actual no
+protejan."""
 
 TIPOS_SIN_RUTA: frozenset[str] = frozenset()
 """Tipos que no tienen una ruta REST de escritura (solo el lote). Vacía hoy."""

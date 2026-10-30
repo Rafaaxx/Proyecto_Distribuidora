@@ -17,7 +17,7 @@ vi.mock('../../../../../src/lib/api/httpClient', () => ({ apiFetch: apiFetchMock
 import DescuentosArea from '../../../../../src/areas/admin/descuentos/DescuentosArea'
 import { enrutar, llamadas, type ReglaDeApi } from '../../../utils/enrutarApi'
 import { queryClientConYo } from '../../../utils/permisosDePrueba'
-import { ROL_VENDEDOR_ID, ROLES, rol } from './descuentosDePrueba'
+import { ROL_ADMINISTRADOR_ID, ROL_SUPERVISOR_ID, ROL_VENDEDOR_ID, ROLES, rol } from './descuentosDePrueba'
 
 function montar() {
   return render(
@@ -57,6 +57,53 @@ function filaDe(nombre: string): HTMLElement {
 function envios() {
   return llamadas(apiFetchMock, 'PUT', /^\/identidad\/roles\/[^/]+\/tope-descuento$/)
 }
+
+describe('Topes por rol: usuarios con tope propio (change 20b, tarea 10.2, D12, tarea 8.6)', () => {
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+    Object.defineProperty(window.navigator, 'onLine', { value: true, configurable: true })
+  })
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  function servidorConTopesPropios() {
+    const roles = [
+      rol({ id: ROL_VENDEDOR_ID, nombre: 'Vendedor/Repartidor', usuarios_con_tope_propio: 3, usuarios_con_tope_propio_activos: 2, usuarios_con_tope_propio_inactivos: 1 }),
+      rol({ id: ROL_SUPERVISOR_ID, nombre: 'Supervisor comercial', usuarios_con_tope_propio: 2, usuarios_con_tope_propio_activos: 2, usuarios_con_tope_propio_inactivos: 0 }),
+      rol({ id: ROL_ADMINISTRADOR_ID, nombre: 'Administrador', usuarios_con_tope_propio: 0 }),
+    ]
+    enrutar(apiFetchMock, [{ metodo: 'GET', ruta: '/identidad/roles', responder: () => ({ status: 200, cuerpo: roles }) }])
+  }
+
+  it('muestra "3 (1 inactivo)" y, sin inactivos, solo el número', async () => {
+    servidorConTopesPropios()
+    montar()
+
+    await screen.findByText('Vendedor/Repartidor')
+    expect(within(filaDe('Vendedor/Repartidor')).getByText('3 (1 inactivo)')).toBeInTheDocument()
+    expect(within(filaDe('Supervisor comercial')).getByText('2')).toBeInTheDocument()
+    expect(within(filaDe('Administrador')).getByText('0')).toBeInTheDocument()
+  })
+
+  it('el número enlaza al listado de usuarios de ese rol con tope propio; el cero no enlaza', async () => {
+    servidorConTopesPropios()
+    montar()
+
+    await screen.findByText('Vendedor/Repartidor')
+    const enlace = within(filaDe('Vendedor/Repartidor')).getByRole('link', { name: '3 (1 inactivo)' })
+    expect(enlace).toHaveAttribute('href', `/admin/usuarios?rol_id=${ROL_VENDEDOR_ID}&con_tope_propio=true`)
+    expect(within(filaDe('Administrador')).queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  it('no ofrece selector de activos o todos: el filtro de estado del listado cumple esa función', async () => {
+    servidorConTopesPropios()
+    montar()
+
+    await screen.findByText('Vendedor/Repartidor')
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  })
+})
 
 describe('pantalla Topes por rol (tarea 15.4)', () => {
   beforeEach(() => {

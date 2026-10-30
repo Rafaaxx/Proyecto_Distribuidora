@@ -91,6 +91,33 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("get", "/api/v1/identidad/permisos"),
         ("post", "/api/v1/identidad/usuarios/{usuario_id}/pin"),
         ("post", "/api/v1/identidad/usuarios/{usuario_id}/desbloqueo"),
+        # Change 20b, grupos 3 y 4: administración de usuarios. Cada una con su prueba real de
+        # aislamiento (login real de dos organizaciones, el administrador de una sobre un usuario
+        # o un rol de la otra -> 404 y nada cambia): `test_usuario_baja.py`,
+        # `test_usuario_reactivar.py`, `test_usuario_modificar.py`, `test_usuario_rol_cambiar.py`
+        # (usuario y rol ajenos) y `test_usuario_contrasena_restablecer.py`.
+        ("post", "/api/v1/identidad/usuarios/{usuario_id}/baja"),
+        ("post", "/api/v1/identidad/usuarios/{usuario_id}/reactivacion"),
+        ("put", "/api/v1/identidad/usuarios/{usuario_id}"),
+        ("put", "/api/v1/identidad/usuarios/{usuario_id}/rol"),
+        ("post", "/api/v1/identidad/usuarios/{usuario_id}/contrasena"),
+        # Tarea 5.1: el tope propio; `test_usuario_tope_descuento_definir.py` (ajeno -> 404).
+        ("put", "/api/v1/identidad/usuarios/{usuario_id}/tope-descuento"),
+        # Change 20b, tarea 4.5: "Mi contraseña". Todo sale del token (el cuerpo no acepta
+        # `usuario_id`); prueba real en `test_contrasena_propia_cambiar.py::test_inv21_cambiar_la_
+        # propia_no_toca_a_los_usuarios_de_otra_organizacion`.
+        ("post", "/api/v1/yo/contrasena"),
+        # Change 20b, grupo 8: administración de roles. Renombrar, baja y reactivación con su
+        # prueba real de rol ajeno -> 404 sin cambios (`test_rol_crear_y_renombrar.py`,
+        # `test_rol_baja_y_reactivacion.py`); el alta no recibe ningún id ajeno: el nombre es único
+        # por organización y el mismo nombre en otra se acepta (misma prueba).
+        ("post", "/api/v1/identidad/roles"),
+        # Tarea 8.4: el detalle de un usuario; `test_identidad_lecturas_usuarios_roles.py`
+        # (usuario de otra organizacion o inexistente -> 404).
+        ("get", "/api/v1/identidad/usuarios/{usuario_id}"),
+        ("put", "/api/v1/identidad/roles/{rol_id}/nombre"),
+        ("post", "/api/v1/identidad/roles/{rol_id}/baja"),
+        ("post", "/api/v1/identidad/roles/{rol_id}/reactivacion"),
         # Change 04, grupo 8 (`sync/api.py`, tarea 8.6): a diferencia de las
         # rutas de arriba, `POST /sync/comandos` no tiene un "recurso ajeno"
         # por id -- `organizacion_id`/`usuario_id`/`dispositivo_id` salen
@@ -391,6 +418,15 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("get", "/api/v1/cobranzas/{cobranza_id}"),
         ("get", "/api/v1/clientes/opciones"),
         ("get", "/api/v1/clientes/{cliente_id}/saldo"),
+        # Change 20b, tarea 9.2: `POST /clientes/vendedor` (`CLIENTE_VENDEDOR_ASIGNAR`). Pruebas
+        # reales de aislamiento en `test_cliente_vendedor_asignar.py` (un cliente o un vendedor de
+        # otra organizacion responde 404 y no cambia nada) y, para las lecturas de cartera y su
+        # filtro por vendedor, en `test_clientes_opciones_cartera.py` y
+        # `test_clientes_cartera_service.py`.
+        ("post", "/api/v1/clientes/vendedor"),
+        # Change 20b, tarea 10.3: `GET /clientes/vendedores`. Prueba real de aislamiento en
+        # `test_clientes_vendedores_elegibles.py::test_no_lista_usuarios_de_otra_organizacion`.
+        ("get", "/api/v1/clientes/vendedores"),
         # Change 18a, tarea 8.1: `POST /ventas` (`VENTA_CONFIRMAR`). Prueba real de aislamiento
         # en `test_ventas_api.py::test_inv21_*` (login real de dos organizaciones; el cliente de
         # otra organización responde 404 sin efectos) y en `test_ventas_confirmar.py`.

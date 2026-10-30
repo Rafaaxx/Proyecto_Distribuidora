@@ -319,6 +319,19 @@ def actualizar_tope_de_rol(
     return rol
 
 
+def obtener_rol_por_nombre(
+    organizacion_id: UUID, nombre: str, sesion: Session, *, excluir_rol_id: UUID | None = None
+) -> Rol | None:
+    """El rol de la organización con ese nombre, sin distinguir mayúsculas y esté de baja o no
+    (change 20b, D10, INV-02: el mismo criterio que el índice `ux_rol__nombre`)."""
+    consulta = select(Rol).where(
+        Rol.organizacion_id == organizacion_id, func.lower(Rol.nombre) == func.lower(nombre)
+    )
+    if excluir_rol_id is not None:
+        consulta = consulta.where(Rol.id != excluir_rol_id)
+    return sesion.scalars(consulta).first()
+
+
 def listar_roles(organizacion_id: UUID, sesion: Session) -> list[Rol]:
     consulta = select(Rol).where(Rol.organizacion_id == organizacion_id).order_by(Rol.nombre)
     return list(sesion.scalars(consulta).all())
@@ -352,14 +365,38 @@ def listar_permisos_de_rol(organizacion_id: UUID, rol_id: UUID, sesion: Session)
     return list(sesion.scalars(consulta).all())
 
 
-def contar_administradores_en_otros_roles(
-    organizacion_id: UUID, sesion: Session, *, rol_excluido_id: UUID, permiso_codigo: str
-) -> int:
-    """Usuarios ACTIVOS de roles ACTIVOS de la organización, distintos de `rol_excluido_id`, cuyo
-    rol tiene `permiso_codigo` (ADR-053). Se cuenta en SQL, filtrado por organización."""
+def listar_vendedores_elegibles(
+    organizacion_id: UUID, permisos_codigos: Collection[str], sesion: Session
+) -> list[tuple[UUID, str]]:
+    """`(id, nombre)` de los usuarios ACTIVOS de la organización, de rol activo, cuyo rol tiene
+    alguno de `permisos_codigos`; ordenados por nombre (change 20b, D15). Un solo SQL."""
     consulta = (
-        select(func.count())
-        .select_from(Usuario)
+        select(Usuario.id, Usuario.nombre)
+        .join(
+            Rol,
+            and_(Rol.organizacion_id == Usuario.organizacion_id, Rol.id == Usuario.rol_id),
+        )
+        .where(
+            Usuario.organizacion_id == organizacion_id,
+            Usuario.estado == "ACTIVO",
+            Rol.activo.is_(True),
+            sa.exists().where(
+                RolPermiso.organizacion_id == Rol.organizacion_id,
+                RolPermiso.rol_id == Rol.id,
+                RolPermiso.permiso_codigo.in_(list(permisos_codigos)),
+            ),
+        )
+        .order_by(func.lower(Usuario.nombre), Usuario.id)
+    )
+    return [(fila[0], fila[1]) for fila in sesion.execute(consulta).all()]
+
+
+def _administradores_de_roles_activos(
+    organizacion_id: UUID, *, permiso_codigo: str
+) -> sa.Select[tuple[Usuario]]:
+    """Usuarios ACTIVOS de roles ACTIVOS de la organización cuyo rol tiene `permiso_codigo`."""
+    return (
+        select(Usuario)
         .join(Rol, and_(Rol.organizacion_id == Usuario.organizacion_id, Rol.id == Usuario.rol_id))
         .join(
             RolPermiso,
@@ -372,11 +409,79 @@ def contar_administradores_en_otros_roles(
             Usuario.organizacion_id == organizacion_id,
             Usuario.estado == "ACTIVO",
             Rol.activo.is_(True),
-            Rol.id != rol_excluido_id,
             RolPermiso.permiso_codigo == permiso_codigo,
         )
     )
-    return sesion.scalar(consulta) or 0
+
+
+def contar_administradores(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    permiso_codigo: str,
+    excluir_usuario_id: UUID | None = None,
+    excluir_rol_id: UUID | None = None,
+    rol_sustituto: tuple[UUID, UUID] | None = None,
+) -> int:
+    """Conteo general de administradores (change 20b, D3, ADR-053): usuarios ACTIVOS de roles
+    ACTIVOS de la organización con `permiso_codigo`, en SQL y filtrado por organización.
+
+    `excluir_usuario_id` saca a un usuario (la baja); `excluir_rol_id`, a todos los de un rol (el
+    cambio de permisos o la baja de un rol); `rol_sustituto=(usuario_id, rol_id)` calcula el
+    estado posterior a un cambio de rol: el usuario deja de contar con su rol actual y cuenta con
+    `rol_id` solo si está ACTIVO y ese rol está activo, tiene el permiso y no está excluido."""
+    base = _administradores_de_roles_activos(organizacion_id, permiso_codigo=permiso_codigo)
+    if excluir_usuario_id is not None:
+        base = base.where(Usuario.id != excluir_usuario_id)
+    if excluir_rol_id is not None:
+        base = base.where(Rol.id != excluir_rol_id)
+    if rol_sustituto is not None:
+        base = base.where(Usuario.id != rol_sustituto[0])
+    total = sesion.scalar(select(func.count()).select_from(base.subquery())) or 0
+    if rol_sustituto is not None:
+        usuario_id, rol_id = rol_sustituto
+        if usuario_id != excluir_usuario_id and rol_id != excluir_rol_id:
+            usuario_activo = sesion.scalar(
+                select(func.count())
+                .select_from(Usuario)
+                .where(
+                    Usuario.organizacion_id == organizacion_id,
+                    Usuario.id == usuario_id,
+                    Usuario.estado == "ACTIVO",
+                )
+            )
+            rol_con_el_permiso = sesion.scalar(
+                select(func.count())
+                .select_from(Rol)
+                .join(
+                    RolPermiso,
+                    and_(
+                        RolPermiso.organizacion_id == Rol.organizacion_id,
+                        RolPermiso.rol_id == Rol.id,
+                    ),
+                )
+                .where(
+                    Rol.organizacion_id == organizacion_id,
+                    Rol.id == rol_id,
+                    Rol.activo.is_(True),
+                    RolPermiso.permiso_codigo == permiso_codigo,
+                )
+            )
+            if (usuario_activo or 0) > 0 and (rol_con_el_permiso or 0) > 0:
+                total += 1
+    return int(total)
+
+
+def es_administrador_activo(
+    organizacion_id: UUID, usuario_id: UUID, sesion: Session, *, permiso_codigo: str
+) -> bool:
+    """`True` si `usuario_id` es hoy un usuario ACTIVO, de un rol ACTIVO que tiene `permiso_codigo`
+    (change 20b, D4: la revalidación de quien ejecuta, ya con el bloqueo tomado). Es un conteo SQL,
+    no una lectura de la entidad: nunca devuelve lo que la sesión tiene en caché."""
+    base = _administradores_de_roles_activos(organizacion_id, permiso_codigo=permiso_codigo).where(
+        Usuario.id == usuario_id
+    )
+    return (sesion.scalar(select(func.count()).select_from(base.subquery())) or 0) > 0
 
 
 def contar_usuarios_activos_del_rol(organizacion_id: UUID, rol_id: UUID, sesion: Session) -> int:
@@ -531,6 +636,23 @@ def obtener_usuario_con_rol(
     return usuario, rol
 
 
+def obtener_usuario_para_actualizar(
+    organizacion_id: UUID, usuario_id: UUID, sesion: Session
+) -> Usuario | None:
+    """El usuario con `FOR NO KEY UPDATE` (change 20b, D4, D20): serializa a quienes lo
+    modifican (baja, cambio de rol, contraseña) sin bloquear a las filas que lo referencian por
+    clave foránea, como el intento fallido de "Mi contraseña" que se confirma en una transacción
+    aparte. Refresca los valores: nunca devuelve un estado en caché. `None` si no existe en
+    `organizacion_id` (INV-21)."""
+    consulta = (
+        select(Usuario)
+        .where(Usuario.organizacion_id == organizacion_id, Usuario.id == usuario_id)
+        .with_for_update(key_share=True)
+        .execution_options(populate_existing=True)
+    )
+    return sesion.scalars(consulta).one_or_none()
+
+
 def listar_usuarios_por_ids(
     organizacion_id: UUID, usuario_ids: frozenset[UUID], sesion: Session
 ) -> list[Usuario]:
@@ -570,6 +692,54 @@ def listar_usuarios(organizacion_id: UUID, sesion: Session) -> list[Usuario]:
         select(Usuario).where(Usuario.organizacion_id == organizacion_id).order_by(Usuario.usuario)
     )
     return list(sesion.scalars(consulta).all())
+
+
+def listar_usuarios_con_rol(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    estado: str | None = None,
+    rol_id: UUID | None = None,
+    con_tope_propio: bool | None = None,
+) -> list[tuple[Usuario, Rol]]:
+    """Los usuarios de la organización con su rol en una sola consulta (change 20b, D16: nombre y
+    estado del rol sin N+1), ordenados por nombre de inicio de sesión. Filtros combinables (tarea
+    8.6): `estado` (del usuario), `rol_id` y `con_tope_propio` (True: con tope propio definido;
+    False: sin él). Siempre filtra por `organizacion_id` (INV-21): un `rol_id` de otra
+    organización no coincide con ningún usuario."""
+    consulta = (
+        select(Usuario, Rol)
+        .join(Rol, and_(Rol.organizacion_id == Usuario.organizacion_id, Rol.id == Usuario.rol_id))
+        .where(Usuario.organizacion_id == organizacion_id)
+        .order_by(Usuario.usuario)
+    )
+    if estado is not None:
+        consulta = consulta.where(Usuario.estado == estado)
+    if rol_id is not None:
+        consulta = consulta.where(Usuario.rol_id == rol_id)
+    if con_tope_propio is not None:
+        columna = Usuario.tope_descuento_override
+        consulta = consulta.where(columna.is_not(None) if con_tope_propio else columna.is_(None))
+    return [(usuario, rol) for usuario, rol in sesion.execute(consulta).all()]
+
+
+def contar_usuarios_con_tope_propio_por_rol(
+    organizacion_id: UUID, sesion: Session
+) -> dict[UUID, tuple[int, int]]:
+    """Usuarios de cada rol con tope de descuento propio definido, separados en `(activos,
+    inactivos)` (change 20b, D16 y tarea 8.6; el tope se conserva en la baja, D2), en una sola
+    consulta SQL sin N+1. Un rol sin ninguno no figura en el resultado."""
+    activos = func.count().filter(Usuario.estado == "ACTIVO")
+    inactivos = func.count().filter(Usuario.estado != "ACTIVO")
+    consulta = (
+        select(Usuario.rol_id, activos, inactivos)
+        .where(
+            Usuario.organizacion_id == organizacion_id,
+            Usuario.tope_descuento_override.is_not(None),
+        )
+        .group_by(Usuario.rol_id)
+    )
+    return {rol: (a, i) for rol, a, i in sesion.execute(consulta).all()}
 
 
 # --- dispositivo ---------------------------------------------------------

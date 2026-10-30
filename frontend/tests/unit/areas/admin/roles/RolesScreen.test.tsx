@@ -129,19 +129,22 @@ describe('pantalla Roles y permisos (tarea 9.1)', () => {
       expect(supervisor.getByRole('cell', { name: '4' })).toBeInTheDocument()
       expect(supervisor.getByRole('cell', { name: '2' })).toBeInTheDocument()
       const vendedor = within(filaDe('Vendedor/Repartidor'))
-      expect(vendedor.getByText('Inactivo')).toBeInTheDocument()
+      expect(vendedor.getByText('De baja')).toBeInTheDocument()
       expect(vendedor.getByRole('cell', { name: '5' })).toBeInTheDocument()
       expect(within(filaDe('Administrador')).getByRole('cell', { name: '7' })).toBeInTheDocument()
     })
 
-    it('ofrece el enlace a "Topes por rol" y no ofrece crear, desactivar ni borrar roles', async () => {
+    // Change 20b (D10, D11): desde acá se crea, renombra, da de baja y reactiva; nada se borra.
+    it('ofrece el enlace a "Topes por rol", "Nuevo rol", renombrar y dar de baja, pero nunca borrar', async () => {
       servidor()
       montar()
 
       await screen.findByText('Supervisor comercial')
       expect(screen.getByRole('link', { name: 'Topes por rol' })).toHaveAttribute('href', '/admin/descuentos/topes')
-      expect(screen.queryByRole('button', { name: /crear|nuevo|desactivar|borrar|eliminar|dar de baja/i })).not.toBeInTheDocument()
-      expect(screen.queryByRole('link', { name: /crear|nuevo rol/i })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Nuevo rol' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Renombrar Supervisor comercial' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Dar de baja Supervisor comercial' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /borrar|eliminar|desactivar/i })).not.toBeInTheDocument()
     })
 
     it('sin ADMIN_USUARIOS avisa y no pide nada (ADR-027)', async () => {

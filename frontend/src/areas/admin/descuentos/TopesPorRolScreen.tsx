@@ -6,7 +6,10 @@ import { Boton } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { PageHeader } from '../../../components/ui/PageHeader'
 import { Tabla, type ColumnaTabla } from '../../../components/ui/Table'
+import { Link } from 'react-router-dom'
+
 import { avisaTopeCero, describirTope } from '../../../domain/identidad/topes'
+import { enlaceDeUsuariosConTopePropio, textoDeTopesPorRol } from '../../../domain/identidad/usuarios'
 import type { RolConTopeYPermisos } from '../../../features/descuentos/api'
 import { PermisoRequeridoDescuentosError } from '../../../features/descuentos/errores'
 import { useRolesConTope } from '../../../features/descuentos/hooks'
@@ -47,7 +50,7 @@ export function TopesPorRolScreen() {
       render: (r) => (
         <div className="flex items-center gap-2">
           <span className="font-medium text-primary">{r.nombre}</span>
-          {!r.activo && <Badge variante="negativo">Inactivo</Badge>}
+          {!r.activo && <Badge variante="negativo">De baja</Badge>}
         </div>
       ),
     },
@@ -60,6 +63,20 @@ export function TopesPorRolScreen() {
           {avisaTopeCero(r) && <span className="text-primary/70">{AVISO_TOPE_CERO}</span>}
         </div>
       ),
+    },
+    {
+      clave: 'topes-propios',
+      encabezado: 'Usuarios con tope propio',
+      render: (r) => {
+        const texto = textoDeTopesPorRol(r.usuarios_con_tope_propio, r.usuarios_con_tope_propio_inactivos)
+        return r.usuarios_con_tope_propio > 0 ? (
+          <Link to={enlaceDeUsuariosConTopePropio(r.id)} className="text-primary hover:underline">
+            {texto}
+          </Link>
+        ) : (
+          <span>{texto}</span>
+        )
+      },
     },
     {
       clave: 'acciones',

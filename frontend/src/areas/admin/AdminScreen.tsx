@@ -25,8 +25,12 @@ const VentasArea = lazy(() => import('./ventas/VentasArea'))
 const ImportacionArea = lazy(() => import('./importacion/ImportacionArea'))
 const ConfiguracionArea = lazy(() => import('./configuracion/ConfiguracionArea'))
 const RolesArea = lazy(() => import('./roles/RolesArea'))
+// Usuarios (change 20b, D16): listado, alta y ficha con `ADMIN_USUARIOS`.
+const UsuariosArea = lazy(() => import('./usuarios/UsuariosArea'))
 // "Mi PIN" (change 18b, D21 parte B): cada supervisor define el suyo.
 const MiPinScreen = lazy(() => import('./cuenta/MiPinScreen'))
+// "Mi contraseña" (change 20b, D20): cualquier usuario con sesión cambia la suya.
+const MiContrasenaScreen = lazy(() => import('./cuenta/MiContrasenaScreen'))
 // Ayuda contextual (change 16b, ADR-051): páginas "Ver más" sin datos ni permisos (D6 = A).
 const AyudaArea = lazy(() => import('./AyudaArea'))
 
@@ -208,6 +212,22 @@ export function AdminScreen() {
             element={
               <Suspense fallback={null}>
                 <RolesArea />
+              </Suspense>
+            }
+          />
+          <Route
+            path="usuarios/*"
+            element={
+              <Suspense fallback={null}>
+                <UsuariosArea />
+              </Suspense>
+            }
+          />
+          <Route
+            path="mi-contrasena"
+            element={
+              <Suspense fallback={null}>
+                <MiContrasenaScreen />
               </Suspense>
             }
           />

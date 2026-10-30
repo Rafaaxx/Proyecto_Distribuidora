@@ -19,10 +19,12 @@ import type { FiltrosClientes } from './claves'
 
 export type Cliente = components['schemas']['ClienteResponse']
 export type PaginaClientes = components['schemas']['PaginaClientes']
+export type VendedorElegible = components['schemas']['VendedorElegibleResponse']
 export type ConsumidorFinal = components['schemas']['ConsumidorFinalResponse']
 export type ClienteCrearDatos = components['schemas']['ClienteCrearRequest']
 export type ClienteModificarDatos = components['schemas']['ClienteModificarRequest']
 export type ClienteCreditoModificarDatos = components['schemas']['ClienteCreditoModificarRequest']
+export type AsignacionDeVendedorResultado = components['schemas']['ClienteVendedorAsignarResponse']
 export type ConsumidorFinalConfigurarDatos = components['schemas']['ConsumidorFinalConfigurarRequest']
 
 async function leerJsonOLanzar<T>(respuesta: Response): Promise<T> {
@@ -38,6 +40,8 @@ function paramsClientes(cursor: string | undefined, limite: number, filtros: Fil
   if (cursor) params.set('cursor', cursor)
   if (filtros.texto) params.set('texto', filtros.texto)
   if (filtros.estado) params.set('estado', filtros.estado)
+  if (filtros.vendedorId) params.set('vendedor_id', filtros.vendedorId)
+  if (filtros.sinVendedor) params.set('sin_vendedor', 'true')
   return params.toString()
 }
 
@@ -57,6 +61,12 @@ export async function obtenerCliente(clienteId: string): Promise<Cliente> {
 
 export async function obtenerConsumidorFinal(): Promise<ConsumidorFinal> {
   const respuesta = await apiFetch('/clientes/consumidor-final')
+  return leerJsonOLanzar(respuesta)
+}
+
+/** Change 20b (D15): los vendedores asignables, para `GESTIONAR_CLIENTES` (sin `ADMIN_USUARIOS`). */
+export async function listarVendedoresElegibles(): Promise<VendedorElegible[]> {
+  const respuesta = await apiFetch('/clientes/vendedores')
   return leerJsonOLanzar(respuesta)
 }
 
@@ -105,6 +115,23 @@ export async function configurarConsumidorFinal(
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Operation-Id': operationId },
     body: JSON.stringify(datos),
+  })
+  return leerJsonOLanzar(respuesta)
+}
+
+/**
+ * `CLIENTE_VENDEDOR_ASIGNAR` (change 20b, D15): asigna un vendedor a uno o varios clientes, o lo
+ * quita con `null`. Todo o nada (INV-01).
+ */
+export async function asignarVendedor(
+  clienteIds: readonly string[],
+  vendedorId: string | null,
+  operationId: string,
+): Promise<AsignacionDeVendedorResultado> {
+  const respuesta = await apiFetch('/clientes/vendedor', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Operation-Id': operationId },
+    body: JSON.stringify({ cliente_ids: clienteIds, vendedor_id: vendedorId }),
   })
   return leerJsonOLanzar(respuesta)
 }

@@ -72,6 +72,12 @@ class Cliente(Base):
             ["lista_precio.organizacion_id", "lista_precio.id"],
             name="fk_cliente__lista_precio",
         ),
+        # Change 20b (D13, INV-21): el vendedor de la cartera es un usuario de la organización.
+        ForeignKeyConstraint(
+            ["organizacion_id", "vendedor_id"],
+            ["usuario.organizacion_id", "usuario.id"],
+            name="fk_cliente__vendedor",
+        ),
         UniqueConstraint("organizacion_id", "id", name="ux_cliente__org_id"),
         # Los tres catálogos cerrados y la máquina de estados también están en
         # la base: un valor fuera de ellos no entra ni por un camino que se
@@ -140,6 +146,7 @@ class Cliente(Base):
         Index("ix_cliente__org_nombre", "organizacion_id", "nombre"),
         Index("ix_cliente__org_estado_nombre", "organizacion_id", "estado", "nombre"),
         Index("ix_cliente__org_documento", "organizacion_id", "documento_numero"),
+        Index("ix_cliente__vendedor", "organizacion_id", "vendedor_id"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=nuevo_id)
@@ -156,6 +163,8 @@ class Cliente(Base):
     # FK compuesta a `lista_precio` desde el change 13 (D2 del change 07, D11); la escribe
     # la importación del change 10 y, desde el 13, el alta y la modificación.
     lista_precio_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    # Change 20b (D13): vendedor de la cartera; nulo = sin vendedor asignado.
+    vendedor_id: Mapped[UUID | None] = mapped_column(nullable=True)
     limite_credito: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     politica_credito: Mapped[str | None] = mapped_column(Text, nullable=True)
     tolerancia_offline_tipo: Mapped[str | None] = mapped_column(Text, nullable=True)

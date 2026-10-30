@@ -567,7 +567,7 @@ export const AYUDAS = {
   'roles.ultimoAdministrador': {
     titulo: 'Último administrador',
     texto:
-      'Siempre tiene que quedar al menos una persona activa que pueda administrar usuarios y roles; si no, nadie podría arreglar los permisos después. Por eso no te deja quitar este permiso si es el último que lo tiene.',
+      'Siempre tiene que quedar al menos una persona activa que pueda administrar usuarios y roles; si no, nadie podría arreglar los permisos después. Por eso no te deja quitar este permiso, dar de baja a ese usuario o a su rol, ni cambiarle el rol, si es el último que lo tiene.',
     reglas: ['ADR-053'],
   },
   'roles.autorizacion': {
@@ -577,6 +577,42 @@ export const AYUDAS = {
     ejemplo:
       'Ej.: le sacás «Autorizar descuentos» y «Vender con exceso de crédito» al Supervisor → el PIN de Ana deja de servir.',
     reglas: ['ADR-011'],
+  },
+  // --- Usuarios, roles y cartera (change 20b, textos aprobados el 2026-10-28, D18; sin ejemplos) ---
+  'usuarios.baja': {
+    titulo: 'Dar de baja a un usuario',
+    texto:
+      'Al dar de baja a un usuario deja de poder entrar y se cierran sus sesiones. Si tiene una jornada abierta, su teléfono puede subir lo que vendió o cobró sin conexión, pero no puede operar. No se puede dar de baja al último usuario que administra usuarios y roles, ni a uno mismo.',
+    reglas: ['ADR-028', 'ADR-053'],
+  },
+  'usuarios.cambioDeRol': {
+    titulo: 'Cambiar el rol de un usuario',
+    texto:
+      'El cambio rige desde la próxima acción del usuario. Si el rol nuevo no puede autorizar excepciones, se borra su PIN de autorización.',
+    reglas: ['ADR-017', 'ADR-011'],
+  },
+  'usuarios.topePropio': {
+    titulo: 'Tope de descuento propio',
+    texto:
+      'Si el usuario tiene tope propio, reemplaza al de su rol, sea mayor o menor. Vacío: rige el del rol. Solo tiene efecto si su rol tiene descuento manual.',
+    reglas: ['DSC-06'],
+  },
+  'usuarios.contrasena': {
+    titulo: 'Restablecer la contraseña',
+    texto: 'La contraseña nueva cierra sus sesiones abiertas y desbloquea el inicio de sesión si estaba bloqueado.',
+    reglas: ['ADR-018', 'ADR-057'],
+  },
+  'roles.baja': {
+    titulo: 'Dar de baja un rol',
+    texto:
+      'Un rol con usuarios activos no se puede dar de baja: primero cambiales el rol. Un rol de baja no se puede asignar.',
+    reglas: ['ADR-028'],
+  },
+  'clientes.vendedor': {
+    titulo: 'Vendedor del cliente',
+    texto:
+      'Los vendedores ven primero sus clientes asignados y pueden buscar en todos. Un vendedor sin clientes asignados ve todos.',
+    reglas: ['ADR-052', 'CLI-03'],
   },
   // --- Ventas (change 18a, textos aprobados por el usuario el 2026-10-17 y el 2026-10-19; D22) ---
   'ventas.cajasYUnidades': {

@@ -40,6 +40,7 @@ COLUMNAS_ESPERADAS = {
     "telefono": ("text", True),
     "email": ("text", True),
     "lista_precio_id": ("uuid", True),
+    "vendedor_id": ("uuid", True),  # change 20b, D13
     "limite_credito": ("numeric", True),
     "politica_credito": ("text", True),
     "tolerancia_offline_tipo": ("text", True),
@@ -146,6 +147,7 @@ def test_las_fk_son_compuestas_con_organizacion_id(_engine_de_sesion: Engine) ->
         ("fk_cliente__actualizado_por", "organizacion_id,actualizado_por_id"),
         ("fk_cliente__lista_precio", "organizacion_id,lista_precio_id"),
         ("fk_cliente__organizacion", "organizacion_id"),
+        ("fk_cliente__vendedor", "organizacion_id,vendedor_id"),  # change 20b, D13
     ]
 
 

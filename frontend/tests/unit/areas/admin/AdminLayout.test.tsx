@@ -100,14 +100,15 @@ describe('AdminLayout: el menú muestra solo las secciones permitidas (tareas 7.
     await montarRol('VEN')
 
     // "Ayuda" (change 16b, D6 = A) la ve todo usuario con sesión; las secciones siguen por permiso.
-    expect(screen.getAllByRole('link').map((enlace) => enlace.textContent)).toEqual(['Ventas', 'Cobranzas', 'Stock', 'Ayuda'])
+    expect(screen.getAllByRole('link').map((enlace) => enlace.textContent)).toEqual(['Ventas', 'Cobranzas', 'Stock', 'Ayuda', 'Mi contraseña'])
   })
 
   it('Consulta/Dirección no ve ninguna sección', async () => {
     await montarRol('CON')
 
     // Solo queda "Ayuda" (change 16b): ninguna sección de negocio.
-    expect(screen.getAllByRole('link').map((enlace) => enlace.textContent)).toEqual(['Ayuda'])
+    // Change 20b (D20): "Mi contraseña" la ve todo usuario con sesión, aunque no tenga secciones.
+    expect(screen.getAllByRole('link').map((enlace) => enlace.textContent)).toEqual(['Ayuda', 'Mi contraseña'])
   })
 
   it('con los permisos ya sembrados no hace ninguna petición extra a /yo (ADR-027: una consulta por sesión)', async () => {
@@ -162,6 +163,7 @@ describe('AdminLayout: estado pendiente y estado de error de la consulta de sesi
 
     expect(await screen.findByText(/no se pudieron obtener tus permisos/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
+    expect(screen.queryByText(/tu sesión terminó/i)).not.toBeInTheDocument()
     expect(screen.queryAllByRole('link')).toHaveLength(0)
   })
 
@@ -189,6 +191,9 @@ describe('AdminLayout: estado pendiente y estado de error de la consulta de sesi
 
     const enlace = await screen.findByRole('link', { name: 'Iniciar sesión' })
     expect(enlace).toHaveAttribute('href', '/admin/login')
+    // Sesión terminada (p. ej. revocada por un restablecimiento de contraseña): no suena a error.
+    expect(screen.getByText('Tu sesión terminó. Iniciá sesión de nuevo.')).toBeInTheDocument()
+    expect(screen.queryByText(/no se pudieron obtener tus permisos/i)).not.toBeInTheDocument()
     // Reintentar no serviría: sin access token la renovación ya fue
     // rechazada una vez, así que un nuevo intento vuelve a fallar (ADR-017).
     expect(screen.queryByRole('button', { name: 'Reintentar' })).not.toBeInTheDocument()
@@ -272,7 +277,8 @@ describe('AdminLayout: la ruta índice /admin/inicio (tarea 7.6, B3)', () => {
       await screen.findByText('Tu usuario no tiene secciones de administración disponibles'),
     ).toBeInTheDocument()
     // Solo queda "Ayuda" (change 16b): ninguna sección de negocio.
-    expect(screen.getAllByRole('link').map((enlace) => enlace.textContent)).toEqual(['Ayuda'])
+    // Change 20b (D20): "Mi contraseña" la ve todo usuario con sesión, aunque no tenga secciones.
+    expect(screen.getAllByRole('link').map((enlace) => enlace.textContent)).toEqual(['Ayuda', 'Mi contraseña'])
   })
 
   it('mientras /yo está pendiente espera y no redirige a ninguna sección (B1)', () => {

@@ -11,7 +11,7 @@ existe el bus de comandos (change 04).
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 
 from app.core.clock import Clock
+from app.core.errors import PermisoRequeridoError
 from app.core.ids import nuevo_id
 from app.core.seguridad import (
     PIN_AUTORIZACION_ITERACIONES_DEFAULT,
@@ -53,16 +54,31 @@ from app.modules.identidad.domain.usuarios import (
     CorrelativoNoAvanzaError,
     CredencialesInvalidasError,
     LoginBloqueadoPorIntentosError,
+    NombreDeRolDuplicadoError,
     PinBloqueadoError,
     PinIncorrectoError,
     RefreshTokenInvalidoError,
     RolConPermisoInexistenteError,
+    RolConUsuariosActivosError,
+    RolNoEncontradoError,
     RolSinAutorizacionParaPinError,
     TopeDescuentoFueraDeRangoError,
+    UsuarioDuplicadoError,
     UsuarioSinRolError,
+    debe_borrar_pin,
+    normalizar_email,
+    normalizar_nombre_de_rol,
+    normalizar_nombre_de_usuario,
+    queda_administrador,
     rol_confiere_autorizacion_excepcion,
+    transicionar_estado_usuario,
+    validar_baja_de_usuario,
+    validar_contrasena,
+    validar_contrasena_nueva,
     validar_formato_pin_autorizacion,
     validar_queda_administrador,
+    validar_reactivacion,
+    validar_rol_asignable,
     validar_tope_descuento,
 )
 from app.modules.identidad.domain.valores import (
@@ -747,8 +763,16 @@ def crear_usuario(
     infraestructura)."""
     if rol_id is None:
         raise UsuarioSinRolError("No se puede crear un usuario sin indicar un rol.")
-    if repository.obtener_rol_por_id(organizacion_id, rol_id, sesion) is None:
+    rol = repository.obtener_rol_por_id(organizacion_id, rol_id, sesion)
+    if rol is None:
         return None
+    # Change 20b, D9: un rol de baja no se asigna, la contraseña cumple la regla común y el nombre
+    # de inicio de sesión no se repite en la organización (409 de dominio, no un error de la
+    # restricción única). El comando toma antes la exclusión mutua de identidad (D4).
+    validar_rol_asignable(rol.activo)
+    validar_contrasena(password)
+    if repository.obtener_usuario_por_nombre_usuario(organizacion_id, usuario, sesion):
+        raise UsuarioDuplicadoError(f"Ya existe un usuario {usuario!r} en la organización.")
 
     momento = reloj.now()
     fila = repository.crear_usuario(
@@ -793,26 +817,47 @@ def listar_catalogo_de_permisos(sesion: Session) -> list[Permiso]:
     )
 
 
+def bloquear_organizacion_para_identidad(
+    organizacion_id: UUID, sesion: Session, *, actor_id: UUID
+) -> None:
+    """Exclusión mutua de identidad (change 20b, D4, ADR-053, `02` §7.3): toma
+    `configuracion_organizacion FOR UPDATE` y, ya con el bloqueo, revalida que quien ejecuta sigue
+    ACTIVO, con rol activo y con `ADMIN_USUARIOS`; si no, `PERMISO_REQUERIDO` (403) sin cambios.
+
+    Orden de bloqueo de toda operación de identidad: configuración -> rol -> usuario ->
+    `sesion_refresh`. La toman, primero y antes de leer o escribir nada, `USUARIO_CREAR`,
+    `USUARIO_BAJA`, `USUARIO_REACTIVAR`, `USUARIO_ROL_CAMBIAR` y `ROL_PERMISOS_CAMBIAR` cuando
+    quita `ADMIN_USUARIOS`. La revalidación lee la base (no la entidad en caché de la sesión): un
+    administrador dado de baja un instante antes ya no completa su comando."""
+    repository.obtener_configuracion_bloqueada(organizacion_id, sesion, exclusivo=True)
+    if not repository.es_administrador_activo(
+        organizacion_id, actor_id, sesion, permiso_codigo=PERMISO_ADMIN_USUARIOS
+    ):
+        raise PermisoRequeridoError(f"Falta el permiso {PERMISO_ADMIN_USUARIOS}.")
+
+
 def _validar_que_quede_un_administrador(
     organizacion_id: UUID,
     sesion: Session,
     *,
     rol_id: UUID,
     permisos_nuevos: frozenset[str],
+    actor_id: UUID,
 ) -> None:
     """Change 17b, D8, ADR-053: se llama SOLO al quitar `ADMIN_USUARIOS` y ANTES de escribir.
-    Bloquea la fila de configuración de la organización (`FOR UPDATE`, el mismo mecanismo de la
-    condición de IVA) para que dos cambios simultáneos sobre roles distintos se serialicen, y
-    recién después cuenta en SQL. El rechazo es un error de dominio que el bus deshace entero."""
-    repository.obtener_configuracion_bloqueada(organizacion_id, sesion, exclusivo=True)
+    Toma la exclusión mutua de identidad (D4 del 20b: configuración y revalidación de quien
+    ejecuta) para que dos cambios simultáneos sobre roles distintos se serialicen, y recién
+    después cuenta en SQL con el conteo general. El rechazo es un error de dominio que el bus
+    deshace entero."""
+    bloquear_organizacion_para_identidad(organizacion_id, sesion, actor_id=actor_id)
     rol = repository.obtener_rol_por_id(organizacion_id, rol_id, sesion)
     assert rol is not None
     validar_queda_administrador(
-        administradores_en_otros_roles=repository.contar_administradores_en_otros_roles(
+        administradores_en_otros_roles=repository.contar_administradores(
             organizacion_id,
             sesion,
-            rol_excluido_id=rol_id,
             permiso_codigo=PERMISO_ADMIN_USUARIOS,
+            excluir_rol_id=rol_id,
         ),
         conserva_el_permiso=PERMISO_ADMIN_USUARIOS in permisos_nuevos,
         rol_activo=rol.activo,
@@ -861,7 +906,11 @@ def cambiar_composicion_rol(
 
     if PERMISO_ADMIN_USUARIOS in permisos_actuales - permisos_nuevos:
         _validar_que_quede_un_administrador(
-            organizacion_id, sesion, rol_id=rol_id, permisos_nuevos=permisos_nuevos
+            organizacion_id,
+            sesion,
+            rol_id=rol_id,
+            permisos_nuevos=permisos_nuevos,
+            actor_id=actor_id,
         )
 
     for codigo in permisos_nuevos - permisos_actuales:
@@ -964,6 +1013,260 @@ def definir_tope_descuento_de_rol(
     return rol
 
 
+def listar_permisos_de_un_rol(organizacion_id: UUID, rol_id: UUID, sesion: Session) -> list[str]:
+    """Los códigos de permiso del rol (change 20b: el resultado de los comandos de rol)."""
+    return list(repository.listar_permisos_de_rol(organizacion_id, rol_id, sesion))
+
+
+def _tope_de_rol_exacto(tope: str) -> Decimal:
+    """Valida el tope como en `definir_tope_descuento_de_rol`: 0 a 1 y a lo sumo seis decimales
+    (un séptimo no se redondea en silencio, TR-02, INV-03)."""
+    valor = validar_tope_descuento(tope)
+    if Decimal(tope) != valor:
+        raise TopeDescuentoFueraDeRangoError(
+            f"El tope de descuento {tope} tiene más de 6 decimales."
+        )
+    return valor
+
+
+def crear_rol_nuevo(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    nombre: str,
+    permisos: frozenset[str],
+    tope_descuento: str,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> tuple[Rol, list[str]]:
+    """`ROL_CREAR` (change 20b, D10-A; ADR-053). Toma la exclusión mutua de identidad (serializa
+    los nombres y revalida a quien ejecuta), valida ANTES de escribir el nombre (1 a 100
+    caracteres, recortado, único sin distinguir mayúsculas entre activos y de baja), el tope y que
+    cada permiso esté en el catálogo, y crea el rol ACTIVO con sus permisos. Audita `ALTA_ROL`
+    (sin estado anterior) con `origen='COMANDO'`. Devuelve el rol y sus permisos ordenados."""
+    bloquear_organizacion_para_identidad(organizacion_id, sesion, actor_id=actor_id)
+    nombre_normalizado = normalizar_nombre_de_rol(nombre)
+    tope = _tope_de_rol_exacto(tope_descuento)
+    ordenados = sorted(permisos)
+    for codigo in ordenados:
+        if repository.obtener_permiso_por_codigo(codigo, sesion) is None:
+            raise RolConPermisoInexistenteError(
+                f"El permiso {codigo!r} no está en el catálogo global (03 §4)."
+            )
+    if repository.obtener_rol_por_nombre(organizacion_id, nombre_normalizado, sesion):
+        raise NombreDeRolDuplicadoError(f"Ya existe un rol {nombre_normalizado!r}.")
+
+    momento = reloj.now()
+    rol = repository.crear_rol(
+        organizacion_id,
+        sesion,
+        rol_id=nuevo_id(),
+        nombre=nombre_normalizado,
+        tope_descuento=tope,
+        activo=True,
+        momento=momento,
+        actualizado_por_id=actor_id,
+    )
+    for codigo in ordenados:
+        repository.asignar_permiso_a_rol(
+            organizacion_id, sesion, rol_id=rol.id, permiso_codigo=codigo
+        )
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="ALTA_ROL",
+        entidad="rol",
+        entidad_id=rol.id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        antes=None,
+        despues={
+            "nombre": nombre_normalizado,
+            "activo": True,
+            "tope_descuento": f"{tope:.6f}",
+            "permisos": ordenados,
+        },
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+    return rol, ordenados
+
+
+def renombrar_rol(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    rol_id: UUID,
+    nombre: str,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> Rol | None:
+    """`ROL_RENOMBRAR` (change 20b, D10-A). Mutex de identidad y rol `FOR UPDATE`; `None` si el
+    rol no existe en la organización (INV-21). Mismas reglas de nombre que el alta, sin chocar con
+    el propio rol (cambiar solo mayúsculas es válido). El mismo nombre se acepta sin auditoría de
+    entidad; si cambia, audita `RENOMBRAR_ROL` con los dos nombres."""
+    bloquear_organizacion_para_identidad(organizacion_id, sesion, actor_id=actor_id)
+    rol = repository.obtener_rol_para_actualizar(organizacion_id, rol_id, sesion)
+    if rol is None:
+        return None
+    nombre_normalizado = normalizar_nombre_de_rol(nombre)
+    if repository.obtener_rol_por_nombre(
+        organizacion_id, nombre_normalizado, sesion, excluir_rol_id=rol_id
+    ):
+        raise NombreDeRolDuplicadoError(f"Ya existe un rol {nombre_normalizado!r}.")
+    nombre_anterior = rol.nombre
+    if nombre_normalizado == nombre_anterior:
+        return rol
+
+    momento = reloj.now()
+    rol.nombre = nombre_normalizado
+    rol.actualizado_en = momento
+    rol.actualizado_por_id = actor_id
+    sesion.flush()
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="RENOMBRAR_ROL",
+        entidad="rol",
+        entidad_id=rol_id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        antes={"nombre": nombre_anterior},
+        despues={"nombre": nombre_normalizado},
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+    return rol
+
+
+def dar_de_baja_rol(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    rol_id: UUID,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> Rol | None:
+    """`ROL_BAJA` (change 20b, D11-A, D3, D4; ADR-028 D9.4, ADR-053). En este orden: exclusión
+    mutua de identidad y revalidación de quien ejecuta; rol `FOR UPDATE` (`None` si no existe en
+    la organización, INV-21); si ya está de baja no cambia nada ni audita; se rechaza si tiene
+    usuarios ACTIVO (`IDENTIDAD_ROL_CON_USUARIOS_ACTIVOS`, con la cantidad); defensa en
+    profundidad de D3 (que quede un administrador sin contar este rol); recién entonces
+    `activo = false` y la auditoría `BAJA_ROL`. Nunca toca sesiones: un rol sin usuarios activos
+    no tiene ninguna."""
+    bloquear_organizacion_para_identidad(organizacion_id, sesion, actor_id=actor_id)
+    rol = repository.obtener_rol_para_actualizar(organizacion_id, rol_id, sesion)
+    if rol is None:
+        return None
+    if not rol.activo:
+        return rol
+    activos = repository.contar_usuarios_activos_del_rol(organizacion_id, rol_id, sesion)
+    if activos > 0:
+        raise RolConUsuariosActivosError(
+            f"El rol tiene {activos} usuario(s) activo(s); cambiales el rol antes de "
+            "darlo de baja.",
+            extension={"usuarios_activos": activos},
+        )
+    queda_administrador(
+        repository.contar_administradores(
+            organizacion_id,
+            sesion,
+            permiso_codigo=PERMISO_ADMIN_USUARIOS,
+            excluir_rol_id=rol_id,
+        )
+    )
+    _cambiar_actividad_de_rol(
+        organizacion_id,
+        sesion,
+        reloj,
+        rol,
+        activo=False,
+        accion="BAJA_ROL",
+        actor_id=actor_id,
+        dispositivo_id_actor=dispositivo_id_actor,
+        operation_id=operation_id,
+    )
+    return rol
+
+
+def reactivar_rol(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    rol_id: UUID,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> Rol | None:
+    """`ROL_REACTIVAR` (change 20b, D11-A, D4). Mutex de identidad y rol `FOR UPDATE`; la
+    reactivación es libre (D3 no aplica: suma administradores, no resta). Un rol ya activo no
+    cambia ni audita. Audita `REACTIVAR_ROL`."""
+    bloquear_organizacion_para_identidad(organizacion_id, sesion, actor_id=actor_id)
+    rol = repository.obtener_rol_para_actualizar(organizacion_id, rol_id, sesion)
+    if rol is None:
+        return None
+    if rol.activo:
+        return rol
+    _cambiar_actividad_de_rol(
+        organizacion_id,
+        sesion,
+        reloj,
+        rol,
+        activo=True,
+        accion="REACTIVAR_ROL",
+        actor_id=actor_id,
+        dispositivo_id_actor=dispositivo_id_actor,
+        operation_id=operation_id,
+    )
+    return rol
+
+
+def _cambiar_actividad_de_rol(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    rol: Rol,
+    *,
+    activo: bool,
+    accion: str,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> None:
+    momento = reloj.now()
+    anterior = rol.activo
+    rol.activo = activo
+    rol.actualizado_en = momento
+    rol.actualizado_por_id = actor_id
+    sesion.flush()
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion=accion,
+        entidad="rol",
+        entidad_id=rol.id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        antes={"activo": anterior},
+        despues={"activo": activo},
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+
+
 def _invalidar_pin_de_usuarios_del_rol(
     organizacion_id: UUID,
     sesion: Session,
@@ -996,6 +1299,509 @@ def _invalidar_pin_de_usuarios_del_rol(
             dispositivo_id=dispositivo_id_actor,
             observacion="El rol perdió su último permiso de autorización de excepciones.",
         )
+
+
+# --- Administración de usuarios (change 20b, D1 a D9, D12) ------------------------------------
+#
+# Cada función corre dentro del bus (`identidad/commands.py`): sin `commit`, con la auditoría de
+# entidad propia (`origen = 'COMANDO'` y el `operation_id` del sobre; la fila genérica del comando
+# la deja el bus, ADR-022). Devuelven `None` sin escribir nada cuando el recurso no existe en la
+# organización (INV-21, SEG-07). Un rechazo es una excepción de dominio que el bus deshace entera.
+
+
+def _revocar_sesiones_de_usuario_salvo_jornada(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    usuario_id: UUID,
+    momento: datetime,
+    motivo: str,
+    conservar_dispositivos: Collection[UUID] = (),
+) -> int:
+    """Revoca las familias de refresh vigentes del usuario salvo las de los dispositivos con una
+    jornada no cerrada de ese usuario (ADR-028 D9.3-B, SYN-05, SYN-10: no se vara su cola) y las
+    de `conservar_dispositivos`. Devuelve cuántas filas revocó."""
+    con_jornada = [
+        dispositivo_id
+        for dispositivo_id in repository.dispositivos_con_sesion_vigente(
+            organizacion_id, sesion, usuario_id=usuario_id
+        )
+        if hay_jornada_no_cerrada(organizacion_id, usuario_id, dispositivo_id, sesion)
+    ]
+    return repository.revocar_sesiones_refresh_de_usuario(
+        organizacion_id,
+        sesion,
+        usuario_id=usuario_id,
+        momento=momento,
+        motivo=motivo,
+        excepto_dispositivo_ids=[*con_jornada, *conservar_dispositivos],
+    )
+
+
+def _auditar_revocacion_de_sesiones(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    usuario_id: UUID,
+    cantidad: int,
+    motivo: str,
+    momento: datetime,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> None:
+    """`REVOCAR_SESIONES_REFRESH_USUARIO` con `origen = 'COMANDO'`, solo si se revocó alguna
+    familia (D17): distingue esta revocación de la que hace la renovación (`origen = 'SISTEMA'`)."""
+    if cantidad == 0:
+        return
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="REVOCAR_SESIONES_REFRESH_USUARIO",
+        entidad="usuario",
+        entidad_id=usuario_id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        despues={"familias_revocadas": cantidad, "motivo": motivo},
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+
+
+def _borrar_pin_de_usuario(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    usuario: Usuario,
+    *,
+    motivo: str,
+    momento: datetime,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> None:
+    """Borra el PIN de autorización del usuario (ADR-011) y lo audita sin exponer su valor. No
+    hace nada si el usuario no tenía PIN."""
+    if usuario.pin_autorizacion_hash is None:
+        return
+    usuario.pin_autorizacion_hash = None
+    usuario.pin_autorizacion_sal = None
+    usuario.pin_autorizacion_iteraciones = None
+    sesion.flush()
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="INVALIDAR_PIN_AUTORIZACION",
+        entidad="usuario",
+        entidad_id=usuario.id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        observacion=motivo,
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+
+
+def dar_de_baja_usuario(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    usuario_id: UUID,
+    observacion: str | None,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> Usuario | None:
+    """`USUARIO_BAJA` (change 20b, D2-A, D3, D4, D5-A; ADR-028 D9.5, ADR-053). En una
+    transacción y en este orden: 1) exclusión mutua de identidad y revalidación de quien ejecuta
+    (D4); 2) el rol del usuario y el usuario `FOR UPDATE` (configuración -> rol -> usuario ->
+    `sesion_refresh`); 3) validaciones ANTES de escribir (INV-01): autobaja (`IDENTIDAD_AUTOBAJA`),
+    transición ACTIVO -> INACTIVO y que quede otro administrador; 4) estado `INACTIVO`; 5) revoca
+    las familias de refresh con `USUARIO_INACTIVO` salvo las de dispositivos con jornada no
+    cerrada; 6) borra el PIN; 7) auditoría. La cartera y el tope propio se conservan."""
+    bloquear_organizacion_para_identidad(organizacion_id, sesion, actor_id=actor_id)
+    existente = repository.obtener_usuario_por_id(organizacion_id, usuario_id, sesion)
+    if existente is None:
+        return None
+    repository.obtener_rol_para_actualizar(organizacion_id, existente.rol_id, sesion)
+    usuario = repository.obtener_usuario_para_actualizar(organizacion_id, usuario_id, sesion)
+    assert usuario is not None  # se leyó arriba y la exclusión mutua impide que desaparezca.
+
+    validar_baja_de_usuario(actor_id=actor_id, usuario_id=usuario_id, estado=usuario.estado)
+    queda_administrador(
+        repository.contar_administradores(
+            organizacion_id,
+            sesion,
+            permiso_codigo=PERMISO_ADMIN_USUARIOS,
+            excluir_usuario_id=usuario_id,
+        )
+    )
+
+    momento = reloj.now()
+    estado_anterior = usuario.estado
+    usuario.estado = transicionar_estado_usuario(estado_anterior, "INACTIVO")
+    usuario.actualizado_en = momento
+    usuario.actualizado_por_id = actor_id
+    sesion.flush()
+    revocadas = _revocar_sesiones_de_usuario_salvo_jornada(
+        organizacion_id,
+        sesion,
+        usuario_id=usuario_id,
+        momento=momento,
+        motivo="USUARIO_INACTIVO",
+    )
+    _borrar_pin_de_usuario(
+        organizacion_id,
+        sesion,
+        reloj,
+        usuario,
+        motivo="El usuario fue dado de baja.",
+        momento=momento,
+        actor_id=actor_id,
+        dispositivo_id_actor=dispositivo_id_actor,
+        operation_id=operation_id,
+    )
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="BAJA_USUARIO",
+        entidad="usuario",
+        entidad_id=usuario_id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        antes={"estado": estado_anterior},
+        despues={"estado": usuario.estado},
+        observacion=(observacion.strip() or None) if observacion is not None else None,
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+    _auditar_revocacion_de_sesiones(
+        organizacion_id,
+        sesion,
+        reloj,
+        usuario_id=usuario_id,
+        cantidad=revocadas,
+        motivo="USUARIO_INACTIVO",
+        momento=momento,
+        actor_id=actor_id,
+        dispositivo_id_actor=dispositivo_id_actor,
+        operation_id=operation_id,
+    )
+    return usuario
+
+
+def reactivar_usuario(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    usuario_id: UUID,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> Usuario | None:
+    """`USUARIO_REACTIVAR` (change 20b, D2-A, D4). Solo vuelve el estado a `ACTIVO` y audita
+    `REACTIVAR_USUARIO`; no restituye el PIN que borró la baja ni las sesiones. La regla del último
+    administrador no aplica (la reactivación suma uno). Toma la exclusión mutua de identidad (un
+    alta, una baja o un cambio de rol simultáneos no se cruzan) y el usuario `FOR UPDATE`. Con el
+    rol de baja el usuario queda `ACTIVO` y el inicio de sesión se sigue rechazando (ADR-028
+    D9.4)."""
+    bloquear_organizacion_para_identidad(organizacion_id, sesion, actor_id=actor_id)
+    existente = repository.obtener_usuario_por_id(organizacion_id, usuario_id, sesion)
+    if existente is None:
+        return None
+    repository.obtener_rol_para_actualizar(organizacion_id, existente.rol_id, sesion)
+    usuario = repository.obtener_usuario_para_actualizar(organizacion_id, usuario_id, sesion)
+    assert usuario is not None  # se leyó arriba y la exclusión mutua impide que desaparezca.
+
+    validar_reactivacion(usuario.estado)
+    momento = reloj.now()
+    estado_anterior = usuario.estado
+    usuario.estado = transicionar_estado_usuario(estado_anterior, "ACTIVO")
+    usuario.actualizado_en = momento
+    usuario.actualizado_por_id = actor_id
+    sesion.flush()
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="REACTIVAR_USUARIO",
+        entidad="usuario",
+        entidad_id=usuario_id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        antes={"estado": estado_anterior},
+        despues={"estado": usuario.estado},
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+    return usuario
+
+
+def modificar_usuario(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    usuario_id: UUID,
+    nombre: str,
+    email: str | None,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> Usuario | None:
+    """`USUARIO_MODIFICAR` (change 20b, D9-A): reemplazo completo de `nombre` (obligatorio,
+    recortado, hasta 200; 422) y `email` (opcional; vacío es nulo). El nombre de inicio de sesión
+    (`usuario`) no se edita. Toma el usuario `FOR UPDATE`. El mismo valor se acepta sin escribir
+    ni auditar la entidad; si cambia, una fila `MODIFICAR_USUARIO` con antes y después (AUD-01).
+    No toca el estado, el rol ni las sesiones."""
+    nombre_nuevo = normalizar_nombre_de_usuario(nombre)
+    email_nuevo = normalizar_email(email)
+    usuario = repository.obtener_usuario_para_actualizar(organizacion_id, usuario_id, sesion)
+    if usuario is None:
+        return None
+    antes: dict[str, object] = {"nombre": usuario.nombre, "email": usuario.email}
+    despues: dict[str, object] = {"nombre": nombre_nuevo, "email": email_nuevo}
+    if antes == despues:
+        return usuario
+
+    momento = reloj.now()
+    usuario.nombre = nombre_nuevo
+    usuario.email = email_nuevo
+    usuario.actualizado_en = momento
+    usuario.actualizado_por_id = actor_id
+    sesion.flush()
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="MODIFICAR_USUARIO",
+        entidad="usuario",
+        entidad_id=usuario_id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        antes=antes,
+        despues=despues,
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+    return usuario
+
+
+def cambiar_rol_de_usuario(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    usuario_id: UUID,
+    rol_id: UUID,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> Usuario | None:
+    """`USUARIO_ROL_CAMBIAR` (change 20b, D7-A, D3, D4, D5-A; ADR-053, ADR-011, ADR-017).
+
+    Exclusión mutua de identidad, los dos roles y el usuario `FOR UPDATE` (en ese orden); rol de
+    otra organización o inexistente: `RolNoEncontradoError` (404); rol inactivo: 409
+    `IDENTIDAD_ROL_INACTIVO`. El mismo rol se acepta sin cambios ni auditoría de entidad. Antes de
+    escribir se cuenta, con el rol nuevo, cuántos administradores quedarían
+    (`IDENTIDAD_SIN_ADMINISTRADOR`). Si el rol nuevo no tiene ningún permiso de autorización,
+    borra el PIN. No revoca sesiones: los permisos se leen en cada petición. Conserva el tope
+    propio y la cartera. Auditoría `CAMBIO_ROL_USUARIO` con el rol anterior y el nuevo."""
+    bloquear_organizacion_para_identidad(organizacion_id, sesion, actor_id=actor_id)
+    existente = repository.obtener_usuario_por_id(organizacion_id, usuario_id, sesion)
+    if existente is None:
+        return None
+    rol_anterior_id = existente.rol_id
+    roles = {}
+    for id_de_rol in sorted({rol_anterior_id, rol_id}, key=str):
+        encontrado = repository.obtener_rol_para_actualizar(organizacion_id, id_de_rol, sesion)
+        if encontrado is None and id_de_rol == rol_id:
+            raise RolNoEncontradoError(f"El rol {rol_id} no existe en esta organización.")
+        roles[id_de_rol] = encontrado
+    rol_nuevo = roles[rol_id]
+    rol_anterior = roles[rol_anterior_id]
+    assert rol_nuevo is not None and rol_anterior is not None
+    usuario = repository.obtener_usuario_para_actualizar(organizacion_id, usuario_id, sesion)
+    assert usuario is not None  # se leyó arriba y la exclusión mutua impide que desaparezca.
+    if usuario.rol_id == rol_id:
+        return usuario
+
+    validar_rol_asignable(rol_nuevo.activo)
+    queda_administrador(
+        repository.contar_administradores(
+            organizacion_id,
+            sesion,
+            permiso_codigo=PERMISO_ADMIN_USUARIOS,
+            rol_sustituto=(usuario_id, rol_id),
+        )
+    )
+
+    momento = reloj.now()
+    permisos_del_rol_nuevo = repository.listar_permisos_de_rol(organizacion_id, rol_id, sesion)
+    usuario.rol_id = rol_id
+    usuario.actualizado_en = momento
+    usuario.actualizado_por_id = actor_id
+    sesion.flush()
+    if debe_borrar_pin(permisos_del_rol_nuevo):
+        _borrar_pin_de_usuario(
+            organizacion_id,
+            sesion,
+            reloj,
+            usuario,
+            motivo="El rol nuevo no confiere ningún permiso de autorización de excepciones.",
+            momento=momento,
+            actor_id=actor_id,
+            dispositivo_id_actor=dispositivo_id_actor,
+            operation_id=operation_id,
+        )
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="CAMBIO_ROL_USUARIO",
+        entidad="usuario",
+        entidad_id=usuario_id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        antes={"rol_id": str(rol_anterior_id), "rol_nombre": rol_anterior.nombre},
+        despues={"rol_id": str(rol_id), "rol_nombre": rol_nuevo.nombre},
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+    return usuario
+
+
+def restablecer_contrasena_de_usuario(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    usuario_id: UUID,
+    password_nueva: str,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> Usuario | None:
+    """`USUARIO_CONTRASENA_RESTABLECER` (change 20b, D8-A; ADR-018, ADR-056, ADR-057). La
+    contraseña nueva llega como dato efímero (nunca se audita ni se guarda en claro) y se valida
+    con la regla común ANTES de escribir o revocar (422, INV-01). Toma el usuario `FOR UPDATE` (no
+    se cruza con "Mi contraseña" del mismo usuario). En la misma transacción: deriva el hash,
+    revoca las familias de refresh con `CONTRASENA_RESTABLECIDA` salvo las de dispositivos con
+    jornada no cerrada, inserta el marcador de desbloqueo (quien la restablece para que el usuario
+    pueda entrar no debe encontrarlo bloqueado) y audita `RESTABLECER_CONTRASENA` sin la
+    contraseña. No toca el PIN. Vale sobre un usuario inactivo y sobre uno mismo."""
+    validar_contrasena(password_nueva)
+    usuario = repository.obtener_usuario_para_actualizar(organizacion_id, usuario_id, sesion)
+    if usuario is None:
+        return None
+
+    momento = reloj.now()
+    usuario.password_hash = hashear_password(password_nueva)
+    usuario.actualizado_en = momento
+    usuario.actualizado_por_id = actor_id
+    sesion.flush()
+    revocadas = _revocar_sesiones_de_usuario_salvo_jornada(
+        organizacion_id,
+        sesion,
+        usuario_id=usuario_id,
+        momento=momento,
+        motivo="CONTRASENA_RESTABLECIDA",
+    )
+    _registrar_marcador_de_desbloqueo(organizacion_id, sesion, usuario, momento=momento)
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="RESTABLECER_CONTRASENA",
+        entidad="usuario",
+        entidad_id=usuario_id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        despues={"familias_revocadas": revocadas},
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+    _auditar_revocacion_de_sesiones(
+        organizacion_id,
+        sesion,
+        reloj,
+        usuario_id=usuario_id,
+        cantidad=revocadas,
+        motivo="CONTRASENA_RESTABLECIDA",
+        momento=momento,
+        actor_id=actor_id,
+        dispositivo_id_actor=dispositivo_id_actor,
+        operation_id=operation_id,
+    )
+    return usuario
+
+
+def definir_tope_descuento_de_usuario(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    usuario_id: UUID,
+    tope_nuevo: str | None,
+    actor_id: UUID,
+    dispositivo_id_actor: UUID | None,
+    operation_id: UUID,
+) -> Usuario | None:
+    """`USUARIO_TOPE_DESCUENTO_DEFINIR` (change 20b, D12-A, DSC-06): fija el tope de descuento
+    manual PROPIO del usuario (`null` vuelve a regir el del rol). Misma validación y mismo código
+    que el tope del rol: de 0 a 1 y a lo sumo 6 decimales, sin redondear en silencio (TR-02,
+    INV-03, `IDENTIDAD_TOPE_DESCUENTO_FUERA_DE_RANGO`). Toma el usuario `FOR UPDATE`. Se permite
+    aunque su rol no tenga `DESCUENTO_MANUAL` y puede ser mayor o menor que el del rol. Una fila de
+    auditoría `TOPE_DESCUENTO_USUARIO` con el valor anterior y el nuevo (AUD-01); el mismo valor
+    se acepta sin auditoría de entidad. Cambia SOLO `tope_descuento_override`."""
+    tope: Decimal | None = None
+    if tope_nuevo is not None:
+        tope = validar_tope_descuento(tope_nuevo)
+        if Decimal(tope_nuevo) != tope:
+            raise TopeDescuentoFueraDeRangoError(
+                f"El tope de descuento {tope_nuevo} tiene más de 6 decimales."
+            )
+    usuario = repository.obtener_usuario_para_actualizar(organizacion_id, usuario_id, sesion)
+    if usuario is None:
+        return None
+    anterior = usuario.tope_descuento_override
+    if anterior == tope:
+        return usuario
+
+    momento = reloj.now()
+    usuario.tope_descuento_override = tope
+    usuario.actualizado_en = momento
+    usuario.actualizado_por_id = actor_id
+    sesion.flush()
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="TOPE_DESCUENTO_USUARIO",
+        entidad="usuario",
+        entidad_id=usuario_id,
+        ocurrido_en=momento,
+        usuario_id=actor_id,
+        dispositivo_id=dispositivo_id_actor,
+        antes={"tope_descuento_override": None if anterior is None else f"{anterior:.6f}"},
+        despues={"tope_descuento_override": None if tope is None else f"{tope:.6f}"},
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+    return usuario
 
 
 # --- Dispositivos (tareas 8.10, 8.11, 8.12) ---------------------------------
@@ -1648,6 +2454,67 @@ def _hasta_del_bloqueo_de_login(
     return max(bloqueos) if bloqueos else None
 
 
+def _exigir_contrasena_actual(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    usuario: Usuario,
+    password_actual: str,
+    ip: str,
+    dispositivo_id: UUID | None,
+    funcionalidad: str,
+) -> None:
+    """Reautenticación con la contraseña actual, con el límite del login (D24 del 18b, ADR-018,
+    ADR-057): la comparten "Mi PIN" y "Mi contraseña" (change 20b, D20).
+
+    Orden: 1) bloqueo de login (usuario 5 y IP 20, 15 minutos desde el último fallo): 429
+    `IDENTIDAD_LOGIN_BLOQUEADO_POR_INTENTOS`, también con la contraseña correcta, sin verificar,
+    sin contar y sin escribir; 2) `verificar_password` contra el hash del usuario: si es incorrecta
+    se anota un intento fallido en `intento_login` en una TRANSACCIÓN APARTE (se confirma aunque
+    el comando se rechace) y se lanza `ContrasenaIncorrectaError` (403). La contraseña nunca se
+    registra ni se incluye en un mensaje. `funcionalidad` solo identifica el origen en el log."""
+    ahora = reloj.now()
+    organizacion = repository.obtener_organizacion_por_id(organizacion_id, sesion)
+    assert organizacion is not None  # el usuario existe: su organización también.
+    # ADR-057 punto 5: la funcionalidad cuenta con el par guardado del propio usuario, que es
+    # exactamente lo que escribe en el login: todos comparten el mismo cupo de 5.
+    clave = clave_de_intento_login(organizacion.slug, usuario.usuario)
+
+    desbloqueo = _hasta_del_bloqueo_de_login(sesion, clave_intento=clave, ip=ip, ahora=ahora)
+    if desbloqueo is not None:
+        logger.warning(
+            "'%s' rechazado por bloqueo del login: usuario=%s dispositivo=%s ip=%s",
+            funcionalidad,
+            usuario.id,
+            dispositivo_id,
+            ip,
+        )
+        # Usuario ya autenticado: la hora va en la zona de la organización. Solo el 429 del login
+        # usa siempre la zona argentina (ADR-057).
+        raise LoginBloqueadoPorIntentosError(
+            _mensaje_de_bloqueo(desbloqueo, organizacion.zona_horaria)
+        )
+
+    if not verificar_password(password_actual, usuario.password_hash):
+        aparte = _sesion_aparte(sesion)
+        try:
+            _registrar_intento_fallido(
+                aparte, clave_intento=clave, usuario_id=usuario.id, ip=ip, momento=ahora
+            )
+            aparte.commit()
+        finally:
+            aparte.close()
+        logger.warning(
+            "Contraseña incorrecta en '%s': usuario=%s dispositivo=%s ip=%s",
+            funcionalidad,
+            usuario.id,
+            dispositivo_id,
+            ip,
+        )
+        raise ContrasenaIncorrectaError("La contraseña no es correcta.")
+
+
 def definir_pin_propio(
     organizacion_id: UUID,
     sesion: Session,
@@ -1675,43 +2542,16 @@ def definir_pin_propio(
     usuario = repository.obtener_usuario_por_id(organizacion_id, usuario_id, sesion)
     if usuario is None:
         raise AutorizadorNoEncontradoError(f"El usuario {usuario_id} no existe.")
-    ahora = reloj.now()
-    organizacion = repository.obtener_organizacion_por_id(organizacion_id, sesion)
-    assert organizacion is not None  # el usuario existe: su organización también.
-    # ADR-057 punto 5: "Mi PIN" cuenta con el par guardado del propio usuario, que es exactamente
-    # lo que escribe en el login: los dos comparten el mismo cupo de 5.
-    clave = clave_de_intento_login(organizacion.slug, usuario.usuario)
-
-    desbloqueo = _hasta_del_bloqueo_de_login(sesion, clave_intento=clave, ip=ip, ahora=ahora)
-    if desbloqueo is not None:
-        logger.warning(
-            "'Mi PIN' rechazado por bloqueo del login: usuario=%s dispositivo=%s ip=%s",
-            usuario_id,
-            dispositivo_id,
-            ip,
-        )
-        # "Mi PIN" (usuario ya autenticado): la hora va en la zona de la organización. Solo el
-        # 429 del login usa siempre la zona argentina (ADR-057).
-        raise LoginBloqueadoPorIntentosError(
-            _mensaje_de_bloqueo(desbloqueo, organizacion.zona_horaria)
-        )
-
-    if not verificar_password(password_actual, usuario.password_hash):
-        aparte = _sesion_aparte(sesion)
-        try:
-            _registrar_intento_fallido(
-                aparte, clave_intento=clave, usuario_id=usuario_id, ip=ip, momento=ahora
-            )
-            aparte.commit()
-        finally:
-            aparte.close()
-        logger.warning(
-            "Contraseña incorrecta en 'Mi PIN': usuario=%s dispositivo=%s ip=%s",
-            usuario_id,
-            dispositivo_id,
-            ip,
-        )
-        raise ContrasenaIncorrectaError("La contraseña no es correcta.")
+    _exigir_contrasena_actual(
+        organizacion_id,
+        sesion,
+        reloj,
+        usuario=usuario,
+        password_actual=password_actual,
+        ip=ip,
+        dispositivo_id=dispositivo_id,
+        funcionalidad="Mi PIN",
+    )
 
     actualizado = establecer_pin_autorizacion(
         organizacion_id,
@@ -1726,10 +2566,112 @@ def definir_pin_propio(
     return actualizado
 
 
+def cambiar_contrasena_propia(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    usuario_id: UUID,
+    password_actual: str,
+    password_nueva: str,
+    ip: str,
+    dispositivo_id: UUID,
+    operation_id: UUID,
+) -> Usuario:
+    """`CONTRASENA_PROPIA_CAMBIAR` ("Mi contraseña", change 20b, D20; ADR-018, ADR-056, ADR-057).
+
+    El usuario sale del token y se toma `FOR NO KEY UPDATE`: un cambio propio y un restablecimiento
+    del administrador sobre el mismo usuario se serializan, y los intentos fallidos que se
+    confirman en una transacción aparte (clave foránea a `usuario`) no quedan bloqueados. Todo
+    rechazo LANZA una excepción de dominio (sin fila de `comando`): el reintento con el mismo
+    `Operation-Id` y datos corregidos se procesa.
+
+    Orden: 1) contraseña actual con el límite del login (`_exigir_contrasena_actual`: 429 o 403, y
+    el fallo cuenta); 2) la nueva cumple la regla común y es distinta de la actual (422, no cuenta
+    como intento); 3) deriva el hash; 4) revoca las familias de refresh de los demás dispositivos
+    (`CONTRASENA_CAMBIADA`), conserva la del dispositivo de la sesión actual y las de dispositivos
+    con jornada no cerrada; 5) auditoría `CAMBIAR_CONTRASENA_PROPIA` sin ninguna contraseña. Un
+    cambio exitoso no borra los intentos fallidos previos ni toca el PIN."""
+    usuario = repository.obtener_usuario_para_actualizar(organizacion_id, usuario_id, sesion)
+    if usuario is None:
+        raise AutorizadorNoEncontradoError(f"El usuario {usuario_id} no existe.")
+    _exigir_contrasena_actual(
+        organizacion_id,
+        sesion,
+        reloj,
+        usuario=usuario,
+        password_actual=password_actual,
+        ip=ip,
+        dispositivo_id=dispositivo_id,
+        funcionalidad="Mi contraseña",
+    )
+    validar_contrasena_nueva(password_actual, password_nueva)
+
+    momento = reloj.now()
+    usuario.password_hash = hashear_password(password_nueva)
+    usuario.actualizado_en = momento
+    usuario.actualizado_por_id = usuario_id
+    sesion.flush()
+    revocadas = _revocar_sesiones_de_usuario_salvo_jornada(
+        organizacion_id,
+        sesion,
+        usuario_id=usuario_id,
+        momento=momento,
+        motivo="CONTRASENA_CAMBIADA",
+        conservar_dispositivos=[dispositivo_id],
+    )
+    registrar_auditoria(
+        organizacion_id,
+        sesion,
+        reloj,
+        accion="CAMBIAR_CONTRASENA_PROPIA",
+        entidad="usuario",
+        entidad_id=usuario_id,
+        ocurrido_en=momento,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        despues={"familias_revocadas": revocadas},
+        operation_id=operation_id,
+        origen="COMANDO",
+    )
+    _auditar_revocacion_de_sesiones(
+        organizacion_id,
+        sesion,
+        reloj,
+        usuario_id=usuario_id,
+        cantidad=revocadas,
+        motivo="CONTRASENA_CAMBIADA",
+        momento=momento,
+        actor_id=usuario_id,
+        dispositivo_id_actor=dispositivo_id,
+        operation_id=operation_id,
+    )
+    return usuario
+
+
 # Sentinela, no una IP real: distingue el marcador de desbloqueo manual de
 # cualquier intento de login real en `intento_login.ip` (que siempre lleva
 # una dirección de origen). Nunca se compara contra un valor de IP real.
 _IP_DESBLOQUEO_MANUAL = "admin:desbloqueo-manual"
+
+
+def _registrar_marcador_de_desbloqueo(
+    organizacion_id: UUID, sesion: Session, usuario: Usuario, *, momento: datetime
+) -> None:
+    """Inserta el marcador que neutraliza los fallos anteriores del par (slug, usuario) del
+    usuario (ADR-057 punto 6): no toca el límite por IP. Lo usan el desbloqueo manual y el
+    restablecimiento de contraseña (change 20b, D8)."""
+    organizacion = repository.obtener_organizacion_por_id(organizacion_id, sesion)
+    assert organizacion is not None  # el usuario existe: su organización también.
+    repository.registrar_intento_login(
+        sesion,
+        intento_id=nuevo_id(),
+        usuario_id=usuario.id,
+        clave_intento=clave_de_intento_login(organizacion.slug, usuario.usuario),
+        ip=_IP_DESBLOQUEO_MANUAL,
+        exito=True,
+        momento=momento,
+    )
 
 
 def desbloquear_usuario(
@@ -1764,20 +2706,8 @@ def desbloquear_usuario(
     if usuario is None:
         return None
 
-    organizacion = repository.obtener_organizacion_por_id(organizacion_id, sesion)
-    assert organizacion is not None  # el usuario existe: su organización también.
     momento = reloj.now()
-    repository.registrar_intento_login(
-        sesion,
-        intento_id=nuevo_id(),
-        usuario_id=usuario_id,
-        # ADR-057 punto 6: el marcador lleva la clave del par actual del usuario y neutraliza los
-        # fallos anteriores de ESA clave; no toca el límite por IP.
-        clave_intento=clave_de_intento_login(organizacion.slug, usuario.usuario),
-        ip=_IP_DESBLOQUEO_MANUAL,
-        exito=True,
-        momento=momento,
-    )
+    _registrar_marcador_de_desbloqueo(organizacion_id, sesion, usuario, momento=momento)
     if auditar:
         registrar_auditoria(
             organizacion_id,
@@ -2279,6 +3209,26 @@ def listar_permisos_del_usuario(
     if _motivo_sesion_deshabilitada(usuario, rol) is not None:
         return frozenset()
     return frozenset(repository.listar_permisos_de_rol(organizacion_id, usuario.rol_id, sesion))
+
+
+PERMISOS_DE_VENDEDOR: frozenset[str] = frozenset({"VENDER", "REGISTRAR_COBRANZA"})
+"""Con alguno de estos permisos un usuario puede tener clientes asignados (change 20b, D15)."""
+
+
+def es_vendedor_valido(organizacion_id: UUID, usuario_id: UUID, sesion: Session) -> bool:
+    """Si `usuario_id` puede figurar como vendedor de la cartera (change 20b, D15): usuario
+    `ACTIVO` de la organización, con rol activo y con `VENDER` o `REGISTRAR_COBRANZA`. Un usuario
+    inexistente o de otra organización no es válido (INV-21); quien necesite distinguirlo para
+    responder 404 lo consulta con `obtener_nombres_de_usuarios`. Nunca lanza."""
+    permisos = listar_permisos_del_usuario(organizacion_id, usuario_id, sesion)
+    return not PERMISOS_DE_VENDEDOR.isdisjoint(permisos)
+
+
+def listar_vendedores_elegibles(organizacion_id: UUID, sesion: Session) -> list[tuple[UUID, str]]:
+    """`(id, nombre)` de los usuarios que pueden figurar como vendedor de la cartera (change 20b,
+    D15): la misma regla que `es_vendedor_valido`, calculada en SQL para toda la organización y
+    ordenada por nombre. Sin datos sensibles."""
+    return repository.listar_vendedores_elegibles(organizacion_id, PERMISOS_DE_VENDEDOR, sesion)
 
 
 def motivo_de_permiso_faltante(

@@ -26,6 +26,7 @@ import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { formatearImporte, parsearImporteDesdeApi } from '../../../lib/money'
 import { SaldoDeCuenta } from '../cuentas-corrientes/SaldoDeCuenta'
 import { SelectorDeListaDePrecios } from './SelectorDeListaDePrecios'
+import { VendedorDelCliente } from './VendedorDelCliente'
 
 const SIN_PERMISO_DE_CLIENTES = 'No tenés permiso para gestionar clientes.'
 const AVISO_SIN_CONEXION = 'Se necesita conexión para completar esta operación. Probá de nuevo cuando tengas conexión.'
@@ -360,6 +361,9 @@ function ClienteEdicionFormulario({
       </Card>
 
       <SaldoDeCuenta cuentaTipo="CLIENTE" entidadId={clienteId} />
+
+      {/* Change 20b (D15): el vendedor se asigna con su propio comando, aparte de la ficha. */}
+      <VendedorDelCliente cliente={detalle} />
 
       <Card>
         <form onSubmit={alEnviar} noValidate className="flex flex-col gap-4">

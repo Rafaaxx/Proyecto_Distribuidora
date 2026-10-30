@@ -72,7 +72,7 @@ def _crear_usuario(
         organizacion_id,
         sesion,
         rol_id=nuevo_id(),
-        nombre="Rol de prueba",
+        nombre=f"Rol de prueba {nuevo_id()}",
         tope_descuento=Decimal("0"),
         activo=True,
         momento=MOMENTO,

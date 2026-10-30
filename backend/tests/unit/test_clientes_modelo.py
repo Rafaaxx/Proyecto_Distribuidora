@@ -36,6 +36,7 @@ COLUMNAS_ESPERADAS = (
     "telefono",
     "email",
     "lista_precio_id",
+    "vendedor_id",  # change 20b, D13
     "limite_credito",
     "politica_credito",
     "tolerancia_offline_tipo",
@@ -64,6 +65,7 @@ NOMBRES_DE_FK = {
     "fk_cliente__organizacion",
     "fk_cliente__actualizado_por",
     "fk_cliente__lista_precio",
+    "fk_cliente__vendedor",  # change 20b, D13
 }
 
 NOMBRES_DE_INDICE = {
@@ -143,6 +145,23 @@ def test_lista_precio_id_tiene_clave_foranea_compuesta_a_lista_precio() -> None:
     assert [e.target_fullname for e in restriccion.elements] == [
         "lista_precio.organizacion_id",
         "lista_precio.id",
+    ]
+
+
+def test_el_vendedor_tiene_clave_foranea_compuesta_a_usuario() -> None:
+    """Change 20b, D13 e INV-21: el vendedor de la cartera es un usuario de la MISMA organización,
+    nulo = sin vendedor asignado."""
+    assert _columna("vendedor_id").nullable is True
+    restriccion = next(
+        restriccion
+        for restriccion in Cliente.__table__.constraints
+        if isinstance(restriccion, ForeignKeyConstraint)
+        and restriccion.name == "fk_cliente__vendedor"
+    )
+    assert [c.name for c in restriccion.columns] == ["organizacion_id", "vendedor_id"]
+    assert [e.target_fullname for e in restriccion.elements] == [
+        "usuario.organizacion_id",
+        "usuario.id",
     ]
 
 

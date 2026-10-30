@@ -177,7 +177,7 @@ Una fila por organización (`01` §4).
 
 | Tabla | Columnas |
 | --- | --- |
-| `rol` | `id`, `organizacion_id`, `nombre`, `tope_descuento` `numeric(9,6)`, `activo` |
+| `rol` | `id`, `organizacion_id`, `nombre` (`ux_rol__nombre` único sobre `(organizacion_id, lower(nombre))`, activos o no; ADR-060), `tope_descuento` `numeric(9,6)`, `activo` |
 | `permiso` | `codigo` `text` PK (global, sin organización), `descripcion`, `modulo` |
 | `rol_permiso` | `organizacion_id`, `rol_id`, `permiso_codigo`; PK compuesta |
 
@@ -196,7 +196,7 @@ El catálogo de `permiso` se sincroniza por migración con `01` §19. Permisos p
 
 ### `sesion_refresh`
 
-`id`, `organizacion_id`, `usuario_id`, `dispositivo_id`, `token_hash`, `familia_id`, `emitido_en`, `expira_en`, `usado_en`, `revocado_en`, `motivo_revocacion`. Índice por `token_hash` (`02` §12.1).
+`id`, `organizacion_id`, `usuario_id`, `dispositivo_id`, `token_hash`, `familia_id`, `emitido_en`, `expira_en`, `usado_en`, `revocado_en`, `motivo_revocacion`. Índice por `token_hash` (`02` §12.1). `motivo_revocacion` toma uno de: `USUARIO_INACTIVO` (baja de usuario y renovación de un usuario inactivo), `ROL_INACTIVO` (renovación con el rol de baja), `CONTRASENA_RESTABLECIDA` (el administrador restableció la contraseña) y `CONTRASENA_CAMBIADA` (el usuario cambió la suya; se conserva la sesión del dispositivo desde el que se cambió). La baja y los cambios de contraseña no revocan las familias de los dispositivos con una jornada no cerrada del usuario (ADR-028 D9.3-B, ADR-060).
 
 ### `intento_login`
 
@@ -442,6 +442,7 @@ Las diferencias generan movimientos `DIFERENCIA_RENDICION` con origen en la rend
 | `documento_tipo`, `documento_numero` | `text` | CUIT o DNI; opcionales como pareja (si se informa uno, el otro es obligatorio). `documento_numero` se normaliza a solo dígitos. Único por organización como pareja, con índice parcial `WHERE documento_numero IS NOT NULL` (`ux_cliente__documento`, D1). Longitud validada por tipo: CUIT 11 dígitos, DNI 7 u 8 (CLI-05) |
 | `direccion`, `telefono`, `email` | `text` | `direccion` obligatoria |
 | `lista_precio_id` | `uuid` | Nulo = la lista por defecto de la organización (PRC-20). Clave foránea compuesta `(organizacion_id, lista_precio_id)` a `lista_precio`. Se ofrece en la ficha con las listas activas (ADR-047 punto 12). En `PUT /clientes/{id}` y `CLIENTE_MODIFICAR`, ausente conserva la lista, nulo explícito la quita y un identificador la asigna (ADR-047 punto 29). |
+| `vendedor_id` | `uuid` | Nulo = sin vendedor asignado. Clave foránea compuesta `(organizacion_id, vendedor_id)` a `usuario (organizacion_id, id)` e índice completo `ix_cliente__vendedor (organizacion_id, vendedor_id)` (sirve también al filtro "sin vendedor"). Lo cambia solo `CLIENTE_VENDEDOR_ASIGNAR`, no `CLIENTE_MODIFICAR`. El consumidor final no se asigna (CLI-03). Si el vendedor se da de baja o pierde el permiso, la asignación se conserva y la pantalla la marca para reasignar (ADR-060) |
 | `limite_credito` | `numeric(14,2)` | Nulo = sin control (CRE-01) |
 | `politica_credito` | `text` | Nulo = la de la organización (CRE-03) |
 | `tolerancia_offline_tipo`, `tolerancia_offline_valor` | `text`, `numeric(14,2)` | Nulos = los de la organización (CRE-06). Misma escala que `configuracion_organizacion.tolerancia_offline_valor` (ADR-032 del change 07) |

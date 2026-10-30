@@ -43,6 +43,9 @@ CONTENIDOS: dict[str, dict[str, object]] = {
     },
     "PIN_AUTORIZACION_ROTAR": {"usuario_id": str(uuid4()), "pin": SECRETO},
     "PIN_AUTORIZACION_PROPIO_DEFINIR": {"pin": SECRETO, "password_actual": SECRETO},
+    # Change 20b: la contraseña del restablecimiento y las dos de "Mi contraseña" (ADR-056).
+    "USUARIO_CONTRASENA_RESTABLECER": {"usuario_id": str(uuid4()), "contrasena": SECRETO},
+    "CONTRASENA_PROPIA_CAMBIAR": {"password_actual": SECRETO, "password_nueva": SECRETO},
 }
 PERMISOS_DE_LOS_TRES = frozenset(
     {"ADMIN_USUARIOS", "AUTORIZAR_DESCUENTO", "SUPERAR_CREDITO", "VENDER", "GESTIONAR_CATALOGO"}

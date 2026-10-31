@@ -891,6 +891,37 @@ export const AYUDAS = {
     texto: 'Primero ves tus clientes asignados. Podés buscar y venderle a cualquier cliente de la organización.',
     reglas: ['ADR-060'],
   },
+  // --- Venta en ruta (change 22a, ADR-063; textos aprobados el 2026-10-31, sin ejemplos) ---
+  'ruta.ventaSinEnviar': {
+    titulo: 'Sin enviar',
+    texto:
+      'La venta ya está confirmada y guardada en el teléfono. Se envía al sistema cuando haya señal; hasta entonces no se borra.',
+    reglas: ['SYN-01', 'SYN-09'],
+  },
+  'ruta.creditoSinSenal': {
+    titulo: 'Crédito del cliente',
+    texto:
+      'Se calcula con la deuda que bajó al abrir la jornada más lo que le vendiste y cobraste desde el teléfono. El sistema lo vuelve a calcular cuando recibe la venta.',
+    reglas: ['CRE-08', 'CRE-09'],
+    verMas: 'credito',
+  },
+  'ruta.stockDelVehiculo': {
+    titulo: 'Stock del vehículo',
+    texto:
+      'Es lo que bajó al abrir la jornada menos lo que vendiste desde el teléfono. Si no alcanza, la venta no se confirma: actualizá los datos con señal.',
+    reglas: ['STK-06', 'RUT-04'],
+  },
+  'ruta.pinSupervisor': {
+    titulo: 'PIN del supervisor',
+    texto:
+      'El supervisor escribe su PIN en tu teléfono; no hace falta señal. Después de varios intentos fallidos ese PIN queda bloqueado en este teléfono hasta que se actualicen los datos.',
+    reglas: ['SEG-05', 'ADR-055'],
+  },
+  'ruta.numeroDeVenta': {
+    titulo: 'Número de venta',
+    texto: 'El teléfono le pone el número al confirmar: el prefijo del teléfono y el siguiente número de sus ventas.',
+    reglas: ['VTA-06'],
+  },
 } as const satisfies Record<string, EntradaDeAyuda>
 
 export type ClaveDeAyuda = keyof typeof AYUDAS

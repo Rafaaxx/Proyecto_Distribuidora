@@ -1,6 +1,7 @@
 import { AvisoDeVersion } from './pwa/AvisoDeVersion'
 import { RutaLayout } from './RutaLayout'
 import { SesionRuta } from './sesion/SesionRuta'
+import { ProveedorGuardaDelCarrito } from './ventas/guardaDelCarrito'
 
 /**
  * Área de ruta. La sesión local (login, PIN, bootstrap) la gestiona `SesionRuta`; con la sesión
@@ -9,12 +10,12 @@ import { SesionRuta } from './sesion/SesionRuta'
  */
 export function RutaScreen() {
   return (
-    <>
+    <ProveedorGuardaDelCarrito>
       <SesionRuta>
         <RutaLayout />
       </SesionRuta>
       <AvisoDeVersion />
-    </>
+    </ProveedorGuardaDelCarrito>
   )
 }
 

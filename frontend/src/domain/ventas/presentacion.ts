@@ -6,6 +6,7 @@
 
 import { formatearPorcentaje, parsearImporteDesdeApi } from '../../lib/money'
 import { formatearMonto } from '../cuentas-corrientes/presentacion'
+import type { AmbitoDeMotivo } from '../configuracion/catalogos'
 import { formatearCantidad } from '../stock/cantidades'
 
 export const ETIQUETA_DE_ESTADO_DE_VENTA: Record<string, string> = { CONFIRMADA: 'Confirmada', ANULADA: 'Anulada' }
@@ -26,7 +27,10 @@ const ETIQUETAS_DE_VERSION: Record<string, string> = {
 }
 
 /** Ámbito de los motivos para vender con otra lista o con una versión anterior (PRC-21, D6). */
-export const AMBITO_DE_LISTA_ANTERIOR = 'LISTA_ANTERIOR'
+export const AMBITO_DE_LISTA_ANTERIOR = 'LISTA_ANTERIOR' satisfies AmbitoDeMotivo
+
+/** Ámbito de los motivos del descuento manual (DSC-05). */
+export const AMBITO_DE_DESCUENTO_MANUAL = 'DESCUENTO_MANUAL' satisfies AmbitoDeMotivo
 
 export function etiquetaDeEstadoDeVenta(estado: string): string {
   return ETIQUETA_DE_ESTADO_DE_VENTA[estado] ?? estado

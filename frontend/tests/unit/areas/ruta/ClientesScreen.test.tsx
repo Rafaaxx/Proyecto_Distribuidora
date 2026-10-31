@@ -181,4 +181,47 @@ describe('ClienteFichaScreen (tarea 14.1)', () => {
     expect(await screen.findByText(/no encontramos ese cliente/i)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Volver a Clientes' })).toHaveAttribute('href', '/ruta/clientes')
   })
+
+  it('con VENDER y la jornada abierta la ficha ofrece "Vender" a ese cliente (change 22a, D14)', async () => {
+    const c = cliente(1, 'Almacén Uno')
+    await sembrar([c])
+    montarEnRuta(
+      <Routes>
+        <Route path="/ruta/clientes/:id" element={<ClienteFichaScreen />} />
+      </Routes>,
+      { ruta: `/ruta/clientes/${c.id}` },
+    )
+
+    expect(await screen.findByRole('link', { name: 'Vender' })).toHaveAttribute('href', `/ruta/vender?cliente=${c.id}`)
+  })
+
+  it('sin VENDER entre los permisos del bootstrap la ficha no ofrece "Vender"', async () => {
+    const c = cliente(1, 'Almacén Uno')
+    const b = bootstrapDePrueba({ clientes: [c] })
+    b.sesion.permisos = ['CONSULTAR_STOCK']
+    await aplicarBootstrap(b)
+    montarEnRuta(
+      <Routes>
+        <Route path="/ruta/clientes/:id" element={<ClienteFichaScreen />} />
+      </Routes>,
+      { ruta: `/ruta/clientes/${c.id}` },
+    )
+
+    expect(await screen.findByRole('heading', { name: 'Almacén Uno' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Vender' })).not.toBeInTheDocument()
+  })
+
+  it('con la jornada liberada la ficha no ofrece "Vender"', async () => {
+    const c = cliente(1, 'Almacén Uno')
+    await sembrar([c])
+    montarEnRuta(
+      <Routes>
+        <Route path="/ruta/clientes/:id" element={<ClienteFichaScreen />} />
+      </Routes>,
+      { ruta: `/ruta/clientes/${c.id}`, sesion: { entrada: { tipo: 'sin_jornada' } } },
+    )
+
+    expect(await screen.findByRole('heading', { name: 'Almacén Uno' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Vender' })).not.toBeInTheDocument()
+  })
 })

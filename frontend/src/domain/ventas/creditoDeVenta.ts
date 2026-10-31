@@ -24,6 +24,7 @@ export type DecisionDeCredito =
   | 'pide-aceptar'
   | 'aceptado'
   | 'permiso-propio'
+  | 'tolerancia-offline'
   | 'pide-autorizador'
   | 'bloqueado'
   | 'no-evaluable'
@@ -39,6 +40,9 @@ export interface PanelDeCredito {
   politica: string
 }
 
+/** Modo de la evaluación (CRE-06): `/admin` es `CON_CONEXION`; la venta de `/ruta`, `SIN_CONEXION` (D9). */
+export type ModoDeCredito = 'CON_CONEXION' | 'SIN_CONEXION'
+
 export interface EntradaDelPanel {
   datos: DatosDeCreditoDeVenta
   total: string
@@ -46,6 +50,8 @@ export interface EntradaDelPanel {
   aceptaExceso: boolean
   /** El usuario tiene `SUPERAR_CREDITO` (de `GET /ventas/contexto`). */
   puedeSuperar: boolean
+  /** Por omisión `CON_CONEXION` (el comportamiento de `/admin`). */
+  modo?: ModoDeCredito
 }
 
 function sinEvaluar(datos: DatosDeCreditoDeVenta): PanelDeCredito {
@@ -87,7 +93,7 @@ export function evaluarPanelDeCredito(entrada: EntradaDelPanel): PanelDeCredito 
         politica: datos.politica,
         toleranciaTipo: datos.toleranciaTipo,
         toleranciaValor: datos.toleranciaValor,
-        modo: 'CON_CONEXION',
+        modo: entrada.modo ?? 'CON_CONEXION',
         aceptaExceso: entrada.aceptaExceso,
         usuarioId: 'yo',
         permisosUsuario: entrada.puedeSuperar ? ['SUPERAR_CREDITO'] : [],
@@ -100,13 +106,20 @@ export function evaluarPanelDeCredito(entrada: EntradaDelPanel): PanelDeCredito 
           return { ...base, decision: 'aceptado' }
         case 'PERMISO_PROPIO':
           return { ...base, decision: 'permiso-propio' }
+        case 'TOLERANCIA_OFFLINE':
+          return { ...base, decision: 'tolerancia-offline' }
         default:
           return { ...base, decision: 'no-evaluable' }
       }
     } catch (error) {
       if (!(error instanceof ErrorDeCredito)) throw error
       if (error.codigo === 'EXCESO_CREDITO_SIN_ACEPTAR') return { ...base, decision: 'pide-aceptar' }
-      if (error.codigo === 'CREDITO_EXCEDIDO') return { ...base, decision: 'bloqueado' }
+      if (error.codigo === 'CREDITO_EXCEDIDO') {
+        // Sin conexión, AUTORIZAR fuera de la tolerancia sin permiso ni PIN pide autorizador
+        // (CRE-06, CRE-05); solo BLOQUEAR bloquea (CRE-07).
+        const pideAutorizador = entrada.modo === 'SIN_CONEXION' && datos.politica === 'AUTORIZAR'
+        return { ...base, decision: pideAutorizador ? 'pide-autorizador' : 'bloqueado' }
+      }
       if (error.codigo === 'AUTORIZACION_CREDITO_REQUERIDA') return { ...base, decision: 'pide-autorizador' }
       return { ...base, decision: 'no-evaluable' }
     }
@@ -131,6 +144,8 @@ export function textoDeDecisionDeCredito(panel: PanelDeCredito): string {
       return `La venta se pasa del límite por ${exceso}; confirmaste venderla igual.`
     case 'permiso-propio':
       return `La venta deja al cliente ${exceso} sobre su límite; la autorizás vos con tu permiso.`
+    case 'tolerancia-offline':
+      return `La venta se pasa del límite por ${exceso}; se confirma por la tolerancia sin conexión.`
     case 'pide-autorizador':
       return `La venta deja al cliente ${exceso} sobre su límite y necesita autorización.`
     case 'bloqueado':

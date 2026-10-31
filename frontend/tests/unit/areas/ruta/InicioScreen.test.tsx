@@ -5,6 +5,8 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { bootstrapDePrueba } from '../../utils/bootstrapDePrueba'
+import { bootstrapParaVender } from '../../utils/datosParaVender'
+import { sembrarVenta } from '../../utils/sembrarVenta'
 import { montarEnRuta } from '../../utils/rutaDePrueba'
 
 const mocks = vi.hoisted(() => ({ pedirBootstrap: vi.fn() }))
@@ -164,3 +166,85 @@ describe('InicioScreen (tarea 13.1)', () => {
     expect(await screen.findByText(/todavía no hay datos descargados/i)).toBeInTheDocument()
   })
 })
+
+/**
+ * Change 22a, tarea 11.2 (spec `ruta/area-de-ruta`, "El inicio muestra las ventas sin enviar";
+ * `design.md` D13, D14; cita SYN-09, RUT-03): "N ventas sin enviar" / "Todo enviado", y "Vender"
+ * y "Ventas de hoy" con el permiso y los datos que corresponden.
+ */
+describe('InicioScreen: ventas sin enviar y "Vender" (tarea 11.2)', () => {
+  beforeEach(async () => {
+    mocks.pedirBootstrap.mockReset()
+    await Promise.all(baseLocal.tables.map((t) => t.clear()))
+    conectado(true)
+    almacenamiento(true)
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    Reflect.deleteProperty(window.navigator, 'storage')
+  })
+
+  it('con dos ventas confirmadas dice "2 ventas sin enviar"', async () => {
+    await aplicarBootstrap(bootstrapParaVender())
+    await sembrarVenta('a', { cajas: 1, unidades: 0 })
+    await sembrarVenta('b', { cajas: 0, unidades: 2 })
+    montarEnRuta(<InicioScreen />)
+
+    expect(await screen.findByText('2 ventas sin enviar')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ayuda: Sin enviar' })).toBeInTheDocument()
+  })
+
+  it('con una sola venta usa el singular y sin ventas dice "Todo enviado"', async () => {
+    await aplicarBootstrap(bootstrapParaVender())
+    montarEnRuta(<InicioScreen />)
+    expect(await screen.findByText('Todo enviado')).toBeInTheDocument()
+
+    await sembrarVenta('a', { cajas: 1, unidades: 0 })
+    expect(await screen.findByText('1 venta sin enviar')).toBeInTheDocument()
+  })
+
+  it('las ventas sin enviar de otro usuario del teléfono no se cuentan como propias', async () => {
+    await aplicarBootstrap(bootstrapParaVender())
+    await sembrarVenta('a', { cajas: 1, unidades: 0, usuarioId: 'otro-usuario' })
+    montarEnRuta(<InicioScreen />)
+
+    expect(await screen.findByText('Todo enviado')).toBeInTheDocument()
+  })
+
+  it('con VENDER y la jornada abierta ofrece "Vender" y "Ventas de hoy"', async () => {
+    await aplicarBootstrap(bootstrapParaVender())
+    montarEnRuta(<InicioScreen />)
+
+    expect(await screen.findByRole('link', { name: 'Vender' })).toHaveAttribute('href', '/ruta/vender')
+    expect(screen.getByRole('link', { name: 'Ventas de hoy' })).toHaveAttribute('href', '/ruta/ventas')
+  })
+
+  it('sin VENDER entre los permisos del bootstrap no aparece "Vender"', async () => {
+    await aplicarBootstrap(
+      bootstrapParaVender((b) => {
+        b.sesion.permisos = ['CONSULTAR_STOCK']
+      }),
+    )
+    montarEnRuta(<InicioScreen />)
+
+    expect(await screen.findByText(/Hola, Vendedor Uno/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Vender' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Vender' })).not.toBeInTheDocument()
+  })
+
+  it('sin datos del día "Vender" no está disponible y se indica que faltan los datos', async () => {
+    montarEnRuta(<InicioScreen />, { sesion: { entrada: { tipo: 'sin_red' } } })
+
+    expect(await screen.findByRole('button', { name: 'Vender' })).toBeDisabled()
+    expect(screen.getByText('Vender necesita los datos del día: abrí la jornada para descargarlos.')).toBeInTheDocument()
+  })
+
+  it('con la jornada liberada "Vender" queda deshabilitado con su motivo', async () => {
+    await aplicarBootstrap(bootstrapParaVender())
+    montarEnRuta(<InicioScreen />, { sesion: { entrada: { tipo: 'sin_jornada' } } })
+
+    expect(await screen.findByRole('button', { name: 'Vender' })).toBeDisabled()
+    expect(screen.getByText('Vender requiere una jornada abierta.')).toBeInTheDocument()
+  })
+})
+

@@ -1,0 +1,99 @@
+{
+  "id": "SYN-VENTA-CONFIRMAR-OFFLINE-01",
+  "reglas": ["SYN-01", "SYN-05", "SYN-06", "CRE-06", "CRE-09", "VTA-12", "INV-06"],
+  "comentario": "Fixture de contrato del sobre que arma el telefono (change 22a, design.md D2). Venta de Vino A: 2 cajas x6 a 12500.00 la caja (25000.00) + 3 botellas (6250.00) = bruto 31250.00; regla de volumen del 5 % (1250.00 + 312.50) = total 29687.50. Cobranza de dos medios por 20000.00. Credito del dispositivo con limite 150000.00 y saldo considerado 150000.00: el saldo resultante es 159687.50 (150000.00 + 29687.50 - 20000.00), exceso 9687.50 dentro de la tolerancia offline, resolucion TOLERANCIA_OFFLINE (CRE-06). Modo OFFLINE, version 1, sin credenciales (ADR-056). Los identificadores {{simbolicos}} se sustituyen por UUID reales: en el frontend la prueba los pasa como entrada y compara; en el backend la prueba de integracion los reemplaza por los de la base de prueba.",
+  "simbolos": [
+    "{{operation_id}}",
+    "{{usuario_id}}",
+    "{{dispositivo_id}}",
+    "{{jornada_id}}",
+    "{{numero}}",
+    "{{venta_id}}",
+    "{{cliente_id}}",
+    "{{lista_version_id}}",
+    "{{producto_id}}",
+    "{{presentacion_caja_id}}",
+    "{{presentacion_botella_id}}",
+    "{{linea_caja_id}}",
+    "{{linea_botella_id}}",
+    "{{regla_id}}",
+    "{{cobranza_id}}",
+    "{{medio_efectivo_id}}",
+    "{{medio_transferencia_id}}"
+  ],
+  "sobre": {
+    "operation_id": "{{operation_id}}",
+    "tipo": "VENTA_CONFIRMAR",
+    "version": 1,
+    "modo": "OFFLINE",
+    "usuario_id": "{{usuario_id}}",
+    "dispositivo_id": "{{dispositivo_id}}",
+    "jornada_id": "{{jornada_id}}",
+    "occurred_at": "2026-10-19T12:00:00.000Z",
+    "secuencia": 8,
+    "app_version": "1.0.0",
+    "contenido": {
+      "venta_id": "{{venta_id}}",
+      "numero": "{{numero}}",
+      "cliente_id": "{{cliente_id}}",
+      "ubicacion_id": null,
+      "lista_id": null,
+      "lista_version_id": null,
+      "motivo_lista_id": null,
+      "lineas": [
+        {
+          "linea_id": "{{linea_caja_id}}",
+          "producto_id": "{{producto_id}}",
+          "presentacion_id": "{{presentacion_caja_id}}",
+          "cantidad": 2,
+          "lista_version_id": "{{lista_version_id}}",
+          "precio_referencia": "12500.00",
+          "unidades_referencia": 6,
+          "importe_bruto": "25000.00",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "{{regla_id}}",
+              "porcentaje": "0.050000",
+              "importe": "1250.00"
+            }
+          ]
+        },
+        {
+          "linea_id": "{{linea_botella_id}}",
+          "producto_id": "{{producto_id}}",
+          "presentacion_id": "{{presentacion_botella_id}}",
+          "cantidad": 3,
+          "lista_version_id": "{{lista_version_id}}",
+          "precio_referencia": "12500.00",
+          "unidades_referencia": 6,
+          "importe_bruto": "6250.00",
+          "descuentos": [
+            {
+              "origen": "AUTOMATICO",
+              "regla_id": "{{regla_id}}",
+              "porcentaje": "0.050000",
+              "importe": "312.50"
+            }
+          ]
+        }
+      ],
+      "total": "29687.50",
+      "cobranza": {
+        "cobranza_id": "{{cobranza_id}}",
+        "medios": [
+          { "medio_pago_id": "{{medio_efectivo_id}}", "importe": "10000.00", "referencia": null },
+          { "medio_pago_id": "{{medio_transferencia_id}}", "importe": "10000.00", "referencia": "TRF-0001" }
+        ],
+        "observacion": null
+      },
+      "credito": {
+        "limite": "150000.00",
+        "saldo_considerado": "150000.00",
+        "politica": "AUTORIZAR",
+        "resolucion": "TOLERANCIA_OFFLINE",
+        "acepta_exceso": true
+      }
+    }
+  }
+}

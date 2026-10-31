@@ -47,3 +47,70 @@ describe('textos de ayuda de ruta (tarea 15.2)', () => {
     },
   )
 })
+
+/**
+ * Change 22a, tarea 15.1 (spec `sistema/ayuda-contextual`; `design.md` D17; ADR-051, ADR-063): las
+ * cinco claves nuevas de la venta de ruta con los textos aprobados el 2026-10-31 (tarea 0.2), sin
+ * ejemplos. Los IDs que citan existen (lo comprueba `trazabilidad.test.ts`).
+ */
+describe('textos de ayuda de la venta de ruta (change 22a, tarea 15.1)', () => {
+  it('ruta.ventaSinEnviar: ya está confirmada y guardada, se envía con señal y no se borra', () => {
+    const { titulo, texto, reglas } = AYUDAS['ruta.ventaSinEnviar']
+    expect(titulo).toBe('Sin enviar')
+    expect(texto).toBe(
+      'La venta ya está confirmada y guardada en el teléfono. Se envía al sistema cuando haya señal; hasta entonces no se borra.',
+    )
+    expect(reglas).toEqual(expect.arrayContaining(['SYN-01', 'SYN-09']))
+  })
+
+  it('ruta.creditoSinSenal: deuda del día + lo vendido y cobrado desde el teléfono, y el sistema lo recalcula', () => {
+    const { titulo, texto, reglas } = AYUDAS['ruta.creditoSinSenal']
+    expect(titulo).toBe('Crédito del cliente')
+    expect(texto).toBe(
+      'Se calcula con la deuda que bajó al abrir la jornada más lo que le vendiste y cobraste desde el teléfono. El sistema lo vuelve a calcular cuando recibe la venta.',
+    )
+    expect(reglas).toEqual(expect.arrayContaining(['CRE-08', 'CRE-09']))
+    expect(AYUDAS['ruta.creditoSinSenal'].verMas).toBe('credito')
+  })
+
+  it('ruta.stockDelVehiculo: si no alcanza la venta no se confirma y hay que actualizar con señal', () => {
+    const { titulo, texto, reglas } = AYUDAS['ruta.stockDelVehiculo']
+    expect(titulo).toBe('Stock del vehículo')
+    expect(texto).toBe(
+      'Es lo que bajó al abrir la jornada menos lo que vendiste desde el teléfono. Si no alcanza, la venta no se confirma: actualizá los datos con señal.',
+    )
+    expect(reglas).toEqual(expect.arrayContaining(['STK-06', 'RUT-04']))
+  })
+
+  it('ruta.pinSupervisor: se escribe en el teléfono y se bloquea hasta actualizar los datos; no fija un número', () => {
+    const { titulo, texto, reglas } = AYUDAS['ruta.pinSupervisor']
+    expect(titulo).toBe('PIN del supervisor')
+    expect(texto).toBe(
+      'El supervisor escribe su PIN en tu teléfono; no hace falta señal. Después de varios intentos fallidos ese PIN queda bloqueado en este teléfono hasta que se actualicen los datos.',
+    )
+    expect(texto).not.toMatch(/\d/)
+    expect(reglas).toEqual(expect.arrayContaining(['SEG-05']))
+  })
+
+  it('ruta.numeroDeVenta: lo pone el teléfono al confirmar', () => {
+    const { titulo, texto, reglas } = AYUDAS['ruta.numeroDeVenta']
+    expect(titulo).toBe('Número de venta')
+    expect(texto).toBe(
+      'El teléfono le pone el número al confirmar: el prefijo del teléfono y el siguiente número de sus ventas.',
+    )
+    expect(reglas).toEqual(expect.arrayContaining(['VTA-06']))
+  })
+
+  it.each([
+    'ruta.ventaSinEnviar',
+    'ruta.creditoSinSenal',
+    'ruta.stockDelVehiculo',
+    'ruta.pinSupervisor',
+    'ruta.numeroDeVenta',
+  ] as const)('%s no lleva ejemplo ni "Ver más" (D17: sin ejemplos)', (clave) => {
+    const entrada: Record<string, unknown> = AYUDAS[clave]
+    expect(entrada.ejemplo).toBeUndefined()
+    expect((entrada.reglas as string[]).length).toBeGreaterThan(0)
+  })
+})
+

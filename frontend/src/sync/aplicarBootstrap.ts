@@ -85,7 +85,7 @@ export function adaptarBootstrap(b: BootstrapRespuesta): FilasLocales {
 
 export async function aplicarBootstrap(respuesta: BootstrapRespuesta): Promise<void> {
   const filas = adaptarBootstrap(respuesta)
-  const tablas = [...TABLAS_MAESTRAS.map((nombre) => baseLocal.table(nombre)), baseLocal.meta]
+  const tablas = [...TABLAS_MAESTRAS.map((nombre) => baseLocal.table(nombre)), baseLocal.meta, baseLocal.intentos_pin]
 
   await baseLocal.transaction('rw', tablas, async () => {
     await Promise.all(TABLAS_MAESTRAS.map((nombre) => baseLocal.table(nombre).clear()))
@@ -102,6 +102,10 @@ export async function aplicarBootstrap(respuesta: BootstrapRespuesta): Promise<v
     await baseLocal.stock.bulkPut(filas.stock)
     await baseLocal.autorizadores.bulkPut(filas.autorizadores)
     await baseLocal.catalogos.bulkPut(filas.catalogos)
+
+    // Cualquier bootstrap nuevo levanta los bloqueos y reinicia las cuentas del PIN de supervisor
+    // (D10 = B, ADR-055). Es la única tabla de operaciones que el bootstrap vacía.
+    await baseLocal.intentos_pin.clear()
 
     await baseLocal.meta.put({ clave: 'fecha_bootstrap', valor: respuesta.generado_en })
     await baseLocal.meta.put({ clave: 'jornada_id', valor: respuesta.sesion.jornada.id })

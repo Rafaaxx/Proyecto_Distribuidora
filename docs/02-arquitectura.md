@@ -442,7 +442,7 @@ Una tarea diaria compara cada tabla de saldo con la suma de su libro. Cualquier 
 ### 7.7 Numeración de notas de venta
 
 - Cada dispositivo tiene un prefijo único asignado por el servidor al registrarse (SEG-02).
-- El dispositivo lleva el correlativo local y lo incrementa al confirmar.
+- El dispositivo lleva el correlativo local en Dexie (`meta.ultimo_correlativo`, sin `localStorage`) y asigna el número dentro de la misma transacción que confirma la venta: el siguiente es el mayor entre el del bootstrap y el local, más uno. Un carrito descartado no consume número (ADR-063).
 - El bootstrap devuelve el último correlativo registrado en el servidor para ese dispositivo; el dispositivo usa el mayor entre ese y el local. Esto evita repetir números si se borran los datos del navegador.
 - Restricción única (organización, número). Una colisión en sync indica un defecto y se trata como error de consistencia.
 - Hasta el bootstrap (change 21), el último correlativo se lee con `GET /api/v1/ventas/numeracion`; el cliente usa el mayor entre ese y el guardado localmente. El servidor no exige que el correlativo supere al último: solo que el número sea del dispositivo y no esté usado; el último pasa al mayor de los dos (ADR-054).
@@ -589,7 +589,7 @@ Agrupación de endpoints de la etapa 1:
 
 - Cada supervisor tiene un **PIN de autorización** distinto del de desbloqueo, de al menos 6 dígitos.
 - El bootstrap incluye, para los supervisores de la organización, la derivación PBKDF2 de ese PIN con su sal.
-- **Riesgo aceptado:** una derivación de un PIN numérico puede atacarse por fuerza bruta con acceso técnico al dispositivo. Mitigaciones: longitud mínima, rotación desde administración, límite de intentos en la interfaz, y toda autorización offline queda con observación y auditoría.
+- **Riesgo aceptado:** una derivación de un PIN numérico puede atacarse por fuerza bruta con acceso técnico al dispositivo. Mitigaciones: longitud mínima, rotación desde administración, límite de intentos en la interfaz, y toda autorización offline queda con observación y auditoría. El límite local cuenta los fallos por par (usuario, supervisor) en la tabla `intentos_pin`; al llegar a `intentos_pin_max` el PIN de ese supervisor queda bloqueado en el teléfono hasta el próximo bootstrap, sin guardar horas (ADR-063).
 - Con conexión, el PIN viaja fuera del contenido del comando y el servidor lo verifica contra la derivación guardada; los fallos se cuentan por usuario que intenta y supervisor en una transacción aparte: al llegar a `intentos_pin_max` ese usuario no puede usar ese PIN, y con 20 fallos sumando todos los usuarios el PIN se bloquea para todos (`PIN_BLOQUEADO`); cada bloqueo dura 15 minutos desde el último fallo y los intentos durante el bloqueo no cuentan; toda definición del PIN reinicia la cuenta. El servidor rechaza PIN triviales: todos los dígitos iguales o una escalera de paso 1, ascendente o descendente (ADR-019, ADR-055). Cada supervisor puede definir su propio PIN confirmando su contraseña («Mi PIN»); las contraseñas incorrectas cuentan para el límite del login (ADR-018).
 
 ## 13. Frontend
@@ -610,7 +610,7 @@ Agrupación de endpoints de la etapa 1:
 
 | Tabla | Contenido |
 | --- | --- |
-| `meta` | Versión de esquema local, dispositivo, último correlativo, fecha de bootstrap |
+| `meta` | Versión de esquema local, dispositivo, último correlativo y última secuencia, fecha de bootstrap |
 | `sesion` | Usuario, permisos, topes, derivación del PIN, jornada abierta |
 | `configuracion` | Parámetros de la organización |
 | `productos`, `presentaciones` | Catálogo activo |
@@ -619,9 +619,12 @@ Agrupación de endpoints de la etapa 1:
 | `reglas_descuento` | Reglas activas |
 | `stock` | Stock de la ubicación tomada |
 | `autorizadores` | Derivaciones de PIN de supervisores |
-| `ventas`, `cobranzas` | Operaciones locales con estado de sincronización |
-| `movimientos_locales` | Efectos locales sobre stock y saldos, para calcular disponibles |
-| `cola` | Comandos pendientes ordenados por secuencia |
+| `ventas`, `cobranzas` | Operaciones locales con estado de envío (`PENDIENTE`, `ACEPTADA`, `CON_OBSERVACIONES`, `RECHAZADA`) y los datos congelados de la nota |
+| `movimientos_locales` | Efectos locales sobre stock y saldos (`VENTA_STOCK`, `VENTA_DEBITO`, `COBRANZA_CREDITO`), para calcular disponibles |
+| `cola` | Comandos pendientes ordenados por secuencia; `operation_id` único |
+| `intentos_pin` | Fallos del PIN de supervisor por par (usuario, supervisor) y su bloqueo |
+
+Las tablas de operaciones (versión 3 de Dexie) no las toca el bootstrap. Confirmar una venta local escribe venta, cobranza, movimientos, comando y los dos contadores en **una sola transacción**: todo o nada. Reconfirmar con el mismo `operation_id` no encola otra venta (ADR-063).
 
 **DEBE:** confirmar una venta local es una transacción Dexie que escribe la venta, los movimientos locales y el comando en la cola, todo o nada.
 En la versión 2 de Dexie (change 21) el saldo viaja dentro de `clientes` (no hay `saldos_clientes`) y las tablas maestras son las que reemplaza el bootstrap; `meta` guarda también el usuario local, la jornada, la fecha del bootstrap y la derivación del PIN con su contador de fallos (`pin_hash`, `pin_sal`, `pin_iteraciones`, `pin_intentos`). El bootstrap reemplaza las tablas maestras en una sola transacción sobre una lista explícita; `ventas`, `cobranzas`, `movimientos_locales` y `cola` las agrega la versión 3 (change 22a) y el bootstrap no las toca (ADR-062).
@@ -645,12 +648,12 @@ En la versión 2 de Dexie (change 21) el saldo viaja dentro de `clientes` (no ha
 
 - Precachea el shell de la aplicación para abrirla sin conexión.
 - **DEBE NO** cachear respuestas de la API: los datos offline viven en Dexie.
-- Una nueva versión se instala en segundo plano y se aplica con aviso al usuario. **DEBE NO** recargar automáticamente la aplicación mientras hay un carrito abierto.
+- Una nueva versión se instala en segundo plano y se aplica con aviso al usuario. **DEBE NO** recargar automáticamente la aplicación mientras hay un carrito abierto: con líneas cargadas el aviso dice «Hay una versión nueva: se instala al terminar la venta» y no ofrece «Actualizar» hasta confirmar o descartar la venta. Salir de la venta con líneas pide confirmar «¿Descartar la venta?» (ADR-063).
 - Se implementa con `vite-plugin-pwa` (`generateSW`, `registerType: 'prompt'`); precachea el shell, `/ruta`, la ayuda y pdfmake, no el código de `/admin`; el manifiesto abre en `/ruta` (ADR-062).
 
 ### 13.6 Nota de venta
 
-- El contenido de la nota lo arma una función pura (`domain/ventas/notaDeVenta.ts`) a partir de un tipo neutro con los valores congelados de la venta; otra función lo convierte en la definición del documento (`lib/nota/documento.ts`, A4 vertical). Cada origen de datos tiene su adaptador: la API en administración (`GET /api/v1/ventas/{id}/nota`, con `VENDER` o `ANULAR_VENTA`) y, en `/ruta`, Dexie (change 22a). Nada del armado conoce pdfmake ni React.
+- El contenido de la nota lo arma una función pura (`domain/ventas/notaDeVenta.ts`) a partir de un tipo neutro con los valores congelados de la venta; otra función lo convierte en la definición del documento (`lib/nota/documento.ts`, A4 vertical). Cada origen de datos tiene su adaptador: la API en administración (`GET /api/v1/ventas/{id}/nota`, con `VENDER` o `ANULAR_VENTA`) y, en `/ruta`, Dexie: la venta local congela los datos de la nota al confirmar (`domain/ventas/notaDesdeLocal.ts`) y el adaptador llama a la misma función de armado, sin señal (ADR-063). Nada del armado conoce pdfmake ni React.
 - El PDF se genera en el dispositivo con pdfmake (versión exacta) y sus fuentes embebidas, cargados con `import()` dinámico solo al generar la nota: no pesan en el bundle inicial.
 - Se comparte con Web Share API (archivos) solo si el navegador comparte archivos (`navigator.canShare`); la descarga está siempre. Archivo `nota-de-venta-{numero}.pdf`.
 - La nota no se guarda: cada generación sale de los datos congelados. La misma función sirve al original y a la reimpresión.

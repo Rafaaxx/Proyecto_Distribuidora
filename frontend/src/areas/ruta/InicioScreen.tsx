@@ -10,6 +10,7 @@ import { useConectado } from '../../lib/conexion'
 import { formatearFechaHora } from '../../lib/fecha'
 import { actualizarDatos, type ResultadoActualizacion } from '../../sync/actualizarDatos'
 import { useDatosDeInicio } from './datos/lecturas'
+import { useVentasSinEnviar } from './datos/ventas'
 import { useSesionRutaActiva } from './sesion/contextoSesion'
 
 /**
@@ -34,6 +35,14 @@ const MENSAJES_DE_FALLA: Record<Exclude<ResultadoActualizacion, 'actualizados'>,
   error: 'No se pudieron actualizar los datos. Probá de nuevo en unos minutos.',
 }
 
+const MOTIVO_SIN_DATOS = 'Vender necesita los datos del día: abrí la jornada para descargarlos.'
+const MOTIVO_SIN_JORNADA = 'Vender requiere una jornada abierta.'
+
+function textoDeSinEnviar(cantidad: number): string {
+  if (cantidad === 0) return 'Todo enviado'
+  return cantidad === 1 ? '1 venta sin enviar' : `${cantidad} ventas sin enviar`
+}
+
 const CLASE_ENLACE =
   'inline-flex items-center justify-center rounded-md border border-border bg-surface-muted px-3 py-3 text-sm font-medium text-primary hover:bg-surface'
 
@@ -46,6 +55,7 @@ export function InicioScreen() {
   const [almacenamiento, setAlmacenamiento] = useState<EstadoDeAlmacenamiento | 'pendiente'>('pendiente')
 
   const fechaBootstrap = datos.estado === 'listo' ? datos.fechaBootstrap : null
+  const sinEnviar = useVentasSinEnviar(datos.estado === 'listo' ? datos.usuario.id : null)
 
   // D18: se pide en cada arranque mientras no esté concedido y de nuevo tras cada bootstrap aplicado.
   useEffect(() => {
@@ -77,6 +87,9 @@ export function InicioScreen() {
 
   const sinJornada = entrada.tipo === 'sin_jornada'
   const puedeAbrir = datos.estado === 'listo' && datos.permisos.includes('ABRIR_JORNADA')
+  // Vender (change 22a, D1, D13, D14): con VENDER en el bootstrap, jornada abierta y datos del día.
+  const ofreceVender = datos.estado === 'sin_datos' || (datos.estado === 'listo' && datos.permisos.includes('VENDER'))
+  const motivoSinVender = datos.estado === 'sin_datos' ? MOTIVO_SIN_DATOS : sinJornada ? MOTIVO_SIN_JORNADA : null
 
   return (
     <div className="flex flex-col gap-4">
@@ -139,6 +152,34 @@ export function InicioScreen() {
                 Reintentar
               </Boton>
             </Alert>
+          )}
+        </Card>
+      )}
+
+      {ofreceVender && (
+        <Card className="flex flex-col gap-2">
+          {sinEnviar !== null && (
+            <div className="flex items-center gap-1">
+              <p className="text-sm font-semibold text-primary">{textoDeSinEnviar(sinEnviar)}</p>
+              <Ayuda clave="ruta.ventaSinEnviar" />
+            </div>
+          )}
+          {motivoSinVender === null ? (
+            <Link to="/ruta/vender" className={CLASE_ENLACE}>
+              Vender
+            </Link>
+          ) : (
+            <div className="flex flex-col gap-1">
+              <Boton variante="secundario" disabled>
+                Vender
+              </Boton>
+              <p className="text-sm text-primary/70">{motivoSinVender}</p>
+            </div>
+          )}
+          {datos.estado === 'listo' && (
+            <Link to="/ruta/ventas" className={CLASE_ENLACE}>
+              Ventas de hoy
+            </Link>
           )}
         </Card>
       )}

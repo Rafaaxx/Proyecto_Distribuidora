@@ -15,3 +15,5 @@ backend/__pycache__/
 # Frontend (ver frontend/.gitignore para detalle)
 frontend/node_modules/
 frontend/dist/
+
+*.stackdump

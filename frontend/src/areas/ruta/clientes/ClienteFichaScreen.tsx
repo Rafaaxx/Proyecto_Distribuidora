@@ -5,7 +5,8 @@ import { Badge } from '../../../components/ui/Badge'
 import { Card } from '../../../components/ui/Card'
 import { disponibleDeCredito, formatearDinero } from '../../../domain/ruta/lecturasLocales'
 import { formatearFechaHora } from '../../../lib/fecha'
-import { useClienteLocal } from '../datos/lecturas'
+import { useClienteLocal, useDatosDeInicio } from '../datos/lecturas'
+import { useSesionRutaActiva } from '../sesion/contextoSesion'
 
 /**
  * Ficha de un cliente en `/ruta` (change 21, `design.md` D19; CRE-01, INV-03). Saldo y crédito
@@ -24,6 +25,10 @@ function Fila({ rotulo, children }: { rotulo: string; children: ReactNode }) {
 export function ClienteFichaScreen() {
   const { id = '' } = useParams()
   const datos = useClienteLocal(id)
+  const inicio = useDatosDeInicio()
+  const { entrada } = useSesionRutaActiva()
+  // D14: "Vender" solo con VENDER en el bootstrap, jornada abierta y datos del día.
+  const puedeVender = inicio.estado === 'listo' && inicio.permisos.includes('VENDER') && entrada.tipo !== 'sin_jornada'
 
   if (datos.estado === 'cargando') return <p className="text-sm text-primary">Cargando…</p>
   if (datos.estado === 'sin_datos') {
@@ -66,6 +71,15 @@ export function ClienteFichaScreen() {
           {datos.listaNombre && <Fila rotulo="Lista de precios">{datos.listaNombre}</Fila>}
         </dl>
       </Card>
+
+      {puedeVender && (
+        <Link
+          to={`/ruta/vender?cliente=${cliente.id}`}
+          className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-3 text-sm font-medium text-primary-foreground hover:opacity-90"
+        >
+          Vender
+        </Link>
+      )}
 
       <Card>
         <dl className="flex flex-col gap-3">

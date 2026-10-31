@@ -130,3 +130,49 @@ describe('textoDeDecisionDeCredito', () => {
     expect(textoDeDecisionDeCredito({ ...base, decision: 'sin-control' })).toBe('El cliente no tiene límite de crédito.')
   })
 })
+
+describe('evaluarPanelDeCredito en el dispositivo (change 22a, tarea 6.1; D9; CRE-04 a CRE-07, CRE-10)', () => {
+  const autorizar = (tolerancia: string) => ({
+    politica: 'AUTORIZAR',
+    toleranciaTipo: 'IMPORTE',
+    toleranciaValor: tolerancia,
+  })
+  const sinConexion = { modo: 'SIN_CONEXION' as const }
+
+  it('SIN_CONEXION dentro de la tolerancia ($20.000) resuelve por tolerancia offline (CRE-06)', () => {
+    const r = panel(autorizar('20000.00'), sinConexion)
+    expect(r.decision).toBe('tolerancia-offline')
+    expect(r.exceso).toBe('10000.00')
+  })
+
+  it('SIN_CONEXION fuera de la tolerancia ($5.000) pide autorizador, no bloquea (CRE-06, CRE-05)', () => {
+    expect(panel(autorizar('5000.00'), sinConexion).decision).toBe('pide-autorizador')
+  })
+
+  it('SIN_CONEXION fuera de la tolerancia con permiso propio autoriza el usuario (CRE-05)', () => {
+    expect(panel(autorizar('5000.00'), { ...sinConexion, puedeSuperar: true }).decision).toBe('permiso-propio')
+  })
+
+  it('BLOQUEAR bloquea también sin conexión (CRE-07)', () => {
+    expect(panel({ politica: 'BLOQUEAR' }, sinConexion).decision).toBe('bloqueado')
+  })
+
+  it('ADVERTIR pide aceptar sin conexión y, aceptado, queda aceptado (CRE-04)', () => {
+    expect(panel({ politica: 'ADVERTIR' }, sinConexion).decision).toBe('pide-aceptar')
+    expect(panel({ politica: 'ADVERTIR' }, { ...sinConexion, aceptaExceso: true }).decision).toBe('aceptado')
+  })
+
+  it('sin exceso no cambia nada en ningún modo (CRE-10)', () => {
+    expect(panel({ saldo: '10000.00' }, sinConexion).decision).toBe('sin-exceso')
+  })
+
+  it('/admin sigue en CON_CONEXION: la misma entrada sin modo pide autorizador aun dentro de la tolerancia', () => {
+    expect(panel(autorizar('20000.00')).decision).toBe('pide-autorizador')
+    expect(panel(autorizar('20000.00'), { modo: 'CON_CONEXION' }).decision).toBe('pide-autorizador')
+  })
+
+  it('el texto de la tolerancia dice que se confirma por tolerancia', () => {
+    const texto = textoDeDecisionDeCredito(panel(autorizar('20000.00'), sinConexion))
+    expect(texto).toMatch(/tolerancia/i)
+  })
+})

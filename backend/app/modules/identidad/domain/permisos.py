@@ -47,7 +47,7 @@ PERMISOS_DEL_CATALOGO: tuple[Permiso, ...] = (
     Permiso("TRANSFERIR_STOCK", "Transferencias", "stock"),
     Permiso("ANULAR_TRANSFERENCIA", "Anular transferencias de otros usuarios", "stock"),
     Permiso("AJUSTAR_STOCK", "Ajustes", "stock"),
-    Permiso("PERMITIR_STOCK_NEGATIVO", "Operar con stock negativo online", "stock"),
+    Permiso("PERMITIR_STOCK_NEGATIVO", "Operar con stock negativo", "stock"),
     Permiso("ABRIR_JORNADA", "Abrir jornada y tomar ubicación", "stock"),
     Permiso("RENDIR_JORNADA", "Rendir y cerrar jornada", "stock"),
     Permiso("LIBERAR_UBICACION", "Liberación forzada", "stock"),

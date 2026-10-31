@@ -164,7 +164,7 @@ describe('Cambio de usuario en el dispositivo (tarea 10.1, D16)', () => {
 
     const r = await registrarUsuarioTrasLogin()
 
-    expect(r).toEqual({ cambioDeUsuario: true, hayPin: false })
+    expect(r).toEqual({ cambioDeUsuario: true, hayPin: false, pendientesDeOtro: [] })
     expect(await tablasMaestrasVacias()).toBe(true)
     expect(await baseLocal.meta.get('pin_hash')).toBeUndefined()
     expect((await baseLocal.meta.get('usuario_local_id'))?.valor).toBe(ID(50))
@@ -178,7 +178,7 @@ describe('Cambio de usuario en el dispositivo (tarea 10.1, D16)', () => {
 
     const r = await registrarUsuarioTrasLogin()
 
-    expect(r).toEqual({ cambioDeUsuario: false, hayPin: true })
+    expect(r).toEqual({ cambioDeUsuario: false, hayPin: true, pendientesDeOtro: [] })
     expect(await baseLocal.clientes.count()).toBe(1)
   })
 
@@ -187,7 +187,7 @@ describe('Cambio de usuario en el dispositivo (tarea 10.1, D16)', () => {
 
     const r = await registrarUsuarioTrasLogin()
 
-    expect(r).toEqual({ cambioDeUsuario: false, hayPin: false })
+    expect(r).toEqual({ cambioDeUsuario: false, hayPin: false, pendientesDeOtro: [] })
     expect((await baseLocal.meta.get('usuario_local_id'))?.valor).toBe(ID(1))
   })
 
@@ -198,7 +198,7 @@ describe('Cambio de usuario en el dispositivo (tarea 10.1, D16)', () => {
 
     const r = await registrarUsuarioTrasLogin()
 
-    expect(r).toEqual({ cambioDeUsuario: false, hayPin: false })
+    expect(r).toEqual({ cambioDeUsuario: false, hayPin: false, pendientesDeOtro: [] })
     expect(await baseLocal.clientes.count()).toBe(1)
   })
 })

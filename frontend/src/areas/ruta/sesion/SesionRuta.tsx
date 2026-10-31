@@ -7,6 +7,8 @@ import { ContextoSesion, type SesionRutaActiva } from './contextoSesion'
 import { sincronizarAlEntrar, type ResultadoEntrada } from './entrada'
 import { DefinirPinScreen, PedirPinScreen } from './PantallasDePin'
 import { estadoInicialDeRuta, registrarUsuarioTrasLogin } from './arranque'
+import { AvisoDePendientesDeOtro } from './AvisoDePendientesDeOtro'
+import { avisoDePendientesDeOtro } from '../../../sync/ventasPendientes'
 
 /**
  * Máquina de estados de `/ruta` (change 21, D11 a D16; SEG-03, ADR-017):
@@ -18,6 +20,8 @@ type Estado =
   | { fase: 'cargando' }
   | { fase: 'login'; motivo?: MotivoDeLogin }
   | { fase: 'definir_pin' }
+  /** Otro usuario inició sesión y quedaron ventas sin enviar del anterior (22a, D16). */
+  | { fase: 'aviso_de_otro'; avisos: string[]; hayPin: boolean }
   | { fase: 'pedir_pin' }
   | { fase: 'entrando' }
   | { fase: 'activa'; entrada: ResultadoEntrada }
@@ -50,8 +54,10 @@ export function SesionRuta({ children }: { children: ReactNode }) {
   }, [])
 
   const alIniciarSesion = useCallback(async () => {
-    const { hayPin } = await registrarUsuarioTrasLogin()
-    if (hayPin) await entrar()
+    const { hayPin, pendientesDeOtro } = await registrarUsuarioTrasLogin()
+    if (pendientesDeOtro.length > 0) {
+      setEstado({ fase: 'aviso_de_otro', avisos: pendientesDeOtro.map(avisoDePendientesDeOtro), hayPin })
+    } else if (hayPin) await entrar()
     else setEstado({ fase: 'definir_pin' })
   }, [entrar])
 
@@ -92,6 +98,14 @@ export function SesionRuta({ children }: { children: ReactNode }) {
     [entrar],
   )
 
+  const alContinuarTrasAviso = useCallback(
+    async (hayPin: boolean) => {
+      if (hayPin) await entrar()
+      else setEstado({ fase: 'definir_pin' })
+    },
+    [entrar],
+  )
+
   const alCerrarSesion = useCallback(() => setEstado({ fase: 'login', motivo: 'cerrada' }), [])
   const alBloquearse = useCallback(() => setEstado({ fase: 'login', motivo: 'bloqueado' }), [])
 
@@ -115,6 +129,8 @@ export function SesionRuta({ children }: { children: ReactNode }) {
       return <LoginRutaScreen motivo={estado.motivo} onIniciada={() => void alIniciarSesion()} />
     case 'definir_pin':
       return <DefinirPinScreen onDefinir={alDefinirPin} />
+    case 'aviso_de_otro':
+      return <AvisoDePendientesDeOtro avisos={estado.avisos} onContinuar={() => void alContinuarTrasAviso(estado.hayPin)} />
     case 'pedir_pin':
       return <PedirPinScreen onDesbloquear={alDesbloquear} />
     case 'activa':

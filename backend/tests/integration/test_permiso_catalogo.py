@@ -64,6 +64,23 @@ def test_el_catalogo_contiene_los_40_permisos_de_la_documentacion(
         assert codigo in codigos
 
 
+def test_la_descripcion_de_cada_permiso_en_la_base_coincide_con_el_catalogo_del_codigo(
+    database_url: str, _engine_de_sesion: Engine
+) -> None:
+    """Change 22a (ADR-063 punto 7): el catálogo se inserta con `ON CONFLICT DO NOTHING`, así
+    que cambiar una descripción en el código exige una migración de datos. Esta prueba detecta
+    la deriva entre `PERMISOS_DEL_CATALOGO` y la tabla `permiso` tras `alembic upgrade head`."""
+    aplicar_migraciones(database_url)
+    with _engine_de_sesion.connect() as conexion:
+        en_base = {
+            fila[0]: fila[1]
+            for fila in conexion.execute(text("SELECT codigo, descripcion FROM permiso")).all()
+        }
+
+    assert en_base == {p.codigo: p.descripcion for p in PERMISOS_DEL_CATALOGO}
+    assert en_base["PERMITIR_STOCK_NEGATIVO"] == "Operar con stock negativo"
+
+
 def test_ningun_permiso_del_catalogo_tiene_organizacion(_engine_de_sesion: Engine) -> None:
     with _engine_de_sesion.connect() as conexion:
         columnas = {

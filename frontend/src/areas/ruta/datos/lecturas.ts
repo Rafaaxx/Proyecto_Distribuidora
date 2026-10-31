@@ -28,7 +28,7 @@ async function fechaDeLosDatos(): Promise<string | null> {
 }
 
 /** Suscribe una consulta de Dexie; vuelve a evaluarla cuando cambian las tablas que lee. */
-function useConsultaLocal<T>(
+export function useConsultaLocal<T>(
   consulta: () => Promise<Lectura<T>>,
   claves: readonly (string | number)[],
 ): Lectura<T> {

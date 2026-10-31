@@ -291,20 +291,21 @@ def bloquear_jornada_abierta_de(
 
 def leer_jornada_abierta_de(
     organizacion_id: UUID, sesion: Session, *, usuario_id: UUID, dispositivo_id: UUID
-) -> tuple[UUID, UUID] | None:
-    """`(jornada_id, ubicacion_id)` de la jornada `ABIERTA` del usuario en ese dispositivo, SIN
+) -> tuple[UUID, UUID, datetime] | None:
+    """`(jornada_id, ubicacion_id, abierta_en)` de la jornada `ABIERTA` del usuario en ese
+    dispositivo (`abierta_en` lo necesita el bootstrap del change 21), SIN
     bloquear, o `None` (change 18a, D3, D17). La venta necesita la ubicación para armar sus
     movimientos antes de pedir bloqueos; la jornada `FOR SHARE` (nivel 5) la toma después el
     movimiento de stock, en el orden global. Como mucho una por usuario y dispositivo."""
     fila = sesion.execute(
-        select(Jornada.id, Jornada.ubicacion_id).where(
+        select(Jornada.id, Jornada.ubicacion_id, Jornada.abierta_en).where(
             Jornada.organizacion_id == organizacion_id,
             Jornada.usuario_id == usuario_id,
             Jornada.dispositivo_id == dispositivo_id,
             Jornada.estado == ABIERTA,
         )
     ).one_or_none()
-    return None if fila is None else (fila.id, fila.ubicacion_id)
+    return None if fila is None else (fila.id, fila.ubicacion_id, fila.abierta_en)
 
 
 def jornada_no_cerrada_de(

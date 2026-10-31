@@ -764,3 +764,61 @@ def listar_cartera(organizacion_id: UUID, usuario_id: UUID, sesion: Session) -> 
 def contar_clientes_asignados(organizacion_id: UUID, usuario_id: UUID, sesion: Session) -> int:
     """Cuántos clientes tiene asignados `usuario_id` (change 20b, D19), contados en SQL."""
     return repository.contar_clientes_de_vendedor(organizacion_id, usuario_id, sesion)
+
+
+@dataclass(frozen=True)
+class ClienteParaDispositivo:
+    """Un cliente tal como baja al teléfono (change 21, D4): contacto, estado, lista asignada y
+    crédito resuelto con la herencia de la organización. Sin correo ni vendedor asignado."""
+
+    id: UUID
+    codigo: str | None
+    nombre: str
+    razon_social: str | None
+    documento_tipo: str | None
+    documento_numero: str | None
+    direccion: str
+    telefono: str | None
+    estado: str
+    lista_precio_id: UUID | None
+    es_consumidor_final: bool
+    credito: DatosDeCredito
+
+
+def listar_clientes_para_dispositivo(
+    organizacion_id: UUID, sesion: Session
+) -> list[ClienteParaDispositivo]:
+    """Los clientes `ACTIVO` y `SUSPENDIDO` de la organización y el consumidor final si está
+    habilitado, con su crédito resuelto (herencia aplicada, CRE-03, CRE-06) y sin correo ni
+    vendedor (change 21, D4; `01` §19). La configuración de la organización se lee una sola vez.
+    Solo lee; filtra por la organización (INV-21)."""
+    configuracion = identidad_service.obtener_configuracion(organizacion_id, sesion)
+    if configuracion is None:
+        raise ConfiguracionDeOrganizacionAusenteError(
+            "La organización no tiene configuración: no se pueden resolver los datos de crédito."
+        )
+    return [
+        ClienteParaDispositivo(
+            id=cliente.id,
+            codigo=cliente.codigo,
+            nombre=cliente.nombre,
+            razon_social=cliente.razon_social,
+            documento_tipo=cliente.documento_tipo,
+            documento_numero=cliente.documento_numero,
+            direccion=cliente.direccion,
+            telefono=cliente.telefono,
+            estado=cliente.estado,
+            lista_precio_id=cliente.lista_precio_id,
+            es_consumidor_final=cliente.es_consumidor_final,
+            credito=_resolver_datos_de_credito(
+                limite_cliente=cliente.limite_credito,
+                politica_cliente=cliente.politica_credito,
+                tolerancia_tipo_cliente=cliente.tolerancia_offline_tipo,
+                tolerancia_valor_cliente=cliente.tolerancia_offline_valor,
+                politica_organizacion=configuracion.politica_credito_default,
+                tolerancia_tipo_organizacion=configuracion.tolerancia_offline_tipo,
+                tolerancia_valor_organizacion=configuracion.tolerancia_offline_valor,
+            ),
+        )
+        for cliente in repository.listar_para_dispositivo(organizacion_id, sesion)
+    ]

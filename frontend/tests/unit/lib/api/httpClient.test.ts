@@ -297,3 +297,51 @@ describe('httpClient: la sesión terminada no vuelve a negociarse (tarea 11.2, B
     expect(llamadasARefresh()).toHaveLength(1)
   })
 })
+
+/**
+ * Change 21, tarea 9.2 (`design.md` D14; ADR-017): al desbloquear con conexión, `/ruta` renueva
+ * el access token con el refresh token. `renovarSesion` distingue los tres desenlaces.
+ */
+describe('httpClient: renovarSesion (change 21, tarea 9.2)', () => {
+  let fetchMock: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    limpiarAccessToken()
+    fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function json(status: number, cuerpo: unknown): Response {
+    return new Response(JSON.stringify(cuerpo), { status, headers: { 'Content-Type': 'application/json' } })
+  }
+
+  it('renovación aceptada: deja el access token nuevo en memoria', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { access_token: 'tok-nuevo' }))
+    const { renovarSesion } = await import('../../../../src/lib/api/httpClient')
+
+    expect(await renovarSesion()).toBe('renovada')
+    expect(obtenerAccessToken()).toBe('tok-nuevo')
+  })
+
+  it('renovación rechazada: informa "rechazada" y la sesión queda terminada', async () => {
+    fetchMock.mockResolvedValueOnce(json(401, { codigo: 'REFRESH_TOKEN_INVALIDO' }))
+    const { renovarSesion } = await import('../../../../src/lib/api/httpClient')
+
+    expect(await renovarSesion()).toBe('rechazada')
+    expect(obtenerAccessToken()).toBeNull()
+  })
+
+  it('corte de red: informa "sin_red" sin dar la sesión por terminada', async () => {
+    fijarAccessToken('token-viejo')
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    const { renovarSesion } = await import('../../../../src/lib/api/httpClient')
+    const { sesionTerminada } = await import('../../../../src/lib/auth/tokenStore')
+
+    expect(await renovarSesion()).toBe('sin_red')
+    expect(sesionTerminada()).toBe(false)
+  })
+})

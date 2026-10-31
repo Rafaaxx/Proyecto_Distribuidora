@@ -45,7 +45,7 @@ from app.modules.descuentos.domain.tipos import (
     ResultadoDescuentos,
 )
 from app.modules.descuentos.domain.tipos import ReglaDescuento as ReglaAplicable
-from app.modules.descuentos.models import ReglaDescuento
+from app.modules.descuentos.models import ReglaDescuento, ReglaDescuentoAlcance
 from app.modules.identidad import service as identidad_service
 
 __all__ = [
@@ -374,24 +374,59 @@ def reglas_aplicables(
     y una de alcances, sin sumar nada en Python. Orden: prioridad y antigüedad."""
     reglas = repository.listar_reglas_aplicables(organizacion_id, momento, sesion)
     alcances = repository.listar_alcances(organizacion_id, [r.id for r in reglas], sesion)
+    return [_como_regla_aplicable(regla, alcances[regla.id]) for regla in reglas]
+
+
+def _como_regla_aplicable(
+    regla: ReglaDescuento, alcances: Sequence[ReglaDescuentoAlcance]
+) -> ReglaAplicable:
+    return ReglaAplicable(
+        id=str(regla.id),
+        tipo=regla.tipo,  # type: ignore[arg-type]
+        medida=regla.medida,  # type: ignore[arg-type]
+        operador=regla.operador,  # type: ignore[arg-type]
+        umbral=regla.umbral,
+        accion_tipo=regla.accion_tipo,  # type: ignore[arg-type]
+        accion_porcentaje=regla.accion_porcentaje,
+        accion_importe=regla.accion_importe,
+        acumulable=regla.acumulable,
+        prioridad=regla.prioridad,
+        alcances=tuple(
+            AlcanceRegla(a.alcance_tipo, str(a.alcance_id))  # type: ignore[arg-type]
+            for a in alcances
+        ),
+    )
+
+
+@dataclass(frozen=True)
+class ReglaParaDispositivo:
+    """Una regla `ACTIVA` con su nombre y su vigencia, tal como baja al teléfono (change 21, D6):
+    el dispositivo elige por el momento de la operación (TR-05)."""
+
+    nombre: str
+    regla: ReglaAplicable
+    vigencia_desde: datetime
+    vigencia_hasta: datetime | None
+
+
+def reglas_para_dispositivo(
+    organizacion_id: UUID, sesion: Session, momento: datetime
+) -> list[ReglaParaDispositivo]:
+    """Las reglas `ACTIVA` cuya vigencia no terminó a `momento`, incluidas las que empiezan más
+    tarde, con nombre, alcances, prioridad, acumulable y vigencia (change 21, D6; DSC-01,
+    DSC-02). Excluye borradores, pausadas y vencidas. Orden: prioridad y antigüedad. Una consulta
+    de reglas y una de alcances; filtra por la organización (INV-21). Solo lee."""
+    reglas = repository.listar_reglas_no_vencidas(organizacion_id, momento, sesion)
+    alcances = repository.listar_alcances(organizacion_id, [r.id for r in reglas], sesion)
     return [
-        ReglaAplicable(
-            id=str(regla.id),
-            tipo=regla.tipo,  # type: ignore[arg-type]
-            medida=regla.medida,  # type: ignore[arg-type]
-            operador=regla.operador,  # type: ignore[arg-type]
-            umbral=regla.umbral,
-            accion_tipo=regla.accion_tipo,  # type: ignore[arg-type]
-            accion_porcentaje=regla.accion_porcentaje,
-            accion_importe=regla.accion_importe,
-            acumulable=regla.acumulable,
-            prioridad=regla.prioridad,
-            alcances=tuple(
-                AlcanceRegla(a.alcance_tipo, str(a.alcance_id))  # type: ignore[arg-type]
-                for a in alcances[regla.id]
-            ),
+        ReglaParaDispositivo(
+            nombre=regla.nombre,
+            regla=_como_regla_aplicable(regla, alcances[regla.id]),
+            vigencia_desde=regla.vigencia_desde,
+            vigencia_hasta=regla.vigencia_hasta,
         )
         for regla in reglas
+        if regla.vigencia_desde is not None
     ]
 
 

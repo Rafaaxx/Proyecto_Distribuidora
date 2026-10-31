@@ -65,6 +65,12 @@ RUTAS_EXENTAS_DE_PERMISO = frozenset(
         # (`Depends(obtener_contexto_autenticado)`, ver docstring de
         # `sync/api.py`).
         ("POST", "/api/v1/sync/comandos"),
+        # Change 21, grupo 2 (`sync/api.py`, `design.md` D2): el bootstrap exige sesión válida y
+        # habilitada (`Depends(requiere_sesion)`) y una jornada propia abierta en el dispositivo,
+        # pero ningún permiso fijo: cada sección se filtra por el permiso del momento (`VENDER`
+        # para el contexto y los autorizadores, `USAR_LISTA_ANTERIOR` para las versiones
+        # anteriores). Es de solo lectura (`test_sync_bootstrap.py`).
+        ("GET", "/api/v1/sync/bootstrap"),
         # Change 06b, grupo 4 (`identidad/api.py::router_yo`, ADR-027): la
         # consulta de la propia sesión exige un access token válido
         # (`Depends(obtener_contexto_autenticado)`) pero ningún permiso en

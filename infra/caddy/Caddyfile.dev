@@ -1,0 +1,37 @@
+# Caddy de DESARROLLO para probar la PWA en un teléfono real dentro de la red local
+# (change 21, D20; ADR-062). Solo se levanta con el perfil `lan` de Docker Compose.
+# No es la configuración de producción (esa llega con el change 27a).
+#
+# Por qué existe: el service worker, la instalación y la cookie `Secure` del refresh token
+# necesitan HTTPS; el teléfono entra por la IP de la PC. `tls internal` emite un certificado
+# propio de Caddy para esa IP: el teléfono debe confiar en la autoridad de Caddy una vez.
+#
+# {$LAN_IP} es la IP de la PC en la red local (se pasa al levantar el perfil).
+
+{
+	# Un navegador que entra por IP no manda el nombre del servidor (SNI), y como Docker
+	# traduce la dirección, Caddy no puede deducirla de la conexión: sin esto el saludo TLS falla.
+	default_sni {$LAN_IP}
+}
+
+https://{$LAN_IP} {
+	tls internal
+
+	encode gzip
+
+	# La API va al backend: mismo origen para el navegador, sin CORS (`02` §11).
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# El resto es la compilación de producción del frontend (la deja `pwa-build` en el volumen).
+	handle {
+		root * /srv
+		# El service worker, el manifiesto y el index nunca se guardan en la caché del
+		# navegador: así una versión nueva se detecta en la siguiente apertura.
+		@sin_cache path /sw.js /registerSW.js /index.html /manifest.webmanifest
+		header @sin_cache Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}

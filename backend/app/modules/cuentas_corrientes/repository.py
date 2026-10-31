@@ -162,6 +162,18 @@ def obtener_saldo(
     return sesion.scalar(consulta)
 
 
+def saldos_de_cuentas(
+    organizacion_id: UUID, sesion: Session, *, cuenta_tipo: str
+) -> dict[UUID, Decimal]:
+    """`{entidad_id: saldo}` de todas las cuentas del tipo con fila de saldo, en UNA consulta
+    (change 21, D4). La cuenta sin movimientos no tiene fila."""
+    consulta = select(SaldoCuenta.entidad_id, SaldoCuenta.saldo).where(
+        SaldoCuenta.organizacion_id == organizacion_id,
+        SaldoCuenta.cuenta_tipo == cuenta_tipo,
+    )
+    return {fila.entidad_id: fila.saldo for fila in sesion.execute(consulta)}
+
+
 def actualizar_saldo(
     organizacion_id: UUID,
     sesion: Session,

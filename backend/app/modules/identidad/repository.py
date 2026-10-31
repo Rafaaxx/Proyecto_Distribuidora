@@ -547,6 +547,56 @@ def listar_autorizadores_con_pin(
     ]
 
 
+def listar_autorizadores_con_derivacion(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    permisos: Collection[str],
+    excluir_usuario_id: UUID,
+) -> list[tuple[UUID, str, frozenset[str], str, str, int]]:
+    """Como `listar_autorizadores_con_pin`, más la derivación del PIN (change 21, D8):
+    `(id, nombre, permisos de esos que tiene, hash, sal, iteraciones)`, por nombre y id. Una sola
+    consulta. Nunca trae la contraseña ni el PIN: solo su derivación PBKDF2."""
+    consulta = (
+        select(
+            Usuario.id,
+            Usuario.nombre,
+            RolPermiso.permiso_codigo,
+            Usuario.pin_autorizacion_hash,
+            Usuario.pin_autorizacion_sal,
+            Usuario.pin_autorizacion_iteraciones,
+        )
+        .join(Rol, and_(Rol.id == Usuario.rol_id, Rol.organizacion_id == Usuario.organizacion_id))
+        .join(
+            RolPermiso,
+            and_(
+                RolPermiso.rol_id == Usuario.rol_id,
+                RolPermiso.organizacion_id == Usuario.organizacion_id,
+            ),
+        )
+        .where(
+            Usuario.organizacion_id == organizacion_id,
+            Usuario.estado == "ACTIVO",
+            Usuario.id != excluir_usuario_id,
+            Usuario.pin_autorizacion_hash.is_not(None),
+            Usuario.pin_autorizacion_sal.is_not(None),
+            Usuario.pin_autorizacion_iteraciones.is_not(None),
+            Rol.activo.is_(True),
+            RolPermiso.permiso_codigo.in_(list(permisos)),
+        )
+        .order_by(Usuario.nombre, Usuario.id)
+    )
+    acumulado: dict[UUID, tuple[str, set[str], str, str, int]] = {}
+    for usuario_id, nombre, permiso, pin_hash, sal, iteraciones in sesion.execute(consulta).all():
+        acumulado.setdefault(usuario_id, (nombre, set(), pin_hash, sal, iteraciones))[1].add(
+            permiso
+        )
+    return [
+        (usuario_id, nombre, frozenset(encontrados), pin_hash, sal, iteraciones)
+        for usuario_id, (nombre, encontrados, pin_hash, sal, iteraciones) in acumulado.items()
+    ]
+
+
 def listar_permisos_de_todos_los_roles(
     organizacion_id: UUID, sesion: Session
 ) -> dict[UUID, list[str]]:

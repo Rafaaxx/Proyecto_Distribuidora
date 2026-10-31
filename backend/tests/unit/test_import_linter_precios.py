@@ -47,7 +47,8 @@ OTROS_MODULOS = (
     "sync",
 )
 # Los que `precios` usa o con los que no tiene relación: no pueden importarlo ni por
-# `service.py`. `clientes` (grupo 10) e `importacion` (13b) sí.
+# `service.py`. `clientes` (grupo 10), `importacion` (13b) y `sync` (change 21, el bootstrap lee
+# las versiones por `precios/service.py`; `02` §5.3: `sync ──► todos`) sí.
 SIN_RUTA_A_PRECIOS = (
     "identidad",
     "configuracion",
@@ -56,7 +57,6 @@ SIN_RUTA_A_PRECIOS = (
     "cuentas_corrientes",
     "costeo",
     "stock",
-    "sync",
 )
 
 

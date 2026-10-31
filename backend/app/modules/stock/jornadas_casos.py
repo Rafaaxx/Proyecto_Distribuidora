@@ -80,6 +80,8 @@ class JornadaAbierta:
 
     jornada_id: UUID
     ubicacion_id: UUID
+    abierta_en: datetime
+    """Momento de apertura (el bootstrap del change 21 lo informa al dispositivo)."""
 
 
 def jornada_abierta_con_ubicacion_de(
@@ -90,7 +92,11 @@ def jornada_abierta_con_ubicacion_de(
     fila = repository.leer_jornada_abierta_de(
         organizacion_id, sesion, usuario_id=usuario_id, dispositivo_id=dispositivo_id
     )
-    return None if fila is None else JornadaAbierta(jornada_id=fila[0], ubicacion_id=fila[1])
+    return (
+        None
+        if fila is None
+        else JornadaAbierta(jornada_id=fila[0], ubicacion_id=fila[1], abierta_en=fila[2])
+    )
 
 
 def ubicacion_de_jornada(

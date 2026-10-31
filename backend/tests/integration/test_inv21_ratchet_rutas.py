@@ -134,6 +134,12 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         # (tarea 8.9, aislamiento de `comando_cuarentena` entre
         # organizaciones).
         ("post", "/api/v1/sync/comandos"),
+        # Change 21, grupo 2: el bootstrap no recibe ningún id (organización, usuario y
+        # dispositivo salen del token, el aislamiento es estructural); prueba real con dos
+        # organizaciones en `test_sync_bootstrap.py::test_inv21_nada_de_otra_organizacion_en_el_
+        # bootstrap` y `::test_inv21_ratchet_el_bootstrap_es_de_lectura_y_de_otra_organizacion_
+        # no_se_ve` (login real de cada una; nada de la ajena en la respuesta).
+        ("get", "/api/v1/sync/bootstrap"),
         # Change 05, grupo 9 (`catalogo/api.py`, tarea 9.1/9.2), cobertura
         # de tarea 11.1: las trece rutas nuevas, cada una con su prueba de
         # aislamiento real -- incluida la referencia ajena EN EL CONTENIDO

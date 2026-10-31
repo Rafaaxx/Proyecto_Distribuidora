@@ -70,6 +70,11 @@ async function renovarAccessToken(): Promise<string | null> {
     return null
   }
 
+  return renovarCompartida()
+}
+
+/** Una sola renovación en vuelo; no consulta `sesionTerminada()` (la pide quien llama). */
+async function renovarCompartida(): Promise<string | null> {
   if (renovacionEnCurso) {
     return renovacionEnCurso
   }
@@ -97,6 +102,23 @@ async function renovarAccessToken(): Promise<string | null> {
     return await renovacionEnCurso
   } finally {
     renovacionEnCurso = null
+  }
+}
+
+export type ResultadoRenovacion = 'renovada' | 'rechazada' | 'sin_red'
+
+/**
+ * Renueva el access token con el refresh token a pedido (change 21, `design.md` D14): `/ruta` la
+ * llama al desbloquear con el PIN y con conexión. A diferencia de `apiFetch`, la hace aunque la
+ * sesión figure terminada, y distingue el rechazo (hay que iniciar sesión) del corte de red
+ * (se sigue con los datos locales).
+ */
+export async function renovarSesion(): Promise<ResultadoRenovacion> {
+  try {
+    const token = await renovarCompartida()
+    return token ? 'renovada' : 'rechazada'
+  } catch {
+    return 'sin_red'
   }
 }
 

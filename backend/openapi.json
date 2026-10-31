@@ -11919,6 +11919,73 @@
         }
       }
     },
+    "/api/v1/sync/bootstrap": {
+      "get": {
+        "tags": [
+          "sync"
+        ],
+        "summary": "Obtener Bootstrap",
+        "description": "El bootstrap del dispositivo (change 21, `design.md` D2, D3, D9; ADR-006, SYN-11): todo lo\nque el vendedor necesita para operar sin conexión, en una sola foto coherente.\n\nExige sesión habilitada (usuario y rol activos, ADR-028) y una jornada `ABIERTA` propia en el\ndispositivo del token; sin ella, 409 `JORNADA_REQUERIDA`. No declara un permiso fijo (cada\nsección se filtra por el permiso del momento: `VENDER`, `USAR_LISTA_ANTERIOR`) y por eso está\nexenta del ratchet de permiso por ruta. `since` se acepta y se ignora: la respuesta es siempre\nel conjunto completo (ADR-006). Solo lee: no pasa por el bus de comandos ni escribe nada.",
+        "operationId": "obtener_bootstrap_api_v1_sync_bootstrap_get",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BootstrapResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/ventas": {
       "post": {
         "tags": [
@@ -13114,6 +13181,25 @@
         "title": "AjusteResponse",
         "description": "Sale de `comando.resultado` (un reenvío idempotente devuelve lo mismo, INV-06); la\nruta le agrega el costo de cada línea, leído del ajuste, si el usuario tiene `VER_COSTOS`."
       },
+      "AlcanceBootstrap": {
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "entidad_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Entidad Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tipo",
+          "entidad_id"
+        ],
+        "title": "AlcanceBootstrap"
+      },
       "AlcanceDeReglaResponse": {
         "properties": {
           "tipo": {
@@ -13187,6 +13273,30 @@
         ],
         "title": "AlcanceReglaResponse",
         "description": "Un alcance con el nombre de su entidad."
+      },
+      "AlicuotaBootstrap": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "valor": {
+            "type": "string",
+            "title": "Valor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "valor"
+        ],
+        "title": "AlicuotaBootstrap"
       },
       "AlicuotaCrearRequest": {
         "properties": {
@@ -13314,6 +13424,49 @@
         ],
         "title": "AnulacionDeTransferenciaResponse"
       },
+      "AutorizadorBootstrap": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "permisos": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Permisos"
+          },
+          "pin_hash": {
+            "type": "string",
+            "title": "Pin Hash"
+          },
+          "pin_sal": {
+            "type": "string",
+            "title": "Pin Sal"
+          },
+          "iteraciones": {
+            "type": "integer",
+            "title": "Iteraciones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "permisos",
+          "pin_hash",
+          "pin_sal",
+          "iteraciones"
+        ],
+        "title": "AutorizadorBootstrap",
+        "description": "La derivación PBKDF2 del PIN de un autorizador (`02` §12.4, ADR-011): nunca el PIN."
+      },
       "AutorizadorContextoResponse": {
         "properties": {
           "id": {
@@ -13358,6 +13511,91 @@
         ],
         "title": "Body_importar_api_v1_importaciones__tipo__post"
       },
+      "BootstrapResponse": {
+        "properties": {
+          "generado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generado En"
+          },
+          "sesion": {
+            "$ref": "#/components/schemas/SesionBootstrap"
+          },
+          "configuracion": {
+            "$ref": "#/components/schemas/ConfiguracionBootstrap"
+          },
+          "contexto_venta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContextoVentaBootstrap"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "catalogos": {
+            "$ref": "#/components/schemas/CatalogosBootstrap"
+          },
+          "productos": {
+            "items": {
+              "$ref": "#/components/schemas/ProductoBootstrap"
+            },
+            "type": "array",
+            "title": "Productos"
+          },
+          "clientes": {
+            "items": {
+              "$ref": "#/components/schemas/ClienteBootstrap"
+            },
+            "type": "array",
+            "title": "Clientes"
+          },
+          "listas": {
+            "items": {
+              "$ref": "#/components/schemas/ListaBootstrap"
+            },
+            "type": "array",
+            "title": "Listas"
+          },
+          "reglas_descuento": {
+            "items": {
+              "$ref": "#/components/schemas/ReglaDescuentoBootstrap"
+            },
+            "type": "array",
+            "title": "Reglas Descuento"
+          },
+          "stock": {
+            "items": {
+              "$ref": "#/components/schemas/StockBootstrap"
+            },
+            "type": "array",
+            "title": "Stock"
+          },
+          "autorizadores": {
+            "items": {
+              "$ref": "#/components/schemas/AutorizadorBootstrap"
+            },
+            "type": "array",
+            "title": "Autorizadores"
+          }
+        },
+        "type": "object",
+        "required": [
+          "generado_en",
+          "sesion",
+          "configuracion",
+          "contexto_venta",
+          "catalogos",
+          "productos",
+          "clientes",
+          "listas",
+          "reglas_descuento",
+          "stock",
+          "autorizadores"
+        ],
+        "title": "BootstrapResponse"
+      },
       "BorradorResponse": {
         "properties": {
           "version": {
@@ -13398,6 +13636,38 @@
         ],
         "title": "BorradorResponse",
         "description": "El borrador de una lista: sus precios y, aparte, los productos activos sin precio."
+      },
+      "CatalogosBootstrap": {
+        "properties": {
+          "medios_pago": {
+            "items": {
+              "$ref": "#/components/schemas/MedioPagoBootstrap"
+            },
+            "type": "array",
+            "title": "Medios Pago"
+          },
+          "motivos": {
+            "items": {
+              "$ref": "#/components/schemas/MotivoBootstrap"
+            },
+            "type": "array",
+            "title": "Motivos"
+          },
+          "alicuotas": {
+            "items": {
+              "$ref": "#/components/schemas/AlicuotaBootstrap"
+            },
+            "type": "array",
+            "title": "Alicuotas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "medios_pago",
+          "motivos",
+          "alicuotas"
+        ],
+        "title": "CatalogosBootstrap"
       },
       "CategoriaCrearRequest": {
         "properties": {
@@ -13465,6 +13735,127 @@
           "actualizado_en"
         ],
         "title": "CategoriaResponse"
+      },
+      "ClienteBootstrap": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "codigo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Codigo"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "razon_social": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Razon Social"
+          },
+          "documento_tipo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documento Tipo"
+          },
+          "documento_numero": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documento Numero"
+          },
+          "direccion": {
+            "type": "string",
+            "title": "Direccion"
+          },
+          "telefono": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telefono"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "lista_precio_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lista Precio Id"
+          },
+          "es_consumidor_final": {
+            "type": "boolean",
+            "title": "Es Consumidor Final"
+          },
+          "en_cartera": {
+            "type": "boolean",
+            "title": "En Cartera"
+          },
+          "saldo": {
+            "type": "string",
+            "title": "Saldo"
+          },
+          "credito": {
+            "$ref": "#/components/schemas/CreditoBootstrap"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "codigo",
+          "nombre",
+          "razon_social",
+          "documento_tipo",
+          "documento_numero",
+          "direccion",
+          "telefono",
+          "estado",
+          "lista_precio_id",
+          "es_consumidor_final",
+          "en_cartera",
+          "saldo",
+          "credito"
+        ],
+        "title": "ClienteBootstrap"
       },
       "ClienteCrearRequest": {
         "properties": {
@@ -15401,6 +15792,130 @@
         "title": "CondicionIvaCambiarRequest",
         "description": "Solo la condición nueva: `organizacion_id` nunca aparece (sale del token). Un valor\nfuera del dominio cerrado responde 422."
       },
+      "ConfiguracionBootstrap": {
+        "properties": {
+          "organizacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Organizacion Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "cuit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cuit"
+          },
+          "moneda": {
+            "type": "string",
+            "title": "Moneda"
+          },
+          "zona_horaria": {
+            "type": "string",
+            "title": "Zona Horaria"
+          },
+          "condicion_iva": {
+            "type": "string",
+            "title": "Condicion Iva"
+          },
+          "modo_impositivo": {
+            "type": "string",
+            "title": "Modo Impositivo"
+          },
+          "politica_credito": {
+            "type": "string",
+            "title": "Politica Credito"
+          },
+          "tolerancia_tipo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tolerancia Tipo"
+          },
+          "tolerancia_valor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tolerancia Valor"
+          },
+          "permite_consumidor_final": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permite Consumidor Final"
+          },
+          "consumidor_final_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumidor Final Id"
+          },
+          "estado_facturacion_default": {
+            "type": "string",
+            "title": "Estado Facturacion Default"
+          },
+          "intentos_pin_max": {
+            "type": "integer",
+            "title": "Intentos Pin Max"
+          },
+          "motivo_obligatorio_lista": {
+            "type": "boolean",
+            "title": "Motivo Obligatorio Lista"
+          },
+          "nota": {
+            "$ref": "#/components/schemas/NotaBootstrap"
+          }
+        },
+        "type": "object",
+        "required": [
+          "organizacion_id",
+          "nombre",
+          "cuit",
+          "moneda",
+          "zona_horaria",
+          "condicion_iva",
+          "modo_impositivo",
+          "politica_credito",
+          "tolerancia_tipo",
+          "tolerancia_valor",
+          "permite_consumidor_final",
+          "consumidor_final_id",
+          "estado_facturacion_default",
+          "intentos_pin_max",
+          "motivo_obligatorio_lista",
+          "nota"
+        ],
+        "title": "ConfiguracionBootstrap"
+      },
       "ConfiguracionFiscalResponse": {
         "properties": {
           "condicion_iva": {
@@ -15510,6 +16025,23 @@
         ],
         "title": "ContextoDeVentaResponse",
         "description": "`GET /ventas/contexto` (change 18b, D15)."
+      },
+      "ContextoVentaBootstrap": {
+        "properties": {
+          "descuento_manual": {
+            "$ref": "#/components/schemas/DescuentoManualBootstrap"
+          },
+          "puede_superar_credito": {
+            "type": "boolean",
+            "title": "Puede Superar Credito"
+          }
+        },
+        "type": "object",
+        "required": [
+          "descuento_manual",
+          "puede_superar_credito"
+        ],
+        "title": "ContextoVentaBootstrap"
       },
       "CostoDelLoteRequest": {
         "properties": {
@@ -15872,6 +16404,55 @@
         "title": "CredencialPinRequest",
         "description": "El PIN que un supervisor escribió para autorizar una excepción (change 18b, D2). Viaja\nfuera del contenido del comando: la ruta lo separa antes de armar la huella. `SecretStr` y\nningún validador sobre el PIN (no puede citarlo en un mensaje de error)."
       },
+      "CreditoBootstrap": {
+        "properties": {
+          "limite": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limite"
+          },
+          "politica": {
+            "type": "string",
+            "title": "Politica"
+          },
+          "tolerancia_tipo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tolerancia Tipo"
+          },
+          "tolerancia_valor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tolerancia Valor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "limite",
+          "politica",
+          "tolerancia_tipo",
+          "tolerancia_valor"
+        ],
+        "title": "CreditoBootstrap"
+      },
       "CreditoContextoResponse": {
         "properties": {
           "puede_superar": {
@@ -16180,6 +16761,46 @@
         ],
         "title": "DescuentoEsperadoRequest",
         "description": "Un descuento de la línea tal como lo vio el usuario (change 18b, D1, D11): el servidor lo\ncompara con el que calcula (`DESCUENTO_DIFIERE`)."
+      },
+      "DescuentoManualBootstrap": {
+        "properties": {
+          "habilitado": {
+            "type": "boolean",
+            "title": "Habilitado"
+          },
+          "motivo_obligatorio": {
+            "type": "boolean",
+            "title": "Motivo Obligatorio"
+          },
+          "tiene_permiso": {
+            "type": "boolean",
+            "title": "Tiene Permiso"
+          },
+          "tope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tope"
+          },
+          "puede_autorizar": {
+            "type": "boolean",
+            "title": "Puede Autorizar"
+          }
+        },
+        "type": "object",
+        "required": [
+          "habilitado",
+          "motivo_obligatorio",
+          "tiene_permiso",
+          "tope",
+          "puede_autorizar"
+        ],
+        "title": "DescuentoManualBootstrap"
       },
       "DescuentoManualConfigurarRequest": {
         "properties": {
@@ -17177,6 +17798,44 @@
         "title": "JornadaAbrirRequest",
         "description": "Solo `ubicacion_id`. `extra=\"forbid\"`: la organización, el usuario y el dispositivo\nsalen del token (INV-21, RUT-03)."
       },
+      "JornadaBootstrap": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "ubicacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Id"
+          },
+          "ubicacion_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ubicacion Nombre"
+          },
+          "abierta_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Abierta En"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "ubicacion_id",
+          "ubicacion_nombre",
+          "abierta_en"
+        ],
+        "title": "JornadaBootstrap"
+      },
       "JornadaDelListadoResponse": {
         "properties": {
           "id": {
@@ -17980,6 +18639,38 @@
         ],
         "title": "LineaTransferenciaResponse"
       },
+      "ListaBootstrap": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "es_predeterminada": {
+            "type": "boolean",
+            "title": "Es Predeterminada"
+          },
+          "versiones": {
+            "items": {
+              "$ref": "#/components/schemas/VersionBootstrap"
+            },
+            "type": "array",
+            "title": "Versiones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "es_predeterminada",
+          "versiones"
+        ],
+        "title": "ListaBootstrap"
+      },
       "ListaCrearRequest": {
         "properties": {
           "nombre": {
@@ -18517,6 +19208,30 @@
         "title": "MedioPagoAdminResponse",
         "description": "Un medio de pago activo o no, para la administración (change 17b, D2, D6)."
       },
+      "MedioPagoBootstrap": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "requiere_referencia": {
+            "type": "boolean",
+            "title": "Requiere Referencia"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "requiere_referencia"
+        ],
+        "title": "MedioPagoBootstrap"
+      },
       "MedioPagoCrearRequest": {
         "properties": {
           "nombre": {
@@ -18689,6 +19404,30 @@
         ],
         "title": "MotivoAdminResponse",
         "description": "Un motivo activo o no, con su ámbito, para la administración (change 20c, D12)."
+      },
+      "MotivoBootstrap": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "ambito": {
+            "type": "string",
+            "title": "Ambito"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "ambito",
+          "nombre"
+        ],
+        "title": "MotivoBootstrap"
       },
       "MotivoContextoResponse": {
         "properties": {
@@ -18875,6 +19614,43 @@
           "devuelve_dinero"
         ],
         "title": "NotaAnulacionResponse"
+      },
+      "NotaBootstrap": {
+        "properties": {
+          "domicilio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domicilio"
+          },
+          "telefono": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telefono"
+          },
+          "muestra_saldo": {
+            "type": "boolean",
+            "title": "Muestra Saldo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "domicilio",
+          "telefono",
+          "muestra_saldo"
+        ],
+        "title": "NotaBootstrap"
       },
       "NotaClienteResponse": {
         "properties": {
@@ -19309,6 +20085,24 @@
         ],
         "title": "NotaVentaConfigurarRequest",
         "description": "`muestra_saldo` booleano estricto; domicilio y teléfono obligatorios (vacíos son `null` o\ntexto en blanco). El largo se valida en el dominio: `DATO_DE_NOTA_INVALIDO` (422)."
+      },
+      "NumeracionBootstrap": {
+        "properties": {
+          "prefijo": {
+            "type": "string",
+            "title": "Prefijo"
+          },
+          "ultimo_correlativo": {
+            "type": "integer",
+            "title": "Ultimo Correlativo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prefijo",
+          "ultimo_correlativo"
+        ],
+        "title": "NumeracionBootstrap"
       },
       "NumeracionResponse": {
         "properties": {
@@ -20339,6 +21133,30 @@
         ],
         "title": "PermisoCatalogoResponse"
       },
+      "PrecioBootstrap": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "precio_referencia": {
+            "type": "string",
+            "title": "Precio Referencia"
+          },
+          "unidades_referencia": {
+            "type": "integer",
+            "title": "Unidades Referencia"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto_id",
+          "precio_referencia",
+          "unidades_referencia"
+        ],
+        "title": "PrecioBootstrap"
+      },
       "PrecioDeVersionResponse": {
         "properties": {
           "producto_id": {
@@ -20737,6 +21555,35 @@
         ],
         "title": "PresentacionAgregarRequest"
       },
+      "PresentacionBootstrap": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "unidades_base": {
+            "type": "integer",
+            "title": "Unidades Base"
+          },
+          "es_referencia": {
+            "type": "boolean",
+            "title": "Es Referencia"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "unidades_base",
+          "es_referencia"
+        ],
+        "title": "PresentacionBootstrap"
+      },
       "PresentacionDeVentaResponse": {
         "properties": {
           "nombre": {
@@ -20927,6 +21774,81 @@
           "actualizado_en"
         ],
         "title": "PresentacionResponse"
+      },
+      "ProductoBootstrap": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "codigo": {
+            "type": "string",
+            "title": "Codigo"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "categoria_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Categoria Id"
+          },
+          "marca_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marca Id"
+          },
+          "alicuota_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Alicuota Id"
+          },
+          "alicuota_valor": {
+            "type": "string",
+            "title": "Alicuota Valor"
+          },
+          "presentacion_referencia_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presentacion Referencia Id"
+          },
+          "presentaciones": {
+            "items": {
+              "$ref": "#/components/schemas/PresentacionBootstrap"
+            },
+            "type": "array",
+            "title": "Presentaciones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "codigo",
+          "nombre",
+          "categoria_id",
+          "marca_id",
+          "alicuota_id",
+          "alicuota_valor",
+          "presentacion_referencia_id",
+          "presentaciones"
+        ],
+        "title": "ProductoBootstrap"
       },
       "ProductoCrearRequest": {
         "properties": {
@@ -21870,6 +22792,111 @@
         ],
         "title": "ReglaCrearRequest",
         "description": "Cuerpo de `POST /precios/listas/{lista_id}/reglas`: `valor` es una fracción en string\n(30% = `\"0.300000\"`); `alcance_id` va solo con un alcance que no es `LISTA`."
+      },
+      "ReglaDescuentoBootstrap": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "medida": {
+            "type": "string",
+            "title": "Medida"
+          },
+          "operador": {
+            "type": "string",
+            "title": "Operador"
+          },
+          "umbral": {
+            "type": "string",
+            "title": "Umbral"
+          },
+          "accion_tipo": {
+            "type": "string",
+            "title": "Accion Tipo"
+          },
+          "accion_porcentaje": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accion Porcentaje"
+          },
+          "accion_importe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accion Importe"
+          },
+          "acumulable": {
+            "type": "boolean",
+            "title": "Acumulable"
+          },
+          "prioridad": {
+            "type": "integer",
+            "title": "Prioridad"
+          },
+          "vigencia_desde": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Vigencia Desde"
+          },
+          "vigencia_hasta": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vigencia Hasta"
+          },
+          "alcances": {
+            "items": {
+              "$ref": "#/components/schemas/AlcanceBootstrap"
+            },
+            "type": "array",
+            "title": "Alcances"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "tipo",
+          "medida",
+          "operador",
+          "umbral",
+          "accion_tipo",
+          "accion_porcentaje",
+          "accion_importe",
+          "acumulable",
+          "prioridad",
+          "vigencia_desde",
+          "vigencia_hasta",
+          "alcances"
+        ],
+        "title": "ReglaDescuentoBootstrap"
       },
       "ReglaDescuentoCrearRequest": {
         "properties": {
@@ -22905,6 +23932,53 @@
         "title": "SenalesResponse",
         "description": "Las señales de un precio del borrador (D2, D3, D7) y, si salió de un costo, de qué\npresentación."
       },
+      "SesionBootstrap": {
+        "properties": {
+          "usuario": {
+            "$ref": "#/components/schemas/UsuarioBootstrap"
+          },
+          "permisos": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Permisos"
+          },
+          "jornada": {
+            "$ref": "#/components/schemas/JornadaBootstrap"
+          },
+          "numeracion": {
+            "$ref": "#/components/schemas/NumeracionBootstrap"
+          }
+        },
+        "type": "object",
+        "required": [
+          "usuario",
+          "permisos",
+          "jornada",
+          "numeracion"
+        ],
+        "title": "SesionBootstrap"
+      },
+      "StockBootstrap": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "cantidad_base": {
+            "type": "integer",
+            "title": "Cantidad Base"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto_id",
+          "cantidad_base"
+        ],
+        "title": "StockBootstrap"
+      },
       "StockDeUbicacionResponse": {
         "properties": {
           "items": {
@@ -23462,6 +24536,30 @@
         "additionalProperties": false,
         "type": "object",
         "title": "UsuarioBajaRequest"
+      },
+      "UsuarioBootstrap": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "usuario": {
+            "type": "string",
+            "title": "Usuario"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "usuario"
+        ],
+        "title": "UsuarioBootstrap"
       },
       "UsuarioCambioResponse": {
         "properties": {
@@ -25086,6 +26184,57 @@
         ],
         "title": "VentaResumenResponse",
         "description": "Una venta del listado. Los importes viajan como string (INV-03)."
+      },
+      "VersionBootstrap": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "numero": {
+            "type": "integer",
+            "title": "Numero"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "vigencia_desde": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Vigencia Desde"
+          },
+          "vigencia_hasta": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vigencia Hasta"
+          },
+          "precios": {
+            "items": {
+              "$ref": "#/components/schemas/PrecioBootstrap"
+            },
+            "type": "array",
+            "title": "Precios"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "numero",
+          "estado",
+          "vigencia_desde",
+          "vigencia_hasta",
+          "precios"
+        ],
+        "title": "VersionBootstrap"
       },
       "VersionElegibleResponse": {
         "properties": {

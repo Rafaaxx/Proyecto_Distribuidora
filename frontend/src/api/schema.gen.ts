@@ -2614,6 +2614,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/bootstrap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Bootstrap
+         * @description El bootstrap del dispositivo (change 21, `design.md` D2, D3, D9; ADR-006, SYN-11): todo lo
+         *     que el vendedor necesita para operar sin conexión, en una sola foto coherente.
+         *
+         *     Exige sesión habilitada (usuario y rol activos, ADR-028) y una jornada `ABIERTA` propia en el
+         *     dispositivo del token; sin ella, 409 `JORNADA_REQUERIDA`. No declara un permiso fijo (cada
+         *     sección se filtra por el permiso del momento: `VENDER`, `USAR_LISTA_ANTERIOR`) y por eso está
+         *     exenta del ratchet de permiso por ruta. `since` se acepta y se ignora: la respuesta es siempre
+         *     el conjunto completo (ADR-006). Solo lee: no pasa por el bus de comandos ni escribe nada.
+         */
+        get: operations["obtener_bootstrap_api_v1_sync_bootstrap_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ventas": {
         parameters: {
             query?: never;
@@ -2990,6 +3017,16 @@ export interface components {
             /** Lineas */
             lineas: components["schemas"]["LineaAjusteResponse"][];
         };
+        /** AlcanceBootstrap */
+        AlcanceBootstrap: {
+            /** Tipo */
+            tipo: string;
+            /**
+             * Entidad Id
+             * Format: uuid
+             */
+            entidad_id: string;
+        };
         /** AlcanceDeReglaResponse */
         AlcanceDeReglaResponse: {
             /** Tipo */
@@ -3030,6 +3067,18 @@ export interface components {
             entidad_id: string;
             /** Nombre */
             nombre: string;
+        };
+        /** AlicuotaBootstrap */
+        AlicuotaBootstrap: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Valor */
+            valor: string;
         };
         /**
          * AlicuotaCrearRequest
@@ -3106,6 +3155,27 @@ export interface components {
             anulada_por_id: string;
         };
         /**
+         * AutorizadorBootstrap
+         * @description La derivación PBKDF2 del PIN de un autorizador (`02` §12.4, ADR-011): nunca el PIN.
+         */
+        AutorizadorBootstrap: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Permisos */
+            permisos: string[];
+            /** Pin Hash */
+            pin_hash: string;
+            /** Pin Sal */
+            pin_sal: string;
+            /** Iteraciones */
+            iteraciones: number;
+        };
+        /**
          * AutorizadorContextoResponse
          * @description Nunca la derivación del PIN ni nada de ella (ADR-011).
          */
@@ -3127,6 +3197,30 @@ export interface components {
             /** Archivo */
             archivo: string;
         };
+        /** BootstrapResponse */
+        BootstrapResponse: {
+            /**
+             * Generado En
+             * Format: date-time
+             */
+            generado_en: string;
+            sesion: components["schemas"]["SesionBootstrap"];
+            configuracion: components["schemas"]["ConfiguracionBootstrap"];
+            contexto_venta: components["schemas"]["ContextoVentaBootstrap"] | null;
+            catalogos: components["schemas"]["CatalogosBootstrap"];
+            /** Productos */
+            productos: components["schemas"]["ProductoBootstrap"][];
+            /** Clientes */
+            clientes: components["schemas"]["ClienteBootstrap"][];
+            /** Listas */
+            listas: components["schemas"]["ListaBootstrap"][];
+            /** Reglas Descuento */
+            reglas_descuento: components["schemas"]["ReglaDescuentoBootstrap"][];
+            /** Stock */
+            stock: components["schemas"]["StockBootstrap"][];
+            /** Autorizadores */
+            autorizadores: components["schemas"]["AutorizadorBootstrap"][];
+        };
         /**
          * BorradorResponse
          * @description El borrador de una lista: sus precios y, aparte, los productos activos sin precio.
@@ -3139,6 +3233,15 @@ export interface components {
             siguiente_cursor: string | null;
             /** Productos Sin Precio */
             productos_sin_precio: components["schemas"]["ProductoSinPrecioResponse"][];
+        };
+        /** CatalogosBootstrap */
+        CatalogosBootstrap: {
+            /** Medios Pago */
+            medios_pago: components["schemas"]["MedioPagoBootstrap"][];
+            /** Motivos */
+            motivos: components["schemas"]["MotivoBootstrap"][];
+            /** Alicuotas */
+            alicuotas: components["schemas"]["AlicuotaBootstrap"][];
         };
         /** CategoriaCrearRequest */
         CategoriaCrearRequest: {
@@ -3173,6 +3276,39 @@ export interface components {
              * Format: date-time
              */
             actualizado_en: string;
+        };
+        /** ClienteBootstrap */
+        ClienteBootstrap: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Codigo */
+            codigo: string | null;
+            /** Nombre */
+            nombre: string;
+            /** Razon Social */
+            razon_social: string | null;
+            /** Documento Tipo */
+            documento_tipo: string | null;
+            /** Documento Numero */
+            documento_numero: string | null;
+            /** Direccion */
+            direccion: string;
+            /** Telefono */
+            telefono: string | null;
+            /** Estado */
+            estado: string;
+            /** Lista Precio Id */
+            lista_precio_id: string | null;
+            /** Es Consumidor Final */
+            es_consumidor_final: boolean;
+            /** En Cartera */
+            en_cartera: boolean;
+            /** Saldo */
+            saldo: string;
+            credito: components["schemas"]["CreditoBootstrap"];
         };
         /**
          * ClienteCrearRequest
@@ -3955,6 +4091,43 @@ export interface components {
              */
             condicion_iva: "RESPONSABLE_INSCRIPTO" | "MONOTRIBUTO" | "EXENTO";
         };
+        /** ConfiguracionBootstrap */
+        ConfiguracionBootstrap: {
+            /**
+             * Organizacion Id
+             * Format: uuid
+             */
+            organizacion_id: string;
+            /** Nombre */
+            nombre: string;
+            /** Cuit */
+            cuit: string | null;
+            /** Moneda */
+            moneda: string;
+            /** Zona Horaria */
+            zona_horaria: string;
+            /** Condicion Iva */
+            condicion_iva: string;
+            /** Modo Impositivo */
+            modo_impositivo: string;
+            /** Politica Credito */
+            politica_credito: string;
+            /** Tolerancia Tipo */
+            tolerancia_tipo: string | null;
+            /** Tolerancia Valor */
+            tolerancia_valor: string | null;
+            /** Permite Consumidor Final */
+            permite_consumidor_final: boolean | null;
+            /** Consumidor Final Id */
+            consumidor_final_id: string | null;
+            /** Estado Facturacion Default */
+            estado_facturacion_default: string;
+            /** Intentos Pin Max */
+            intentos_pin_max: number;
+            /** Motivo Obligatorio Lista */
+            motivo_obligatorio_lista: boolean;
+            nota: components["schemas"]["NotaBootstrap"];
+        };
         /** ConfiguracionFiscalResponse */
         ConfiguracionFiscalResponse: {
             /**
@@ -4011,6 +4184,12 @@ export interface components {
             motivos: components["schemas"]["MotivoContextoResponse"][];
             /** Autorizadores */
             autorizadores: components["schemas"]["AutorizadorContextoResponse"][];
+        };
+        /** ContextoVentaBootstrap */
+        ContextoVentaBootstrap: {
+            descuento_manual: components["schemas"]["DescuentoManualBootstrap"];
+            /** Puede Superar Credito */
+            puede_superar_credito: boolean;
         };
         /**
          * CostoDelLoteRequest
@@ -4221,6 +4400,17 @@ export interface components {
              */
             pin: string;
         };
+        /** CreditoBootstrap */
+        CreditoBootstrap: {
+            /** Limite */
+            limite: string | null;
+            /** Politica */
+            politica: string;
+            /** Tolerancia Tipo */
+            tolerancia_tipo: string | null;
+            /** Tolerancia Valor */
+            tolerancia_valor: string | null;
+        };
         /** CreditoContextoResponse */
         CreditoContextoResponse: {
             /** Puede Superar */
@@ -4319,6 +4509,19 @@ export interface components {
             porcentaje?: string | null;
             /** Importe */
             importe: string;
+        };
+        /** DescuentoManualBootstrap */
+        DescuentoManualBootstrap: {
+            /** Habilitado */
+            habilitado: boolean;
+            /** Motivo Obligatorio */
+            motivo_obligatorio: boolean;
+            /** Tiene Permiso */
+            tiene_permiso: boolean;
+            /** Tope */
+            tope: string | null;
+            /** Puede Autorizar */
+            puede_autorizar: boolean;
         };
         /**
          * DescuentoManualConfigurarRequest
@@ -4756,6 +4959,26 @@ export interface components {
              */
             ubicacion_id: string;
         };
+        /** JornadaBootstrap */
+        JornadaBootstrap: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Ubicacion Id
+             * Format: uuid
+             */
+            ubicacion_id: string;
+            /** Ubicacion Nombre */
+            ubicacion_nombre: string | null;
+            /**
+             * Abierta En
+             * Format: date-time
+             */
+            abierta_en: string;
+        };
         /** JornadaDelListadoResponse */
         JornadaDelListadoResponse: {
             /**
@@ -5081,6 +5304,20 @@ export interface components {
             /** Saldo Destino */
             saldo_destino: number;
         };
+        /** ListaBootstrap */
+        ListaBootstrap: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Es Predeterminada */
+            es_predeterminada: boolean;
+            /** Versiones */
+            versiones: components["schemas"]["VersionBootstrap"][];
+        };
         /**
          * ListaCrearRequest
          * @description Cuerpo de `POST /precios/listas`. La lista nace activa y sin versiones.
@@ -5335,6 +5572,18 @@ export interface components {
              */
             actualizado_en: string;
         };
+        /** MedioPagoBootstrap */
+        MedioPagoBootstrap: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Requiere Referencia */
+            requiere_referencia: boolean;
+        };
         /**
          * MedioPagoCrearRequest
          * @description Cuerpo de `POST /configuracion/medios-pago`: el medio nace activo y la organización sale
@@ -5443,6 +5692,18 @@ export interface components {
              */
             actualizado_en: string;
         };
+        /** MotivoBootstrap */
+        MotivoBootstrap: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Ambito */
+            ambito: string;
+            /** Nombre */
+            nombre: string;
+        };
         /** MotivoContextoResponse */
         MotivoContextoResponse: {
             /**
@@ -5541,6 +5802,15 @@ export interface components {
             motivo_nombre: string | null;
             /** Devuelve Dinero */
             devuelve_dinero: boolean | null;
+        };
+        /** NotaBootstrap */
+        NotaBootstrap: {
+            /** Domicilio */
+            domicilio: string | null;
+            /** Telefono */
+            telefono: string | null;
+            /** Muestra Saldo */
+            muestra_saldo: boolean;
         };
         /** NotaClienteResponse */
         NotaClienteResponse: {
@@ -5675,6 +5945,13 @@ export interface components {
             domicilio: string | null;
             /** Telefono */
             telefono: string | null;
+        };
+        /** NumeracionBootstrap */
+        NumeracionBootstrap: {
+            /** Prefijo */
+            prefijo: string;
+            /** Ultimo Correlativo */
+            ultimo_correlativo: number;
         };
         /**
          * NumeracionResponse
@@ -6077,6 +6354,18 @@ export interface components {
             /** Modulo */
             modulo: string;
         };
+        /** PrecioBootstrap */
+        PrecioBootstrap: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Precio Referencia */
+            precio_referencia: string;
+            /** Unidades Referencia */
+            unidades_referencia: number;
+        };
         /**
          * PrecioDeVersionResponse
          * @description Un precio de una versión. Los campos de costo (`costo_referencia`, `tipo_margen`,
@@ -6236,6 +6525,20 @@ export interface components {
             /** Usar En Compra */
             usar_en_compra: boolean;
         };
+        /** PresentacionBootstrap */
+        PresentacionBootstrap: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Unidades Base */
+            unidades_base: number;
+            /** Es Referencia */
+            es_referencia: boolean;
+        };
         /**
          * PresentacionDeVentaResponse
          * @description Nombre y unidades base de una presentación activa de venta del producto, para mostrar
@@ -6334,6 +6637,36 @@ export interface components {
              * Format: date-time
              */
             actualizado_en: string;
+        };
+        /** ProductoBootstrap */
+        ProductoBootstrap: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Codigo */
+            codigo: string;
+            /** Nombre */
+            nombre: string;
+            /**
+             * Categoria Id
+             * Format: uuid
+             */
+            categoria_id: string;
+            /** Marca Id */
+            marca_id: string | null;
+            /**
+             * Alicuota Id
+             * Format: uuid
+             */
+            alicuota_id: string;
+            /** Alicuota Valor */
+            alicuota_valor: string;
+            /** Presentacion Referencia Id */
+            presentacion_referencia_id: string | null;
+            /** Presentaciones */
+            presentaciones: components["schemas"]["PresentacionBootstrap"][];
         };
         /** ProductoCrearRequest */
         ProductoCrearRequest: {
@@ -6739,6 +7072,43 @@ export interface components {
             alcance_tipo: string;
             /** Alcance Id */
             alcance_id?: string | null;
+        };
+        /** ReglaDescuentoBootstrap */
+        ReglaDescuentoBootstrap: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Tipo */
+            tipo: string;
+            /** Medida */
+            medida: string;
+            /** Operador */
+            operador: string;
+            /** Umbral */
+            umbral: string;
+            /** Accion Tipo */
+            accion_tipo: string;
+            /** Accion Porcentaje */
+            accion_porcentaje: string | null;
+            /** Accion Importe */
+            accion_importe: string | null;
+            /** Acumulable */
+            acumulable: boolean;
+            /** Prioridad */
+            prioridad: number;
+            /**
+             * Vigencia Desde
+             * Format: date-time
+             */
+            vigencia_desde: string;
+            /** Vigencia Hasta */
+            vigencia_hasta: string | null;
+            /** Alcances */
+            alcances: components["schemas"]["AlcanceBootstrap"][];
         };
         /**
          * ReglaDescuentoCrearRequest
@@ -7169,6 +7539,24 @@ export interface components {
             /** Presentacion Del Costo Nombre */
             presentacion_del_costo_nombre: string | null;
         };
+        /** SesionBootstrap */
+        SesionBootstrap: {
+            usuario: components["schemas"]["UsuarioBootstrap"];
+            /** Permisos */
+            permisos: string[];
+            jornada: components["schemas"]["JornadaBootstrap"];
+            numeracion: components["schemas"]["NumeracionBootstrap"];
+        };
+        /** StockBootstrap */
+        StockBootstrap: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Cantidad Base */
+            cantidad_base: number;
+        };
         /** StockDeUbicacionResponse */
         StockDeUbicacionResponse: {
             /** Items */
@@ -7446,6 +7834,18 @@ export interface components {
         UsuarioBajaRequest: {
             /** Observacion */
             observacion?: string | null;
+        };
+        /** UsuarioBootstrap */
+        UsuarioBootstrap: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+            /** Usuario */
+            usuario: string;
         };
         /**
          * UsuarioCambioResponse
@@ -8103,6 +8503,27 @@ export interface components {
             estado_facturacion: string;
             /** Modo Confirmacion */
             modo_confirmacion: string;
+        };
+        /** VersionBootstrap */
+        VersionBootstrap: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Numero */
+            numero: number;
+            /** Estado */
+            estado: string;
+            /**
+             * Vigencia Desde
+             * Format: date-time
+             */
+            vigencia_desde: string;
+            /** Vigencia Hasta */
+            vigencia_hasta: string | null;
+            /** Precios */
+            precios: components["schemas"]["PrecioBootstrap"][];
         };
         /** VersionElegibleResponse */
         VersionElegibleResponse: {
@@ -13579,6 +14000,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LoteComandosResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_bootstrap_api_v1_sync_bootstrap_get: {
+        parameters: {
+            query?: {
+                since?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BootstrapResponse"];
                 };
             };
             /** @description Validation Error */

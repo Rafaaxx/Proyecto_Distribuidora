@@ -64,6 +64,7 @@ ignore_imports = [
     "app.modules.sync.models -> sqlalchemy",
     "app.modules.sync.repository -> sqlalchemy",
     "app.modules.sync.service -> sqlalchemy",
+    "app.modules.sync.bootstrap -> sqlalchemy",
     "app.modules.sync.api -> fastapi",
     "app.modules.sync.api -> sqlalchemy",
     "app.modules.sync.api -> app.api_v1.dependencias",
@@ -922,7 +923,9 @@ allow_indirect_imports = "true"
 # `02` SS5.3: `precios -> catalogo, proveedores, identidad` y `clientes -> precios`. Lo
 # contrario formaria un ciclo, asi que ninguno de los modulos que `precios` usa (ni los que
 # no tienen relacion con el) lo importa, ni siquiera por su `service.py`. Solo `clientes` e
-# `importacion` quedan fuera de esta lista.
+# `importacion` quedan fuera de esta lista. Change 21 (`design.md` D1, `02` SS5.3: `sync -> todos`):
+# `sync` tambien queda fuera, porque el bootstrap lee las versiones y los precios por
+# `precios/service.py` (no hay ciclo: `precios` no importa `sync`).
 [[tool.importlinter.contracts]]
 id = "precios-no-es-alcanzado-por-sus-dependencias"
 name = "las dependencias de precios no lo importan de vuelta"
@@ -935,7 +938,6 @@ source_modules = [
     "app.modules.cuentas_corrientes",
     "app.modules.costeo",
     "app.modules.stock",
-    "app.modules.sync",
 ]
 forbidden_modules = ["app.modules.precios"]
 allow_indirect_imports = "true"

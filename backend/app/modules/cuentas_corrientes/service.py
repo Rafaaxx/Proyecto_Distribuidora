@@ -130,6 +130,14 @@ def obtener_saldo(
     return CERO if saldo is None else saldo
 
 
+def saldos_de_clientes(organizacion_id: UUID, sesion: Session) -> dict[UUID, Decimal]:
+    """`{cliente_id: saldo}` de todos los clientes de la organización con cuenta, en una sola
+    consulta SQL, sin sumar en Python (change 21, D4; CC-04, INV-13). El cliente sin movimientos
+    no figura: quien consume lo toma como `0.00`. Solo lectura; filtra por organización
+    (INV-21)."""
+    return repository.saldos_de_cuentas(organizacion_id, sesion, cuenta_tipo=CLIENTE)
+
+
 def cuenta_tiene_movimientos(
     organizacion_id: UUID, sesion: Session, *, cuenta_tipo: str, entidad_id: UUID
 ) -> bool:

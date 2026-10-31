@@ -55,6 +55,7 @@ from app.modules.precios.domain.redondeo import Redondeo, redondeo_aplicable, va
 from app.modules.precios.domain.reglas import ProductoDeRegla, Regla, resolver_regla, validar_regla
 from app.modules.precios.domain.versiones import (
     HISTORICA,
+    PROGRAMADA,
     VIGENTE,
     VersionDeLista,
     estados_derivados,
@@ -1231,3 +1232,132 @@ def definir_lista_predeterminada(
         dispositivo_id_actor=dispositivo_id_actor,
         operation_id=operation_id,
     )
+
+
+# --- lo que baja el bootstrap (change 21, D5, D6) ---------------------------------------------
+
+
+@dataclass(frozen=True)
+class PrecioParaDispositivo:
+    """El precio de un producto en una versión, tal como baja al teléfono (PRC-22): el importe de
+    la presentación de referencia y las unidades con que se calculó."""
+
+    producto_id: UUID
+    precio_referencia: Decimal
+    unidades_referencia: int
+
+
+@dataclass(frozen=True)
+class VersionParaDispositivo:
+    """Una versión `PUBLICADA` no anulada con su estado derivado (`VIGENTE`, `PROGRAMADA` o
+    `HISTORICA`), su vigencia y sus precios."""
+
+    version_id: UUID
+    numero: int
+    estado: str
+    vigencia_desde: datetime
+    vigencia_hasta: datetime | None
+    precios: tuple[PrecioParaDispositivo, ...]
+
+
+@dataclass(frozen=True)
+class ListaParaDispositivo:
+    lista_id: UUID
+    nombre: str
+    es_predeterminada: bool
+    versiones: tuple[VersionParaDispositivo, ...]
+
+
+def listas_aplicables_a_clientes(
+    organizacion_id: UUID, sesion: Session, *, lista_asignada_ids: Collection[UUID]
+) -> list[UUID]:
+    """Las listas con las que se resuelve el precio de un conjunto de clientes (PRC-20): las
+    asignadas y la predeterminada de la organización, solo las activas y de la organización
+    (INV-21), sin repetir y con la predeterminada primero. Solo lectura."""
+    pedidas = set(lista_asignada_ids)
+    configuracion = identidad_service.obtener_configuracion(organizacion_id, sesion)
+    predeterminada_id = None if configuracion is None else configuracion.lista_precio_default_id
+    if predeterminada_id is not None:
+        pedidas.add(predeterminada_id)
+    activas = {lista.id for lista in repository.listar_listas_activas(organizacion_id, sesion)}
+    aplicables = sorted(pedidas & activas, key=str)
+    if predeterminada_id in aplicables:
+        aplicables.remove(predeterminada_id)
+        aplicables.insert(0, predeterminada_id)
+    return aplicables
+
+
+def listas_para_dispositivo(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    momento: datetime,
+    lista_ids: Collection[UUID] | None,
+    producto_ids: Collection[UUID],
+    con_historicas: bool,
+) -> list[ListaParaDispositivo]:
+    """Las listas activas (`lista_ids`, o todas si es `None`) con sus versiones `PUBLICADA` no
+    anuladas a `momento` y los precios de `producto_ids` (change 21, D5, D6; PRC-20, PRC-21,
+    PRC-22): la vigente y las programadas, y con `con_historicas` también las históricas
+    elegibles. Nunca borradores ni anuladas (INV-11). Una lista inactiva, inexistente o de otra
+    organización no figura (INV-21). Las listas y los precios se leen por lote, no de a una.
+    Solo lectura, sin bloquear."""
+    if momento.tzinfo is None:
+        raise ValueError("El momento de la consulta debe tener zona horaria (timestamptz).")
+    activas = repository.listar_listas_activas(organizacion_id, sesion)
+    if lista_ids is not None:
+        pedidas = set(lista_ids)
+        activas = [lista for lista in activas if lista.id in pedidas]
+    configuracion = identidad_service.obtener_configuracion(organizacion_id, sesion)
+    predeterminada_id = None if configuracion is None else configuracion.lista_precio_default_id
+
+    versiones_por_lista: dict[UUID, list[ListaVersion]] = {lista.id: [] for lista in activas}
+    for version in repository.listar_versiones_de_listas(
+        organizacion_id, list(versiones_por_lista), sesion
+    ):
+        versiones_por_lista[version.lista_id].append(version)
+
+    estados_admitidos = (
+        {VIGENTE, PROGRAMADA, HISTORICA} if con_historicas else {VIGENTE, PROGRAMADA}
+    )
+    elegidas: dict[UUID, tuple[ListaVersion, str]] = {}
+    for versiones in versiones_por_lista.values():
+        estados = estados_derivados([_como_version_de_lista(v) for v in versiones], momento)
+        for version in versiones:
+            estado = estados[version.id]
+            if estado in estados_admitidos and version.vigencia_desde is not None:
+                elegidas[version.id] = (version, estado or "")
+
+    precios_por_version: dict[UUID, list[PrecioParaDispositivo]] = {}
+    for fila in repository.listar_precios_de_versiones(
+        organizacion_id, list(elegidas), producto_ids, sesion
+    ):
+        precios_por_version.setdefault(fila.version_id, []).append(
+            PrecioParaDispositivo(
+                producto_id=fila.producto_id,
+                precio_referencia=fila.precio_final,
+                unidades_referencia=fila.unidades_referencia,
+            )
+        )
+
+    return [
+        ListaParaDispositivo(
+            lista_id=lista.id,
+            nombre=lista.nombre,
+            es_predeterminada=lista.id == predeterminada_id,
+            versiones=tuple(
+                VersionParaDispositivo(
+                    version_id=version.id,
+                    numero=version.numero,
+                    estado=estado,
+                    vigencia_desde=version.vigencia_desde,  # type: ignore[arg-type]
+                    vigencia_hasta=version.vigencia_hasta,
+                    precios=tuple(precios_por_version.get(version.id, ())),
+                )
+                for version, estado in (
+                    elegidas[v.id] for v in versiones_por_lista[lista.id] if v.id in elegidas
+                )
+            ),
+        )
+        for lista in activas
+    ]

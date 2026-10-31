@@ -6,7 +6,7 @@ import { Alert } from '../../../components/ui/Alert'
 import { Boton } from '../../../components/ui/Button'
 import { Campo } from '../../../components/ui/Field'
 import { esquemaLogin, type DatosLogin } from '../../../domain/identidad/loginSchema'
-import { useLogin } from './useLogin'
+import { useLogin } from '../../../features/identidad/useLogin'
 
 /**
  * Pantalla de inicio de sesión de `/admin` (tarea 13.4). React Hook Form +

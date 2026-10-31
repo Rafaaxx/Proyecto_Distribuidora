@@ -1,7 +1,8 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { Link, useInRouterContext, useLocation } from 'react-router-dom'
 
 import { conEnfasis } from '../../ayuda/formato'
-import { AYUDAS, type ClaveDeAyuda } from '../../ayuda/textos'
+import { AYUDAS, type ClaveDeAyuda, type TemaDeAyuda } from '../../ayuda/textos'
 
 /**
  * Botón "(?)" de ayuda contextual (change 16b, ADR-051, `design.md` D2 = A).
@@ -18,12 +19,61 @@ import { AYUDAS, type ClaveDeAyuda } from '../../ayuda/textos'
 const EVENTO_AYUDA_ABIERTA = 'ayuda:abierta'
 const MARGEN_PX = 8
 
+/**
+ * La aplicación corre instalada (modo `standalone`; en iPhone, `navigator.standalone`). Instalada no
+ * hay pestañas: "Ver más" tiene que navegar en la misma ventana (change 21, D21).
+ */
+function estaInstalada(): boolean {
+  const iphone = (globalThis.navigator as { standalone?: boolean } | undefined)?.standalone === true
+  const modo = typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches
+  return iphone || modo
+}
+
+const CLASE_VER_MAS = 'mt-2 inline-block font-medium underline'
+
+/** Sin enrutador (pantallas sueltas): siempre otra pestaña, como en `/admin` en el navegador. */
+function VerMasExterno({ tema }: { tema: TemaDeAyuda }) {
+  return (
+    <a href={`/admin/ayuda/${tema}`} target="_blank" rel="noopener noreferrer" className={CLASE_VER_MAS}>
+      Ver más
+    </a>
+  )
+}
+
+/**
+ * "Ver más": en `/ruta` navega a `/ruta/ayuda/<tema>` en la misma ventana (disponible sin
+ * conexión, precacheada); en `/admin` navega en la misma ventana si la aplicación está instalada
+ * y abre otra pestaña si no (ADR-051; change 21, D21).
+ */
+function VerMasEnRouter({ tema }: { tema: TemaDeAyuda }) {
+  const { pathname } = useLocation()
+  if (pathname === '/ruta' || pathname.startsWith('/ruta/')) {
+    return (
+      <Link to={`/ruta/ayuda/${tema}`} className={CLASE_VER_MAS}>
+        Ver más
+      </Link>
+    )
+  }
+  if (estaInstalada()) {
+    return (
+      <Link to={`/admin/ayuda/${tema}`} className={CLASE_VER_MAS}>
+        Ver más
+      </Link>
+    )
+  }
+  return <VerMasExterno tema={tema} />
+}
+
+function VerMas({ tema }: { tema: TemaDeAyuda }) {
+  return useInRouterContext() ? <VerMasEnRouter tema={tema} /> : <VerMasExterno tema={tema} />
+}
+
 export interface AyudaProps {
   clave: ClaveDeAyuda
 }
 
 export function Ayuda({ clave }: AyudaProps) {
-  const entrada: { titulo: string; texto: string; ejemplo?: string; verMas?: string } = AYUDAS[clave]
+  const entrada: { titulo: string; texto: string; ejemplo?: string; verMas?: TemaDeAyuda } = AYUDAS[clave]
   const idPanel = useId()
   const [abierta, setAbierta] = useState(false)
   const [desplazamiento, setDesplazamiento] = useState(0)
@@ -72,7 +122,9 @@ export function Ayuda({ clave }: AyudaProps) {
     if (width === 0) {
       return
     }
-    const sobra = left + width - (window.innerWidth - MARGEN_PX)
+    // `clientWidth` y no `innerWidth`: este último incluye la barra de desplazamiento vertical y
+    // el panel quedaba tapado por ella (prueba manual del change 21).
+    const sobra = left + width - (document.documentElement.clientWidth - MARGEN_PX)
     const corrimiento = -Math.max(0, sobra)
     setDesplazamiento(left + corrimiento < MARGEN_PX ? MARGEN_PX - left : corrimiento)
   }, [abierta])
@@ -111,16 +163,7 @@ export function Ayuda({ clave }: AyudaProps) {
           {entrada.ejemplo && (
             <p className="mt-2 rounded-md bg-surface-muted p-2 text-primary/80">{conEnfasis(entrada.ejemplo)}</p>
           )}
-          {entrada.verMas && (
-            <a
-              href={`/admin/ayuda/${entrada.verMas}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-block font-medium underline"
-            >
-              Ver más
-            </a>
-          )}
+          {entrada.verMas && <VerMas tema={entrada.verMas} />}
         </div>
       )}
     </span>

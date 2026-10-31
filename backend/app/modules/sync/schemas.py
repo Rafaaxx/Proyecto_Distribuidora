@@ -79,3 +79,213 @@ class ResultadoItemLoteResponse(BaseModel):
 
 class LoteComandosResponse(BaseModel):
     resultados: list[ResultadoItemLoteResponse]
+
+
+# --- `GET /api/v1/sync/bootstrap` (change 21, `design.md` D9) ---------------------------------
+# Una sola respuesta con secciones. Importes, porcentajes y alícuotas viajan como string decimal
+# (`"31250.00"`, INV-03); las cantidades en unidad base, como enteros (INV-04). Ninguna sección
+# lleva costos ni márgenes (D7), ni el PIN ni la contraseña de nadie (D8).
+
+
+class UsuarioBootstrap(BaseModel):
+    id: UUID
+    nombre: str
+    usuario: str
+
+
+class JornadaBootstrap(BaseModel):
+    id: UUID
+    ubicacion_id: UUID
+    ubicacion_nombre: str | None
+    abierta_en: datetime
+
+
+class NumeracionBootstrap(BaseModel):
+    prefijo: str
+    ultimo_correlativo: int
+
+
+class SesionBootstrap(BaseModel):
+    usuario: UsuarioBootstrap
+    permisos: list[str]
+    jornada: JornadaBootstrap
+    numeracion: NumeracionBootstrap
+
+
+class NotaBootstrap(BaseModel):
+    domicilio: str | None
+    telefono: str | None
+    muestra_saldo: bool
+
+
+class ConfiguracionBootstrap(BaseModel):
+    organizacion_id: UUID
+    nombre: str
+    cuit: str | None
+    moneda: str
+    zona_horaria: str
+    condicion_iva: str
+    modo_impositivo: str
+    politica_credito: str
+    tolerancia_tipo: str | None
+    tolerancia_valor: str | None
+    permite_consumidor_final: bool | None
+    consumidor_final_id: UUID | None
+    estado_facturacion_default: str
+    intentos_pin_max: int
+    motivo_obligatorio_lista: bool
+    nota: NotaBootstrap
+
+
+class DescuentoManualBootstrap(BaseModel):
+    habilitado: bool
+    motivo_obligatorio: bool
+    tiene_permiso: bool
+    tope: str | None
+    puede_autorizar: bool
+
+
+class ContextoVentaBootstrap(BaseModel):
+    descuento_manual: DescuentoManualBootstrap
+    puede_superar_credito: bool
+
+
+class MedioPagoBootstrap(BaseModel):
+    id: UUID
+    nombre: str
+    requiere_referencia: bool
+
+
+class MotivoBootstrap(BaseModel):
+    id: UUID
+    ambito: str
+    nombre: str
+
+
+class AlicuotaBootstrap(BaseModel):
+    id: UUID
+    nombre: str
+    valor: str
+
+
+class CatalogosBootstrap(BaseModel):
+    medios_pago: list[MedioPagoBootstrap]
+    motivos: list[MotivoBootstrap]
+    alicuotas: list[AlicuotaBootstrap]
+
+
+class PresentacionBootstrap(BaseModel):
+    id: UUID
+    nombre: str
+    unidades_base: int
+    es_referencia: bool
+
+
+class ProductoBootstrap(BaseModel):
+    id: UUID
+    codigo: str
+    nombre: str
+    categoria_id: UUID
+    marca_id: UUID | None
+    alicuota_id: UUID
+    alicuota_valor: str
+    presentacion_referencia_id: UUID | None
+    presentaciones: list[PresentacionBootstrap]
+
+
+class CreditoBootstrap(BaseModel):
+    limite: str | None
+    politica: str
+    tolerancia_tipo: str | None
+    tolerancia_valor: str | None
+
+
+class ClienteBootstrap(BaseModel):
+    id: UUID
+    codigo: str | None
+    nombre: str
+    razon_social: str | None
+    documento_tipo: str | None
+    documento_numero: str | None
+    direccion: str
+    telefono: str | None
+    estado: str
+    lista_precio_id: UUID | None
+    es_consumidor_final: bool
+    en_cartera: bool
+    saldo: str
+    credito: CreditoBootstrap
+
+
+class PrecioBootstrap(BaseModel):
+    producto_id: UUID
+    precio_referencia: str
+    unidades_referencia: int
+
+
+class VersionBootstrap(BaseModel):
+    id: UUID
+    numero: int
+    estado: str
+    vigencia_desde: datetime
+    vigencia_hasta: datetime | None
+    precios: list[PrecioBootstrap]
+
+
+class ListaBootstrap(BaseModel):
+    id: UUID
+    nombre: str
+    es_predeterminada: bool
+    versiones: list[VersionBootstrap]
+
+
+class AlcanceBootstrap(BaseModel):
+    tipo: str
+    entidad_id: UUID
+
+
+class ReglaDescuentoBootstrap(BaseModel):
+    id: UUID
+    nombre: str
+    tipo: str
+    medida: str
+    operador: str
+    umbral: str
+    accion_tipo: str
+    accion_porcentaje: str | None
+    accion_importe: str | None
+    acumulable: bool
+    prioridad: int
+    vigencia_desde: datetime
+    vigencia_hasta: datetime | None
+    alcances: list[AlcanceBootstrap]
+
+
+class StockBootstrap(BaseModel):
+    producto_id: UUID
+    cantidad_base: int
+
+
+class AutorizadorBootstrap(BaseModel):
+    """La derivación PBKDF2 del PIN de un autorizador (`02` §12.4, ADR-011): nunca el PIN."""
+
+    id: UUID
+    nombre: str
+    permisos: list[str]
+    pin_hash: str
+    pin_sal: str
+    iteraciones: int
+
+
+class BootstrapResponse(BaseModel):
+    generado_en: datetime
+    sesion: SesionBootstrap
+    configuracion: ConfiguracionBootstrap
+    contexto_venta: ContextoVentaBootstrap | None
+    catalogos: CatalogosBootstrap
+    productos: list[ProductoBootstrap]
+    clientes: list[ClienteBootstrap]
+    listas: list[ListaBootstrap]
+    reglas_descuento: list[ReglaDescuentoBootstrap]
+    stock: list[StockBootstrap]
+    autorizadores: list[AutorizadorBootstrap]

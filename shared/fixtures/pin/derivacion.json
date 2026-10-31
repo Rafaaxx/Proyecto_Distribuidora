@@ -1,0 +1,31 @@
+{
+  "descripcion": "Vector de derivacion PBKDF2-HMAC-SHA256 del PIN (ADR-011, ADR-019, ADR-055; 02 S12.4). Python (verificar_pin_autorizacion) y TypeScript (Web Crypto) deben obtener el mismo hash con la misma sal e iteraciones. Valores de prueba: no son PINs reales.",
+  "reglas": [
+    "ADR-011",
+    "ADR-019",
+    "SEG-05"
+  ],
+  "casos": [
+    {
+      "id": "PIN-DERIV-01",
+      "pin": "482915",
+      "sal_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "iteraciones": 600000,
+      "hash_hex": "afe8e0ff6b528bdcbb887ebeb33162c375aa9b87efb2d168ff340a6e5cc07b7b"
+    },
+    {
+      "id": "PIN-DERIV-02",
+      "pin": "031975",
+      "sal_hex": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0",
+      "iteraciones": 600000,
+      "hash_hex": "ed968e3ac87ae15ceb2921b66ecb6fa32d8ed0d686755611cd762fa3e04d89bc"
+    },
+    {
+      "id": "PIN-DERIV-03",
+      "pin": "907264",
+      "sal_hex": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+      "iteraciones": 1000,
+      "hash_hex": "9927acaeffad0ed972f648ebc43f4d0c690a298faa2492cb02bd7c94ae9e0a07"
+    }
+  ]
+}

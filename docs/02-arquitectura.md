@@ -383,7 +383,7 @@ Una importación es un comando por archivo: todo o nada, con savepoints por fila
 
 ### 7.1 Nivel de aislamiento
 
-READ COMMITTED con bloqueos explícitos de fila. No se usa SERIALIZABLE por defecto.
+READ COMMITTED con bloqueos explícitos de fila. No se usa SERIALIZABLE por defecto. Excepción de solo lectura: el bootstrap (§13.4) se lee en una transacción `REPEATABLE READ READ ONLY` para que todas sus secciones sean del mismo instante (ADR-062).
 
 ### 7.2 Tablas de saldo
 
@@ -537,6 +537,7 @@ El caso completo de venta con IVA y total (`modo_impositivo`, `alicuota`, `iva`,
 - **Códigos de error nuevos**: `IDENTIDAD_AUTOBAJA`, `IDENTIDAD_ROL_INACTIVO`, `IDENTIDAD_USUARIO_DUPLICADO`, `IDENTIDAD_NOMBRE_DE_USUARIO_INVALIDO`, `IDENTIDAD_NOMBRE_DE_ROL_INVALIDO`, `IDENTIDAD_NOMBRE_DE_ROL_DUPLICADO`, `IDENTIDAD_ROL_CON_USUARIOS_ACTIVOS`, `IDENTIDAD_CONTRASENA_INVALIDA`, `IDENTIDAD_CONTRASENA_NUEVA_IGUAL_A_ACTUAL`, `VENDEDOR_INVALIDO` y `CLIENTE_CONSUMIDOR_FINAL_SIN_VENDEDOR`. **Rutas nuevas:** `GET /identidad/usuarios` (filtros `estado`, `rol_id`, `con_tope_propio`), `GET/PUT /identidad/usuarios/{id}`, `POST .../baja`, `POST .../reactivacion`, `PUT .../rol`, `POST .../contrasena`, `PUT .../tope-descuento`, `POST /identidad/roles`, `PUT /identidad/roles/{id}/nombre`, `POST .../baja`, `POST .../reactivacion`, `POST /yo/contrasena`, `POST /clientes/vendedor`, `GET /clientes/vendedores` (`GESTIONAR_CLIENTES`; vendedores elegibles, `id` y `nombre`), y `GET /clientes/opciones?alcance=todos`, `GET /clientes?vendedor_id=&sin_vendedor=`.
 - Los listados usan paginación por cursor y un límite máximo por página.
 - Las fechas viajan en ISO 8601 con zona horaria.
+- **Ruta nueva del change 21:** `GET /api/v1/sync/bootstrap` (jornada `ABIERTA` propia en el dispositivo; 409 `JORNADA_REQUERIDA` sin ella; `since` aceptado e ignorado).
 
 Agrupación de endpoints de la etapa 1:
 
@@ -580,7 +581,7 @@ Agrupación de endpoints de la etapa 1:
 
 ### 12.3 Sesión sin conexión
 
-- El PIN de desbloqueo se define con conexión y se guarda en el dispositivo como derivación PBKDF2 (Web Crypto) con sal e iteraciones altas.
+- El PIN de desbloqueo (6 dígitos, sin triviales) se define con conexión y se guarda en el dispositivo como derivación PBKDF2-SHA256 (Web Crypto) con sal de 32 bytes y 600 000 iteraciones; nunca viaja al servidor. Los fallos se cuentan en la base local; con 10 fallos (constante del código) se borra la derivación (ADR-062).
 - El PIN protege el uso casual de la aplicación. No es una barrera frente a alguien con acceso técnico al dispositivo: los datos de IndexedDB no están cifrados en la etapa 1. La mitigación es minimizar datos sensibles en el bootstrap (SYN-11) y poder revocar el dispositivo.
 - Al volver la conexión, la aplicación usa el refresh token. Si venció, pide login; la cola se conserva y se sincroniza cuando inicia sesión el mismo usuario.
 
@@ -603,7 +604,7 @@ Agrupación de endpoints de la etapa 1:
 - Las áreas se cargan de forma diferida: el teléfono no descarga el código de administración.
 - React Context se usa solo para sesión, permisos, conectividad y tema.
 - Las pantallas del área de ruta leen siempre de Dexie, con o sin conexión.
-- **Ayuda contextual (ADR-051):** el componente `Ayuda` ("(?)") abre un panel no modal con clic, tap o teclado y cierra con Escape o clic afuera. Todos sus textos viven en `frontend/src/ayuda/textos.ts`, por clave, con los IDs de regla que citan; no piden nada a la red ni dependen de permisos, así que también sirven sin conexión. Las páginas "Ver más" están en `/admin/ayuda/:tema`; `/ruta` montará las suyas cuando tenga pantallas (change 21). Una prueba de Vitest verifica que toda clave usada exista y que todo ID citado exista en `01-dominio.md` o en `docs/adr/`.
+- **Ayuda contextual (ADR-051):** el componente `Ayuda` ("(?)") abre un panel no modal con clic, tap o teclado y cierra con Escape o clic afuera. Todos sus textos viven en `frontend/src/ayuda/textos.ts`, por clave, con los IDs de regla que citan; no piden nada a la red ni dependen de permisos, así que también sirven sin conexión. Las páginas "Ver más" están en `/admin/ayuda/:tema` y en `/ruta/ayuda/:tema`; dentro de `/ruta` y de la aplicación instalada el "Ver más" navega dentro de la aplicación (no abre otra pestaña), de modo que funciona sin conexión (ADR-062 punto 21). Una prueba de Vitest verifica que toda clave usada exista y que todo ID citado exista en `01-dominio.md` o en `docs/adr/`.
 
 ### 13.2 Base local (Dexie)
 
@@ -614,7 +615,6 @@ Agrupación de endpoints de la etapa 1:
 | `configuracion` | Parámetros de la organización |
 | `productos`, `presentaciones` | Catálogo activo |
 | `clientes` | Clientes con datos de crédito |
-| `saldos_clientes` | Saldo al bootstrap |
 | `precios` | Versiones de lista disponibles y sus precios |
 | `reglas_descuento` | Reglas activas |
 | `stock` | Stock de la ubicación tomada |
@@ -624,6 +624,7 @@ Agrupación de endpoints de la etapa 1:
 | `cola` | Comandos pendientes ordenados por secuencia |
 
 **DEBE:** confirmar una venta local es una transacción Dexie que escribe la venta, los movimientos locales y el comando en la cola, todo o nada.
+En la versión 2 de Dexie (change 21) el saldo viaja dentro de `clientes` (no hay `saldos_clientes`) y las tablas maestras son las que reemplaza el bootstrap; `meta` guarda también el usuario local, la jornada, la fecha del bootstrap y la derivación del PIN con su contador de fallos (`pin_hash`, `pin_sal`, `pin_iteraciones`, `pin_intentos`). El bootstrap reemplaza las tablas maestras en una sola transacción sobre una lista explícita; `ventas`, `cobranzas`, `movimientos_locales` y `cola` las agrega la versión 3 (change 22a) y el bootstrap no las toca (ADR-062).
 
 ### 13.3 Motor de sincronización
 
@@ -632,11 +633,11 @@ Agrupación de endpoints de la etapa 1:
 - **DEBE:** una sola sincronización a la vez, garantizada con Web Locks API, incluso con varias pestañas abiertas.
 - Envía lotes en orden (§6.4), aplica los resultados a la base local y reintenta errores transitorios con espera exponencial.
 - Muestra en todo momento: estado de conexión, cantidad de pendientes, última sincronización exitosa y operaciones con observaciones o rechazadas.
-- Al iniciar, solicita almacenamiento persistente (`navigator.storage.persist()`) y muestra una advertencia si el navegador lo niega.
+- Pide almacenamiento persistente (`navigator.storage.persist()`) tras el primer bootstrap y en cada arranque hasta que se conceda, y muestra una advertencia si el navegador lo niega (ADR-062 punto 18).
 
 ### 13.4 Bootstrap
 
-- `GET /api/v1/sync/bootstrap` se ejecuta al abrir la jornada (RUT-03) y devuelve el contenido de SYN-11.
+- `GET /api/v1/sync/bootstrap` se ejecuta al abrir la jornada, al iniciar sesión o desbloquear con conexión si faltan los datos de la jornada abierta, y con "Actualizar datos" (RUT-03); devuelve el contenido de SYN-11 en una sola foto (§7.1). Lo compone el módulo `sync` por el `service.py` de cada módulo (ADR-062).
 - El contrato acepta un parámetro `since` para descargas incrementales; en la etapa 1 se ignora y siempre devuelve el conjunto completo (ADR-006).
 - El bootstrap reemplaza los datos maestros locales, pero **DEBE NO** tocar `ventas`, `cobranzas`, `movimientos_locales` ni `cola`.
 
@@ -645,6 +646,7 @@ Agrupación de endpoints de la etapa 1:
 - Precachea el shell de la aplicación para abrirla sin conexión.
 - **DEBE NO** cachear respuestas de la API: los datos offline viven en Dexie.
 - Una nueva versión se instala en segundo plano y se aplica con aviso al usuario. **DEBE NO** recargar automáticamente la aplicación mientras hay un carrito abierto.
+- Se implementa con `vite-plugin-pwa` (`generateSW`, `registerType: 'prompt'`); precachea el shell, `/ruta`, la ayuda y pdfmake, no el código de `/admin`; el manifiesto abre en `/ruta` (ADR-062).
 
 ### 13.6 Nota de venta
 

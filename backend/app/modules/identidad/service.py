@@ -48,6 +48,7 @@ from app.modules.identidad.domain.permisos import (
     PLANTILLAS_DE_ROL,
 )
 from app.modules.identidad.domain.usuarios import (
+    PERMISOS_AUTORIZACION_EXCEPCION,
     AutorizadorNoEncontradoError,
     AutorizadorSinPermisoError,
     ContrasenaIncorrectaError,
@@ -3396,6 +3397,48 @@ def listar_autorizadores_disponibles(
     ]
 
 
+@dataclass(frozen=True)
+class AutorizadorConDerivacion:
+    """Un autorizador con la derivación PBKDF2 de su PIN, para que el dispositivo la verifique
+    sin conexión (change 21, D8; `02` §12.4). `permisos` son los de autorización de excepciones
+    que tiene. Nunca lleva el PIN ni ninguna contraseña."""
+
+    usuario_id: UUID
+    nombre: str
+    permisos: frozenset[str]
+    pin_hash: str
+    pin_sal: str
+    iteraciones: int
+
+
+def listar_autorizadores_con_derivacion(
+    organizacion_id: UUID, sesion: Session, *, excluir_usuario_id: UUID
+) -> list[AutorizadorConDerivacion]:
+    """Los usuarios activos con rol activo, PIN definido y algún permiso de autorización de
+    excepciones (`AUTORIZAR_DESCUENTO`, `SUPERAR_CREDITO`, `VENDER_CLIENTE_SUSPENDIDO`,
+    `USAR_LISTA_ANTERIOR`), sin `excluir_usuario_id` (quien pide), con la derivación de su PIN
+    (change 21, D8; ADR-011, SEG-05). Solo lee; filtra por organización (INV-21). Quien lo expone
+    decide a quién se lo entrega (solo con `VENDER`)."""
+    return [
+        AutorizadorConDerivacion(
+            usuario_id=usuario_id,
+            nombre=nombre,
+            permisos=permisos,
+            pin_hash=pin_hash,
+            pin_sal=sal,
+            iteraciones=iteraciones,
+        )
+        for usuario_id, nombre, permisos, pin_hash, sal, iteraciones in (
+            repository.listar_autorizadores_con_derivacion(
+                organizacion_id,
+                sesion,
+                permisos=sorted(PERMISOS_AUTORIZACION_EXCEPCION),
+                excluir_usuario_id=excluir_usuario_id,
+            )
+        )
+    ]
+
+
 # --- `GET /api/v1/yo` (grupo 3, D1) ----------------------------------------
 
 
@@ -3462,6 +3505,28 @@ def obtener_yo(organizacion_id: UUID, usuario_id: UUID, sesion: Session) -> Dato
         organizacion=OrganizacionYo(id=organizacion.id, nombre=organizacion.nombre),
         rol=RolYo(id=rol.id, nombre=rol.nombre),
         permisos=permisos,
+    )
+
+
+@dataclass(frozen=True)
+class DatosDeUsuarioParaDispositivo:
+    """Quién es el usuario de la sesión, tal como lo guarda el teléfono (change 21, D9)."""
+
+    id: UUID
+    nombre: str
+    usuario: str
+
+
+def obtener_usuario_para_dispositivo(
+    organizacion_id: UUID, usuario_id: UUID, sesion: Session
+) -> DatosDeUsuarioParaDispositivo | None:
+    """Id, nombre y nombre de usuario de `usuario_id`, o `None` si no existe en la organización
+    (INV-21). Nunca la contraseña ni la derivación del PIN. Solo lee."""
+    usuario = repository.obtener_usuario_por_id(organizacion_id, usuario_id, sesion)
+    if usuario is None:
+        return None
+    return DatosDeUsuarioParaDispositivo(
+        id=usuario.id, nombre=usuario.nombre, usuario=usuario.usuario
     )
 
 

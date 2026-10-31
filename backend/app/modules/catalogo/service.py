@@ -888,6 +888,55 @@ def productos_activos_para_vender(
 
 
 @dataclass(frozen=True)
+class ProductoParaDispositivo:
+    """Un producto activo tal como baja al teléfono (change 21, D9): lo de `ProductoParaVender`
+    más su alícuota de IVA. Sin costos ni precios."""
+
+    producto_id: UUID
+    codigo: str
+    nombre: str
+    categoria_id: UUID
+    marca_id: UUID | None
+    alicuota_id: UUID
+    presentaciones: tuple[PresentacionVendible, ...]
+
+
+def listar_productos_para_dispositivo(
+    organizacion_id: UUID, sesion: Session
+) -> list[ProductoParaDispositivo]:
+    """TODOS los productos activos de la organización (por código) con su categoría, marca,
+    alícuota y presentaciones activas de venta (de menos unidades a más), en dos consultas
+    (change 21, D9; CAT-02, CAT-05, SYN-11). Un producto inactivo no figura. Solo lectura, sin
+    bloquear; filtra por la organización (INV-21)."""
+    filas = repository.listar_todos_los_productos_activos_con_alicuota(organizacion_id, sesion)
+    vendibles: dict[UUID, list[PresentacionVendible]] = {}
+    for (
+        id_producto,
+        presentacion_id,
+        nombre,
+        unidades,
+        es_referencia,
+    ) in repository.presentaciones_vendibles_de_productos_activos(
+        organizacion_id, [fila[0] for fila in filas], sesion
+    ):
+        vendibles.setdefault(id_producto, []).append(
+            PresentacionVendible(presentacion_id, nombre, unidades, es_referencia)
+        )
+    return [
+        ProductoParaDispositivo(
+            producto_id=id_producto,
+            codigo=codigo,
+            nombre=nombre,
+            categoria_id=categoria_id,
+            marca_id=marca_id,
+            alicuota_id=alicuota_id,
+            presentaciones=tuple(vendibles.get(id_producto, [])),
+        )
+        for id_producto, codigo, nombre, categoria_id, marca_id, alicuota_id in filas
+    ]
+
+
+@dataclass(frozen=True)
 class PresentacionParaVenta:
     """Una presentación tal como la lee la venta (change 18a, D17): sus unidades base (que la
     línea congela, INV-18) y las marcas con que la venta decide si es vendible (CAT-02, CAT-05)."""

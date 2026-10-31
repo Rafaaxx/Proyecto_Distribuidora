@@ -24,6 +24,7 @@ Sí requiere autenticación: sin token, `obtener_contexto_autenticado` lanza
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends
@@ -31,10 +32,16 @@ from sqlalchemy.orm import Session
 
 from app.api_v1.dependencias import get_session
 from app.commands.huella import ContenidoComando
-from app.core.autenticacion import ContextoAutenticado, obtener_contexto_autenticado
+from app.core.autenticacion import (
+    ContextoAutenticado,
+    obtener_contexto_autenticado,
+    requiere_sesion,
+)
 from app.core.clock import SystemClock
 from app.modules.sync import service as sync_service
+from app.modules.sync.bootstrap import generar_bootstrap
 from app.modules.sync.schemas import (
+    BootstrapResponse,
     ItemLoteComandoRequest,
     LoteComandosRequest,
     LoteComandosResponse,
@@ -99,4 +106,28 @@ def sincronizar_lote(
             )
             for resultado in resultados
         ]
+    )
+
+
+@router.get("/bootstrap", response_model=BootstrapResponse)
+def obtener_bootstrap(
+    contexto: Annotated[ContextoAutenticado, Depends(requiere_sesion)],
+    sesion: Annotated[Session, Depends(get_session)],
+    since: datetime | None = None,
+) -> BootstrapResponse:
+    """El bootstrap del dispositivo (change 21, `design.md` D2, D3, D9; ADR-006, SYN-11): todo lo
+    que el vendedor necesita para operar sin conexión, en una sola foto coherente.
+
+    Exige sesión habilitada (usuario y rol activos, ADR-028) y una jornada `ABIERTA` propia en el
+    dispositivo del token; sin ella, 409 `JORNADA_REQUERIDA`. No declara un permiso fijo (cada
+    sección se filtra por el permiso del momento: `VENDER`, `USAR_LISTA_ANTERIOR`) y por eso está
+    exenta del ratchet de permiso por ruta. `since` se acepta y se ignora: la respuesta es siempre
+    el conjunto completo (ADR-006). Solo lee: no pasa por el bus de comandos ni escribe nada."""
+    del since  # ADR-006: aceptado e ignorado
+    return generar_bootstrap(
+        sesion,
+        SystemClock(),
+        organizacion_id=contexto.organizacion_id,
+        usuario_id=contexto.usuario_id,
+        dispositivo_id=contexto.dispositivo_id,
     )

@@ -247,6 +247,28 @@ def listar_reglas_aplicables(
     )
 
 
+def listar_reglas_no_vencidas(
+    organizacion_id: UUID, momento: datetime, sesion: Session
+) -> list[ReglaDescuento]:
+    """Las reglas `ACTIVA` cuya vigencia no terminó en `momento` (`hasta` nulo o posterior),
+    comiencen ya o más tarde (change 21, D6), por prioridad y antigüedad."""
+    return list(
+        sesion.scalars(
+            select(ReglaDescuento)
+            .where(
+                ReglaDescuento.organizacion_id == organizacion_id,
+                ReglaDescuento.estado == "ACTIVA",
+                or_(
+                    ReglaDescuento.vigencia_hasta.is_(None),
+                    ReglaDescuento.vigencia_hasta > momento,
+                ),
+            )
+            .order_by(ReglaDescuento.prioridad, ReglaDescuento.id)
+            .execution_options(populate_existing=True)
+        )
+    )
+
+
 def _codificar_cursor(regla_id: UUID) -> str:
     return base64.urlsafe_b64encode(str(regla_id).encode("ascii")).decode("ascii")
 

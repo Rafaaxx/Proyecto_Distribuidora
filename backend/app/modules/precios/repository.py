@@ -475,6 +475,47 @@ def listar_versiones(organizacion_id: UUID, lista_id: UUID, sesion: Session) -> 
     return list(sesion.scalars(consulta).all())
 
 
+def listar_versiones_de_listas(
+    organizacion_id: UUID, lista_ids: Collection[UUID], sesion: Session
+) -> list[ListaVersion]:
+    """Las versiones de varias listas en una consulta (change 21: el bootstrap), por lista y de la
+    más nueva a la más antigua. Las de otra organización no aparecen (INV-21)."""
+    if not lista_ids:
+        return []
+    consulta = (
+        select(ListaVersion)
+        .where(
+            ListaVersion.organizacion_id == organizacion_id, ListaVersion.lista_id.in_(lista_ids)
+        )
+        .order_by(ListaVersion.lista_id, ListaVersion.numero.desc())
+        .execution_options(populate_existing=True)
+    )
+    return list(sesion.scalars(consulta).all())
+
+
+def listar_precios_de_versiones(
+    organizacion_id: UUID,
+    version_ids: Collection[UUID],
+    producto_ids: Collection[UUID],
+    sesion: Session,
+) -> list[PrecioItem]:
+    """Los precios de `producto_ids` en varias versiones, en una consulta (change 21: el
+    bootstrap), por versión y producto. Sin versiones o sin productos, nada."""
+    if not version_ids or not producto_ids:
+        return []
+    consulta = (
+        select(PrecioItem)
+        .where(
+            PrecioItem.organizacion_id == organizacion_id,
+            PrecioItem.version_id.in_(version_ids),
+            PrecioItem.producto_id.in_(producto_ids),
+        )
+        .order_by(PrecioItem.version_id, PrecioItem.producto_id)
+        .execution_options(populate_existing=True)
+    )
+    return list(sesion.scalars(consulta).all())
+
+
 def obtener_version_base(
     organizacion_id: UUID, lista_id: UUID, sesion: Session
 ) -> ListaVersion | None:

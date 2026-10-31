@@ -867,6 +867,30 @@ export const AYUDAS = {
       'Es el redondeo que aparece cargado al crear una lista de precios nueva; en cada lista lo podés cambiar. Cambiarlo no modifica las listas que ya existen ni sus precios. Sin definir, la lista nueva empieza con el redondeo vacío.',
     reglas: ['PRC-01', 'PRC-14', 'ADR-061'],
   },
+  // --- Área de ruta (change 21, ADR-062; textos aprobados el 2026-10-30, sin ejemplos) ---
+  'ruta.pin': {
+    titulo: 'PIN de este teléfono',
+    texto:
+      'El PIN abre la aplicación en este teléfono, con o sin señal. No es tu contraseña. Si lo errás varias veces seguidas, tenés que iniciar sesión con conexión y definir uno nuevo; lo que tengas pendiente no se pierde.',
+    reglas: ['SEG-03', 'SEG-04', 'ADR-011', 'ADR-062'],
+  },
+  'ruta.datosDelDia': {
+    titulo: 'Datos del día',
+    texto:
+      'Los clientes, precios, saldos y stock se descargan al abrir la jornada. Hasta que los actualices, ves los de ese momento, aunque no tengas señal. Actualizar requiere conexión y no toca lo que tengas pendiente.',
+    reglas: ['SYN-11', 'ADR-006'],
+  },
+  'ruta.almacenamiento': {
+    titulo: 'Almacenamiento del teléfono',
+    texto:
+      'Este navegador no garantiza conservar los datos de la aplicación y puede borrarlos si le falta espacio. Instalá la aplicación en la pantalla de inicio y actualizá los datos con conexión cuando puedas.',
+    reglas: ['ADR-062'],
+  },
+  'ruta.cartera': {
+    titulo: 'Tu cartera de clientes',
+    texto: 'Primero ves tus clientes asignados. Podés buscar y venderle a cualquier cliente de la organización.',
+    reglas: ['ADR-060'],
+  },
 } as const satisfies Record<string, EntradaDeAyuda>
 
 export type ClaveDeAyuda = keyof typeof AYUDAS

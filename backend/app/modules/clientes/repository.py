@@ -433,6 +433,22 @@ def listar_clientes_paginado(
     return pagina, cursor_siguiente
 
 
+def listar_para_dispositivo(organizacion_id: UUID, sesion: Session) -> list[Cliente]:
+    """Los clientes `ACTIVO` y `SUSPENDIDO` de la organización, consumidor final incluido si
+    existe, por nombre e id (change 21, D4: lo que baja el bootstrap). Filtra por organización
+    (INV-21)."""
+    consulta = (
+        select(Cliente)
+        .where(
+            Cliente.organizacion_id == organizacion_id,
+            Cliente.estado.in_(ESTADOS_DEL_SELECTOR),
+        )
+        .order_by(Cliente.nombre, Cliente.id)
+        .execution_options(populate_existing=True)
+    )
+    return list(sesion.scalars(consulta).all())
+
+
 def listar_ids_de_cartera(organizacion_id: UUID, vendedor_id: UUID, sesion: Session) -> list[UUID]:
     """Ids de los clientes asignados a `vendedor_id`, de cualquier estado, ordenados por id
     (change 20b, D19). Filtra por organización (INV-21)."""

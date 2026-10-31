@@ -861,6 +861,26 @@ def listar_productos_activos_para_vender(
     return filas[:limite], len(filas) > limite
 
 
+def listar_todos_los_productos_activos_con_alicuota(
+    organizacion_id: UUID, sesion: Session
+) -> list[tuple[UUID, str, str, UUID, UUID | None, UUID]]:
+    """`(producto_id, codigo, nombre, categoria_id, marca_id, alicuota_id)` de TODOS los productos
+    activos de la organización, por código, en una consulta (change 21: el bootstrap)."""
+    consulta = (
+        select(
+            Producto.id,
+            Producto.codigo,
+            Producto.nombre,
+            Producto.categoria_id,
+            Producto.marca_id,
+            Producto.alicuota_id,
+        )
+        .where(Producto.organizacion_id == organizacion_id, Producto.activo.is_(True))
+        .order_by(Producto.codigo, Producto.id)
+    )
+    return [(f[0], f[1], f[2], f[3], f[4], f[5]) for f in sesion.execute(consulta)]
+
+
 def presentaciones_vendibles_de_productos_activos(
     organizacion_id: UUID, producto_ids: Collection[UUID], sesion: Session
 ) -> list[tuple[UUID, UUID, str, int, bool]]:

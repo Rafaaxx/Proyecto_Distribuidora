@@ -1,3 +1,5 @@
+import 'fake-indexeddb/auto'
+
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -36,8 +38,10 @@ describe('ruteo de áreas (docs/02 §13.1: /ruta y /admin cargadas de forma dife
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText(/área de ruta/i)).toBeInTheDocument()
-  })
+    // Change 21: `/ruta` ahora tiene su propio inicio de sesión; sin sesión local lo muestra. El
+    // primer import diferido del área (pantallas, ayuda, service worker) tarda más en frío.
+    expect(await screen.findByRole('heading', { name: /iniciar sesión/i }, { timeout: 15_000 })).toBeInTheDocument()
+  }, 20_000)
 
   it('redirige /admin al inicio de sesión (change 03, tarea 13.4)', async () => {
     render(
@@ -100,7 +104,7 @@ describe('ruteo de áreas (docs/02 §13.1: /ruta y /admin cargadas de forma dife
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText(/área de ruta/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /iniciar sesión/i })).toBeInTheDocument()
   })
 })
 

@@ -84,5 +84,47 @@ services:
     depends_on:
       - backend
 
+  # --- Perfil `lan`: probar la PWA en un teléfono real (change 21, D20, ADR-062) -------------
+  # No se levanta con `docker compose up`; solo con `--profile lan`. Ver la prueba manual del
+  # change 21 para el paso a paso (IP de la PC, certificado de Caddy en el teléfono).
+  #
+  #   LAN_IP=192.168.1.20 docker compose --profile lan up --build caddy
+  #
+  # `pwa-build` compila el frontend de producción (el service worker solo existe en la
+  # compilación, no en `vite dev`) y lo deja en el volumen `pwa_dist`; `caddy` lo sirve por HTTPS
+  # con certificado propio (`tls internal`) y reenvía `/api` al backend.
+  pwa-build:
+    profiles: ["lan"]
+    build:
+      context: ./frontend
+    command: ["npm", "run", "build", "--", "--outDir", "/dist", "--emptyOutDir"]
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - pwa_dist:/dist
+    restart: "no"
+
+  caddy:
+    profiles: ["lan"]
+    image: caddy:2
+    environment:
+      # Sin LAN_IP, Caddy atiende https://localhost (sirve para probar en la PC).
+      LAN_IP: ${LAN_IP:-localhost}
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./infra/caddy/Caddyfile.dev:/etc/caddy/Caddyfile:ro
+      - pwa_dist:/srv:ro
+      # Guarda la autoridad propia de Caddy: si se pierde, el teléfono debe volver a confiar.
+      - caddy_data:/data
+    depends_on:
+      pwa-build:
+        condition: service_completed_successfully
+      backend:
+        condition: service_healthy
+
 volumes:
   postgres_data:
+  pwa_dist:
+  caddy_data:

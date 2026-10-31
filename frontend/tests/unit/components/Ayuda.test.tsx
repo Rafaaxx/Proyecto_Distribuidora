@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { Ayuda } from '../../../src/components/ui/Ayuda'
 import { Dialogo } from '../../../src/components/ui/Dialog'
@@ -248,5 +248,54 @@ describe('Ayuda: dentro de un Dialogo (tarea 6.1)', () => {
     expect(screen.queryByText(/cajas equivalentes/i)).not.toBeInTheDocument()
     expect(screen.getByRole('dialog', { name: 'Regla' })).toBeInTheDocument()
     expect(alCerrar).not.toHaveBeenCalled()
+  })
+})
+
+describe('Ayuda: el panel queda dentro del área visible (change 21, prueba manual 20.2)', () => {
+  /**
+   * jsdom no mide layout: se fija el rectángulo del panel recién abierto (pegado al botón, cerca
+   * del borde derecho) y el ancho visible del documento. `window.innerWidth` incluye la barra de
+   * desplazamiento vertical; el panel tiene que caber en `clientWidth`, que no la incluye.
+   */
+  function fijarMedidas({ izquierda, anchoVisible, anchoVentana }: { izquierda: number; anchoVisible: number; anchoVentana: number }) {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const ancho = this.id ? 288 : 24
+      return { left: izquierda, width: ancho, right: izquierda + ancho, top: 0, bottom: 0, height: 0, x: izquierda, y: 0, toJSON: () => ({}) }
+    })
+    vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(anchoVisible)
+    vi.stubGlobal('innerWidth', anchoVentana)
+  }
+
+  async function abrirYLeerCorrimiento(): Promise<string> {
+    const usuario = userEvent.setup()
+    render(<Ayuda clave="ruta.almacenamiento" />)
+    await usuario.click(botonDe('Almacenamiento del teléfono'))
+    const panel = document.getElementById(botonDe('Almacenamiento del teléfono').getAttribute('aria-controls') ?? '')
+    return panel?.style.left ?? ''
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('con barra de desplazamiento, se corre contando solo el ancho visible', async () => {
+    fijarMedidas({ izquierda: 360, anchoVisible: 385, anchoVentana: 400 })
+
+    // 360 + 288 − (385 − 8) = 271
+    expect(await abrirYLeerCorrimiento()).toBe('-271px')
+  })
+
+  it('sin barra de desplazamiento, el corrimiento usa el mismo ancho', async () => {
+    fijarMedidas({ izquierda: 360, anchoVisible: 400, anchoVentana: 400 })
+
+    // 360 + 288 − (400 − 8) = 256
+    expect(await abrirYLeerCorrimiento()).toBe('-256px')
+  })
+
+  it('lejos del borde no se corre', async () => {
+    fijarMedidas({ izquierda: 20, anchoVisible: 385, anchoVentana: 400 })
+
+    expect(await abrirYLeerCorrimiento()).toBe('0px')
   })
 })

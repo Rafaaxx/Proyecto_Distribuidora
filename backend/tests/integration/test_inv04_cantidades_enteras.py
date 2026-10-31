@@ -178,6 +178,11 @@ EXCEPCIONES_DE_CANTIDAD_EN_PRESENTACION_OPENAPI = frozenset(
     {("CompraLineaRequest", "cantidad"), ("CompraLineaResponse", "cantidad")}
 )
 
+# `stock` del bootstrap (change 21) no es una cantidad: es la lista de renglones
+# `{producto_id, cantidad_base}` de la ubicación tomada; la cantidad de cada renglón
+# (`cantidad_base`) sí cae en la regla y es `integer`.
+COLECCIONES_CON_NOMBRE_DE_CANTIDAD_OPENAPI = frozenset({("BootstrapResponse", "stock")})
+
 
 def test_inv04_toda_propiedad_de_cantidad_del_openapi_es_integer() -> None:
     app = crear_app(Settings(_env_file=None, database_url="postgresql+psycopg://x/x"))
@@ -189,8 +194,20 @@ def test_inv04_toda_propiedad_de_cantidad_del_openapi_es_integer() -> None:
         for esquema, propiedad, definicion in propiedades
         if _tipos_de(definicion) - {"null"} != {"integer"}
         and (esquema, propiedad) not in EXCEPCIONES_DE_CANTIDAD_EN_PRESENTACION_OPENAPI
+        and (esquema, propiedad) not in COLECCIONES_CON_NOMBRE_DE_CANTIDAD_OPENAPI
     ]
     assert infractoras == [], f"INV-04: propiedades de cantidad que no son integer: {infractoras}"
+
+
+def test_inv04_el_stock_del_bootstrap_es_una_lista_cuyas_cantidades_son_enteras() -> None:
+    app = crear_app(Settings(_env_file=None, database_url="postgresql+psycopg://x/x"))
+    openapi = app.openapi()
+    esquemas = openapi["components"]["schemas"]
+    stock = esquemas["BootstrapResponse"]["properties"]["stock"]
+    renglon = esquemas[stock["items"]["$ref"].rsplit("/", 1)[1]]
+
+    assert stock["type"] == "array"
+    assert _tipos_de(renglon["properties"]["cantidad_base"]) == {"integer"}
 
 
 def test_inv04_la_cantidad_en_presentacion_de_compra_viaja_como_string_nunca_number() -> None:

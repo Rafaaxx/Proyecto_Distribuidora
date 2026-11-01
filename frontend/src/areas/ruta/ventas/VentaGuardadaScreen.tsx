@@ -6,8 +6,10 @@ import { Card } from '../../../components/ui/Card'
 import { formatearDinero } from '../../../domain/ruta/lecturasLocales'
 import { formatearFechaHora } from '../../../lib/fecha'
 import { useVentaLocal } from '../datos/ventas'
+import { Alert } from '../../../components/ui/Alert'
+import { TEXTO_DE_VENTA_RECHAZADA } from '../sincronizacion/presentacion'
 import { NotaSinSenal } from './NotaSinSenal'
-import { etiquetaDeEnvio } from './presentacionDeVentas'
+import { claveDeAyudaDeEnvio, etiquetaDeEnvio } from './presentacionDeVentas'
 
 const CLASE_ENLACE =
   'inline-flex items-center justify-center rounded-md border border-border bg-surface-muted px-3 py-3 text-sm font-medium text-primary hover:bg-surface'
@@ -35,6 +37,7 @@ export function VentaGuardadaScreen() {
 
   const { venta } = lectura
   const cliente = venta.nota?.cliente.nombre ?? '—'
+  const claveDeEstado = claveDeAyudaDeEnvio(venta.estado_envio)
   return (
     <div className="flex min-w-0 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -42,7 +45,7 @@ export function VentaGuardadaScreen() {
         <Ayuda clave="ruta.numeroDeVenta" />
         <span className="flex items-center gap-1">
           <Badge>{etiquetaDeEnvio(venta.estado_envio)}</Badge>
-          <Ayuda clave="ruta.ventaSinEnviar" />
+          {claveDeEstado !== null && <Ayuda clave={claveDeEstado} />}
         </span>
       </div>
       <Card className="flex flex-col gap-1 text-sm text-primary">
@@ -50,6 +53,7 @@ export function VentaGuardadaScreen() {
         <p className="text-xs text-primary/70">{formatearFechaHora(venta.occurred_at).trim()}</p>
         <p className="text-base font-semibold">{formatearDinero(venta.calculo.total)}</p>
       </Card>
+      {venta.estado_envio === 'RECHAZADA' && <Alert>{TEXTO_DE_VENTA_RECHAZADA}</Alert>}
       <NotaSinSenal venta={venta} />
       <div className="grid grid-cols-2 gap-2">
         <Link to="/ruta/vender" className={CLASE_ENLACE}>

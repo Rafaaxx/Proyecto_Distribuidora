@@ -81,4 +81,28 @@ describe('VentasDeHoyScreen (tarea 11.1)', () => {
 
     expect(await screen.findByText(/todavía no hay datos descargados/i)).toBeInTheDocument()
   })
+
+  /**
+   * Change 22b, tarea 10.3 (spec `ruta/area-de-ruta`, «Ventas de hoy desde la base local»,
+   * escenario «Estados después de sincronizar»; cita SYN-04, SYN-09).
+   */
+  it('después de sincronizar muestra «Enviada», «Con observaciones» y «Rechazada» (y «Sin enviar» la que falta)', async () => {
+    await sembrarVenta('a', { cajas: 0, unidades: 1, ahora: new Date('2026-10-30T14:00:00.000Z') })
+    await sembrarVenta('b', { cajas: 0, unidades: 1, ahora: new Date('2026-10-30T15:00:00.000Z') })
+    await sembrarVenta('c', { cajas: 0, unidades: 1, ahora: new Date('2026-10-30T16:00:00.000Z') })
+    await sembrarVenta('d', { cajas: 0, unidades: 1, ahora: new Date('2026-10-30T17:00:00.000Z') })
+    await baseLocal.ventas.update('venta-a', { estado_envio: 'ACEPTADA' })
+    await baseLocal.ventas.update('venta-b', { estado_envio: 'CON_OBSERVACIONES' })
+    await baseLocal.ventas.update('venta-c', { estado_envio: 'RECHAZADA' })
+
+    montarEnRuta(<VentasDeHoyScreen />, { ruta: '/ruta/ventas' })
+
+    const filas = await screen.findAllByRole('listitem')
+    const textoDe = (numero: string) =>
+      within(filas.find((f) => within(f).queryByText(numero)) as HTMLElement)
+    expect(textoDe('0001-000008').getByText('Enviada')).toBeInTheDocument()
+    expect(textoDe('0001-000009').getByText('Con observaciones')).toBeInTheDocument()
+    expect(textoDe('0001-000010').getByText('Rechazada')).toBeInTheDocument()
+    expect(textoDe('0001-000011').getByText('Sin enviar')).toBeInTheDocument()
+  })
 })

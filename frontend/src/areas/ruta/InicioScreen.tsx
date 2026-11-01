@@ -9,9 +9,13 @@ import { asegurarAlmacenamientoPersistente, type EstadoDeAlmacenamiento } from '
 import { useConectado } from '../../lib/conexion'
 import { formatearFechaHora } from '../../lib/fecha'
 import { actualizarDatos, type ResultadoActualizacion } from '../../sync/actualizarDatos'
+import { AVISO_DE_VERSION_MINIMA } from '../../sync/versionMinima'
 import { useDatosDeInicio } from './datos/lecturas'
+import { useResumenDeSincronizacion, useVersionBloqueada } from './datos/sincronizacion'
 import { useVentasSinEnviar } from './datos/ventas'
 import { useSesionRutaActiva } from './sesion/contextoSesion'
+import { BotonSincronizar } from './sincronizacion/BotonSincronizar'
+import { textoDeSinEnviar, textoDeUltimaSincronizacion } from './sincronizacion/presentacion'
 
 /**
  * Inicio de `/ruta` (change 21, `design.md` D2, D11, D18, D19; RUT-03, RUT-09, SYN-11): usuario,
@@ -38,11 +42,6 @@ const MENSAJES_DE_FALLA: Record<Exclude<ResultadoActualizacion, 'actualizados'>,
 const MOTIVO_SIN_DATOS = 'Vender necesita los datos del día: abrí la jornada para descargarlos.'
 const MOTIVO_SIN_JORNADA = 'Vender requiere una jornada abierta.'
 
-function textoDeSinEnviar(cantidad: number): string {
-  if (cantidad === 0) return 'Todo enviado'
-  return cantidad === 1 ? '1 venta sin enviar' : `${cantidad} ventas sin enviar`
-}
-
 const CLASE_ENLACE =
   'inline-flex items-center justify-center rounded-md border border-border bg-surface-muted px-3 py-3 text-sm font-medium text-primary hover:bg-surface'
 
@@ -56,6 +55,8 @@ export function InicioScreen() {
 
   const fechaBootstrap = datos.estado === 'listo' ? datos.fechaBootstrap : null
   const sinEnviar = useVentasSinEnviar(datos.estado === 'listo' ? datos.usuario.id : null)
+  const { ultimaSincronizacion } = useResumenDeSincronizacion()
+  const versionBloqueada = useVersionBloqueada()
 
   // D18: se pide en cada arranque mientras no esté concedido y de nuevo tras cada bootstrap aplicado.
   useEffect(() => {
@@ -89,7 +90,9 @@ export function InicioScreen() {
   const puedeAbrir = datos.estado === 'listo' && datos.permisos.includes('ABRIR_JORNADA')
   // Vender (change 22a, D1, D13, D14): con VENDER en el bootstrap, jornada abierta y datos del día.
   const ofreceVender = datos.estado === 'sin_datos' || (datos.estado === 'listo' && datos.permisos.includes('VENDER'))
-  const motivoSinVender = datos.estado === 'sin_datos' ? MOTIVO_SIN_DATOS : sinJornada ? MOTIVO_SIN_JORNADA : null
+  // D7: por debajo de la versión mínima no se venden ventas nuevas; la cola se sigue enviando.
+  const motivoSinVender =
+    datos.estado === 'sin_datos' ? MOTIVO_SIN_DATOS : sinJornada ? MOTIVO_SIN_JORNADA : versionBloqueada ? AVISO_DE_VERSION_MINIMA : null
 
   return (
     <div className="flex flex-col gap-4">
@@ -164,6 +167,11 @@ export function InicioScreen() {
               <Ayuda clave="ruta.ventaSinEnviar" />
             </div>
           )}
+          <p className="text-sm text-primary">{textoDeUltimaSincronizacion(ultimaSincronizacion)}</p>
+          <div className="flex items-center gap-1">
+            <BotonSincronizar />
+            <Ayuda clave="ruta.sincronizar" />
+          </div>
           {motivoSinVender === null ? (
             <Link to="/ruta/vender" className={CLASE_ENLACE}>
               Vender
@@ -173,7 +181,10 @@ export function InicioScreen() {
               <Boton variante="secundario" disabled>
                 Vender
               </Boton>
-              <p className="text-sm text-primary/70">{motivoSinVender}</p>
+              <p className="flex items-center gap-1 text-sm text-primary/70">
+                {motivoSinVender}
+                {motivoSinVender === AVISO_DE_VERSION_MINIMA && <Ayuda clave="ruta.versionMinima" />}
+              </p>
             </div>
           )}
           {datos.estado === 'listo' && (

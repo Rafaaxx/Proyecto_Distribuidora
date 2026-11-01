@@ -4,7 +4,7 @@ import { Ayuda } from '../../../components/ui/Ayuda'
 import { Badge } from '../../../components/ui/Badge'
 import { formatearDinero } from '../../../domain/ruta/lecturasLocales'
 import { useVentasDeHoy } from '../datos/ventas'
-import { etiquetaDeEnvio } from './presentacionDeVentas'
+import { ayudasDeProblemasEnLista, etiquetaDeEnvio } from './presentacionDeVentas'
 
 /**
  * Ventas de hoy (change 22a, tarea 11.1; spec `ruta/area-de-ruta`; `design.md` D14; SYN-09,
@@ -18,6 +18,8 @@ export function VentasDeHoyScreen() {
   if (datos.estado === 'sin_datos') {
     return <p className="text-sm text-primary">Todavía no hay datos descargados. Abrí una jornada desde el inicio.</p>
   }
+
+  const claves = ayudasDeProblemasEnLista(datos.ventas.map((v) => v.estado_envio))
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
@@ -42,8 +44,11 @@ export function VentasDeHoyScreen() {
           ))}
         </ul>
       )}
-      <p className="flex items-center gap-1 text-xs text-primary/70">
+      <p className="flex flex-wrap items-center gap-1 text-xs text-primary/70">
         Las ventas sin enviar se guardan en el teléfono. <Ayuda clave="ruta.ventaSinEnviar" />
+        {claves.map((clave) => (
+          <Ayuda key={clave} clave={clave} />
+        ))}
       </p>
     </div>
   )

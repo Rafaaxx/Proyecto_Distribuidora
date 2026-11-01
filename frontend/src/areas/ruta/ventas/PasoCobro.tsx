@@ -1,5 +1,6 @@
 import { Alert } from '../../../components/ui/Alert'
 import { Ayuda } from '../../../components/ui/Ayuda'
+import { AVISO_DE_VERSION_MINIMA } from '../../../sync/versionMinima'
 import { Boton } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import type { CarritoDeRuta, MedioPagoLocal, VentaArmada } from '../../../domain/ruta/armadoDeVentaLocal'
@@ -203,7 +204,17 @@ export function PasoCobro(props: PasoCobroProps) {
           ))}
         </ul>
       )}
-      {props.error && <Alert>{props.error}</Alert>}
+      {props.error && (
+        <Alert>
+          {props.error}
+          {props.error === AVISO_DE_VERSION_MINIMA && (
+            <>
+              {' '}
+              <Ayuda clave="ruta.versionMinima" />
+            </>
+          )}
+        </Alert>
+      )}
 
       <div className="flex flex-col gap-2">
         <Boton disabled={!armada.puedeConfirmar || props.confirmando} onClick={props.alConfirmar}>

@@ -6,8 +6,16 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Change 22b, D7: la versión de la compilación es `APP_VERSION` (la misma variable del backend) y
+// el código la lee como `VITE_APP_VERSION`. Con `dev` (sin formato X.Y.Z) la versión mínima no
+// restringe nada; sin `APP_VERSION` la aplicación queda en `0.0.0` (`sync/appVersion.ts`).
+const VERSION_DE_LA_COMPILACION = process.env.APP_VERSION
+
 // https://vite.dev/config/
 export default defineConfig({
+  define: VERSION_DE_LA_COMPILACION
+    ? { 'import.meta.env.VITE_APP_VERSION': JSON.stringify(VERSION_DE_LA_COMPILACION) }
+    : {},
   plugins: [
     react(),
     tailwindcss(),

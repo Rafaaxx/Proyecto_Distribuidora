@@ -81,6 +81,25 @@ describe('VentaGuardadaScreen (tarea 10.3)', () => {
     expect(await screen.findByText('No encontramos esa venta en este teléfono.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Ventas de hoy' })).toHaveAttribute('href', '/ruta/ventas')
   })
+
+  /** Change 22b, tarea 10.3 (cita SYN-04, SYN-09): las etiquetas del detalle. */
+  it.each([
+    ['ACEPTADA', 'Enviada'],
+    ['CON_OBSERVACIONES', 'Con observaciones'],
+    ['RECHAZADA', 'Rechazada'],
+  ] as const)('el detalle de una venta %s dice «%s»', async (estado, etiqueta) => {
+    await sembrarVenta('a')
+    await baseLocal.ventas.update('venta-a', { estado_envio: estado })
+
+    montar('venta-a')
+
+    expect(await screen.findByText(etiqueta)).toBeInTheDocument()
+    if (estado === 'RECHAZADA') {
+      expect(
+        screen.getByText('El sistema no aceptó esta venta. Sigue guardada en el teléfono; avisá a administración.'),
+      ).toBeInTheDocument()
+    }
+  })
 })
 
 vi.mock('../../../../../src/lib/nota/pdf', () => ({ generarPdfDeNota: vi.fn(async () => new Blob(['pdf'])) }))

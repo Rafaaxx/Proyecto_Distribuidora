@@ -1,5 +1,6 @@
 import { fijarAccessToken, limpiarAccessToken, obtenerAccessToken, sesionTerminada } from '../auth/tokenStore'
 import { obtenerOGenerarDispositivoId } from '../dispositivo/dispositivoId'
+import { conCandado } from '../locks'
 import { generarOperationId } from './operationId'
 
 /**
@@ -60,6 +61,8 @@ function conOperationIdFijo(init: RequestInit): RequestInit {
   return { ...init, headers }
 }
 
+const CANDADO_DE_RENOVACION = 'distribuidora:renovacion'
+
 let renovacionEnCurso: Promise<string | null> | null = null
 
 async function renovarAccessToken(): Promise<string | null> {
@@ -79,7 +82,11 @@ async function renovarCompartida(): Promise<string | null> {
     return renovacionEnCurso
   }
 
-  renovacionEnCurso = (async () => {
+  // Web Lock entre pestañas (change 22b, D11 = A; `02` §12.1): el refresh token rota en cada uso y
+  // reusar uno rotado revoca la familia, así que dos pestañas renuevan una después de la otra. La
+  // cookie se lee al enviar `/auth/refresh`, ya dentro del candado: la pestaña que espera manda la
+  // que dejó la anterior. Sin Web Locks queda como antes (una renovación en vuelo por pestaña).
+  renovacionEnCurso = conCandado(CANDADO_DE_RENOVACION, async () => {
     const dispositivoId = await obtenerOGenerarDispositivoId()
     const respuesta = await fetch(`${BASE_URL}/auth/refresh`, {
       method: 'POST',
@@ -96,7 +103,7 @@ async function renovarCompartida(): Promise<string | null> {
     const datos = (await respuesta.json()) as RespuestaTokenRenovado
     fijarAccessToken(datos.access_token)
     return datos.access_token
-  })()
+  })
 
   try {
     return await renovacionEnCurso

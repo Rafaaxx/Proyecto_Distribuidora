@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useBlocker, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { Boton } from '../../../components/ui/Button'
 import { Dialogo } from '../../../components/ui/Dialog'
@@ -30,6 +30,8 @@ import { generarOperationId } from '../../../lib/api/operationId'
 import { obtenerOGenerarDispositivoId } from '../../../lib/dispositivo/dispositivoId'
 import { confirmarVentaLocal } from '../../../sync/confirmarVentaLocal'
 import { APP_VERSION } from '../../../sync/appVersion'
+import { dispararTrasVenta } from '../../../sync/disparadores'
+import { AVISO_DE_VERSION_MINIMA, ventaBloqueadaPorVersion } from '../../../sync/versionMinima'
 import { useAhora } from '../datos/useAhora'
 import { useDatosParaVender } from '../datos/paraVender'
 import { DialogoDePinSupervisor } from './DialogoDePinSupervisor'
@@ -85,7 +87,8 @@ function VentaDeRuta({ datos }: { datos: DatosParaVender }) {
   const [pidiendoPin, setPidiendoPin] = useState(false)
   const [verificando, setVerificando] = useState(false)
   const [errorDePin, setErrorDePin] = useState<string | null>(null)
-  const [descartando, setDescartando] = useState(false)
+  // D10: con líneas, toda salida (menú, enlaces, atrás del historial) pasa por el bloqueador.
+  const salidaLibre = useRef(false)
 
   // D12: mientras hay líneas o una confirmación en curso, la guarda impide aplicar una versión nueva.
   const abierto = hayLineas(carrito) || confirmando
@@ -94,6 +97,18 @@ function VentaDeRuta({ datos }: { datos: DatosParaVender }) {
     marcar(abierto)
   }, [abierto, marcar])
   useEffect(() => () => marcar(false), [marcar])
+
+  const bloqueador = useBlocker(() => !salidaLibre.current && hayLineas(carrito))
+  // Recargar o cerrar la pestaña con líneas: el navegador pone su propio aviso.
+  useEffect(() => {
+    if (!hayLineas(carrito)) return undefined
+    const avisar = (evento: BeforeUnloadEvent) => {
+      evento.preventDefault()
+      evento.returnValue = ''
+    }
+    window.addEventListener('beforeunload', avisar)
+    return () => window.removeEventListener('beforeunload', avisar)
+  }, [carrito])
 
   const armada = useMemo(() => armarVentaDeRuta(datos, carrito, ahora), [datos, carrito, ahora])
 
@@ -115,6 +130,12 @@ function VentaDeRuta({ datos }: { datos: DatosParaVender }) {
     setConfirmando(true)
     setError(null)
     try {
+      // D7: por debajo de la versión mínima no se confirman ventas nuevas; el carrito se conserva.
+      if (await ventaBloqueadaPorVersion(APP_VERSION)) {
+        setError(AVISO_DE_VERSION_MINIMA)
+        setConfirmando(false)
+        return
+      }
       const dispositivoId = await obtenerOGenerarDispositivoId()
       // Se vuelve a armar con la hora de ahora: el número y los precios vigentes son los de confirmar.
       const momento = new Date()
@@ -126,7 +147,10 @@ function VentaDeRuta({ datos }: { datos: DatosParaVender }) {
         autorizadoresVerificados: verificados,
       })
       const resultado = await confirmarVentaLocal(entrada)
+      salidaLibre.current = true
       marcar(false)
+      // D6: después de cada venta confirmada se envía sola (si hay conexión).
+      dispararTrasVenta()
       navegar(`/ruta/ventas/${resultado.venta.venta_id}`, { replace: true })
     } catch {
       // No quedó nada guardado: el carrito sigue abierto y se reintenta con la misma operación (INV-06).
@@ -135,7 +159,12 @@ function VentaDeRuta({ datos }: { datos: DatosParaVender }) {
     }
   }
 
-  const alConfirmar = () => {
+  const alConfirmar = async () => {
+    // D7: el aviso puede llegar con el carrito abierto; se revisa antes de pedir PIN.
+    if (await ventaBloqueadaPorVersion(APP_VERSION)) {
+      setError(AVISO_DE_VERSION_MINIMA)
+      return
+    }
     if (personas.length > 0) {
       setErrorDePin(null)
       setPidiendoPin(true)
@@ -157,7 +186,7 @@ function VentaDeRuta({ datos }: { datos: DatosParaVender }) {
     await guardar(resultado.verificados)
   }
 
-  const alCancelar = () => (hayLineas(carrito) ? setDescartando(true) : navegar('/ruta'))
+  const alCancelar = () => navegar('/ruta')
 
   const clienteNombre = armada.cliente?.nombre ?? ''
 
@@ -239,7 +268,7 @@ function VentaDeRuta({ datos }: { datos: DatosParaVender }) {
           alAceptarExceso={(acepta) => actualizar((c) => ({ ...c, aceptaExceso: acepta }))}
           alElegirSupervisor={(tipo, id) => actualizar((c) => ({ ...c, seleccion: { ...c.seleccion, [tipo]: id } }))}
           alVenderIgual={(acepta) => actualizar((c) => ({ ...c, venderIgual: acepta }))}
-          alConfirmar={alConfirmar}
+          alConfirmar={() => void alConfirmar()}
           alVolver={() => setPaso('pedido')}
         />
       )}
@@ -254,17 +283,18 @@ function VentaDeRuta({ datos }: { datos: DatosParaVender }) {
         />
       )}
 
-      <Dialogo abierto={descartando} titulo="¿Descartar la venta?" onCerrar={() => setDescartando(false)}>
+      <Dialogo abierto={bloqueador.state === 'blocked'} titulo="¿Descartar la venta?" onCerrar={() => bloqueador.reset?.()}>
         <p className="mb-3 text-sm text-primary">Si salís ahora se pierde lo que cargaste. Todavía no se confirmó nada.</p>
         <div className="flex justify-end gap-2">
-          <Boton variante="secundario" onClick={() => setDescartando(false)}>
+          <Boton variante="secundario" onClick={() => bloqueador.reset?.()}>
             Seguir vendiendo
           </Boton>
           <Boton
             variante="peligro"
             onClick={() => {
+              salidaLibre.current = true
               marcar(false)
-              navegar('/ruta')
+              bloqueador.proceed?.()
             }}
           >
             Descartar

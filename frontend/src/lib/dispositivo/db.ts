@@ -72,7 +72,7 @@ export type CatalogoLocal =
   | { clave: 'motivos'; items: Esquema['MotivoBootstrap'][] }
   | { clave: 'alicuotas'; items: Esquema['AlicuotaBootstrap'][] }
 
-/** Estado de envío de una venta local (D13): en el 22a solo existe `PENDIENTE` ("Sin enviar"). */
+/** Estado de envío de una venta local (D13): `PENDIENTE` («Sin enviar») hasta el resultado del servidor (22b). */
 export type EstadoDeEnvio = 'PENDIENTE' | 'ACEPTADA' | 'CON_OBSERVACIONES' | 'RECHAZADA'
 
 export type ContenidoDeVentaLocal = Esquema['VentaConfirmarRequest']
@@ -167,15 +167,26 @@ export interface MovimientoLocal {
   cliente_id: string | null
   cantidad_base: number | null
   importe: string | null
-  /** `PENDIENTE` hasta que el servidor responde (lo escribe el change 22b). */
+  /** `PENDIENTE` hasta la conciliación con un bootstrap posterior (la escribe el change 22c; el 22b NO la cambia, D4). */
   estado_operacion: 'PENDIENTE' | 'RESUELTA'
 }
+
+/**
+ * Estado de un comando de la cola (change 22b, `design.md` D3): `PENDIENTE` hasta que el servidor
+ * responde; después toma el estado del resultado. Nunca se borra (SYN-09). Sin versión nueva de
+ * Dexie: el índice `estado` ya existe.
+ */
+export type EstadoDeComando = 'PENDIENTE' | 'ACEPTADO' | 'ACEPTADO_CON_OBSERVACIONES' | 'RECHAZADO'
 
 export interface ComandoEnCola {
   secuencia: number
   operation_id: string
-  estado: 'PENDIENTE'
+  estado: EstadoDeComando
   sobre: SobreEnCola
+  /** Código del rechazo del servidor (solo con `RECHAZADO`). */
+  error_codigo?: string | null
+  /** Momento local (ISO) en que se escribió el resultado. */
+  resultado_en?: string
 }
 
 /** Fallos del PIN de un supervisor por par (usuario, autorizador); no guarda horas (D10). */

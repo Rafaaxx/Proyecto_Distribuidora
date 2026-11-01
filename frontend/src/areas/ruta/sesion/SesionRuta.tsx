@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { renovarSesion } from '../../../lib/api/httpClient'
+import { obtenerOGenerarDispositivoId } from '../../../lib/dispositivo/dispositivoId'
 import { definirPin, desbloquearConPin, type ResultadoDesbloqueo } from '../../../lib/sesionLocal/pin'
+import { usuarioLocalId } from '../../../lib/sesionLocal/sesionLocal'
+import { iniciarDisparadores } from '../../../sync/disparadores'
 import { LoginRutaScreen, type MotivoDeLogin } from '../auth/LoginRutaScreen'
 import { ContextoSesion, type SesionRutaActiva } from './contextoSesion'
 import { sincronizarAlEntrar, type ResultadoEntrada } from './entrada'
@@ -43,6 +46,23 @@ export function SesionRuta({ children }: { children: ReactNode }) {
       vigente = false
     }
   }, [])
+
+  // Change 22b, D6 (SEG-03): los disparadores de la sincronización viven solo con la sesión local
+  // desbloqueada; al bloquear, cerrar la sesión o desmontar se quitan.
+  const desbloqueada = estado.fase === 'activa'
+  useEffect(() => {
+    if (!desbloqueada) return undefined
+    let vigente = true
+    let detener: (() => void) | null = null
+    void Promise.all([usuarioLocalId(), obtenerOGenerarDispositivoId()]).then(([usuarioId, dispositivoId]) => {
+      if (!vigente || usuarioId === undefined) return
+      detener = iniciarDisparadores({ usuarioId, dispositivoId }).detener
+    })
+    return () => {
+      vigente = false
+      detener?.()
+    }
+  }, [desbloqueada])
 
   /** Consulta la jornada y baja el bootstrap si corresponde; pasa a `activa` o al login. */
   const entrar = useCallback(async () => {

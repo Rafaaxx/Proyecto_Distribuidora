@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { vi } from 'vitest'
 
 import { ContextoSesion, type SesionRutaActiva } from '../../../src/areas/ruta/sesion/contextoSesion'
@@ -17,10 +17,11 @@ export function montarEnRuta(
     reintentarEntrada: vi.fn(async () => undefined),
     ...opciones.sesion,
   }
-  const vista = render(
-    <MemoryRouter initialEntries={[opciones.ruta ?? '/ruta']}>
-      <ContextoSesion.Provider value={sesion}>{pantalla}</ContextoSesion.Provider>
-    </MemoryRouter>,
+  // Enrutador de datos (22b D10): Vender usa `useBlocker`, que no funciona con `MemoryRouter`.
+  const router = createMemoryRouter(
+    [{ path: '*', element: <ContextoSesion.Provider value={sesion}>{pantalla}</ContextoSesion.Provider> }],
+    { initialEntries: [opciones.ruta ?? '/ruta'] },
   )
+  const vista = render(<RouterProvider router={router} />)
   return { ...vista, sesion }
 }

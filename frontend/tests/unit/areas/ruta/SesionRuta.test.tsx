@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   pedirBootstrap: vi.fn(),
   iniciarSesionConContrasena: vi.fn(),
   obtenerYo: vi.fn(),
+  iniciarDisparadores: vi.fn(),
+  detenerDisparadores: vi.fn(),
 }))
 
 vi.mock('../../../../src/lib/api/httpClient', () => ({
@@ -28,6 +30,7 @@ vi.mock('../../../../src/features/identidad/login', () => ({
   iniciarSesionConContrasena: mocks.iniciarSesionConContrasena,
 }))
 vi.mock('../../../../src/features/identidad/api', () => ({ obtenerYo: mocks.obtenerYo }))
+vi.mock('../../../../src/sync/disparadores', () => ({ iniciarDisparadores: mocks.iniciarDisparadores }))
 
 import { useSesionRutaActiva } from '../../../../src/areas/ruta/sesion/contextoSesion'
 import { SesionRuta } from '../../../../src/areas/ruta/sesion/SesionRuta'
@@ -82,6 +85,7 @@ describe('SesionRuta: máquina de estados de /ruta (tareas 9.2 y 9.3)', () => {
     mocks.obtenerJornadaActual.mockResolvedValue(null)
     mocks.iniciarSesionConContrasena.mockResolvedValue({ access_token: 'tok' })
     mocks.obtenerYo.mockResolvedValue({ usuario: { id: ID(1), nombre: 'Vendedor Uno' } })
+    mocks.iniciarDisparadores.mockReturnValue({ detener: mocks.detenerDisparadores })
   })
 
   afterEach(() => {
@@ -295,4 +299,76 @@ describe('SesionRuta: máquina de estados de /ruta (tareas 9.2 y 9.3)', () => {
 
     expect(await screen.findByLabelText(/^PIN$/i)).toBeInTheDocument()
   }, 20_000)
+})
+
+/**
+ * Change 22b, tarea 8.1 (spec `sync/motor-de-sincronizacion`, «La sincronización se dispara sola y
+ * a pedido», escenario «Sesión bloqueada»; cita SEG-03, `02` §13.3): los disparadores se montan
+ * con la sesión desbloqueada y se quitan al bloquear o cerrar la sesión.
+ */
+function Salir() {
+  const { alBloquearse, alCerrarSesion } = useSesionRutaActiva()
+  return (
+    <>
+      <button onClick={alBloquearse}>Bloquear de prueba</button>
+      <button onClick={alCerrarSesion}>Cerrar de prueba</button>
+    </>
+  )
+}
+
+describe('SesionRuta: montaje de los disparadores de sincronización (tarea 8.1)', () => {
+  beforeEach(async () => {
+    for (const m of Object.values(mocks)) m.mockReset()
+    await Promise.all(baseLocal.tables.map((t) => t.clear()))
+    conectado(true)
+    mocks.renovarSesion.mockResolvedValue('renovada')
+    mocks.obtenerJornadaActual.mockResolvedValue(null)
+    mocks.iniciarDisparadores.mockReturnValue({ detener: mocks.detenerDisparadores })
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('con la sesión bloqueada (pantalla del PIN) no hay disparadores; al desbloquear se montan con el usuario y el dispositivo', async () => {
+    await sembrarSesionConDatos()
+    render(
+      <SesionRuta>
+        <Inicio />
+      </SesionRuta>,
+    )
+    await screen.findByLabelText(/^PIN$/i)
+    expect(mocks.iniciarDisparadores).not.toHaveBeenCalled()
+  })
+
+  it('al desbloquear con el PIN correcto los inicia, y al bloquearse o cerrar la sesión los detiene', async () => {
+    await sembrarSesionConDatos()
+    render(
+      <SesionRuta>
+        <Inicio />
+        <Salir />
+      </SesionRuta>,
+    )
+    await tipearPin(PIN)
+    await screen.findByText(/inicio de prueba/i, undefined, { timeout: 8000 })
+
+    await waitFor(() => expect(mocks.iniciarDisparadores).toHaveBeenCalledTimes(1))
+    expect(mocks.iniciarDisparadores).toHaveBeenCalledWith({ usuarioId: ID(1), dispositivoId: 'dispositivo-de-prueba' })
+    expect(mocks.detenerDisparadores).not.toHaveBeenCalled()
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Bloquear de prueba' }))
+    await screen.findByRole('button', { name: /iniciar sesión/i })
+    expect(mocks.detenerDisparadores).toHaveBeenCalledTimes(1)
+  })
+
+  it('sin usuario local no inicia nada (no hay de quién sea la cola)', async () => {
+    await sembrarSesionConDatos()
+    await baseLocal.meta.delete('usuario_local_id')
+    render(
+      <SesionRuta>
+        <Inicio />
+      </SesionRuta>,
+    )
+    expect(await screen.findByRole('button', { name: /iniciar sesión/i })).toBeInTheDocument()
+    expect(mocks.iniciarDisparadores).not.toHaveBeenCalled()
+  })
 })

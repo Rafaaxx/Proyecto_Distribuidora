@@ -97,6 +97,10 @@ services:
     profiles: ["lan"]
     build:
       context: ./frontend
+    environment:
+      # Change 22b, D7: la compilación toma su versión de `APP_VERSION` (formato X.Y.Z para que la
+      # versión mínima tenga efecto; con `dev` no restringe nada).
+      APP_VERSION: ${APP_VERSION:-dev}
     command: ["npm", "run", "build", "--", "--outDir", "/dist", "--emptyOutDir"]
     volumes:
       - ./frontend:/app

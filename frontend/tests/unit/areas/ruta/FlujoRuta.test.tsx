@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto'
 
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { bootstrapDePrueba, clienteDePrueba, ID } from '../../utils/bootstrapDePrueba'
@@ -81,11 +81,7 @@ function conectado(servidor: Servidor, valor: boolean) {
 /** Un arranque de la aplicación: un montaje nuevo sobre la misma base local. */
 function abrirAplicacion() {
   return render(
-    <MemoryRouter initialEntries={['/ruta']}>
-      <Routes>
-        <Route path="/ruta/*" element={<RutaScreen />} />
-      </Routes>
-    </MemoryRouter>,
+    <RouterProvider router={createMemoryRouter([{ path: '/ruta/*', element: <RutaScreen /> }], { initialEntries: ['/ruta'] })} />,
   )
 }
 

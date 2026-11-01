@@ -1,4 +1,5 @@
 import { baseLocal, type AutorizadorLocal, type IntentoPinLocal } from '../dispositivo/db'
+import { conCandado } from '../locks'
 import { compararEnTiempoConstante, derivarPin } from './derivacion'
 
 /**
@@ -50,13 +51,39 @@ function estadoVigente(fila: IntentoPinLocal | undefined, derivacion: string): {
   return { fallos: fila.fallos, bloqueado: fila.bloqueado }
 }
 
-/** Serializa los intentos para que dos toques simultáneos no esquiven el límite. */
-let cola: Promise<unknown> = Promise.resolve()
+/** Candado por par (usuario local, autorizador): dos supervisores distintos no se esperan. */
+function nombreDeCandado(usuarioId: string, autorizadorId: string): string {
+  return `distribuidora:pin:${usuarioId}:${autorizadorId}`
+}
 
-function enSerie<T>(tarea: () => Promise<T>): Promise<T> {
-  const siguiente = cola.then(tarea, tarea)
-  cola = siguiente.catch(() => undefined)
-  return siguiente
+/**
+ * Suma un fallo en una transacción `rw` que RELEE la fila (change 22b, D9 = A): ningún fallo se
+ * pierde aunque otra pestaña escriba entre la lectura previa y esta. Si otra pestaña ya bloqueó el
+ * par, no cuenta y responde «bloqueado».
+ */
+async function registrarFallo(
+  usuarioId: string,
+  autorizador: AutorizadorLocal,
+  maximo: number,
+): Promise<ResultadoPinSupervisor> {
+  return baseLocal.transaction('rw', baseLocal.intentos_pin, async (): Promise<ResultadoPinSupervisor> => {
+    const actual = estadoVigente(await baseLocal.intentos_pin.get([usuarioId, autorizador.id]), autorizador.pin_hash)
+    if (actual.bloqueado) return { tipo: 'bloqueado' }
+    const fallos = actual.fallos + 1
+    const bloqueado = fallos >= maximo
+    await baseLocal.intentos_pin.put({
+      usuario_id: usuarioId,
+      autorizador_id: autorizador.id,
+      fallos,
+      derivacion: autorizador.pin_hash,
+      bloqueado,
+    })
+    return bloqueado ? { tipo: 'bloqueado' } : { tipo: 'incorrecto', restantes: maximo - fallos }
+  })
+}
+
+async function estaBloqueado(usuarioId: string, autorizador: AutorizadorLocal): Promise<boolean> {
+  return estadoVigente(await baseLocal.intentos_pin.get([usuarioId, autorizador.id]), autorizador.pin_hash).bloqueado
 }
 
 async function verificar(solicitud: SolicitudDePinSupervisor): Promise<ResultadoPinSupervisor> {
@@ -66,29 +93,25 @@ async function verificar(solicitud: SolicitudDePinSupervisor): Promise<Resultado
     return { tipo: 'sin_permiso' }
   }
 
-  const clave: [string, string] = [usuarioId, autorizadorId]
-  const previo = estadoVigente(await baseLocal.intentos_pin.get(clave), autorizador.pin_hash)
-  if (previo.bloqueado) return { tipo: 'bloqueado' }
+  if (await estaBloqueado(usuarioId, autorizador)) return { tipo: 'bloqueado' }
 
   const derivado = await derivarPin(pin, autorizador.pin_sal, autorizador.iteraciones)
+
+  // Sin Web Locks otra pestaña pudo bloquear el par mientras se derivaba: ninguna derivación de
+  // más da información, ni acierto ni fallo (D9 = A).
+  if (await estaBloqueado(usuarioId, autorizador)) return { tipo: 'bloqueado' }
+
   if (compararEnTiempoConstante(derivado, autorizador.pin_hash)) {
     return { tipo: 'ok', autorizadorId }
   }
-
-  const maximo = await maximoDeIntentos()
-  const fallos = previo.fallos + 1
-  const bloqueado = fallos >= maximo
-  await baseLocal.intentos_pin.put({
-    usuario_id: usuarioId,
-    autorizador_id: autorizadorId,
-    fallos,
-    derivacion: autorizador.pin_hash,
-    bloqueado,
-  })
-  return bloqueado ? { tipo: 'bloqueado' } : { tipo: 'incorrecto', restantes: maximo - fallos }
+  return registrarFallo(usuarioId, autorizador, await maximoDeIntentos())
 }
 
-/** Verifica el PIN de un supervisor en el teléfono (sin señal, sin enviarlo). */
+/**
+ * Verifica el PIN de un supervisor en el teléfono (sin señal, sin enviarlo). Toda la verificación,
+ * con la derivación dentro, va en un Web Lock por par entre pestañas (`02` §12.4, D9 = A); sin Web
+ * Locks, `conCandado` serializa dentro de la pestaña y la transacción atómica evita perder fallos.
+ */
 export function verificarPinDeSupervisor(solicitud: SolicitudDePinSupervisor): Promise<ResultadoPinSupervisor> {
-  return enSerie(() => verificar(solicitud))
+  return conCandado(nombreDeCandado(solicitud.usuarioId, solicitud.autorizadorId), () => verificar(solicitud))
 }

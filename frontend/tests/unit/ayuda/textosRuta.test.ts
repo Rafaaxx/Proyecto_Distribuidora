@@ -58,7 +58,7 @@ describe('textos de ayuda de la venta de ruta (change 22a, tarea 15.1)', () => {
     const { titulo, texto, reglas } = AYUDAS['ruta.ventaSinEnviar']
     expect(titulo).toBe('Sin enviar')
     expect(texto).toBe(
-      'La venta ya está confirmada y guardada en el teléfono. Se envía al sistema cuando haya señal; hasta entonces no se borra.',
+      'La venta ya está confirmada y guardada en el teléfono. Se envía sola cuando haya señal, o con «Sincronizar»; hasta entonces no se borra.',
     )
     expect(reglas).toEqual(expect.arrayContaining(['SYN-01', 'SYN-09']))
   })
@@ -114,3 +114,56 @@ describe('textos de ayuda de la venta de ruta (change 22a, tarea 15.1)', () => {
   })
 })
 
+
+/**
+ * Change 22b, tarea 12.1 (spec `sistema/ayuda-contextual`, "La sincronización del área de ruta
+ * explica sus estados"; `design.md` D13; ADR-051, ADR-064): cuatro claves nuevas con los textos
+ * aprobados el 2026-11-01, sin ejemplos. Los IDs citados existen (`trazabilidad.test.ts`).
+ */
+describe('textos de ayuda de la sincronización (change 22b, tarea 12.1)', () => {
+  it('ruta.sincronizar: qué envía, cuándo se hace sola y que reenviar no duplica; no habla del botón', () => {
+    const { titulo, texto, reglas } = AYUDAS['ruta.sincronizar']
+    expect(titulo).toBe('Sincronizar')
+    expect(texto).toBe(
+      'Envía al sistema las ventas sin enviar de tu usuario, en el orden en que las hiciste. Se hace sola al abrir la aplicación o volver a ella, al volver la señal, después de cada venta y cada 2 minutos. Enviar dos veces la misma venta no la duplica.',
+    )
+    expect(texto).not.toMatch(/bot[oó]n|tocá|apretá/i)
+    expect(reglas).toEqual(expect.arrayContaining(['SYN-02', 'SYN-03', 'INV-06']))
+  })
+
+  it('ruta.ventaConObservaciones: se aceptó, administración revisa y no hay nada que hacer', () => {
+    const { titulo, texto, reglas } = AYUDAS['ruta.ventaConObservaciones']
+    expect(titulo).toBe('Con observaciones')
+    expect(texto).toBe(
+      'El sistema aceptó la venta y anotó algo para que administración lo revise. La venta vale igual; no tenés que hacer nada.',
+    )
+    expect(reglas).toEqual(expect.arrayContaining(['SYN-04', 'SYN-05', 'SYN-08']))
+  })
+
+  it('ruta.ventaRechazada: problema de datos, sigue en el teléfono, no se reenvía sola y se avisa', () => {
+    const { titulo, texto, reglas } = AYUDAS['ruta.ventaRechazada']
+    expect(titulo).toBe('Rechazada')
+    expect(texto).toBe(
+      'El sistema no aceptó la venta por un problema de datos, no por stock ni por crédito. Sigue guardada en el teléfono y no se vuelve a enviar sola: avisá a administración.',
+    )
+    expect(reglas).toEqual(expect.arrayContaining(['SYN-06', 'SYN-09']))
+  })
+
+  it('ruta.versionMinima: ya no confirma ventas nuevas, las guardadas se siguen enviando', () => {
+    const { titulo, texto, reglas } = AYUDAS['ruta.versionMinima']
+    expect(titulo).toBe('Versión desactualizada')
+    expect(texto).toBe(
+      'Esta versión de la aplicación ya no puede confirmar ventas nuevas. Las ventas guardadas se siguen enviando. Actualizá la aplicación para volver a vender.',
+    )
+    expect(reglas).toEqual(['ADR-064'])
+  })
+
+  it.each(['ruta.sincronizar', 'ruta.ventaConObservaciones', 'ruta.ventaRechazada', 'ruta.versionMinima'] as const)(
+    '%s no lleva ejemplo ni "Ver más"',
+    (clave) => {
+      const entrada: Record<string, unknown> = AYUDAS[clave]
+      expect(entrada.ejemplo).toBeUndefined()
+      expect(entrada.verMas).toBeUndefined()
+    },
+  )
+})

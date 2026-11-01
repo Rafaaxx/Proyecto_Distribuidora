@@ -895,7 +895,7 @@ export const AYUDAS = {
   'ruta.ventaSinEnviar': {
     titulo: 'Sin enviar',
     texto:
-      'La venta ya está confirmada y guardada en el teléfono. Se envía al sistema cuando haya señal; hasta entonces no se borra.',
+      'La venta ya está confirmada y guardada en el teléfono. Se envía sola cuando haya señal, o con «Sincronizar»; hasta entonces no se borra.',
     reglas: ['SYN-01', 'SYN-09'],
   },
   'ruta.creditoSinSenal': {
@@ -921,6 +921,31 @@ export const AYUDAS = {
     titulo: 'Número de venta',
     texto: 'El teléfono le pone el número al confirmar: el prefijo del teléfono y el siguiente número de sus ventas.',
     reglas: ['VTA-06'],
+  },
+  // --- Sincronización de ruta (change 22b, ADR-064; textos aprobados el 2026-11-01, sin ejemplos) ---
+  'ruta.sincronizar': {
+    titulo: 'Sincronizar',
+    texto:
+      'Envía al sistema las ventas sin enviar de tu usuario, en el orden en que las hiciste. Se hace sola al abrir la aplicación o volver a ella, al volver la señal, después de cada venta y cada 2 minutos. Enviar dos veces la misma venta no la duplica.',
+    reglas: ['SYN-02', 'SYN-03', 'INV-06'],
+  },
+  'ruta.ventaConObservaciones': {
+    titulo: 'Con observaciones',
+    texto:
+      'El sistema aceptó la venta y anotó algo para que administración lo revise. La venta vale igual; no tenés que hacer nada.',
+    reglas: ['SYN-04', 'SYN-05', 'SYN-08'],
+  },
+  'ruta.ventaRechazada': {
+    titulo: 'Rechazada',
+    texto:
+      'El sistema no aceptó la venta por un problema de datos, no por stock ni por crédito. Sigue guardada en el teléfono y no se vuelve a enviar sola: avisá a administración.',
+    reglas: ['SYN-06', 'SYN-09'],
+  },
+  'ruta.versionMinima': {
+    titulo: 'Versión desactualizada',
+    texto:
+      'Esta versión de la aplicación ya no puede confirmar ventas nuevas. Las ventas guardadas se siguen enviando. Actualizá la aplicación para volver a vender.',
+    reglas: ['ADR-064'],
   },
 } as const satisfies Record<string, EntradaDeAyuda>
 

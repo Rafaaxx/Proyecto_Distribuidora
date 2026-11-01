@@ -29,6 +29,8 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session
 from testcontainers.community.postgres import PostgresContainer
@@ -37,6 +39,20 @@ from app import modelos  # noqa: F401 (todos los modelos en `Base.metadata`: FK 
 from app.core.db import crear_engine, crear_session_factory
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+
+
+def cabeza_de_alembic() -> str:
+    """Revision cabeza actual de las migraciones, leida de los scripts de Alembic.
+
+    Evita hardcodear la cabeza en las pruebas de migracion: la proxima
+    migracion no las rompe. No conecta a la base ni corre `env.py`.
+    """
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    cabeza = ScriptDirectory.from_config(config).get_current_head()
+    assert cabeza is not None
+    return cabeza
+
 
 # Los dos roles de PostgreSQL que exige INV-05 (`design.md` D3, `ADR-020`).
 # En este arnés se crean desde cero en cada corrida (`design.md`, Risks: "el

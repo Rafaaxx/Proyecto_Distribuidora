@@ -2,10 +2,14 @@ import type { ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { Badge } from '../../../components/ui/Badge'
+import { Boton } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { disponibleDeCredito, formatearDinero } from '../../../domain/ruta/lecturasLocales'
 import { formatearFechaHora } from '../../../lib/fecha'
+import { Ayuda } from '../../../components/ui/Ayuda'
+import { AVISO_DE_VERSION_MINIMA } from '../../../sync/versionMinima'
 import { useClienteLocal, useDatosDeInicio } from '../datos/lecturas'
+import { useVersionBloqueada } from '../datos/sincronizacion'
 import { useSesionRutaActiva } from '../sesion/contextoSesion'
 
 /**
@@ -28,6 +32,7 @@ export function ClienteFichaScreen() {
   const inicio = useDatosDeInicio()
   const { entrada } = useSesionRutaActiva()
   // D14: "Vender" solo con VENDER en el bootstrap, jornada abierta y datos del día.
+  const versionBloqueada = useVersionBloqueada()
   const puedeVender = inicio.estado === 'listo' && inicio.permisos.includes('VENDER') && entrada.tipo !== 'sin_jornada'
 
   if (datos.estado === 'cargando') return <p className="text-sm text-primary">Cargando…</p>
@@ -72,7 +77,18 @@ export function ClienteFichaScreen() {
         </dl>
       </Card>
 
-      {puedeVender && (
+      {puedeVender && versionBloqueada && (
+        <div className="flex flex-col gap-1">
+          <Boton variante="secundario" disabled>
+            Vender
+          </Boton>
+          <p className="flex items-center gap-1 text-sm text-primary/70">
+            {AVISO_DE_VERSION_MINIMA}
+            <Ayuda clave="ruta.versionMinima" />
+          </p>
+        </div>
+      )}
+      {puedeVender && !versionBloqueada && (
         <Link
           to={`/ruta/vender?cliente=${cliente.id}`}
           className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-3 text-sm font-medium text-primary-foreground hover:opacity-90"

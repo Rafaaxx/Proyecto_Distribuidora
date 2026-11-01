@@ -24,6 +24,7 @@ from conftest import (
     BACKEND_DIR,
     NOMBRE_ROL_MIGRACIONES,
     _url_con_credenciales,
+    cabeza_de_alembic,
 )
 from cuentas_corrientes_utiles import (
     crear_cliente,
@@ -38,7 +39,7 @@ from ventas_utiles import MOMENTO, VentaSembrada, insertar_sql, sembrar_venta_sq
 
 REVISION = "b6c7d8e9f0a1"
 REVISION_ANTERIOR = "a2b3c4d5e6f7"  # `ventas`, la última del change 18a.
-REVISION_HEAD = "a9c1e3f5b7d2"  # `catalogos_de_configuracion` (change 20c), la cabeza actual.
+REVISION_HEAD = cabeza_de_alembic()  # la cabeza actual, leida de Alembic.
 
 AMBITO = "DESCUENTO_MANUAL"
 MOTIVOS_SEMBRADOS = {

@@ -1,8 +1,5 @@
-import { useState } from 'react'
-import { Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom'
+import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
 
-import { Boton } from '../../components/ui/Button'
-import { Dialogo } from '../../components/ui/Dialog'
 import { AyudaRutaRoutes } from './ayuda/AyudaRutaRoutes'
 import { ClienteFichaScreen } from './clientes/ClienteFichaScreen'
 import { ClientesScreen } from './clientes/ClientesScreen'
@@ -12,8 +9,9 @@ import { MiCuentaScreen } from './cuenta/MiCuentaScreen'
 import { InicioScreen } from './InicioScreen'
 import { AbrirJornadaScreen } from './jornada/AbrirJornadaScreen'
 import { ProductosScreen } from './productos/ProductosScreen'
+import { IndicadorDeSincronizacion } from './sincronizacion/IndicadorDeSincronizacion'
+import { SincronizacionScreen } from './sincronizacion/SincronizacionScreen'
 import { StockScreen } from './stock/StockScreen'
-import { useGuardaDelCarrito } from './ventas/contextoGuarda'
 import { VenderScreen } from './ventas/VenderScreen'
 import { VentaGuardadaScreen } from './ventas/VentaGuardadaScreen'
 import { VentasDeHoyScreen } from './ventas/VentasDeHoyScreen'
@@ -21,8 +19,7 @@ import { VentasDeHoyScreen } from './ventas/VentasDeHoyScreen'
 /**
  * Pantallas de `/ruta` con la sesión local ya desbloqueada (change 21, `design.md` D19): inicio,
  * jornada, consulta de clientes, productos y stock, cuenta y ayuda. Todo lo de consulta lee de la
- * base local. La venta de ruta (change 22a) va por `vender`, `ventas` y `ventas/:id`; el menú
- * pregunta antes de salir de una venta con líneas (D12).
+ * base local. La venta de ruta (change 22a) va por `vender`, `ventas` y `ventas/:id`; la pantalla de venta pregunta antes de salir con líneas (22b D10, `useBlocker`).
  */
 const MENU = [
   { a: '/ruta', texto: 'Inicio', exacto: true },
@@ -40,24 +37,9 @@ function claseDeMenu({ isActive }: { isActive: boolean }): string {
 }
 
 export function RutaLayout() {
-  const navegar = useNavigate()
-  const { ocupado } = useGuardaDelCarrito()
-  const [destinoPendiente, setDestinoPendiente] = useState<string | null>(null)
-
-  // D12, VTA-07: con un carrito con líneas, salir por el menú pregunta antes de descartarlo.
-  const alTocarMenu = (evento: React.MouseEvent, destino: string) => {
-    if (!ocupado) return
-    evento.preventDefault()
-    setDestinoPendiente(destino)
-  }
-  const descartar = () => {
-    const destino = destinoPendiente
-    setDestinoPendiente(null)
-    if (destino !== null) navegar(destino)
-  }
-
   return (
     <div className="flex min-h-dvh flex-col bg-surface-muted">
+      <IndicadorDeSincronizacion />
       <main className="flex-1 p-4 pb-20">
         <Routes>
           <Route index element={<InicioScreen />} />
@@ -69,6 +51,7 @@ export function RutaLayout() {
           <Route path="vender" element={<VenderScreen />} />
           <Route path="ventas" element={<VentasDeHoyScreen />} />
           <Route path="ventas/:id" element={<VentaGuardadaScreen />} />
+          <Route path="sincronizacion" element={<SincronizacionScreen />} />
           <Route path="cuenta" element={<MiCuentaScreen />} />
           <Route path="cuenta/contrasena" element={<MiContrasenaRutaScreen />} />
           <Route path="cuenta/pin" element={<CambiarPinScreen />} />
@@ -86,23 +69,11 @@ export function RutaLayout() {
             to={item.a}
             end={item.exacto}
             className={claseDeMenu}
-            onClick={(evento) => alTocarMenu(evento, item.a)}
           >
             {item.texto}
           </NavLink>
         ))}
       </nav>
-      <Dialogo abierto={destinoPendiente !== null} titulo="¿Descartar la venta?" onCerrar={() => setDestinoPendiente(null)}>
-        <p className="mb-3 text-sm text-primary">Si salís ahora se pierde lo que cargaste. Todavía no se confirmó nada.</p>
-        <div className="flex justify-end gap-2">
-          <Boton variante="secundario" onClick={() => setDestinoPendiente(null)}>
-            Seguir vendiendo
-          </Boton>
-          <Boton variante="peligro" onClick={descartar}>
-            Descartar
-          </Boton>
-        </div>
-      </Dialogo>
     </div>
   )
 }

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ generarPdfDeNota: vi.fn(), compartir: vi.fn() }))
@@ -201,11 +201,7 @@ describe('Flujo de venta de ruta de punta a punta (tarea 17.1)', () => {
     conectado(servidor, true)
     const u = userEvent.setup()
     render(
-      <MemoryRouter initialEntries={['/ruta']}>
-        <Routes>
-          <Route path="/ruta/*" element={<RutaScreen />} />
-        </Routes>
-      </MemoryRouter>,
+      <RouterProvider router={createMemoryRouter([{ path: '/ruta/*', element: <RutaScreen /> }], { initialEntries: ['/ruta'] })} />,
     )
 
     // Login, PIN del dispositivo, jornada y bootstrap.

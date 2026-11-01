@@ -11,7 +11,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { components } from '../../../../../src/api/schema.gen'
 
-const mocks = vi.hoisted(() => ({ confirmar: vi.fn(), verificar: vi.fn(), fetch: vi.fn() }))
+const mocks = vi.hoisted(() => ({ confirmar: vi.fn(), verificar: vi.fn(), fetch: vi.fn(), dispararTrasVenta: vi.fn() }))
+vi.mock('../../../../../src/sync/disparadores', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../../../../src/sync/disparadores')>()
+  return { ...real, dispararTrasVenta: mocks.dispararTrasVenta }
+})
 vi.mock('../../../../../src/sync/confirmarVentaLocal', async (importOriginal) => {
   const real = await importOriginal<typeof import('../../../../../src/sync/confirmarVentaLocal')>()
   mocks.confirmar.mockImplementation(real.confirmarVentaLocal)
@@ -209,6 +213,23 @@ describe('VenderScreen: la venta del criterio 5 (tarea 10.1)', () => {
     expect(JSON.stringify(comandos[0]?.sobre)).not.toMatch(/credenciales|"pin"/i)
     const venta = await baseLocal.ventas.toCollection().first()
     expect(venta?.nota?.saldo_resultante).toBe('11188.00')
+  })
+
+  it('después de confirmar dispara la sincronización una vez; si la confirmación falla, no (change 22b, D6)', async () => {
+    mocks.dispararTrasVenta.mockClear()
+    mocks.confirmar.mockRejectedValueOnce(new Error('falla inyectada'))
+    const { u } = montar()
+    await elegirCliente(u)
+    await cargarVino(u, '1', '0')
+    await irAlCobro(u)
+
+    await u.click(screen.getByRole('button', { name: 'Confirmar venta' }))
+    expect(await screen.findByText('No se pudo guardar la venta. Probá de nuevo.')).toBeInTheDocument()
+    expect(mocks.dispararTrasVenta).not.toHaveBeenCalled()
+
+    await u.click(screen.getByRole('button', { name: 'Confirmar venta' }))
+    expect(await screen.findByRole('heading', { name: /^Venta 0001-/ })).toBeInTheDocument()
+    expect(mocks.dispararTrasVenta).toHaveBeenCalledTimes(1)
   })
 
   it('funciona igual sin señal', async () => {

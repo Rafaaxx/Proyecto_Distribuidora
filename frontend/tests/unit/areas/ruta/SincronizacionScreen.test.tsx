@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { bootstrapParaVender } from '../../utils/datosParaVender'
 import { ID } from '../../utils/bootstrapDePrueba'
 import { montarEnRuta } from '../../utils/rutaDePrueba'
-import { sembrarVenta } from '../../utils/sembrarVenta'
+import { sembrarAnulacion, sembrarVenta } from '../../utils/sembrarVenta'
 import { sincronizadorDePrueba } from '../../utils/sincronizadorDePrueba'
 
 import { SincronizacionScreen } from '../../../../src/areas/ruta/sincronizacion/SincronizacionScreen'
@@ -209,5 +209,65 @@ describe('SincronizacionScreen (tarea 10.2)', () => {
 
     await screen.findByText('0001-000008')
     expect(screen.getAllByRole('button', { name: /ayuda: observaciones y rechazos/i }).length).toBeGreaterThan(0)
+  })
+
+  /**
+   * Change 22d, tarea 12.2 (spec `ruta/area-de-ruta`, «Anulación rechazada en Sincronización»,
+   * «Pendientes»; `design.md` D10, D11; cita SYN-06, SYN-07, SYN-09).
+   */
+  async function anulacionConResultado(
+    sufijo: string,
+    estado: 'ACEPTADA' | 'CON_OBSERVACIONES' | 'RECHAZADA',
+    resultado: { error_codigo?: string | null; observaciones?: ObservacionLocal[] },
+  ) {
+    await sembrarVenta(sufijo, { cajas: 1, unidades: 0 })
+    await sembrarAnulacion(sufijo)
+    await baseLocal.anulaciones.update(`venta-${sufijo}`, { estado_envio: estado })
+    const comando = await baseLocal.cola.where('operation_id').equals(`op-anul-${sufijo}`).first()
+    await baseLocal.cola.update(comando?.secuencia as number, {
+      estado: estado === 'RECHAZADA' ? 'RECHAZADO' : 'ACEPTADO_CON_OBSERVACIONES',
+      ...resultado,
+    })
+  }
+
+  it('una anulación rechazada con VENTA_YA_ANULADA se lista como «Anulación de {número}» con su texto, el código y el aviso, y abre el detalle de la venta', async () => {
+    await anulacionConResultado('a', 'RECHAZADA', { error_codigo: 'VENTA_YA_ANULADA' })
+    montarEnRuta(<SincronizacionScreen />, { ruta: '/ruta/sincronizacion' })
+
+    const fila = (await screen.findByText('Anulación de 0001-000008')).closest('li') as HTMLElement
+    expect(within(fila).getByText('Rechazada')).toBeInTheDocument()
+    expect(within(fila).getByText('La venta ya estaba anulada en el sistema.')).toBeInTheDocument()
+    expect(within(fila).getByText('VENTA_YA_ANULADA')).toBeInTheDocument()
+    expect(within(fila).getByText('La venta sigue vigente en el teléfono; avisá a administración.')).toBeInTheDocument()
+    expect(within(fila).getByRole('link')).toHaveAttribute('href', '/ruta/ventas/venta-a')
+  })
+
+  it('una anulación con observaciones muestra la primera traducida con el texto de la anulación', async () => {
+    await anulacionConResultado('a', 'CON_OBSERVACIONES', {
+      observaciones: [obs('JORNADA_LIBERADA'), obs('UBICACION_TOMADA_AL_SINCRONIZAR')],
+    })
+    montarEnRuta(<SincronizacionScreen />, { ruta: '/ruta/sincronizacion' })
+
+    const fila = (await screen.findByText('Anulación de 0001-000008')).closest('li') as HTMLElement
+    expect(within(fila).getByText('Con observaciones')).toBeInTheDocument()
+    expect(within(fila).getByText('La jornada había sido liberada cuando llegó la anulación.')).toBeInTheDocument()
+    expect(within(fila).getByText('1 más')).toBeInTheDocument()
+  })
+
+  it('una anulación aceptada sin problemas no se lista', async () => {
+    await anulacionConResultado('a', 'ACEPTADA', {})
+    montarEnRuta(<SincronizacionScreen />, { ruta: '/ruta/sincronizacion' })
+
+    await screen.findByRole('heading', { name: 'Sincronización' })
+    expect(screen.queryByText(/Anulación de/)).not.toBeInTheDocument()
+  })
+
+  it('dos ventas y una anulación sin enviar: «2 ventas y 1 anulación sin enviar»', async () => {
+    await sembrarVenta('a', { cajas: 1, unidades: 0 })
+    await sembrarVenta('b', { cajas: 1, unidades: 0 })
+    await sembrarAnulacion('a')
+    montarEnRuta(<SincronizacionScreen />, { ruta: '/ruta/sincronizacion' })
+
+    expect(await screen.findByText('2 ventas y 1 anulación sin enviar')).toBeInTheDocument()
   })
 })

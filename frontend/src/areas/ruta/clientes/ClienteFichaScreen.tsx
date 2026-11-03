@@ -8,6 +8,8 @@ import { disponibleDeCredito, formatearDinero, LEYENDA_INCLUYE_VENTAS } from '..
 import { formatearFechaHora } from '../../../lib/fecha'
 import { Ayuda } from '../../../components/ui/Ayuda'
 import { AVISO_DE_VERSION_MINIMA } from '../../../sync/versionMinima'
+import { AVISO_LO_YA_VENDIDO, textoDeJornadaNoAbierta } from '../../../domain/ruta/avisoDeJornada'
+import { useJornadaNoAbierta } from '../datos/anulacion'
 import { useClienteLocal, useDatosDeInicio } from '../datos/lecturas'
 import { useVersionBloqueada } from '../datos/sincronizacion'
 import { useSesionRutaActiva } from '../sesion/contextoSesion'
@@ -33,7 +35,10 @@ export function ClienteFichaScreen() {
   const { entrada } = useSesionRutaActiva()
   // D14: "Vender" solo con VENDER en el bootstrap, jornada abierta y datos del día.
   const versionBloqueada = useVersionBloqueada()
-  const puedeVender = inicio.estado === 'listo' && inicio.permisos.includes('VENDER') && entrada.tipo !== 'sin_jornada'
+  // Change 22d (D9): si el teléfono guardó que la jornada ya no está abierta, «Vender» queda deshabilitado.
+  const jornadaNoAbierta = useJornadaNoAbierta()
+  const tieneVender = inicio.estado === 'listo' && inicio.permisos.includes('VENDER')
+  const puedeVender = tieneVender && entrada.tipo !== 'sin_jornada' && !jornadaNoAbierta
 
   if (datos.estado === 'cargando') return <p className="text-sm text-primary">Cargando…</p>
   if (datos.estado === 'sin_datos') {
@@ -79,6 +84,18 @@ export function ClienteFichaScreen() {
         </dl>
       </Card>
 
+      {tieneVender && jornadaNoAbierta && (
+        <div className="flex flex-col gap-1">
+          <Boton variante="secundario" disabled>
+            Vender
+          </Boton>
+          <p className="flex flex-wrap items-center gap-1 text-sm text-primary/70">
+            <span>{textoDeJornadaNoAbierta(jornadaNoAbierta.estado)}</span>
+            <span>{AVISO_LO_YA_VENDIDO}</span>
+            <Ayuda clave="ruta.jornadaNoAbierta" />
+          </p>
+        </div>
+      )}
       {puedeVender && versionBloqueada && (
         <div className="flex flex-col gap-1">
           <Boton variante="secundario" disabled>

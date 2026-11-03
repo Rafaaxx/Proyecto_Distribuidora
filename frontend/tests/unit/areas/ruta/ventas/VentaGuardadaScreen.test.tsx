@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
 
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -9,7 +9,7 @@ import { baseLocal, type ObservacionLocal } from '../../../../../src/lib/disposi
 import { aplicarBootstrap } from '../../../../../src/sync/aplicarBootstrap'
 import { bootstrapParaVender, IDS_DE_PRUEBA } from '../../../utils/datosParaVender'
 import { montarEnRuta } from '../../../utils/rutaDePrueba'
-import { sembrarVenta } from '../../../utils/sembrarVenta'
+import { sembrarAnulacion, sembrarVenta } from '../../../utils/sembrarVenta'
 
 /**
  * Change 22a, tarea 10.3 (spec `ventas/venta-en-ruta`, "La venta confirmada se muestra con su
@@ -175,6 +175,115 @@ describe('VentaGuardadaScreen: observaciones y rechazo (change 22c, tarea 9.2)',
     await screen.findByText('Enviada')
     expect(screen.queryByRole('heading', { name: /^Observaciones/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /^Motivo del rechazo/ })).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * Change 22d, tarea 10.2 (spec `ruta/area-de-ruta`, «Las anulaciones se ven en las pantallas de
+ * ruta»: «Anulación con observaciones», «Anulación rechazada» y «Doble sincronización»; `design.md`
+ * D10, D11; cita VTA-20, SYN-06, SYN-07, INV-06): la etiqueta «Anulada» y la sección «Anulación».
+ */
+async function anulacionConResultado(
+  estado: 'ACEPTADA' | 'CON_OBSERVACIONES' | 'RECHAZADA',
+  resultado: { error_codigo?: string | null; observaciones?: ObservacionLocal[] },
+  opciones: { devuelveDinero?: boolean | null; observacion?: string | null; cobro?: string } = {},
+) {
+  await sembrarVenta('a', opciones.cobro === undefined ? {} : { cobro: opciones.cobro })
+  await sembrarAnulacion('a', { devuelveDinero: opciones.devuelveDinero ?? null, observacion: opciones.observacion ?? null })
+  await baseLocal.anulaciones.update('venta-a', { estado_envio: estado })
+  const comando = await baseLocal.cola.where('operation_id').equals('op-anul-a').first()
+  await baseLocal.cola.update(comando?.secuencia as number, resultado)
+}
+
+describe('VentaGuardadaScreen: la anulación (change 22d, tarea 10.2)', () => {
+  beforeEach(async () => {
+    await Promise.all(baseLocal.tables.map((t) => t.clear()))
+    await aplicarBootstrap(bootstrapParaVender())
+  })
+
+  it('una venta anulada se ve «Anulada» y la sección «Anulación» dice motivo, observación, estado «Sin enviar» y la ayuda', async () => {
+    await sembrarVenta('a')
+    await sembrarAnulacion('a', { observacion: 'Se cargó dos veces' })
+
+    montar('venta-a')
+
+    expect(await screen.findByText('Anulada')).toBeInTheDocument()
+    const seccion = await screen.findByRole('region', { name: 'Anulación' })
+    expect(within(seccion).getByText('Error de carga')).toBeInTheDocument()
+    expect(within(seccion).getByText('Se cargó dos veces')).toBeInTheDocument()
+    expect(within(seccion).getByText('Sin enviar')).toBeInTheDocument()
+    expect(within(seccion).queryByText(/lo cobrado/i)).not.toBeInTheDocument()
+    expect(within(seccion).getByRole('button', { name: /ayuda: sin enviar/i })).toBeInTheDocument()
+  })
+
+  it('con cobro y devolución dice que se devolvió lo cobrado (VTA-22)', async () => {
+    await anulacionConResultado('ACEPTADA', {}, { cobro: '30000.00', devuelveDinero: true })
+    montar('venta-a')
+
+    const seccion = await screen.findByRole('region', { name: 'Anulación' })
+    expect(within(seccion).getByText('Se devolvió lo cobrado.')).toBeInTheDocument()
+    expect(within(seccion).getByText('Enviada')).toBeInTheDocument()
+  })
+
+  it('sin devolución dice que lo cobrado quedó a favor del cliente (VTA-22)', async () => {
+    await anulacionConResultado('ACEPTADA', {}, { cobro: '30000.00', devuelveDinero: false })
+    montar('venta-a')
+
+    const seccion = await screen.findByRole('region', { name: 'Anulación' })
+    expect(within(seccion).getByText('Lo cobrado quedó a favor del cliente.')).toBeInTheDocument()
+  })
+
+  it('«Con observaciones» explica con el texto de la anulación y la ayuda de observaciones (SYN-07)', async () => {
+    await anulacionConResultado('CON_OBSERVACIONES', {
+      observaciones: [{ codigo: 'JORNADA_LIBERADA', operacion_tipo: 'VENTA_ANULAR', operacion_id: 'op-anul-a', detalle: null }],
+    })
+    montar('venta-a')
+
+    const seccion = await screen.findByRole('region', { name: 'Anulación' })
+    expect(within(seccion).getByText('Con observaciones')).toBeInTheDocument()
+    expect(await within(seccion).findByText('La jornada había sido liberada cuando llegó la anulación.')).toBeInTheDocument()
+    expect(within(seccion).getAllByRole('button', { name: /ayuda: observaciones y rechazos/i }).length).toBeGreaterThan(0)
+  })
+
+  it('«Rechazada» trae el texto de la anulación, el código, «La venta sigue vigente…» y la ayuda de anulación rechazada (SYN-06)', async () => {
+    await anulacionConResultado('RECHAZADA', { error_codigo: 'VENTA_YA_ANULADA' })
+    montar('venta-a')
+
+    const seccion = await screen.findByRole('region', { name: 'Anulación' })
+    expect(await within(seccion).findByText('La venta ya estaba anulada en el sistema.')).toBeInTheDocument()
+    expect(within(seccion).getByText('VENTA_YA_ANULADA')).toBeInTheDocument()
+    expect(within(seccion).getByText('La venta sigue vigente en el teléfono; avisá a administración.')).toBeInTheDocument()
+    expect(within(seccion).getByRole('button', { name: /ayuda: anulación rechazada/i })).toBeInTheDocument()
+  })
+
+  it('una anulación rechazada no marca la venta como «Anulada»: sigue vigente', async () => {
+    await anulacionConResultado('RECHAZADA', { error_codigo: 'VENTA_YA_ANULADA' })
+    montar('venta-a')
+
+    await screen.findByRole('region', { name: 'Anulación' })
+    expect(screen.queryByText('Anulada')).not.toBeInTheDocument()
+  })
+
+  it('una venta sin anulación no tiene sección «Anulación» ni «Anulada»', async () => {
+    await sembrarVenta('a')
+    montar('venta-a')
+
+    await screen.findByRole('heading', { name: /Venta 0001-000008/ })
+    expect(screen.queryByRole('region', { name: 'Anulación' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Anulada')).not.toBeInTheDocument()
+  })
+
+  it('escribir dos veces el mismo resultado muestra lo mismo (INV-06)', async () => {
+    await anulacionConResultado('CON_OBSERVACIONES', {
+      observaciones: [{ codigo: 'JORNADA_LIBERADA', operacion_tipo: 'VENTA_ANULAR', operacion_id: 'op-anul-a', detalle: null }],
+    })
+    montar('venta-a')
+    await screen.findByText('La jornada había sido liberada cuando llegó la anulación.')
+    const antes = (await screen.findByRole('region', { name: 'Anulación' })).textContent
+
+    await baseLocal.anulaciones.update('venta-a', { estado_envio: 'CON_OBSERVACIONES' })
+
+    expect((await screen.findByRole('region', { name: 'Anulación' })).textContent).toBe(antes)
   })
 })
 

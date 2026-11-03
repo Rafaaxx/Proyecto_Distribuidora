@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { leerSaldoConsiderado, leerStockDisponible } from '../../../src/areas/ruta/datos/disponibles'
 import { baseLocal } from '../../../src/lib/dispositivo/db'
 import { aplicarBootstrap } from '../../../src/sync/aplicarBootstrap'
+import { anularVentaLocal } from '../../../src/sync/anularVentaLocal'
 import { aplicarResultados } from '../../../src/sync/aplicarResultados'
+import { seleccionarCola } from '../../../src/sync/seleccionDeCola'
 import { comandoDePrueba, sembrarComando } from '../utils/colaDePrueba'
 import { bootstrapParaVender, IDS_DE_PRUEBA } from '../utils/datosParaVender'
 import { sembrarVenta } from '../utils/sembrarVenta'
@@ -194,7 +196,7 @@ describe('las observaciones se guardan con el resultado (change 22c, tarea 5.1; 
   })
 
   it('la base v3 abre igual: el esquema de cola no cambia (D3, sin versión nueva)', async () => {
-    expect(baseLocal.verno).toBe(3)
+    expect(baseLocal.verno).toBe(4)
     expect(baseLocal.cola.schema.indexes.map((i) => i.name)).toEqual(['operation_id', 'estado'])
   })
 })
@@ -225,6 +227,125 @@ describe('el stock y el saldo locales siguen contando la venta aceptada (tarea 3
 
     await aplicarResultados([resultado('op-b', 'RECHAZADO', 'JORNADA_INEXISTENTE')], AHORA)
 
+    expect(await leerStockDisponible(IDS_DE_PRUEBA.producto)).toBe(14)
+  })
+})
+
+/**
+ * Change 22d, tarea 8.1 (spec `sync/motor-de-sincronizacion`, «El resultado de una anulación se
+ * escribe en el teléfono», sus cinco escenarios; `design.md` D6; cita INV-01, INV-06, SYN-04,
+ * SYN-06, SYN-07, SYN-09).
+ */
+describe('el resultado de una anulación se escribe en el teléfono (change 22d, tarea 8.1)', () => {
+  const OBSERVACION_LIBERADA = {
+    codigo: 'JORNADA_LIBERADA',
+    operacion_tipo: 'VENTA',
+    operacion_id: '0190a000-0000-7000-8000-0000000000aa',
+    detalle: { jornada_id: 'j1' },
+  }
+
+  beforeEach(async () => {
+    await Promise.all(baseLocal.tables.map((t) => t.clear()))
+    await aplicarBootstrap(bootstrapParaVender())
+    await sembrarVenta('a', { cajas: 1, unidades: 0 })
+    await aplicarResultados([resultado('op-a', 'ACEPTADO')], AHORA)
+    await anularVentaLocal({
+      ventaId: 'venta-a',
+      motivo: { id: IDS_DE_PRUEBA.motivo, nombre: 'Error de carga' },
+      observacion: null,
+      devuelveDinero: null,
+      operationId: 'op-anul-a',
+      usuarioId: '00000000-0000-4000-8000-000000000001',
+      dispositivoId: 'disp-1',
+      ahora: AHORA,
+      appVersion: '1.0.0',
+    })
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('aceptada: la anulación y su comando quedan «Enviada» y la venta sigue como estaba (SYN-04, SYN-09)', async () => {
+    await aplicarResultados([resultado('op-anul-a', 'ACEPTADO')], AHORA)
+
+    expect((await baseLocal.anulaciones.get('venta-a'))?.estado_envio).toBe('ACEPTADA')
+    expect(await baseLocal.cola.where('operation_id').equals('op-anul-a').first()).toMatchObject({
+      estado: 'ACEPTADO',
+      resultado_en: AHORA.toISOString(),
+    })
+    expect((await baseLocal.ventas.get('venta-a'))?.estado_envio).toBe('ACEPTADA')
+  })
+
+  it('con observaciones: la anulación queda «Con observaciones» y el comando guarda la observación con su detalle (SYN-07, RUT-09)', async () => {
+    await aplicarResultados(
+      [{ ...resultado('op-anul-a', 'ACEPTADO_CON_OBSERVACIONES'), observaciones: [OBSERVACION_LIBERADA] }],
+      AHORA,
+    )
+
+    expect((await baseLocal.anulaciones.get('venta-a'))?.estado_envio).toBe('CON_OBSERVACIONES')
+    const comando = await baseLocal.cola.where('operation_id').equals('op-anul-a').first()
+    expect(comando?.observaciones).toEqual([OBSERVACION_LIBERADA])
+    expect((await baseLocal.ventas.get('venta-a'))?.estado_envio).toBe('ACEPTADA')
+  })
+
+  it('rechazada: queda «Rechazada» con su código, sigue visible y no vuelve a la selección de envío (SYN-06, SYN-09)', async () => {
+    await aplicarResultados([resultado('op-anul-a', 'RECHAZADO', 'VENTA_YA_ANULADA')], AHORA)
+
+    expect((await baseLocal.anulaciones.get('venta-a'))?.estado_envio).toBe('RECHAZADA')
+    expect(await baseLocal.cola.where('operation_id').equals('op-anul-a').first()).toMatchObject({
+      estado: 'RECHAZADO',
+      error_codigo: 'VENTA_YA_ANULADA',
+    })
+    expect((await baseLocal.ventas.get('venta-a'))?.estado_envio).toBe('ACEPTADA')
+    const pendientes = await seleccionarCola('00000000-0000-4000-8000-000000000001', 'disp-1')
+    expect(pendientes.map((c) => c.operation_id)).not.toContain('op-anul-a')
+    expect(await baseLocal.anulaciones.count()).toBe(1)
+  })
+
+  it('una venta y su anulación en la misma respuesta cambian por su operation_id, cada una lo suyo', async () => {
+    await sembrarVenta('b', { cajas: 1, unidades: 0 })
+
+    await aplicarResultados([resultado('op-anul-a', 'ACEPTADO'), resultado('op-b', 'RECHAZADO', 'JORNADA_AJENA')], AHORA)
+
+    expect((await baseLocal.anulaciones.get('venta-a'))?.estado_envio).toBe('ACEPTADA')
+    expect((await baseLocal.ventas.get('venta-b'))?.estado_envio).toBe('RECHAZADA')
+    expect((await baseLocal.ventas.get('venta-a'))?.estado_envio).toBe('ACEPTADA')
+  })
+
+  it('falla a mitad de la respuesta: ni la venta ni su anulación cambian y el próximo envío las manda otra vez (INV-01, INV-06)', async () => {
+    await sembrarVenta('b', { cajas: 1, unidades: 0 })
+    vi.spyOn(baseLocal.anulaciones, 'where').mockImplementation((() => {
+      throw new Error('falla inyectada')
+    }) as unknown as typeof baseLocal.anulaciones.where)
+
+    await expect(
+      aplicarResultados([resultado('op-b', 'ACEPTADO'), resultado('op-anul-a', 'ACEPTADO')], AHORA),
+    ).rejects.toThrow('falla inyectada')
+
+    vi.restoreAllMocks()
+    expect((await baseLocal.ventas.get('venta-b'))?.estado_envio).toBe('PENDIENTE')
+    expect((await baseLocal.anulaciones.get('venta-a'))?.estado_envio).toBe('PENDIENTE')
+    expect((await baseLocal.cola.where('operation_id').equals('op-b').first())?.estado).toBe('PENDIENTE')
+    expect((await baseLocal.cola.where('operation_id').equals('op-anul-a').first())?.estado).toBe('PENDIENTE')
+  })
+
+  it('doble envío: el mismo resultado otra vez no cambia la anulación ni su comando (INV-06, SYN-02)', async () => {
+    await aplicarResultados([resultado('op-anul-a', 'ACEPTADO')], AHORA)
+    const anulacion = await baseLocal.anulaciones.get('venta-a')
+    const comando = await baseLocal.cola.where('operation_id').equals('op-anul-a').first()
+
+    await aplicarResultados([resultado('op-anul-a', 'ACEPTADO')], new Date('2026-11-03T13:00:00.000Z'))
+
+    expect(await baseLocal.anulaciones.get('venta-a')).toEqual(anulacion)
+    expect(await baseLocal.cola.where('operation_id').equals('op-anul-a').first()).toEqual(comando)
+  })
+
+  it('una anulación rechazada deja de contar y la venta sigue descontando; la compensación es del 7.1 (D7)', async () => {
+    expect(await leerStockDisponible(IDS_DE_PRUEBA.producto)).toBe(20)
+
+    await aplicarResultados([resultado('op-anul-a', 'RECHAZADO', 'VENTA_YA_ANULADA')], AHORA)
+
+    // La venta (1 caja = 6 unidades) sigue vigente en el servidor: se descuenta de nuevo.
     expect(await leerStockDisponible(IDS_DE_PRUEBA.producto)).toBe(14)
   })
 })

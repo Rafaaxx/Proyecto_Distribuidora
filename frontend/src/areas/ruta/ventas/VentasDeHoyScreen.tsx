@@ -4,7 +4,7 @@ import { Ayuda } from '../../../components/ui/Ayuda'
 import { Badge } from '../../../components/ui/Badge'
 import { formatearDinero } from '../../../domain/ruta/lecturasLocales'
 import { useVentasDeHoy } from '../datos/ventas'
-import { ayudasDeProblemasEnLista, etiquetaDeEnvio } from './presentacionDeVentas'
+import { ayudasDeProblemasEnLista, ETIQUETA_ANULADA, etiquetaDeEnvio } from './presentacionDeVentas'
 
 /**
  * Ventas de hoy (change 22a, tarea 11.1; spec `ruta/area-de-ruta`; `design.md` D14; SYN-09,
@@ -36,8 +36,9 @@ export function VentasDeHoyScreen() {
                   <span className="text-sm font-semibold text-primary">{formatearDinero(venta.calculo.total)}</span>
                 </span>
                 <span className="break-words text-sm text-primary">{venta.nota?.cliente.nombre ?? '—'}</span>
-                <span>
+                <span className="flex flex-wrap items-center gap-2">
                   <Badge>{etiquetaDeEnvio(venta.estado_envio)}</Badge>
+                  {datos.anuladas.has(venta.venta_id) && <Badge variante="negativo">{ETIQUETA_ANULADA}</Badge>}
                 </span>
               </Link>
             </li>

@@ -8,11 +8,17 @@ import type { ClaveDeAyuda } from '../../../ayuda/textos'
 import { formatearDinero } from '../../../domain/ruta/lecturasLocales'
 import { resumenDeObservaciones } from '../../../domain/ruta/textosDeSincronizacion'
 import { useConectado } from '../../../lib/conexion'
-import { useResumenDeSincronizacion, useVentasConProblemas, type VentaConProblema } from '../datos/sincronizacion'
+import {
+  useAnulacionesConProblemas,
+  useResumenDeSincronizacion,
+  useVentasConProblemas,
+  type AnulacionConProblema,
+  type VentaConProblema,
+} from '../datos/sincronizacion'
 import { etiquetaDeEnvio } from '../ventas/presentacionDeVentas'
 import { BotonSincronizar } from './BotonSincronizar'
 import {
-  textoDeSinEnviar,
+  textoDePendientes,
   textoDeUltimaSincronizacion,
   textoDelUltimoError,
 } from './presentacion'
@@ -21,7 +27,9 @@ import {
  * Pantalla «Sincronización» (change 22b, tarea 10.2; `design.md` D8; SYN-04, SYN-06, SYN-09,
  * `02` §12.3, §13.3): conexión, ventas sin enviar, última sincronización, último error con su
  * texto y su código, el botón «Sincronizar» y las ventas «Con observaciones» y «Rechazadas», cada
- * una con su detalle. Lee de la base local; sin lógica de negocio.
+ * una con su detalle. Lee de la base local; sin lógica de negocio. Change 22d (D10): también lista
+ * las anulaciones «Con observaciones» y «Rechazadas» como «Anulación de {número}», con el acceso
+ * al detalle de la venta, y lo pendiente cuenta ventas y anulaciones.
  */
 function FilaDeVenta({ item }: { item: VentaConProblema }) {
   const { venta, codigo, explicacion } = item
@@ -59,8 +67,51 @@ function FilaDeVenta({ item }: { item: VentaConProblema }) {
   )
 }
 
-function Lista({ titulo, clave, items }: { titulo: string; clave: ClaveDeAyuda; items: VentaConProblema[] }) {
-  if (items.length === 0) return null
+function FilaDeAnulacion({ item }: { item: AnulacionConProblema }) {
+  const { anulacion, venta, codigo, explicacion } = item
+  const rechazada = anulacion.estado_envio === 'RECHAZADA'
+  const resumen = explicacion?.tipo === 'observaciones' ? resumenDeObservaciones(explicacion.textos) : null
+  return (
+    <li className="rounded-md border border-border bg-surface">
+      <Link to={`/ruta/ventas/${anulacion.venta_id}`} className="flex min-w-0 flex-col gap-1 p-3">
+        <span className="text-sm font-semibold text-primary">Anulación de {venta?.numero ?? '—'}</span>
+        <span className="break-words text-sm text-primary">{venta?.nota?.cliente.nombre ?? '—'}</span>
+        <span className="flex flex-wrap items-center gap-2">
+          <Badge variante={rechazada ? 'negativo' : 'neutral'}>{etiquetaDeEnvio(anulacion.estado_envio)}</Badge>
+          {rechazada && codigo !== null && <span className="text-xs font-medium text-danger">{codigo}</span>}
+        </span>
+        {explicacion?.tipo === 'rechazo' && (
+          <>
+            <span className="break-words text-sm text-primary">{explicacion.texto}</span>
+            <span className="break-words text-xs text-primary/70">{explicacion.aviso}</span>
+          </>
+        )}
+        {explicacion?.tipo === 'sin_detalle' && (
+          <span className="break-words text-sm text-primary">{explicacion.texto}</span>
+        )}
+        {resumen !== null && (
+          <>
+            <span className="break-words text-sm text-primary">{resumen.primera}</span>
+            {resumen.mas !== null && <span className="text-xs text-primary/70">{resumen.mas}</span>}
+          </>
+        )}
+      </Link>
+    </li>
+  )
+}
+
+function Lista({
+  titulo,
+  clave,
+  items,
+  anulaciones,
+}: {
+  titulo: string
+  clave: ClaveDeAyuda
+  items: VentaConProblema[]
+  anulaciones: AnulacionConProblema[]
+}) {
+  if (items.length === 0 && anulaciones.length === 0) return null
   return (
     <section className="flex flex-col gap-2">
       <h2 className="flex items-center gap-1 text-sm font-semibold text-primary">
@@ -71,6 +122,9 @@ function Lista({ titulo, clave, items }: { titulo: string; clave: ClaveDeAyuda; 
         {items.map((item) => (
           <FilaDeVenta key={item.venta.venta_id} item={item} />
         ))}
+        {anulaciones.map((item) => (
+          <FilaDeAnulacion key={item.anulacion.venta_id} item={item} />
+        ))}
       </ul>
     </section>
   )
@@ -80,6 +134,7 @@ export function SincronizacionScreen() {
   const conectado = useConectado()
   const resumen = useResumenDeSincronizacion()
   const problemas = useVentasConProblemas()
+  const problemasDeAnulacion = useAnulacionesConProblemas()
   const error = resumen.ultimoError === null ? null : textoDelUltimoError(resumen.ultimoError)
 
   return (
@@ -90,7 +145,7 @@ export function SincronizacionScreen() {
       </div>
       <Card className="flex flex-col gap-2">
         <p className="text-sm text-primary">{conectado ? 'Con conexión' : 'Sin conexión'}</p>
-        <p className="text-sm font-semibold text-primary">{textoDeSinEnviar(resumen.sinEnviar)}</p>
+        <p className="text-sm font-semibold text-primary">{textoDePendientes(resumen.sinEnviar, resumen.anulacionesSinEnviar)}</p>
         <p className="text-sm text-primary">{textoDeUltimaSincronizacion(resumen.ultimaSincronizacion)}</p>
         {error !== null && (
           <Alert>
@@ -105,14 +160,24 @@ export function SincronizacionScreen() {
         )}
         <BotonSincronizar />
       </Card>
-      {problemas.length > 0 && (
+      {problemas.length + problemasDeAnulacion.length > 0 && (
         <p className="flex items-center gap-1 text-sm text-primary">
           Observaciones y rechazos
           <Ayuda clave="ruta.observacionesYRechazos" />
         </p>
       )}
-      <Lista titulo="Con observaciones" clave="ruta.ventaConObservaciones" items={problemas.filter((p) => p.venta.estado_envio === 'CON_OBSERVACIONES')} />
-      <Lista titulo="Rechazadas" clave="ruta.ventaRechazada" items={problemas.filter((p) => p.venta.estado_envio === 'RECHAZADA')} />
+      <Lista
+        titulo="Con observaciones"
+        clave="ruta.ventaConObservaciones"
+        items={problemas.filter((p) => p.venta.estado_envio === 'CON_OBSERVACIONES')}
+        anulaciones={problemasDeAnulacion.filter((p) => p.anulacion.estado_envio === 'CON_OBSERVACIONES')}
+      />
+      <Lista
+        titulo="Rechazadas"
+        clave="ruta.ventaRechazada"
+        items={problemas.filter((p) => p.venta.estado_envio === 'RECHAZADA')}
+        anulaciones={problemasDeAnulacion.filter((p) => p.anulacion.estado_envio === 'RECHAZADA')}
+      />
     </div>
   )
 }

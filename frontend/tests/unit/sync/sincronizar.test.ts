@@ -13,8 +13,13 @@ import { instalarCandadosDePrueba, type CandadosDePrueba } from '../utils/candad
 import { comandoDePrueba, sembrarComando } from '../utils/colaDePrueba'
 
 vi.mock('../../../src/sync/clienteLote', () => ({ enviarLote: vi.fn() }))
+vi.mock('../../../src/lib/api/httpClient', () => ({ apiFetch: vi.fn() }))
 
+import { apiFetch } from '../../../src/lib/api/httpClient'
 import { enviarLote } from '../../../src/sync/clienteLote'
+import { aplicarBootstrap } from '../../../src/sync/aplicarBootstrap'
+import { leerJornadaNoAbierta } from '../../../src/sync/estadoDeJornada'
+import { bootstrapDePrueba, ID } from '../utils/bootstrapDePrueba'
 
 /**
  * Change 22b, tareas 4.1 y 4.2 (spec `sync/motor-de-sincronizacion`, «El teléfono envía solo la
@@ -294,5 +299,82 @@ describe('una sola sincronización a la vez (tarea 4.2; D2; `02` §13.3)', () =>
 
     expect(await primera).toEqual({ tipo: 'transitorio' })
     expect(enviar).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * Change 22d, tarea 9.1 (spec `sync/motor-de-sincronizacion`, «Con señal, el teléfono se entera de
+ * que su jornada ya no está abierta»; `design.md` D8; RUT-09, SYN-09, INV-06): la consulta de la
+ * jornada va al empezar cada ciclo y la cola se envía igual.
+ */
+describe('la sincronización consulta el estado de la jornada (change 22d, tarea 9.1)', () => {
+  const pedir = vi.mocked(apiFetch)
+  let candados: CandadosDePrueba
+  beforeEach(async () => {
+    candados = instalarCandadosDePrueba()
+    enviar.mockReset()
+    pedir.mockReset()
+    await Promise.all(baseLocal.tables.map((t) => t.clear()))
+    await aplicarBootstrap(bootstrapDePrueba())
+  })
+  afterEach(() => {
+    candados.restaurar()
+  })
+
+  const respuesta = (estado: string) =>
+    new Response(JSON.stringify({ id: ID(2), estado }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+
+  it('con la jornada liberada la guarda y las dos ventas sin enviar se envían igual (RUT-09, SYN-09)', async () => {
+    await sembrarComando(comandoDePrueba(1, { jornadaId: ID(2) }))
+    await sembrarComando(comandoDePrueba(2, { jornadaId: ID(2) }))
+    pedir.mockResolvedValue(respuesta('LIBERADA'))
+    aceptarTodo()
+
+    const resultado = await nuevo().sincronizar({ ...ENTRADA, origen: 'periodico' })
+
+    expect(resultado).toEqual({ tipo: 'completa', enviadas: 2 })
+    expect(pedir).toHaveBeenCalledWith(`/stock/jornadas/${ID(2)}`)
+    expect(await leerJornadaNoAbierta()).toMatchObject({ jornada_id: ID(2), estado: 'LIBERADA' })
+    expect(await estados()).toEqual(['ACEPTADO', 'ACEPTADO'])
+  })
+
+  it('con la cola vacía también consulta; con la jornada abierta no guarda nada', async () => {
+    pedir.mockResolvedValue(respuesta('ABIERTA'))
+    aceptarTodo()
+
+    expect(await nuevo().sincronizar({ ...ENTRADA, origen: 'periodico' })).toEqual({ tipo: 'completa', enviadas: 0 })
+
+    expect(pedir).toHaveBeenCalledTimes(1)
+    expect(await leerJornadaNoAbierta()).toBeNull()
+  })
+
+  it('sin señal en la consulta nada cambia y la cola se envía (CRE-08)', async () => {
+    await sembrarComando(comandoDePrueba(1, { jornadaId: ID(2) }))
+    pedir.mockRejectedValue(new TypeError('Failed to fetch'))
+    aceptarTodo()
+
+    expect(await nuevo().sincronizar({ ...ENTRADA, origen: 'periodico' })).toEqual({ tipo: 'completa', enviadas: 1 })
+    expect(await leerJornadaNoAbierta()).toBeNull()
+  })
+
+  it('un 403 (sin ABRIR_JORNADA) se ignora y la cola se envía', async () => {
+    await sembrarComando(comandoDePrueba(1, { jornadaId: ID(2) }))
+    pedir.mockResolvedValue(new Response('{}', { status: 403 }))
+    aceptarTodo()
+
+    expect(await nuevo().sincronizar({ ...ENTRADA, origen: 'periodico' })).toEqual({ tipo: 'completa', enviadas: 1 })
+    expect(await leerJornadaNoAbierta()).toBeNull()
+  })
+
+  it('doble consulta con LIBERADA no cambia lo guardado (INV-06)', async () => {
+    pedir.mockResolvedValue(respuesta('LIBERADA'))
+    aceptarTodo()
+    const motor = nuevo()
+
+    await motor.sincronizar({ ...ENTRADA, origen: 'manual' })
+    const primera = (await baseLocal.meta.get('jornada_no_abierta'))?.valor
+    await motor.sincronizar({ ...ENTRADA, origen: 'manual' })
+
+    expect((await baseLocal.meta.get('jornada_no_abierta'))?.valor).toBe(primera)
   })
 })

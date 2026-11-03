@@ -15,6 +15,7 @@ from app.modules.stock.domain.jornadas import (
     DecisionDeToma,
     JornadaDeUbicacion,
     decidir_toma,
+    toma_permitida_por_excepcion,
 )
 
 JUAN = uuid4()
@@ -150,3 +151,22 @@ def test_una_ubicacion_libre_no_se_rechaza_aunque_el_sobre_traiga_una_jornada(
     )
 
     assert decision is DecisionDeToma.LIBRE
+
+
+# --- Change 22d, tarea 2.1 (D2, STK-09, SYN-07): lo hecho sin conexión ya ocurrió -----------------
+
+
+def test_la_venta_y_la_anulacion_sin_conexion_pasan_por_la_excepcion_de_toma() -> None:
+    assert toma_permitida_por_excepcion(venta_sin_conexion=True)
+    assert toma_permitida_por_excepcion(anulacion_sin_conexion=True)
+
+
+def test_el_permiso_liberar_ubicacion_sigue_pasando_por_la_excepcion() -> None:
+    assert toma_permitida_por_excepcion(puede_operar_ubicacion_tomada=True)
+
+
+def test_sin_permiso_ni_modo_sin_conexion_la_toma_falla_cerrado() -> None:
+    assert not toma_permitida_por_excepcion()
+    assert not toma_permitida_por_excepcion(
+        puede_operar_ubicacion_tomada=False, venta_sin_conexion=False, anulacion_sin_conexion=False
+    )

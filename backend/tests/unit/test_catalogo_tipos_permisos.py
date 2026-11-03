@@ -140,16 +140,19 @@ def test_cobranza_registrar_sigue_declarando_su_operacion_observable_triangulaci
     assert declarado.operacion_offline.clave_en_resultado == "cobranza_id"
 
 
-def test_venta_anular_declara_anular_venta_y_solo_online() -> None:
-    """Change 19, tarea 7.4 (`design.md` D1, D19; spec `sistema/pipeline-de-comandos`):
-    `VENTA_ANULAR` v1 exige `ANULAR_VENTA`, admite `ONLINE` y no `OFFLINE` hasta el change 22c
-    (VTA-24, `02` §6.5), y no declara una operación observable (no emite observaciones SYN-07)."""
+def test_venta_anular_declara_anular_venta_y_admite_los_dos_modos() -> None:
+    """Change 19, tarea 7.4, ajustada por el change 22d, tarea 1.1 (`design.md` D1; VTA-24,
+    `02` §6.5): `VENTA_ANULAR` v1 exige `ANULAR_VENTA`, admite `ONLINE` y desde el 22d también
+    `OFFLINE` (solo por el lote), y declara la venta como operación observable de `PERMISO_REVOCADO`
+    y `JORNADA_LIBERADA` (SYN-07)."""
     declarado = _CATALOGO_REAL["VENTA_ANULAR"]
 
     assert declarado.admite_online is True
-    assert declarado.admite_offline is False
+    assert declarado.admite_offline is True
     assert declarado.permisos == ("ANULAR_VENTA",)
-    assert declarado.operacion_offline is None
+    assert declarado.operacion_offline is not None
+    assert declarado.operacion_offline.tipo == "VENTA"
+    assert declarado.operacion_offline.clave_en_resultado == "venta_id"
 
 
 def test_venta_anular_y_venta_confirmar_no_comparten_permiso_triangulacion() -> None:

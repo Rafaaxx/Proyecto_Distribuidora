@@ -11,17 +11,26 @@ import { describe, expect, it } from 'vitest'
 
 import {
   AVISO_DE_RECHAZO,
+  AVISO_DE_RECHAZO_DE_ANULACION,
+  TEXTO_DE_RECHAZO_GENERAL_DE_ANULACION,
   TEXTO_SIN_DETALLE,
   explicarEnvio,
   resumenDeObservaciones,
   textoDeObservacion,
   textoDeRechazo,
+  textoDeObservacionDeAnulacion,
+  textoDeRechazoDeAnulacion,
   type NombresLocales,
 } from '../../../../src/domain/ruta/textosDeSincronizacion'
 import type { ObservacionLocal } from '../../../../src/lib/dispositivo/db'
 
 const FIXTURE = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../shared/fixtures/sync/codigos-de-sincronizacion.json')
-const CODIGOS = JSON.parse(readFileSync(FIXTURE, 'utf-8')) as { observaciones: string[]; rechazos: string[] }
+const CODIGOS = JSON.parse(readFileSync(FIXTURE, 'utf-8')) as {
+  observaciones: string[]
+  rechazos: string[]
+  rechazos_de_anulacion: string[]
+  observaciones_de_anulacion: string[]
+}
 
 const NOMBRES: NombresLocales = {
   productos: new Map([['p-1', 'Malbec 750']]),
@@ -166,5 +175,120 @@ describe('explicarEnvio (D3, D4)', () => {
   it('una «Enviada» (o sin enviar) no explica nada', () => {
     expect(explicarEnvio('ACEPTADA', { error_codigo: null, observaciones: [] }, NOMBRES)).toBeNull()
     expect(explicarEnvio('PENDIENTE', undefined, NOMBRES)).toBeNull()
+  })
+})
+
+/**
+ * Change 22d, tarea 12.1 (D11, aprobados en 0.2; cita SYN-06, SYN-07): los rechazos y las
+ * observaciones de una anulación, elegidos por tipo de operación.
+ */
+const DATOS_INVALIDOS = 'La anulación llegó con datos incompletos o inválidos.'
+
+describe('textoDeRechazoDeAnulacion (D11, SYN-06)', () => {
+  it.each(CODIGOS.rechazos_de_anulacion)('%s tiene texto aprobado para la anulación y se reconoce', (codigo) => {
+    const rechazo = textoDeRechazoDeAnulacion(codigo)
+    expect(rechazo.conocido).toBe(true)
+    expect(rechazo.codigo).toBe(codigo)
+    expect(rechazo.texto).not.toBe(TEXTO_DE_RECHAZO_GENERAL_DE_ANULACION)
+    expect(rechazo.texto).not.toMatch(/venta llegó/i)
+  })
+
+  it.each([
+    ['VENTA_INEXISTENTE', 'El sistema no tiene la venta que se quiso anular.'],
+    ['VENTA_YA_ANULADA', 'La venta ya estaba anulada en el sistema.'],
+    ['JORNADA_AJENA', 'La venta es de otra jornada.'],
+    ['UBICACION_INACTIVA', 'La ubicación de la venta está dada de baja.'],
+    ['MOTIVO_INVALIDO', 'El motivo de la anulación no es válido.'],
+    ['DISPOSITIVO_REVOCADO', 'Este teléfono fue dado de baja; la anulación quedó para revisión.'],
+    ['DEVOLUCION_INVALIDA', DATOS_INVALIDOS],
+    ['CONSUMIDOR_FINAL_SIN_DEVOLUCION', DATOS_INVALIDOS],
+    ['OBSERVACION_INVALIDA', DATOS_INVALIDOS],
+    ['CONTENIDO_DE_COMANDO_INVALIDO', DATOS_INVALIDOS],
+    ['MODO_NO_ADMITIDO_PARA_TIPO', DATOS_INVALIDOS],
+    ['TIPO_DE_COMANDO_DESCONOCIDO', DATOS_INVALIDOS],
+    ['VERSION_DE_COMANDO_SIN_HANDLER', DATOS_INVALIDOS],
+    ['COMANDO_INCONSISTENTE', DATOS_INVALIDOS],
+    ['JORNADA_INEXISTENTE', DATOS_INVALIDOS],
+    ['JORNADA_REQUERIDA', DATOS_INVALIDOS],
+  ])('%s -> %s', (codigo, esperado) => {
+    expect(textoDeRechazoDeAnulacion(codigo).texto).toBe(esperado)
+  })
+
+  it('el mismo código dice una cosa para la venta y otra para la anulación', () => {
+    expect(textoDeRechazo('JORNADA_AJENA').texto).toBe('La jornada de la venta es de otro usuario o de otro teléfono.')
+    expect(textoDeRechazoDeAnulacion('JORNADA_AJENA').texto).toBe('La venta es de otra jornada.')
+  })
+
+  it('un código desconocido da el texto general de la anulación con el código', () => {
+    expect(textoDeRechazoDeAnulacion('CODIGO_NUEVO')).toEqual({
+      texto: TEXTO_DE_RECHAZO_GENERAL_DE_ANULACION,
+      codigo: 'CODIGO_NUEVO',
+      conocido: false,
+    })
+    expect(textoDeRechazoDeAnulacion(null)).toEqual({
+      texto: TEXTO_DE_RECHAZO_GENERAL_DE_ANULACION,
+      codigo: null,
+      conocido: false,
+    })
+  })
+})
+
+describe('textoDeObservacionDeAnulacion (D11, SYN-07)', () => {
+  it.each(CODIGOS.observaciones_de_anulacion)('%s tiene un texto propio de la anulación', (codigo) => {
+    const texto = textoDeObservacionDeAnulacion(observacion(codigo), NOMBRES)
+    expect(texto).not.toBe(textoDeObservacion(observacion('CODIGO_QUE_NO_EXISTE'), NOMBRES))
+    expect(texto).not.toMatch(/llegó la venta/)
+  })
+
+  it.each([
+    ['JORNADA_LIBERADA', 'La jornada había sido liberada cuando llegó la anulación.'],
+    [
+      'UBICACION_TOMADA_AL_SINCRONIZAR',
+      'Cuando llegó la anulación, el vehículo estaba en rendición o en la jornada de otro vendedor.',
+    ],
+    ['PERMISO_REVOCADO', 'Cuando llegó la operación, tu usuario ya no tenía el permiso.'],
+  ])('%s -> %s', (codigo, esperado) => {
+    expect(textoDeObservacionDeAnulacion(observacion(codigo), NOMBRES)).toBe(esperado)
+  })
+
+  it('un código desconocido no rompe: texto general', () => {
+    expect(textoDeObservacionDeAnulacion(observacion('NUEVO'), NOMBRES)).toBe(
+      'El sistema anotó algo para que administración lo revise.',
+    )
+  })
+})
+
+describe('explicarEnvio de una anulación (D11; SYN-06, SYN-07)', () => {
+  it('una anulación rechazada trae su texto, el código y «La venta sigue vigente…»', () => {
+    expect(explicarEnvio('RECHAZADA', { error_codigo: 'VENTA_YA_ANULADA' }, NOMBRES, 'VENTA_ANULAR')).toEqual({
+      tipo: 'rechazo',
+      texto: 'La venta ya estaba anulada en el sistema.',
+      codigo: 'VENTA_YA_ANULADA',
+      aviso: AVISO_DE_RECHAZO_DE_ANULACION,
+    })
+    expect(AVISO_DE_RECHAZO_DE_ANULACION).toBe('La venta sigue vigente en el teléfono; avisá a administración.')
+  })
+
+  it('el mismo código sobre una venta mantiene el texto de la venta', () => {
+    expect(explicarEnvio('RECHAZADA', { error_codigo: 'JORNADA_AJENA' }, NOMBRES, 'VENTA_CONFIRMAR')).toMatchObject({
+      texto: 'La jornada de la venta es de otro usuario o de otro teléfono.',
+      aviso: AVISO_DE_RECHAZO,
+    })
+  })
+
+  it('una anulación con observaciones las traduce con los textos de la anulación', () => {
+    expect(
+      explicarEnvio(
+        'CON_OBSERVACIONES',
+        { error_codigo: null, observaciones: [observacion('JORNADA_LIBERADA')] },
+        NOMBRES,
+        'VENTA_ANULAR',
+      ),
+    ).toEqual({ tipo: 'observaciones', textos: ['La jornada había sido liberada cuando llegó la anulación.'] })
+  })
+
+  it('una anulación aceptada o sin enviar no explica nada', () => {
+    expect(explicarEnvio('ACEPTADA', undefined, NOMBRES, 'VENTA_ANULAR')).toBeNull()
+    expect(explicarEnvio('PENDIENTE', undefined, NOMBRES, 'VENTA_ANULAR')).toBeNull()
   })
 })

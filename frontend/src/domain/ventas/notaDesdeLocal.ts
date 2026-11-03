@@ -1,4 +1,4 @@
-import type { NotaCongelada, VentaLocal } from '../../lib/dispositivo/db'
+import type { AnulacionLocal, NotaCongelada, VentaLocal } from '../../lib/dispositivo/db'
 import { parsearImporteDesdeApi, redondearImporte } from '../../lib/money'
 import type { ClienteDeNota, DatosDeNotaDeVenta, OrganizacionDeNota } from './notaDeVenta'
 
@@ -60,8 +60,12 @@ export function congelarNotaDeVenta(entrada: EntradaDeCongelado): NotaCongelada 
 
 const SIN_NOMBRE = '—'
 
-/** Los datos de la nota desde la venta local (contenido enviado + cálculo + lo congelado). */
-export function datosDeNotaDesdeLocal(venta: VentaLocal): DatosDeNotaDeVenta {
+/**
+ * Los datos de la nota desde la venta local (contenido enviado + cálculo + lo congelado). Con la
+ * anulación local (change 22d, D10; VTA-13, VTA-22) la nota lleva la marca «ANULADA», la fecha, el
+ * nombre del motivo guardado y el destino de lo cobrado, y no lleva saldo.
+ */
+export function datosDeNotaDesdeLocal(venta: VentaLocal, anulacion: AnulacionLocal | null = null): DatosDeNotaDeVenta {
   const congelada = venta.nota
   if (congelada === null) throw new Error(`La venta ${venta.numero} no tiene los datos de la nota guardados.`)
   const calculoPorLinea = new Map(venta.calculo.lineas.map((l) => [l.linea_id, l]))
@@ -78,7 +82,7 @@ export function datosDeNotaDesdeLocal(venta: VentaLocal): DatosDeNotaDeVenta {
     occurred_at: venta.occurred_at,
     vendedor_nombre: congelada.vendedor_nombre,
     modo_impositivo: congelada.modo_impositivo,
-    estado: 'CONFIRMADA',
+    estado: anulacion === null ? 'CONFIRMADA' : 'ANULADA',
     lineas: venta.contenido.lineas.map((linea) => {
       const calculada = calculoPorLinea.get(linea.linea_id)
       const nombres = nombrePorLinea.get(linea.linea_id)
@@ -115,6 +119,13 @@ export function datosDeNotaDesdeLocal(venta: VentaLocal): DatosDeNotaDeVenta {
             })),
           },
     saldo_resultante: congelada.saldo_resultante,
-    anulacion: null,
+    anulacion:
+      anulacion === null
+        ? null
+        : {
+            anulada_en: anulacion.occurred_at,
+            motivo_nombre: anulacion.motivo_nombre,
+            devuelve_dinero: anulacion.devuelve_dinero === true,
+          },
   }
 }

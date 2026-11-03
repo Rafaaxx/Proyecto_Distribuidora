@@ -112,6 +112,18 @@ class JornadaDeUbicacion:
     estado: str
 
 
+def toma_permitida_por_excepcion(
+    *,
+    puede_operar_ubicacion_tomada: bool = False,
+    venta_sin_conexion: bool = False,
+    anulacion_sin_conexion: bool = False,
+) -> bool:
+    """STK-09, SYN-05, SYN-07: quién mueve una ubicación tomada por excepción. Quien tiene
+    `LIBERAR_UBICACION`, y lo hecho sin conexión que ya ocurrió: la venta (mercadería entregada,
+    change 18a) y la anulación (mercadería devuelta al vehículo, change 22d, D2). Falla cerrado."""
+    return puede_operar_ubicacion_tomada or venta_sin_conexion or anulacion_sin_conexion
+
+
 def decidir_toma(
     jornada: JornadaDeUbicacion | None,
     *,

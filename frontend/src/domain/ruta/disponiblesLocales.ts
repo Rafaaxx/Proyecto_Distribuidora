@@ -14,12 +14,18 @@ import { parsearImporteDesdeApi, redondearImporte } from '../../lib/money'
  * - no hay marca (bootstrap anterior al 22c: se cuenta todo, como hasta ahora); o
  * - no se conoce su operación (no hay evidencia de que el servidor la tenga).
  * `estado_operacion` del movimiento ya no se lee.
+ *
+ * Change 22d (D7; VTA-22, INV-19): los movimientos de una anulación cuentan por la misma regla,
+ * con su propia secuencia. Una anulación «Rechazada» NO cuenta (la venta sigue vigente en el
+ * servidor), salvo que su venta también esté rechazada: entonces cuentan las dos y se compensan.
  */
 export interface OperacionConciliable {
   /** Secuencia del comando en la cola. */
   secuencia: number
   /** El servidor rechazó la operación (estado `RECHAZADO` de la cola). */
   rechazada: boolean
+  /** Solo en una anulación: si su venta está «Rechazada» (D7). */
+  anulacion?: { ventaRechazada: boolean }
 }
 
 export interface Conciliacion {
@@ -35,14 +41,20 @@ export const SIN_CONCILIACION: Conciliacion = { secuenciaProcesada: null, operac
 function cuenta(m: MovimientoLocal, jornadaId: string, conciliacion: Conciliacion): boolean {
   if (m.jornada_id !== jornadaId) return false
   const marca = conciliacion.secuenciaProcesada
-  if (marca === null) return true
   const operacion = conciliacion.operaciones.get(m.operation_id)
-  if (operacion === undefined) return true
+  // D7 (22d): una anulación rechazada no cuenta, tenga o no marca el bootstrap, salvo que su venta
+  // también esté rechazada (se compensan).
+  if (operacion?.rechazada === true && operacion.anulacion !== undefined) return operacion.anulacion.ventaRechazada
+  if (marca === null || operacion === undefined) return true
   // D2 (precisión aprobada 2026-11-02): una operación rechazada cuenta COMPLETA (stock, débito y el
   // cobro en el momento, todos con su operation_id). La cobranza suelta sin conexión llega en el
   // change 23, que decidirá su propia regla.
   if (operacion.rechazada) return true
   return operacion.secuencia > marca
+}
+
+function esDeStock(m: MovimientoLocal): boolean {
+  return m.tipo === 'VENTA_STOCK' || m.tipo === 'ANULACION_STOCK'
 }
 
 /** Los movimientos de la jornada que todavía cuentan sobre los valores del bootstrap. */
@@ -54,7 +66,10 @@ export function movimientosQueCuentan(
   return movimientos.filter((m) => cuenta(m, jornadaId, conciliacion))
 }
 
-/** CRE-08: saldo del bootstrap + débitos de venta - cobranzas locales. String de dos decimales. */
+/**
+ * CRE-08: saldo del bootstrap + débitos de venta - cobranzas locales - créditos de anulación +
+ * devoluciones de lo cobrado. String de dos decimales.
+ */
 export function saldoConsiderado(
   saldoBootstrap: string,
   movimientos: readonly MovimientoLocal[],
@@ -66,8 +81,8 @@ export function saldoConsiderado(
   for (const m of movimientos) {
     if (!cuenta(m, jornadaId, conciliacion) || m.cliente_id !== clienteId || m.importe === null) continue
     const importe = parsearImporteDesdeApi(m.importe)
-    if (m.tipo === 'VENTA_DEBITO') saldo = saldo.plus(importe)
-    else if (m.tipo === 'COBRANZA_CREDITO') saldo = saldo.minus(importe)
+    if (m.tipo === 'VENTA_DEBITO' || m.tipo === 'ANULACION_COBRANZA_DEBITO') saldo = saldo.plus(importe)
+    else if (m.tipo === 'COBRANZA_CREDITO' || m.tipo === 'ANULACION_CREDITO') saldo = saldo.minus(importe)
   }
   return redondearImporte(saldo).toFixed(2)
 }
@@ -78,7 +93,10 @@ export function creditoDisponibleLocal(limite: string | null, saldo: string): st
   return redondearImporte(parsearImporteDesdeApi(limite).minus(parsearImporteDesdeApi(saldo))).toFixed(2)
 }
 
-/** RUT-04: stock del bootstrap + movimientos de venta (cantidades negativas), en unidad base. */
+/**
+ * RUT-04: stock del bootstrap + movimientos de venta (cantidades negativas) + ingresos de
+ * anulación (positivas), en unidad base.
+ */
 export function stockDisponible(
   stockBootstrap: number,
   movimientos: readonly MovimientoLocal[],
@@ -88,7 +106,7 @@ export function stockDisponible(
 ): number {
   let stock = stockBootstrap
   for (const m of movimientos) {
-    if (!cuenta(m, jornadaId, conciliacion) || m.tipo !== 'VENTA_STOCK') continue
+    if (!cuenta(m, jornadaId, conciliacion) || !esDeStock(m)) continue
     if (m.producto_id !== productoId || m.cantidad_base === null) continue
     stock += m.cantidad_base
   }
@@ -107,7 +125,7 @@ export function stockDeTodos(
 ): Map<string, number> {
   const base = new Map<string, number>(stockBootstrap.map((f) => [f.producto_id, f.cantidad_base]))
   for (const m of movimientos) {
-    if (m.tipo === 'VENTA_STOCK' && m.producto_id !== null && !base.has(m.producto_id)) base.set(m.producto_id, 0)
+    if (esDeStock(m) && m.producto_id !== null && !base.has(m.producto_id)) base.set(m.producto_id, 0)
   }
   const resultado = new Map<string, number>()
   for (const [productoId, cantidad] of base) {

@@ -44,3 +44,44 @@ export function armarSobreDeVenta(entrada: EntradaDeSobre): SobreEnCola {
     contenido,
   }
 }
+
+/**
+ * Sobre del comando `VENTA_ANULAR` sin conexión (change 22d, `design.md` D1, D4, D6; VTA-24,
+ * VTA-22, SYN-01, SYN-03). Función pura; el fixture `shared/fixtures/sync/venta-anular-offline.json`
+ * fija su forma. `devuelve_dinero` se OMITE cuando la venta no tuvo cobro en el acto (`null`).
+ * El contenido nunca lleva credenciales ni importes: el servidor deriva todo de la venta.
+ */
+export interface EntradaDeSobreDeAnulacion {
+  operationId: string
+  usuarioId: string
+  dispositivoId: string
+  jornadaId: string
+  occurredAt: Date
+  secuencia: number
+  appVersion: string
+  ventaId: string
+  motivoId: string
+  observacion: string | null
+  devuelveDinero: boolean | null
+}
+
+export function armarSobreDeAnulacion(entrada: EntradaDeSobreDeAnulacion): SobreEnCola {
+  return {
+    operation_id: entrada.operationId,
+    tipo: 'VENTA_ANULAR',
+    version: 1,
+    modo: 'OFFLINE',
+    usuario_id: entrada.usuarioId,
+    dispositivo_id: entrada.dispositivoId,
+    jornada_id: entrada.jornadaId,
+    occurred_at: entrada.occurredAt.toISOString(),
+    secuencia: entrada.secuencia,
+    app_version: entrada.appVersion,
+    contenido: {
+      venta_id: entrada.ventaId,
+      motivo_id: entrada.motivoId,
+      observacion: entrada.observacion,
+      ...(entrada.devuelveDinero === null ? {} : { devuelve_dinero: entrada.devuelveDinero }),
+    },
+  }
+}

@@ -9,6 +9,7 @@ import {
   reiniciarEspera,
   type EstadoDeEspera,
 } from './espera'
+import { consultarEstadoDeJornada } from './estadoDeJornada'
 import { partirEnLotes, seleccionarCola } from './seleccionDeCola'
 import { actualizarVersionMinima } from './versionMinima'
 
@@ -124,6 +125,8 @@ export function crearSincronizador(dependencias: DependenciasDelSincronizador = 
     let resultado: ResultadoDelCiclo
     // D7: al empezar cada ciclo se pide la mínima (sin señal vale la última); la cola se envía igual.
     await actualizarVersionMinima()
+    // Change 22d (D8): también se consulta el estado de la jornada de la sesión; la cola se envía igual.
+    await consultarEstadoDeJornada(ahora())
     do {
       repetir = false
       resultado = await unaVuelta(entrada)

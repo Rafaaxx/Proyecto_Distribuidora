@@ -8,6 +8,7 @@ import {
   creditoDisponibleLocal,
   movimientosQueCuentan,
   saldoConsiderado,
+  SIN_CONCILIACION,
   stockDisponible,
   stockDeTodos,
   type Conciliacion,
@@ -222,5 +223,129 @@ describe('stockDeTodos (RUT-04, INV-04)', () => {
       c,
     )
     expect(Object.fromEntries(stock)).toEqual({ [VINO]: 45, otro: 10, 'sin-fila': -2 })
+  })
+})
+
+/**
+ * Change 22d, tarea 7.1 (spec `sync/cola-local`, «La anulación local cuenta en el saldo y el
+ * stock locales», sus ocho escenarios; D7; CRE-08, RUT-04, VTA-22, INV-19, SYN-06, INV-06).
+ */
+function conAnulaciones(
+  secuenciaProcesada: number | null,
+  operaciones: Record<
+    string,
+    { secuencia: number; rechazada?: boolean; anulacion?: { ventaRechazada: boolean } }
+  >,
+): Conciliacion {
+  return {
+    secuenciaProcesada,
+    operaciones: new Map(
+      Object.entries(operaciones).map(([id, o]) => [
+        id,
+        {
+          secuencia: o.secuencia,
+          rechazada: o.rechazada ?? false,
+          ...(o.anulacion === undefined ? {} : { anulacion: o.anulacion }),
+        },
+      ]),
+    ),
+  }
+}
+
+const anulacionStock = (cantidad: number, extra: Partial<MovimientoLocal> = {}) =>
+  mov({ operation_id: 'op-anul', tipo: 'ANULACION_STOCK', producto_id: VINO, cantidad_base: cantidad, ...extra })
+const anulacionCredito = (importe: string) =>
+  mov({ operation_id: 'op-anul', tipo: 'ANULACION_CREDITO', cliente_id: CLIENTE, importe })
+const anulacionCobranza = (importe: string) =>
+  mov({ operation_id: 'op-anul', tipo: 'ANULACION_COBRANZA_DEBITO', cliente_id: CLIENTE, importe })
+
+describe('la anulación local cuenta en el saldo y el stock locales (D7, INV-19)', () => {
+  const ANULACION_PENDIENTE = { 'op-1': { secuencia: 7 }, 'op-anul': { secuencia: 8, anulacion: { ventaRechazada: false } } }
+
+  it('stock: 63 tras vender 15 y anular (RUT-04, VTA-21)', () => {
+    const c = conAnulaciones(null, ANULACION_PENDIENTE)
+    expect(stockDisponible(63, [venta(15), anulacionStock(15)], VINO, JORNADA, c)).toBe(63)
+    expect(stockDisponible(63, [venta(15), anulacionStock(15)], VINO, JORNADA, SIN_CONCILIACION)).toBe(63)
+  })
+
+  it('crédito con devolución: límite 200.000, saldo 100.000 y disponible 100.000 (CRE-08, VTA-22)', () => {
+    const c = conAnulaciones(null, ANULACION_PENDIENTE)
+    const movimientos = [debito('70000.00'), credito('20000.00'), anulacionCredito('70000.00'), anulacionCobranza('20000.00')]
+    const saldo = saldoConsiderado('100000.00', movimientos, CLIENTE, JORNADA, c)
+    expect(saldo).toBe('100000.00')
+    expect(creditoDisponibleLocal('200000.00', saldo)).toBe('100000.00')
+  })
+
+  it('crédito sin devolución: saldo 80.000, los 20.000 cobrados quedan a favor (CRE-08, VTA-22)', () => {
+    const c = conAnulaciones(null, ANULACION_PENDIENTE)
+    const movimientos = [debito('70000.00'), credito('20000.00'), anulacionCredito('70000.00')]
+    expect(saldoConsiderado('100000.00', movimientos, CLIENTE, JORNADA, c)).toBe('80000.00')
+  })
+
+  it('venta incluida en el bootstrap (marca 7, 48 botellas) y anulación pendiente (secuencia 8): 63 (SYN-11)', () => {
+    const c = conAnulaciones(7, ANULACION_PENDIENTE)
+    expect(stockDisponible(48, [venta(15), anulacionStock(15)], VINO, JORNADA, c)).toBe(63)
+  })
+
+  it('anulación incluida en el bootstrap (marca 8, 63 botellas): 63 y no 78 (INV-06)', () => {
+    const c = conAnulaciones(8, ANULACION_PENDIENTE)
+    expect(stockDisponible(63, [venta(15), anulacionStock(15)], VINO, JORNADA, c)).toBe(63)
+  })
+
+  it('anulación rechazada: no cuenta; con el bootstrap que ya incluye la anulación de administración: 63 (SYN-06)', () => {
+    const c = conAnulaciones(8, {
+      'op-1': { secuencia: 7 },
+      'op-anul': { secuencia: 8, rechazada: true, anulacion: { ventaRechazada: false } },
+    })
+    expect(stockDisponible(63, [venta(15), anulacionStock(15)], VINO, JORNADA, c)).toBe(63)
+    // Con una marca que no cubre la venta, la venta cuenta y la anulación rechazada sigue sin contar.
+    const sinCubrir = conAnulaciones(6, {
+      'op-1': { secuencia: 7 },
+      'op-anul': { secuencia: 8, rechazada: true, anulacion: { ventaRechazada: false } },
+    })
+    expect(stockDisponible(63, [venta(15), anulacionStock(15)], VINO, JORNADA, sinCubrir)).toBe(48)
+    expect(
+      saldoConsiderado('100000.00', [debito('70000.00'), anulacionCredito('70000.00')], CLIENTE, JORNADA, sinCubrir),
+    ).toBe('170000.00')
+  })
+
+  it('sin marca (bootstrap anterior al 22c) una anulación rechazada tampoco cuenta, la aceptada sí', () => {
+    const rechazada = conAnulaciones(null, {
+      'op-1': { secuencia: 7 },
+      'op-anul': { secuencia: 8, rechazada: true, anulacion: { ventaRechazada: false } },
+    })
+    expect(stockDisponible(48, [anulacionStock(15)], VINO, JORNADA, rechazada)).toBe(48)
+    expect(stockDisponible(48, [anulacionStock(15)], VINO, JORNADA, conAnulaciones(null, ANULACION_PENDIENTE))).toBe(63)
+  })
+
+  it('venta y anulación rechazadas: cuentan las dos y se compensan, el disponible es el del bootstrap (SYN-09)', () => {
+    const c = conAnulaciones(9, {
+      'op-1': { secuencia: 7, rechazada: true },
+      'op-anul': { secuencia: 8, rechazada: true, anulacion: { ventaRechazada: true } },
+    })
+    expect(stockDisponible(63, [venta(15), anulacionStock(15)], VINO, JORNADA, c)).toBe(63)
+    expect(
+      saldoConsiderado('100000.00', [debito('70000.00'), anulacionCredito('70000.00')], CLIENTE, JORNADA, c),
+    ).toBe('100000.00')
+  })
+
+  it('doble sincronización: el mismo resultado dos veces no cambia el saldo ni el stock (INV-06, SYN-02)', () => {
+    const c = conAnulaciones(8, ANULACION_PENDIENTE)
+    const movimientos = [venta(15), anulacionStock(15), debito('70000.00'), anulacionCredito('70000.00')]
+    const una = [stockDisponible(63, movimientos, VINO, JORNADA, c), saldoConsiderado('100000.00', movimientos, CLIENTE, JORNADA, c)]
+    const otra = [stockDisponible(63, movimientos, VINO, JORNADA, c), saldoConsiderado('100000.00', movimientos, CLIENTE, JORNADA, c)]
+    expect(otra).toEqual(una)
+    expect(una).toEqual([63, '100000.00'])
+  })
+
+  it('stockDeTodos suma el ingreso de la anulación y un producto solo anulado parte de cero', () => {
+    const c = conAnulaciones(null, ANULACION_PENDIENTE)
+    const stock = stockDeTodos(
+      [{ producto_id: VINO, cantidad_base: 48 }],
+      [anulacionStock(15), anulacionStock(2, { producto_id: 'sin-fila' })],
+      JORNADA,
+      c,
+    )
+    expect(Object.fromEntries(stock)).toEqual({ [VINO]: 63, 'sin-fila': 2 })
   })
 })

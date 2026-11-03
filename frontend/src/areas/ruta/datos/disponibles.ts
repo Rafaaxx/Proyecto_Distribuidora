@@ -7,17 +7,34 @@ import {
 import { baseLocal } from '../../../lib/dispositivo/db'
 
 /**
- * Lectura de Dexie de los disponibles locales (change 22a, D5; change 22c, D1 y D2; CRE-08,
+ * Lectura de Dexie de los disponibles locales (change 22a, D5; change 22c, D1 y D2; change 22d, D7; CRE-08,
  * RUT-04): lee la jornada y la marca de la sesión, el valor del bootstrap, los movimientos y la
  * secuencia y el estado de cada operación de `cola`, y delega la suma en funciones puras.
  */
 export async function leerConciliacion(): Promise<Conciliacion> {
   const sesion = await baseLocal.sesion.get('actual')
-  const cola = await baseLocal.cola.toArray()
+  const [cola, anulaciones, ventas] = await Promise.all([
+    baseLocal.cola.toArray(),
+    baseLocal.anulaciones.toArray(),
+    baseLocal.ventas.toArray(),
+  ])
+  // Change 22d (D7): una anulación rechazada solo cuenta si su venta también está rechazada.
+  const ventasRechazadas = new Set(ventas.filter((v) => v.estado_envio === 'RECHAZADA').map((v) => v.venta_id))
+  const ventaDeLaAnulacion = new Map(anulaciones.map((a) => [a.operation_id, a.venta_id]))
   return {
     secuenciaProcesada: sesion?.secuencia_procesada ?? null,
     operaciones: new Map(
-      cola.map((c) => [c.operation_id, { secuencia: c.secuencia, rechazada: c.estado === 'RECHAZADO' }]),
+      cola.map((c) => {
+        const ventaId = ventaDeLaAnulacion.get(c.operation_id)
+        return [
+          c.operation_id,
+          {
+            secuencia: c.secuencia,
+            rechazada: c.estado === 'RECHAZADO',
+            ...(ventaId === undefined ? {} : { anulacion: { ventaRechazada: ventasRechazadas.has(ventaId) } }),
+          },
+        ]
+      }),
     ),
   }
 }

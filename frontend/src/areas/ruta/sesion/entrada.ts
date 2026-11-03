@@ -2,6 +2,7 @@ import { obtenerJornadaActual } from '../../../features/stock/api'
 import { baseLocal } from '../../../lib/dispositivo/db'
 import { aplicarBootstrap } from '../../../sync/aplicarBootstrap'
 import { pedirBootstrap } from '../../../sync/clienteBootstrap'
+import { marcarJornadaDeLaSesionNoAbierta, marcarJornadaNoAbierta } from '../../../sync/estadoDeJornada'
 
 /**
  * Qué pasó con los datos al entrar con conexión (change 21, `design.md` D11; RUT-03).
@@ -22,6 +23,20 @@ export type ResultadoEntrada =
 
 const ESTADO_JORNADA_ABIERTA = 'ABIERTA'
 
+/**
+ * Change 22d (D8): la consulta al entrar no encontró una jornada abierta propia. Si la jornada no
+ * cerrada del servidor es la de la sesión local, se guarda su estado (por ejemplo `EN_RENDICION`);
+ * si no hay ninguna, se guarda que la de la sesión ya no está abierta, sin estado conocido.
+ */
+async function marcarSinJornada(jornada: Awaited<ReturnType<typeof obtenerJornadaActual>>): Promise<void> {
+  const ahora = new Date()
+  if (jornada !== null && jornada.estado === 'EN_RENDICION') {
+    await marcarJornadaNoAbierta(jornada.id, 'EN_RENDICION', ahora)
+  }
+  // Sin efecto si ya se conoce el estado; si la jornada del servidor es otra, la local ya no está abierta.
+  await marcarJornadaDeLaSesionNoAbierta('DESCONOCIDO', ahora)
+}
+
 export async function sincronizarAlEntrar(): Promise<ResultadoEntrada> {
   if (!navigator.onLine) return { tipo: 'sin_red' }
 
@@ -32,7 +47,10 @@ export async function sincronizarAlEntrar(): Promise<ResultadoEntrada> {
     return e instanceof TypeError ? { tipo: 'sin_red' } : { tipo: 'error' }
   }
 
-  if (jornada === null || jornada.estado !== ESTADO_JORNADA_ABIERTA) return { tipo: 'sin_jornada' }
+  if (jornada === null || jornada.estado !== ESTADO_JORNADA_ABIERTA) {
+    await marcarSinJornada(jornada)
+    return { tipo: 'sin_jornada' }
+  }
 
   const [local, sesion] = await Promise.all([baseLocal.meta.get('jornada_id'), baseLocal.sesion.get('actual')])
   if (sesion !== undefined && local?.valor === jornada.id) return { tipo: 'al_dia' }
@@ -43,6 +61,7 @@ export async function sincronizarAlEntrar(): Promise<ResultadoEntrada> {
       await aplicarBootstrap(resultado.bootstrap)
       return { tipo: 'bootstrap_aplicado' }
     case 'jornada_requerida':
+      await marcarJornadaDeLaSesionNoAbierta('DESCONOCIDO', new Date())
       return { tipo: 'sin_jornada' }
     case 'sin_sesion':
       return { tipo: 'sesion_vencida' }

@@ -11,6 +11,8 @@ import type { components } from '../../api/schema.gen'
  * `cobranzas`, `movimientos_locales`, `cola`, `intentos_pin`) que el bootstrap NO toca
  * (`TABLAS_MAESTRAS` no cambia; `02` §13.4, SYN-09). Los importes siguen siendo string (INV-03)
  * y las cantidades, enteros en unidad base (INV-04).
+ * Versión 4 (change 22d, `design.md` D6): agrega `anulaciones` (una por venta anulada en el
+ * teléfono). Solo suma una tabla: no toca las otras ni entra en `TABLAS_MAESTRAS`.
  */
 type Esquema = components['schemas']
 
@@ -156,12 +158,21 @@ export interface CobranzaLocal {
   total: string
 }
 
-export type TipoDeMovimientoLocal = 'VENTA_STOCK' | 'VENTA_DEBITO' | 'COBRANZA_CREDITO'
+export type TipoDeMovimientoLocal =
+  | 'VENTA_STOCK'
+  | 'VENTA_DEBITO'
+  | 'COBRANZA_CREDITO'
+  | 'ANULACION_STOCK'
+  | 'ANULACION_CREDITO'
+  | 'ANULACION_COBRANZA_DEBITO'
 
 /**
  * Efecto local de una operación sobre stock o cuenta (D5). `VENTA_STOCK` guarda `cantidad_base`
  * entera y NEGATIVA (sale mercadería); `VENTA_DEBITO` y `COBRANZA_CREDITO` guardan `importe`
- * positivo como string: el tipo dice el sentido.
+ * positivo como string: el tipo dice el sentido. Change 22d (D6): `ANULACION_STOCK` guarda
+ * `cantidad_base` entera y POSITIVA (la mercadería vuelve), `ANULACION_CREDITO` el total que se
+ * descuenta de la cuenta del cliente y `ANULACION_COBRANZA_DEBITO` lo cobrado que se devuelve
+ * (solo con devolución); los tres llevan el `operation_id` de la anulación.
  */
 export interface MovimientoLocal {
   id?: number
@@ -178,6 +189,24 @@ export interface MovimientoLocal {
    * Queda en el tipo para no cambiar el esquema ni las filas ya guardadas.
    */
   estado_operacion: 'PENDIENTE' | 'RESUELTA'
+}
+
+/**
+ * Anulación de una venta hecha en el teléfono (change 22d, `design.md` D6; VTA-20, VTA-22,
+ * VTA-24). Una por venta (`venta_id` es la clave). `estado_envio` sigue el de la venta: `PENDIENTE`
+ * hasta el resultado del servidor. `devuelve_dinero` es `null` si la venta no tuvo cobro en el
+ * acto (el sobre lo omite). `motivo_nombre` se congela para la nota (VTA-13).
+ */
+export interface AnulacionLocal {
+  venta_id: string
+  operation_id: string
+  jornada_id: string
+  estado_envio: EstadoDeEnvio
+  motivo_id: string
+  motivo_nombre: string
+  observacion: string | null
+  devuelve_dinero: boolean | null
+  occurred_at: string
 }
 
 /**
@@ -234,6 +263,7 @@ class BaseLocal extends Dexie {
   movimientos_locales!: EntityTable<MovimientoLocal, 'id'>
   cola!: EntityTable<ComandoEnCola, 'secuencia'>
   intentos_pin!: Table<IntentoPinLocal, [string, string]>
+  anulaciones!: EntityTable<AnulacionLocal, 'venta_id'>
 
   constructor() {
     super('distribuidora')
@@ -261,6 +291,9 @@ class BaseLocal extends Dexie {
       movimientos_locales: '++id, operation_id, [jornada_id+producto_id], [jornada_id+cliente_id]',
       cola: 'secuencia, &operation_id, estado',
       intentos_pin: '[usuario_id+autorizador_id]',
+    })
+    this.version(4).stores({
+      anulaciones: 'venta_id, &operation_id, jornada_id, estado_envio',
     })
   }
 }

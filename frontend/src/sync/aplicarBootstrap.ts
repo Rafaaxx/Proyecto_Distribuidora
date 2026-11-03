@@ -11,6 +11,7 @@ import {
   type SesionLocal,
   type VersionLocal,
 } from '../lib/dispositivo/db'
+import { borrarMarcaSiEsDeOtraJornada } from './estadoDeJornada'
 
 /**
  * Aplica el bootstrap a la base local (change 21, `design.md` D10; ADR-006, INV-01,
@@ -111,5 +112,7 @@ export async function aplicarBootstrap(respuesta: BootstrapRespuesta): Promise<v
 
     await baseLocal.meta.put({ clave: 'fecha_bootstrap', valor: respuesta.generado_en })
     await baseLocal.meta.put({ clave: 'jornada_id', valor: respuesta.sesion.jornada.id })
+    // Change 22d (D8): el bootstrap de otra jornada borra «jornada no abierta» (RUT-03).
+    await borrarMarcaSiEsDeOtraJornada(respuesta.sesion.jornada.id)
   })
 }

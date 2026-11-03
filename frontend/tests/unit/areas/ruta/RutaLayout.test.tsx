@@ -52,6 +52,13 @@ describe('RutaLayout: rutas y menú de /ruta', () => {
     expect(await screen.findByRole('heading', { name: 'Mi cuenta' })).toBeInTheDocument()
   })
 
+  it('/ruta/ventas/:id/anular es una ruta de ruta (change 22d, tarea 10.1) y no vuelve al inicio', async () => {
+    montar('/ruta/ventas/no-existe/anular')
+
+    expect(await screen.findByText('No encontramos esa venta en este teléfono.')).toBeInTheDocument()
+    expect(screen.queryByText(/Hola, /)).not.toBeInTheDocument()
+  })
+
   it('/ruta/ayuda abre el índice de ayuda y una ruta desconocida vuelve al inicio', async () => {
     const ayuda = montar('/ruta/ayuda')
     expect(await screen.findByRole('heading', { name: 'Ayuda' })).toBeInTheDocument()

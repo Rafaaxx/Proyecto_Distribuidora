@@ -901,15 +901,15 @@ export const AYUDAS = {
   'ruta.creditoSinSenal': {
     titulo: 'Crédito del cliente',
     texto:
-      'Se calcula con la deuda de la última actualización de datos más lo que le vendiste y cobraste desde el teléfono después.',
-    reglas: ['CRE-08', 'CRE-09', 'ADR-065'],
+      'Se calcula con la deuda de la última actualización de datos más lo que le vendiste y cobraste, y menos lo que le anulaste, desde el teléfono después.',
+    reglas: ['CRE-08', 'CRE-09', 'ADR-065', 'ADR-066'],
     verMas: 'credito',
   },
   'ruta.stockDelVehiculo': {
     titulo: 'Stock del vehículo',
     texto:
-      'Es el stock de la última actualización de datos menos lo que vendiste desde el teléfono después. Si no alcanza, la venta no se confirma: actualizá los datos con señal.',
-    reglas: ['STK-06', 'RUT-04', 'ADR-065'],
+      'Es el stock de la última actualización de datos menos lo que vendiste y más lo que anulaste desde el teléfono después. Si no alcanza, la venta no se confirma: actualizá los datos con señal.',
+    reglas: ['STK-06', 'RUT-04', 'ADR-065', 'ADR-066'],
   },
   'ruta.pinSupervisor': {
     titulo: 'PIN del supervisor',
@@ -926,7 +926,7 @@ export const AYUDAS = {
   'ruta.sincronizar': {
     titulo: 'Sincronizar',
     texto:
-      'Envía al sistema las ventas sin enviar de tu usuario, en el orden en que las hiciste. Se hace sola al abrir la aplicación o volver a ella, al volver la señal, después de cada venta y cada 2 minutos. Enviar dos veces la misma venta no la duplica.',
+      'Envía al sistema las ventas y anulaciones sin enviar de tu usuario, en el orden en que las hiciste. Se hace sola al abrir la aplicación o volver a ella, al volver la señal, después de cada venta o anulación y cada 2 minutos. Enviar dos veces lo mismo no lo duplica.',
     reglas: ['SYN-02', 'SYN-03', 'INV-06'],
   },
   'ruta.ventaConObservaciones': {
@@ -945,8 +945,27 @@ export const AYUDAS = {
   'ruta.observacionesYRechazos': {
     titulo: 'Observaciones y rechazos',
     texto:
-      'Muestra qué anotó el sistema en cada venta enviada y por qué no aceptó las rechazadas. Las observaciones las revisa administración; no tenés que hacer nada. Una venta rechazada no se vuelve a enviar sola.',
+      'Muestra qué anotó el sistema en cada venta o anulación enviada y por qué no aceptó las rechazadas. Las observaciones las revisa administración; no tenés que hacer nada. Lo rechazado no se vuelve a enviar solo.',
     reglas: ['SYN-04', 'SYN-07', 'SYN-08', 'SYN-09'],
+  },
+  // --- Anulación sin conexión y jornada no abierta (change 22d, ADR-066; textos aprobados el 2026-11-03, sin ejemplos) ---
+  'ruta.anularVenta': {
+    titulo: 'Anular una venta',
+    texto:
+      'Deja sin efecto una venta de tu jornada, también sin señal: la mercadería vuelve al stock del vehículo y al cliente se le descuenta el total de su cuenta. Se anula entera y una sola vez, y se envía al sistema como las ventas.',
+    reglas: ['VTA-20', 'VTA-21', 'VTA-24', 'ADR-066'],
+  },
+  'ruta.anulacionRechazada': {
+    titulo: 'Anulación rechazada',
+    texto:
+      'El sistema no aceptó la anulación. En el detalle ves el motivo. La venta sigue vigente: el teléfono la vuelve a descontar del stock y de la cuenta del cliente. No se vuelve a enviar sola: avisá a administración.',
+    reglas: ['SYN-06', 'SYN-09', 'VTA-24', 'ADR-066'],
+  },
+  'ruta.jornadaNoAbierta': {
+    titulo: 'Jornada no abierta',
+    texto:
+      'El sistema avisó que tu jornada ya no está abierta. No podés vender ni anular ventas; lo que ya vendiste se sigue enviando. Para seguir vendiendo, abrí una jornada nueva con señal.',
+    reglas: ['RUT-09', 'RUT-03', 'ADR-066'],
   },
   'ruta.versionMinima': {
     titulo: 'Versión desactualizada',

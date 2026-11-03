@@ -64,6 +64,7 @@ from app.modules.stock.domain.jornadas import (
     DecisionDeToma,
     JornadaDeUbicacion,
     decidir_toma,
+    toma_permitida_por_excepcion,
 )
 from app.modules.stock.domain.kardex import (
     DiferenciaDeStock,
@@ -402,6 +403,7 @@ def _preparar(
     dispositivo_id: UUID,
     puede_operar_ubicacion_tomada: bool = False,
     venta_sin_conexion: bool = False,
+    anulacion_sin_conexion: bool = False,
 ) -> tuple[list[LineaDeMovimiento], dict[UUID, UUID]]:
     """Valida las líneas contra la base y toma los bloqueos en el orden global.
 
@@ -418,7 +420,8 @@ def _preparar(
        `puede_operar_ubicacion_tomada` (sin `jornada_id`); cualquier otro caso es
        `UBICACION_TOMADA`. Falla cerrado: el parámetro es `False` por defecto. Excepción
        (decisión del usuario, 2026-10-20; SYN-05, INV-17): `venta_sin_conexion` equivale a ese
-       permiso, porque la mercadería ya se entregó.
+       permiso, porque la mercadería ya se entregó. Igual `anulacion_sin_conexion` (change 22d,
+       D2, aprobada el 2026-11-03, SYN-07): la mercadería ya volvió al vehículo.
 
     Devuelve las líneas con el costo validado y la jornada de cada ubicación que pasó por
     excepción (`ubicacion_id -> jornada_id`). NO escribe ningún movimiento."""
@@ -476,7 +479,11 @@ def _preparar(
         dispositivo_id=dispositivo_id,
         # SYN-05, INV-17: una venta recibida sin conexion ya entrego la mercaderia, asi que la
         # toma nunca la rechaza; pasa por la excepcion y `ventas` la observa (change 18a, 11.2).
-        puede_operar_ubicacion_tomada=puede_operar_ubicacion_tomada or venta_sin_conexion,
+        puede_operar_ubicacion_tomada=toma_permitida_por_excepcion(
+            puede_operar_ubicacion_tomada=puede_operar_ubicacion_tomada,
+            venta_sin_conexion=venta_sin_conexion,
+            anulacion_sin_conexion=anulacion_sin_conexion,
+        ),
     )
 
 
@@ -722,6 +729,7 @@ def registrar_movimientos(
     negativo_sin_condicion: bool = False,
     puede_operar_ubicacion_tomada: bool = False,
     venta_sin_conexion: bool = False,
+    anulacion_sin_conexion: bool = False,
 ) -> list[ResultadoDeMovimiento]:
     """Registra movimientos de stock con todas las filas bloqueadas en el orden
     global (`02` §7.3), todo en la transacción de quien llama (INV-01, INV-12).
@@ -751,6 +759,7 @@ def registrar_movimientos(
     siempre; solo alcanza al egreso `VENTA`. `venta_sin_conexion` también acepta la venta sobre
     una ubicación tomada por una jornada (la propia en `EN_RENDICION` o la de otro vendedor): pasa
     por la excepción de STK-09 y el resultado nombra la jornada (decisión del 2026-10-20).
+    `anulacion_sin_conexion` (change 22d, D2) hace lo mismo con el reingreso `ANULACION_VENTA`.
 
     Change 15, STK-09 (D6, D7): una ubicación con jornada `ABIERTA` o `EN_RENDICION` solo
     la mueve la jornada (usuario y dispositivo de la jornada `ABIERTA`; la línea queda con
@@ -768,6 +777,7 @@ def registrar_movimientos(
         dispositivo_id=dispositivo_id,
         puede_operar_ubicacion_tomada=puede_operar_ubicacion_tomada,
         venta_sin_conexion=venta_sin_conexion,
+        anulacion_sin_conexion=anulacion_sin_conexion,
     )
     return _aplicar(
         organizacion_id,

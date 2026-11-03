@@ -12,6 +12,7 @@ import { ProductosScreen } from './productos/ProductosScreen'
 import { IndicadorDeSincronizacion } from './sincronizacion/IndicadorDeSincronizacion'
 import { SincronizacionScreen } from './sincronizacion/SincronizacionScreen'
 import { StockScreen } from './stock/StockScreen'
+import { AnularVentaScreen } from './ventas/AnularVentaScreen'
 import { VenderScreen } from './ventas/VenderScreen'
 import { VentaGuardadaScreen } from './ventas/VentaGuardadaScreen'
 import { VentasDeHoyScreen } from './ventas/VentasDeHoyScreen'
@@ -51,6 +52,7 @@ export function RutaLayout() {
           <Route path="vender" element={<VenderScreen />} />
           <Route path="ventas" element={<VentasDeHoyScreen />} />
           <Route path="ventas/:id" element={<VentaGuardadaScreen />} />
+          <Route path="ventas/:id/anular" element={<AnularVentaScreen />} />
           <Route path="sincronizacion" element={<SincronizacionScreen />} />
           <Route path="cuenta" element={<MiCuentaScreen />} />
           <Route path="cuenta/contrasena" element={<MiContrasenaRutaScreen />} />

@@ -205,6 +205,15 @@ class JornadaAjenaError(DomainError):
     status_http = 409
 
 
+class VentaInexistenteError(DomainError):
+    """La venta que nombra una anulación sin conexión no existe en la organización: la rechazó el
+    servidor antes o es de otra organización (SYN-06, INV-21; change 22d, `design.md` D1).
+    Dependencia inexistente: el ítem se rechaza sin fila de comando y el lote sigue."""
+
+    codigo = "VENTA_INEXISTENTE"
+    status_http = 404
+
+
 class UbicacionRequeridaError(DomainError):
     """Sin una jornada abierta, la venta tiene que decir de qué ubicación sale el stock
     (VTA-01, `design.md` D3)."""

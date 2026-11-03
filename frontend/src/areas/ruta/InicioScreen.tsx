@@ -9,13 +9,15 @@ import { asegurarAlmacenamientoPersistente, type EstadoDeAlmacenamiento } from '
 import { useConectado } from '../../lib/conexion'
 import { formatearFechaHora } from '../../lib/fecha'
 import { actualizarDatos, type ResultadoActualizacion } from '../../sync/actualizarDatos'
+import { AVISO_LO_YA_VENDIDO, textoDeJornadaNoAbierta } from '../../domain/ruta/avisoDeJornada'
 import { AVISO_DE_VERSION_MINIMA } from '../../sync/versionMinima'
+import { useJornadaNoAbierta } from './datos/anulacion'
 import { useDatosDeInicio } from './datos/lecturas'
 import { useResumenDeSincronizacion, useVersionBloqueada } from './datos/sincronizacion'
 import { useVentasSinEnviar } from './datos/ventas'
 import { useSesionRutaActiva } from './sesion/contextoSesion'
 import { BotonSincronizar } from './sincronizacion/BotonSincronizar'
-import { textoDeSinEnviar, textoDeUltimaSincronizacion } from './sincronizacion/presentacion'
+import { textoDePendientes, textoDeUltimaSincronizacion } from './sincronizacion/presentacion'
 
 /**
  * Inicio de `/ruta` (change 21, `design.md` D2, D11, D18, D19; RUT-03, RUT-09, SYN-11): usuario,
@@ -57,6 +59,8 @@ export function InicioScreen() {
   const sinEnviar = useVentasSinEnviar(datos.estado === 'listo' ? datos.usuario.id : null)
   const { ultimaSincronizacion } = useResumenDeSincronizacion()
   const versionBloqueada = useVersionBloqueada()
+  // Change 22d (D8, D9): lo que el teléfono guardó sobre su jornada; corta «Vender» con o sin señal.
+  const jornadaNoAbierta = useJornadaNoAbierta()
 
   // D18: se pide en cada arranque mientras no esté concedido y de nuevo tras cada bootstrap aplicado.
   useEffect(() => {
@@ -91,8 +95,16 @@ export function InicioScreen() {
   // Vender (change 22a, D1, D13, D14): con VENDER en el bootstrap, jornada abierta y datos del día.
   const ofreceVender = datos.estado === 'sin_datos' || (datos.estado === 'listo' && datos.permisos.includes('VENDER'))
   // D7: por debajo de la versión mínima no se venden ventas nuevas; la cola se sigue enviando.
+  const jornadaCortada = jornadaNoAbierta !== null && jornadaNoAbierta !== undefined
   const motivoSinVender =
-    datos.estado === 'sin_datos' ? MOTIVO_SIN_DATOS : sinJornada ? MOTIVO_SIN_JORNADA : versionBloqueada ? AVISO_DE_VERSION_MINIMA : null
+    datos.estado === 'sin_datos'
+      ? MOTIVO_SIN_DATOS
+      : sinJornada || jornadaCortada
+        ? MOTIVO_SIN_JORNADA
+        : versionBloqueada
+          ? AVISO_DE_VERSION_MINIMA
+          : null
+  const cortada = sinJornada || jornadaCortada
 
   return (
     <div className="flex flex-col gap-4">
@@ -107,13 +119,23 @@ export function InicioScreen() {
 
       <Card className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold text-primary">Jornada</h2>
-        {sinJornada ? (
+        {cortada ? (
           <>
-            <p className="text-sm text-primary">
-              {datos.estado === 'listo'
-                ? 'Tu jornada ya no figura abierta en el servidor. Los datos que ves son los de la última descarga.'
-                : 'Todavía no hay datos descargados: abrí una jornada para descargarlos.'}
-            </p>
+            {jornadaCortada ? (
+              <>
+                <p className="flex items-center gap-1 text-sm text-primary">
+                  {textoDeJornadaNoAbierta(jornadaNoAbierta.estado)}
+                  <Ayuda clave="ruta.jornadaNoAbierta" />
+                </p>
+                <p className="text-sm text-primary">{AVISO_LO_YA_VENDIDO}</p>
+              </>
+            ) : (
+              <p className="text-sm text-primary">
+                {datos.estado === 'listo'
+                  ? 'Tu jornada ya no figura abierta en el servidor. Los datos que ves son los de la última descarga.'
+                  : 'Todavía no hay datos descargados: abrí una jornada para descargarlos.'}
+              </p>
+            )}
             {puedeAbrir || datos.estado === 'sin_datos' ? (
               conectado ? (
                 <Link to="/ruta/jornada/abrir" className={CLASE_ENLACE}>
@@ -163,7 +185,7 @@ export function InicioScreen() {
         <Card className="flex flex-col gap-2">
           {sinEnviar !== null && (
             <div className="flex items-center gap-1">
-              <p className="text-sm font-semibold text-primary">{textoDeSinEnviar(sinEnviar)}</p>
+              <p className="text-sm font-semibold text-primary">{textoDePendientes(sinEnviar.ventas, sinEnviar.anulaciones)}</p>
               <Ayuda clave="ruta.ventaSinEnviar" />
             </div>
           )}

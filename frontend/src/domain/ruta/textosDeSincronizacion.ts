@@ -12,6 +12,12 @@ export const AVISO_DE_RECHAZO = 'Sigue guardada en el teléfono; avisá a admini
 export const TEXTO_SIN_DETALLE = 'El detalle no está en el teléfono; consultalo con administración.'
 export const TEXTO_DE_RECHAZO_GENERAL = 'El sistema no aceptó esta venta.'
 export const TEXTO_DE_OBSERVACION_GENERAL = 'El sistema anotó algo para que administración lo revise.'
+/** Change 22d (D11): lo mismo para una anulación. */
+export const AVISO_DE_RECHAZO_DE_ANULACION = 'La venta sigue vigente en el teléfono; avisá a administración.'
+/** Texto general de una anulación con un código que el teléfono no conoce (adaptado del de la venta). */
+export const TEXTO_DE_RECHAZO_GENERAL_DE_ANULACION = 'El sistema no aceptó esta anulación.'
+/** Tipo de comando de la cola de una anulación. */
+export const TIPO_DE_ANULACION = 'VENTA_ANULAR'
 
 /** Nombres que la base local todavía conoce, por id. */
 export interface NombresLocales {
@@ -132,6 +138,52 @@ export function textoDeRechazo(codigo: string | null): TextoDeRechazo {
   return { texto: propio, codigo, conocido: true }
 }
 
+const TEXTO_DE_DATOS_INVALIDOS_DE_ANULACION = 'La anulación llegó con datos incompletos o inválidos.'
+
+/**
+ * Change 22d, D11 (aprobados en 0.2): los rechazos de una anulación. Los códigos propios dicen qué
+ * pasó; el resto (datos, contenido, tipo, versión y modo del comando, jornada inexistente o
+ * requerida) comparte el texto de datos incompletos. Se elige por el tipo de operación de la cola.
+ */
+const TEXTOS_DE_RECHAZO_DE_ANULACION: Readonly<Record<string, string>> = {
+  VENTA_INEXISTENTE: 'El sistema no tiene la venta que se quiso anular.',
+  VENTA_YA_ANULADA: 'La venta ya estaba anulada en el sistema.',
+  JORNADA_AJENA: 'La venta es de otra jornada.',
+  UBICACION_INACTIVA: 'La ubicación de la venta está dada de baja.',
+  MOTIVO_INVALIDO: 'El motivo de la anulación no es válido.',
+  DISPOSITIVO_REVOCADO: 'Este teléfono fue dado de baja; la anulación quedó para revisión.',
+  DEVOLUCION_INVALIDA: TEXTO_DE_DATOS_INVALIDOS_DE_ANULACION,
+  CONSUMIDOR_FINAL_SIN_DEVOLUCION: TEXTO_DE_DATOS_INVALIDOS_DE_ANULACION,
+  OBSERVACION_INVALIDA: TEXTO_DE_DATOS_INVALIDOS_DE_ANULACION,
+  CONTENIDO_DE_COMANDO_INVALIDO: TEXTO_DE_DATOS_INVALIDOS_DE_ANULACION,
+  TIPO_DE_COMANDO_DESCONOCIDO: TEXTO_DE_DATOS_INVALIDOS_DE_ANULACION,
+  VERSION_DE_COMANDO_SIN_HANDLER: TEXTO_DE_DATOS_INVALIDOS_DE_ANULACION,
+  MODO_NO_ADMITIDO_PARA_TIPO: TEXTO_DE_DATOS_INVALIDOS_DE_ANULACION,
+  COMANDO_INCONSISTENTE: TEXTO_DE_DATOS_INVALIDOS_DE_ANULACION,
+  JORNADA_INEXISTENTE: TEXTO_DE_DATOS_INVALIDOS_DE_ANULACION,
+  JORNADA_REQUERIDA: TEXTO_DE_DATOS_INVALIDOS_DE_ANULACION,
+}
+
+/** SYN-06: el texto del motivo del rechazo de una anulación. */
+export function textoDeRechazoDeAnulacion(codigo: string | null): TextoDeRechazo {
+  const propio = codigo === null ? undefined : TEXTOS_DE_RECHAZO_DE_ANULACION[codigo]
+  if (propio === undefined) return { texto: TEXTO_DE_RECHAZO_GENERAL_DE_ANULACION, codigo, conocido: false }
+  return { texto: propio, codigo, conocido: true }
+}
+
+/** Observaciones de una anulación (SYN-07): `PERMISO_REVOCADO` no cambia; las otras dos dicen «anulación». */
+const FIJOS_DE_OBSERVACION_DE_ANULACION: Readonly<Record<string, string>> = {
+  PERMISO_REVOCADO: 'Cuando llegó la operación, tu usuario ya no tenía el permiso.',
+  JORNADA_LIBERADA: 'La jornada había sido liberada cuando llegó la anulación.',
+  UBICACION_TOMADA_AL_SINCRONIZAR:
+    'Cuando llegó la anulación, el vehículo estaba en rendición o en la jornada de otro vendedor.',
+}
+
+export function textoDeObservacionDeAnulacion(observacion: ObservacionLocal, nombres: NombresLocales): string {
+  void nombres
+  return FIJOS_DE_OBSERVACION_DE_ANULACION[observacion.codigo] ?? TEXTO_DE_OBSERVACION_GENERAL
+}
+
 /** D4: la primera observación y cuántas más hay («1 más», «N más»). */
 export function resumenDeObservaciones(textos: readonly string[]): { primera: string; mas: string | null } | null {
   const [primera, ...resto] = textos
@@ -153,19 +205,29 @@ export interface ResultadoGuardado {
 /**
  * D3, D4: explicación de una venta según su estado de envío: sus observaciones traducidas, el
  * aviso de que el detalle no está (aceptada antes del 22c) o el motivo del rechazo. Una «Enviada»
- * o sin enviar no explica nada.
+ * o sin enviar no explica nada. Change 22d (D11): con `tipoDeOperacion` `VENTA_ANULAR` se eligen
+ * los textos de la anulación; sin tipo o con otro, los de la venta.
  */
 export function explicarEnvio(
   estado: EstadoDeEnvio,
   resultado: ResultadoGuardado | undefined,
   nombres: NombresLocales,
+  tipoDeOperacion?: string,
 ): ExplicacionDeEnvio | null {
+  const esAnulacion = tipoDeOperacion === TIPO_DE_ANULACION
   if (estado === 'RECHAZADA') {
-    const rechazo = textoDeRechazo(resultado?.error_codigo ?? null)
-    return { tipo: 'rechazo', texto: rechazo.texto, codigo: rechazo.codigo, aviso: AVISO_DE_RECHAZO }
+    const codigo = resultado?.error_codigo ?? null
+    const rechazo = esAnulacion ? textoDeRechazoDeAnulacion(codigo) : textoDeRechazo(codigo)
+    return {
+      tipo: 'rechazo',
+      texto: rechazo.texto,
+      codigo: rechazo.codigo,
+      aviso: esAnulacion ? AVISO_DE_RECHAZO_DE_ANULACION : AVISO_DE_RECHAZO,
+    }
   }
   if (estado !== 'CON_OBSERVACIONES') return null
   const observaciones = resultado?.observaciones
   if (observaciones === undefined || observaciones.length === 0) return { tipo: 'sin_detalle', texto: TEXTO_SIN_DETALLE }
-  return { tipo: 'observaciones', textos: observaciones.map((o) => textoDeObservacion(o, nombres)) }
+  const traducir = esAnulacion ? textoDeObservacionDeAnulacion : textoDeObservacion
+  return { tipo: 'observaciones', textos: observaciones.map((o) => traducir(o, nombres)) }
 }

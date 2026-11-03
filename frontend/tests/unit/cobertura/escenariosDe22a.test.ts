@@ -53,7 +53,7 @@ const MAPA: Record<string, Destino> = {
   'Salir con un pedido a medias': unit(AVISO, '¿Descartar la venta?'),
   // sync/base-local
   'La base local guarda las operaciones del dispositivo': unit('lib/dispositivo/db.test.ts', 'las tablas de operaciones tienen sus índices'),
-  'Actualización de la base': unit('lib/dispositivo/db.test.ts', 'una base v2 con sesión, PIN, dispositivo_id y maestros abre en v3'),
+  'Actualización de la base': unit('lib/dispositivo/db.test.ts', 'una base v2 con sesión, PIN, dispositivo_id y maestros abre en v4'),
   'El bootstrap no toca las operaciones locales': unit('sync/aplicarBootstrap.test.ts', 'aplicar un bootstrap deja idénticas ventas'),
   'Bootstrap con operaciones pendientes': unit('sync/aplicarBootstrap.test.ts', 'aplicar un bootstrap deja idénticas ventas'),
   'Bootstrap que falla con operaciones pendientes': unit('sync/aplicarBootstrap.test.ts', 'un bootstrap que falla a mitad deja las operaciones'),

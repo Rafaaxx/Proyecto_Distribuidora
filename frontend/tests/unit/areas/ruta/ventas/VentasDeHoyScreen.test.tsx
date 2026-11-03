@@ -9,7 +9,7 @@ import { aplicarBootstrap } from '../../../../../src/sync/aplicarBootstrap'
 import { bootstrapParaVender } from '../../../utils/datosParaVender'
 import { ID, clienteDePrueba } from '../../../utils/bootstrapDePrueba'
 import { montarEnRuta } from '../../../utils/rutaDePrueba'
-import { sembrarVenta } from '../../../utils/sembrarVenta'
+import { sembrarAnulacion, sembrarVenta } from '../../../utils/sembrarVenta'
 
 /**
  * Change 22a, tarea 11.1 (spec `ruta/area-de-ruta`, "Ventas de hoy desde la base local";
@@ -104,5 +104,30 @@ describe('VentasDeHoyScreen (tarea 11.1)', () => {
     expect(textoDe('0001-000009').getByText('Con observaciones')).toBeInTheDocument()
     expect(textoDe('0001-000010').getByText('Rechazada')).toBeInTheDocument()
     expect(textoDe('0001-000011').getByText('Sin enviar')).toBeInTheDocument()
+  })
+
+  /** Change 22d, tarea 10.2 («Ventas de hoy»; VTA-20, SYN-09): la venta anulada lleva «Anulada». */
+  it('tres ventas, una anulada: ve las tres y solo la anulada lleva «Anulada»', async () => {
+    await sembrarVenta('a', { cajas: 1, unidades: 0, ahora: new Date('2026-10-30T14:00:00.000Z') })
+    await sembrarVenta('b', { cajas: 0, unidades: 2, ahora: new Date('2026-10-30T15:00:00.000Z') })
+    await sembrarVenta('c', { cajas: 0, unidades: 1, ahora: new Date('2026-10-30T15:30:00.000Z') })
+    await sembrarAnulacion('b')
+
+    montarEnRuta(<VentasDeHoyScreen />, { ruta: '/ruta/ventas' })
+
+    const filas = await screen.findAllByRole('listitem')
+    expect(filas).toHaveLength(3)
+    const anuladas = filas.filter((fila) => within(fila).queryByText('Anulada') !== null)
+    expect(anuladas).toHaveLength(1)
+    expect(within(anuladas[0] as HTMLElement).getByText(/0001-000009/)).toBeInTheDocument()
+  })
+
+  it('sin anulaciones ninguna fila dice «Anulada»', async () => {
+    await sembrarVenta('a', { cajas: 1, unidades: 0 })
+
+    montarEnRuta(<VentasDeHoyScreen />, { ruta: '/ruta/ventas' })
+
+    await screen.findAllByRole('listitem')
+    expect(screen.queryByText('Anulada')).not.toBeInTheDocument()
   })
 })

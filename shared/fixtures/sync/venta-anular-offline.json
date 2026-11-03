@@ -1,0 +1,68 @@
+{
+  "id": "SYN-VENTA-ANULAR-OFFLINE-01",
+  "reglas": ["SYN-01", "SYN-03", "VTA-20", "VTA-22", "VTA-24", "INV-06"],
+  "comentario": "Fixture de contrato del sobre que arma el telefono al anular una venta de su jornada (change 22d, design.md D1 y D6). Tres sobres de VENTA_ANULAR v1, modo OFFLINE, sin credenciales: con_devolucion (la venta se cobro en el acto y se devuelve el dinero: devuelve_dinero true), sin_devolucion (se cobro y no se devuelve: devuelve_dinero false) y sin_cobro (la venta no tuvo cobro en el acto: devuelve_dinero se OMITE; el consumidor final siempre devuelve, asi que nunca lleva este caso con cobro). La observacion es un texto de hasta 500 caracteres o null. La secuencia es la siguiente a la de la venta (SYN-03). Los identificadores {{simbolicos}} se sustituyen por UUID reales: en el frontend la prueba los pasa como entrada y compara; en el backend la prueba de integracion los reemplaza por los de la base de prueba.",
+  "simbolos": [
+    "{{operation_id}}",
+    "{{usuario_id}}",
+    "{{dispositivo_id}}",
+    "{{jornada_id}}",
+    "{{venta_id}}",
+    "{{motivo_id}}"
+  ],
+  "sobres": {
+    "con_devolucion": {
+      "operation_id": "{{operation_id}}",
+      "tipo": "VENTA_ANULAR",
+      "version": 1,
+      "modo": "OFFLINE",
+      "usuario_id": "{{usuario_id}}",
+      "dispositivo_id": "{{dispositivo_id}}",
+      "jornada_id": "{{jornada_id}}",
+      "occurred_at": "2026-10-19T12:30:00.000Z",
+      "secuencia": 9,
+      "app_version": "1.0.0",
+      "contenido": {
+        "venta_id": "{{venta_id}}",
+        "motivo_id": "{{motivo_id}}",
+        "observacion": "El cliente no recibio la mercaderia",
+        "devuelve_dinero": true
+      }
+    },
+    "sin_devolucion": {
+      "operation_id": "{{operation_id}}",
+      "tipo": "VENTA_ANULAR",
+      "version": 1,
+      "modo": "OFFLINE",
+      "usuario_id": "{{usuario_id}}",
+      "dispositivo_id": "{{dispositivo_id}}",
+      "jornada_id": "{{jornada_id}}",
+      "occurred_at": "2026-10-19T12:30:00.000Z",
+      "secuencia": 9,
+      "app_version": "1.0.0",
+      "contenido": {
+        "venta_id": "{{venta_id}}",
+        "motivo_id": "{{motivo_id}}",
+        "observacion": null,
+        "devuelve_dinero": false
+      }
+    },
+    "sin_cobro": {
+      "operation_id": "{{operation_id}}",
+      "tipo": "VENTA_ANULAR",
+      "version": 1,
+      "modo": "OFFLINE",
+      "usuario_id": "{{usuario_id}}",
+      "dispositivo_id": "{{dispositivo_id}}",
+      "jornada_id": "{{jornada_id}}",
+      "occurred_at": "2026-10-19T12:30:00.000Z",
+      "secuencia": 9,
+      "app_version": "1.0.0",
+      "contenido": {
+        "venta_id": "{{venta_id}}",
+        "motivo_id": "{{motivo_id}}",
+        "observacion": null
+      }
+    }
+  }
+}

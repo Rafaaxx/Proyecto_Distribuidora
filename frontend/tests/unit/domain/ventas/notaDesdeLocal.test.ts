@@ -6,7 +6,7 @@ import {
   datosDeNotaDesdeLocal,
   type EntradaDeCongelado,
 } from '../../../../src/domain/ventas/notaDesdeLocal'
-import type { ContenidoDeVentaLocal, VentaLocal } from '../../../../src/lib/dispositivo/db'
+import type { AnulacionLocal, ContenidoDeVentaLocal, VentaLocal } from '../../../../src/lib/dispositivo/db'
 
 /**
  * Change 22a, tarea 12.1 (spec `ventas/nota-de-venta`, "La nota de una venta del teléfono se arma
@@ -216,5 +216,75 @@ describe('datos de la nota desde la venta local (tarea 12.1, D15)', () => {
 
   it('una venta sin datos congelados no se puede armar', () => {
     expect(() => datosDeNotaDesdeLocal(ventaLocal(null))).toThrow(/no tiene los datos de la nota/i)
+  })
+})
+
+/**
+ * Change 22d, tarea 11.1 (spec `ruta/area-de-ruta`, «Nota de una venta anulada»; `design.md` D10;
+ * cita VTA-13, VTA-22): con la anulación local la nota lleva «ANULADA», la fecha, el motivo
+ * guardado y el destino de lo cobrado, y no lleva saldo.
+ */
+function anulacionLocal(sobre: Partial<AnulacionLocal> = {}): AnulacionLocal {
+  return {
+    venta_id: 'v1',
+    operation_id: 'op-anulacion',
+    jornada_id: 'j1',
+    estado_envio: 'PENDIENTE',
+    motivo_id: 'mot-1',
+    motivo_nombre: 'Error de carga',
+    observacion: null,
+    devuelve_dinero: true,
+    occurred_at: '2026-10-30T18:30:00.000Z',
+    ...sobre,
+  }
+}
+
+describe('nota de una venta anulada en el teléfono (tarea 11.1, D10, VTA-13, VTA-22)', () => {
+  const venta = () => ventaLocal(congelarNotaDeVenta(entrada()))
+
+  it('con la anulación pasa estado ANULADA y sus datos (fecha, motivo guardado, devolución)', () => {
+    const datos = datosDeNotaDesdeLocal(venta(), anulacionLocal())
+
+    expect(datos.estado).toBe('ANULADA')
+    expect(datos.anulacion).toEqual({
+      anulada_en: '2026-10-30T18:30:00.000Z',
+      motivo_nombre: 'Error de carga',
+      devuelve_dinero: true,
+    })
+  })
+
+  it('la nota armada lleva la marca, la línea con fecha y motivo y «Se devolvió lo cobrado.», sin saldo', () => {
+    const nota = armarNotaDeVenta(datosDeNotaDesdeLocal(venta(), anulacionLocal()))
+
+    expect(nota.anulacion?.marca).toBe('ANULADA')
+    expect(nota.anulacion?.renglones[0]).toContain('Motivo: Error de carga.')
+    expect(nota.anulacion?.renglones[0]).toContain('30/10/2026')
+    expect(nota.anulacion?.renglones).toContain('Se devolvió lo cobrado.')
+    expect(nota.saldo).toBeNull()
+  })
+
+  it('sin devolución dice que lo cobrado quedó a favor del cliente', () => {
+    const nota = armarNotaDeVenta(datosDeNotaDesdeLocal(venta(), anulacionLocal({ devuelve_dinero: false })))
+
+    expect(nota.anulacion?.renglones).toContain('Lo cobrado quedó a favor del cliente.')
+  })
+
+  it('una venta sin cobro anulada no dice nada del dinero (la devolución no se preguntó)', () => {
+    const sinCobro = venta()
+    sinCobro.contenido = { ...sinCobro.contenido, cobranza: null }
+
+    const nota = armarNotaDeVenta(datosDeNotaDesdeLocal(sinCobro, anulacionLocal({ devuelve_dinero: null })))
+
+    expect(nota.anulacion?.renglones).toHaveLength(1)
+  })
+
+  it('sin anulación (o con null) la nota queda igual que hoy: CONFIRMADA, sin marca y con saldo', () => {
+    const datos = datosDeNotaDesdeLocal(venta(), null)
+
+    expect(datos.estado).toBe('CONFIRMADA')
+    expect(datos.anulacion).toBeNull()
+    expect(datosDeNotaDesdeLocal(venta())).toEqual(datos)
+    expect(armarNotaDeVenta(datos).anulacion).toBeNull()
+    expect(armarNotaDeVenta(datos).saldo?.valor).toContain('210.000,00')
   })
 })

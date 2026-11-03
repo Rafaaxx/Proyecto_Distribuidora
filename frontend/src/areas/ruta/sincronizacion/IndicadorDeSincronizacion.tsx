@@ -20,7 +20,7 @@ export function IndicadorDeSincronizacion() {
       <span>{conectado ? 'Con conexión' : 'Sin conexión'}</span>
       <span className="flex items-center gap-3">
         <Link to="/ruta/sincronizacion" className={CLASE_ENLACE}>
-          {textoDeCabecera(resumen.sinEnviar)}
+          {textoDeCabecera(resumen.sinEnviar + resumen.anulacionesSinEnviar)}
         </Link>
         <Ayuda clave="ruta.sincronizar" />
         {resumen.rechazadas > 0 && (

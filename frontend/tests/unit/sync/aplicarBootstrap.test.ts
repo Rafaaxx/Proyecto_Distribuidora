@@ -3,6 +3,7 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { baseLocal, TABLAS_MAESTRAS } from '../../../src/lib/dispositivo/db'
+import { borrarSesionLocal } from '../../../src/lib/sesionLocal/sesionLocal'
 import { aplicarBootstrap } from '../../../src/sync/aplicarBootstrap'
 import {
   bootstrapDePrueba as bootstrap,
@@ -239,6 +240,62 @@ describe('aplicar el bootstrap en una sola transacción (change 21, tarea 6.1)',
 
       expect(await instantanea()).toEqual(antes)
       expect(await baseLocal.clientes.toArray()).toEqual(clientesAntes)
+    })
+  })
+
+  describe('no toca las anulaciones locales (change 22d, tarea 5.1; INV-05, SYN-09, 02 §13.4)', () => {
+    async function sembrarAnulacion(estado: 'PENDIENTE' | 'RECHAZADA'): Promise<void> {
+      await baseLocal.anulaciones.put({
+        venta_id: 'v-1',
+        operation_id: 'op-anul-1',
+        jornada_id: ID(2),
+        estado_envio: estado,
+        motivo_id: ID(21),
+        motivo_nombre: 'Error de carga',
+        observacion: null,
+        devuelve_dinero: null,
+        occurred_at: '2026-10-30T11:00:00.000Z',
+      })
+      await baseLocal.movimientos_locales.add({
+        operation_id: 'op-anul-1',
+        jornada_id: ID(2),
+        tipo: 'ANULACION_STOCK',
+        producto_id: ID(30),
+        cliente_id: null,
+        cantidad_base: 15,
+        importe: null,
+        estado_operacion: 'PENDIENTE',
+      })
+      await baseLocal.cola.put({ secuencia: 8, operation_id: 'op-anul-1', estado: 'PENDIENTE', sobre: {} as never })
+    }
+
+    async function instantanea(): Promise<unknown> {
+      return {
+        anulaciones: await baseLocal.anulaciones.toArray(),
+        movimientos: await baseLocal.movimientos_locales.toArray(),
+        cola: await baseLocal.cola.toArray(),
+      }
+    }
+
+    it('un bootstrap con una anulación sin enviar la deja con sus movimientos y su comando', async () => {
+      await sembrarAnulacion('PENDIENTE')
+      const antes = await instantanea()
+
+      await aplicarBootstrap(bootstrap({ generado: '2026-10-30T11:00:00Z' }))
+      await aplicarBootstrap(bootstrap({ clientes: [cliente(1, 'Otro')], generado: '2026-10-30T12:00:00Z' }))
+
+      expect(await instantanea()).toEqual(antes)
+    })
+
+    it('cerrar la sesión local no borra una anulación rechazada (SYN-09)', async () => {
+      await aplicarBootstrap(bootstrap())
+      await sembrarAnulacion('RECHAZADA')
+      const antes = await instantanea()
+
+      await borrarSesionLocal()
+
+      expect(await instantanea()).toEqual(antes)
+      expect((await baseLocal.anulaciones.get('v-1'))?.estado_envio).toBe('RECHAZADA')
     })
   })
 })

@@ -5,7 +5,8 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ID } from '../../../utils/bootstrapDePrueba'
-import { bootstrapParaVender } from '../../../utils/datosParaVender'
+import { bootstrapParaVender, IDS_DE_PRUEBA } from '../../../utils/datosParaVender'
+import { anularVentaLocal } from '../../../../../src/sync/anularVentaLocal'
 import { sembrarVenta } from '../../../utils/sembrarVenta'
 
 const mocks = vi.hoisted(() => ({
@@ -50,6 +51,22 @@ async function contarOperaciones() {
     cola: await baseLocal.cola.count(),
     movimientos: await baseLocal.movimientos_locales.count(),
   }
+}
+
+async function anularDeLaSesion(sufijo: string) {
+  const sesion = await baseLocal.sesion.get('actual')
+  if (sesion === undefined) throw new Error('Falta la sesión de prueba.')
+  return anularVentaLocal({
+    ventaId: `venta-${sufijo}`,
+    motivo: { id: IDS_DE_PRUEBA.motivo, nombre: 'Error de carga' },
+    observacion: null,
+    devuelveDinero: null,
+    operationId: `op-anul-${sufijo}`,
+    usuarioId: sesion.usuario.id,
+    dispositivoId: 'disp-1',
+    ahora: new Date('2026-11-03T12:30:00.000Z'),
+    appVersion: '1.0.0',
+  })
 }
 
 describe('Cerrar sesión con ventas sin enviar (tarea 14.1, D16)', () => {
@@ -101,6 +118,22 @@ describe('Cerrar sesión con ventas sin enviar (tarea 14.1, D16)', () => {
     ).toBeInTheDocument()
   })
 
+  it('con una anulación sin enviar el aviso nombra ventas y anulaciones (change 22d, tarea 12.2)', async () => {
+    await sembrarVenta('a', { cajas: 1, unidades: 0 })
+    await sembrarVenta('b', { cajas: 0, unidades: 2 })
+    await anularDeLaSesion('a')
+    const u = userEvent.setup()
+    render(<CerrarSesionBoton onCerrada={vi.fn()} />)
+
+    await u.click(screen.getByRole('button', { name: /cerrar sesión/i }))
+
+    expect(
+      await screen.findByText(
+        'Tenés 2 ventas y 1 anulación sin enviar. Quedan guardadas en el teléfono y se envían cuando vuelvas a entrar vos.',
+      ),
+    ).toBeInTheDocument()
+  })
+
   it('sin ventas sin enviar no agrega ningún aviso de pendientes', async () => {
     const u = userEvent.setup()
     render(<CerrarSesionBoton onCerrada={vi.fn()} />)
@@ -147,10 +180,19 @@ describe('Otro usuario inicia sesión en el teléfono (tarea 14.1, D16, `02` §6
     const r = await registrarUsuarioTrasLogin()
 
     expect(r.cambioDeUsuario).toBe(true)
-    expect(r.pendientesDeOtro).toEqual([{ vendedor: 'Vendedor Uno', cantidad: 1 }])
+    expect(r.pendientesDeOtro).toEqual([{ vendedor: 'Vendedor Uno', ventas: 1, anulaciones: 0 }])
     expect(await baseLocal.ventas.count()).toBe(1)
     expect(await baseLocal.cola.count()).toBe(1)
     expect(await baseLocal.clientes.count()).toBe(0)
+  })
+
+  it('la anulación sin enviar del otro vendedor también se informa (change 22d, tarea 12.2)', async () => {
+    await anularDeLaSesion('a')
+    mocks.obtenerYo.mockResolvedValue({ usuario: { id: ID(90), nombre: 'Vendedor Dos' } })
+
+    const r = await registrarUsuarioTrasLogin()
+
+    expect(r.pendientesDeOtro).toEqual([{ vendedor: 'Vendedor Uno', ventas: 1, anulaciones: 1 }])
   })
 
   it('el mismo usuario que vuelve a entrar no recibe aviso de otro', async () => {
@@ -169,7 +211,7 @@ describe('Otro usuario inicia sesión en el teléfono (tarea 14.1, D16, `02` §6
     const r = await registrarUsuarioTrasLogin()
 
     expect(r.cambioDeUsuario).toBe(false)
-    expect(r.pendientesDeOtro).toEqual([{ vendedor: 'Vendedor Uno', cantidad: 1 }])
+    expect(r.pendientesDeOtro).toEqual([{ vendedor: 'Vendedor Uno', ventas: 1, anulaciones: 0 }])
     expect(await baseLocal.ventas.count()).toBe(1)
     expect(await baseLocal.cola.count()).toBe(1)
   })

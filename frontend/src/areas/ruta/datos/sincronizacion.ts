@@ -6,7 +6,7 @@ import {
   type ExplicacionDeEnvio,
   type NombresLocales,
 } from '../../../domain/ruta/textosDeSincronizacion'
-import { baseLocal, type EstadoDeEnvio, type VentaLocal } from '../../../lib/dispositivo/db'
+import { baseLocal, type AnulacionLocal, type EstadoDeEnvio, type VentaLocal } from '../../../lib/dispositivo/db'
 import {
   estadoDeSincronizacion,
   suscribirEstadoDeSincronizacion,
@@ -15,7 +15,7 @@ import {
 import { APP_VERSION } from '../../../sync/appVersion'
 import { CLAVE_ULTIMA_SINCRONIZACION, CLAVE_ULTIMO_ERROR_SYNC, type ErrorDeSincronizacion } from '../../../sync/sincronizar'
 import { ventaBloqueadaPorVersion } from '../../../sync/versionMinima'
-import { contarVentasSinEnviar } from '../../../sync/ventasPendientes'
+import { contarPendientes } from '../../../sync/ventasPendientes'
 import { leerUltimoError } from '../sincronizacion/presentacion'
 
 /**
@@ -24,7 +24,9 @@ import { leerUltimoError } from '../sincronizacion/presentacion'
  * sin recargar.
  */
 export interface ResumenDeSincronizacion {
+  /** Ventas sin enviar (change 22d: las anulaciones se cuentan aparte). */
   sinEnviar: number
+  anulacionesSinEnviar: number
   conObservaciones: number
   rechazadas: number
   ultimaSincronizacion: string | null
@@ -33,6 +35,7 @@ export interface ResumenDeSincronizacion {
 
 const RESUMEN_VACIO: ResumenDeSincronizacion = {
   sinEnviar: 0,
+  anulacionesSinEnviar: 0,
   conObservaciones: 0,
   rechazadas: 0,
   ultimaSincronizacion: null,
@@ -45,17 +48,28 @@ async function ventasDeLaJornada(): Promise<VentaLocal[]> {
   return baseLocal.ventas.where('jornada_id').equals(sesion.jornada.id).toArray()
 }
 
+async function anulacionesDeLaJornada(): Promise<AnulacionLocal[]> {
+  const sesion = await baseLocal.sesion.get('actual')
+  if (sesion === undefined) return []
+  return baseLocal.anulaciones.where('jornada_id').equals(sesion.jornada.id).toArray()
+}
+
 async function leerResumen(): Promise<ResumenDeSincronizacion> {
   const sesion = await baseLocal.sesion.get('actual')
-  const [ventas, ultima, error] = await Promise.all([
+  const [ventas, anulaciones, ultima, error] = await Promise.all([
     ventasDeLaJornada(),
+    anulacionesDeLaJornada(),
     baseLocal.meta.get(CLAVE_ULTIMA_SINCRONIZACION),
     baseLocal.meta.get(CLAVE_ULTIMO_ERROR_SYNC),
   ])
+  const pendientes = sesion === undefined ? { ventas: 0, anulaciones: 0 } : await contarPendientes(sesion.usuario.id)
+  const conEstado = (estado: EstadoDeEnvio) =>
+    ventas.filter((v) => v.estado_envio === estado).length + anulaciones.filter((a) => a.estado_envio === estado).length
   return {
-    sinEnviar: sesion === undefined ? 0 : await contarVentasSinEnviar(sesion.usuario.id),
-    conObservaciones: ventas.filter((v) => v.estado_envio === 'CON_OBSERVACIONES').length,
-    rechazadas: ventas.filter((v) => v.estado_envio === 'RECHAZADA').length,
+    sinEnviar: pendientes.ventas,
+    anulacionesSinEnviar: pendientes.anulaciones,
+    conObservaciones: conEstado('CON_OBSERVACIONES'),
+    rechazadas: conEstado('RECHAZADA'),
     ultimaSincronizacion: ultima?.valor ?? null,
     ultimoError: leerUltimoError(error?.valor),
   }
@@ -97,7 +111,7 @@ async function leerExplicacion(
   nombres: NombresLocales,
 ): Promise<ExplicacionDeEnvio | null> {
   const comando = await baseLocal.cola.where('operation_id').equals(operationId).first()
-  return explicarEnvio(estado, comando, nombres)
+  return explicarEnvio(estado, comando, nombres, comando?.sobre.tipo)
 }
 
 export interface VentaConProblema {
@@ -123,10 +137,47 @@ export function useVentasConProblemas(): VentaConProblema[] {
   }, [] as VentaConProblema[])
 }
 
+export interface AnulacionConProblema {
+  anulacion: AnulacionLocal
+  /** La venta anulada (para el número y el cliente); `undefined` si ya no está en el teléfono. */
+  venta: VentaLocal | undefined
+  codigo: string | null
+  explicacion: ExplicacionDeEnvio | null
+}
+
+/** Anulaciones de la jornada «Con observaciones» o «Rechazadas», con su explicación traducida (22d, D10). */
+export function useAnulacionesConProblemas(): AnulacionConProblema[] {
+  return useConsulta(async () => {
+    const anulaciones = (await anulacionesDeLaJornada()).filter(
+      (a) => a.estado_envio === 'CON_OBSERVACIONES' || a.estado_envio === 'RECHAZADA',
+    )
+    anulaciones.sort((a, b) => a.occurred_at.localeCompare(b.occurred_at))
+    const nombres = await leerNombresLocales()
+    return Promise.all(
+      anulaciones.map(async (anulacion) => {
+        const explicacion = await leerExplicacion(anulacion.operation_id, anulacion.estado_envio, nombres)
+        return {
+          anulacion,
+          venta: await baseLocal.ventas.get(anulacion.venta_id),
+          codigo: explicacion?.tipo === 'rechazo' ? explicacion.codigo : null,
+          explicacion,
+        }
+      }),
+    )
+  }, [] as AnulacionConProblema[])
+}
+
 /** Explicación de las observaciones o del rechazo de una venta, sin conexión (22c, D4). `undefined` mientras carga. */
 export function useExplicacionDeEnvio(venta: VentaLocal): ExplicacionDeEnvio | null | undefined {
+  return useExplicacionDeOperacion(venta.operation_id, venta.estado_envio)
+}
+
+/** Lo mismo para cualquier operación de la cola, por ejemplo la anulación de una venta (22d, D10). */
+export function useExplicacionDeOperacion(
+  operacionId: string,
+  estado: EstadoDeEnvio,
+): ExplicacionDeEnvio | null | undefined {
   const [explicacion, setExplicacion] = useState<ExplicacionDeEnvio | null | undefined>(undefined)
-  const { operation_id: operacionId, estado_envio: estado } = venta
   useEffect(() => {
     const suscripcion = liveQuery(async () => leerExplicacion(operacionId, estado, await leerNombresLocales())).subscribe({
       next: setExplicacion,

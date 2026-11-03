@@ -1,5 +1,5 @@
 import type { ClaveDeAyuda } from '../../../ayuda/textos'
-import type { EstadoDeEnvio } from '../../../lib/dispositivo/db'
+import type { AnulacionLocal, EstadoDeEnvio } from '../../../lib/dispositivo/db'
 
 /**
  * Etiqueta visible del estado de envío de una venta del teléfono (change 22a, `design.md` D13).
@@ -35,4 +35,20 @@ const AYUDA_DE_ENVIO: Record<EstadoDeEnvio, ClaveDeAyuda | null> = {
 /** Ayuda «(?)» que explica el estado de envío de una venta; la enviada no necesita ninguna (ADR-051). */
 export function claveDeAyudaDeEnvio(estado: EstadoDeEnvio): ClaveDeAyuda | null {
   return AYUDA_DE_ENVIO[estado]
+}
+
+/** Etiqueta de una venta con anulación en el teléfono (change 22d, D10). */
+export const ETIQUETA_ANULADA = 'Anulada'
+
+/**
+ * Una venta se ve «Anulada» mientras su anulación no haya sido rechazada: rechazada, la venta
+ * sigue vigente (D7, SYN-06). Sin enviar, aceptada o con observaciones cuenta como anulada.
+ */
+export function estaAnulada(anulacion: Pick<AnulacionLocal, 'estado_envio'> | null | undefined): boolean {
+  return anulacion !== null && anulacion !== undefined && anulacion.estado_envio !== 'RECHAZADA'
+}
+
+/** Ayuda «(?)» del estado de envío de una anulación; la rechazada tiene la suya (D12). */
+export function claveDeAyudaDeEnvioDeAnulacion(estado: EstadoDeEnvio): ClaveDeAyuda | null {
+  return estado === 'RECHAZADA' ? 'ruta.anulacionRechazada' : AYUDA_DE_ENVIO[estado]
 }

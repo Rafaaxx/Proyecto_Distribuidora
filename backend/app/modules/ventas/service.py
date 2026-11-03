@@ -90,11 +90,13 @@ from app.modules.descuentos import service as descuentos_service
 from app.modules.identidad import service as identidad_service
 from app.modules.precios import service as precios_service
 from app.modules.stock import service as stock_service
-from app.modules.stock.service import LineaDeMovimiento
+from app.modules.stock.service import LineaDeMovimiento, ResultadoDeMovimiento
 from app.modules.ventas import repository
 from app.modules.ventas.domain.anulacion import (
     lineas_de_reingreso,
     validar_devolucion,
+    validar_jornada_en_curso,
+    validar_motivo_de_anulacion,
     validar_observacion,
     validar_venta_anulable,
 )
@@ -143,6 +145,7 @@ from app.modules.ventas.domain.errores import (
     RecursoNoEncontradoError,
     UbicacionRequeridaError,
     VentaDuplicadaError,
+    VentaInexistenteError,
     VersionNoPermitidaError,
 )
 from app.modules.ventas.domain.momento import validar_momento
@@ -1761,20 +1764,72 @@ class ResultadoDeAnulacionDeVenta:
     cobranza_id: UUID | None
     cobranza_anulada: bool
     jornadas_tomadas: tuple[UUID, ...]
+    observaciones: tuple[ObservacionDeVenta, ...] = ()
+    """Sin conexión (change 22d, D2, SYN-07): `JORNADA_LIBERADA` y `UBICACION_TOMADA_AL_
+    SINCRONIZAR`, anotadas sobre la venta."""
 
 
 def _validar_motivo_de_anulacion_de_venta(
-    organizacion_id: UUID, sesion: Session, motivo_id: UUID
+    organizacion_id: UUID, sesion: Session, motivo_id: UUID, *, sin_conexion: bool = False
 ) -> None:
     """VTA-20, TR-09, INV-21: el motivo existe en la organización (404 si no) y es un motivo
-    activo del ámbito `ANULACION_VENTA` (`MOTIVO_INVALIDO` si no)."""
+    activo del ámbito `ANULACION_VENTA` (`MOTIVO_INVALIDO` si no). Sin conexión (change 22d, D2,
+    SYN-06): uno de otra organización también es `MOTIVO_INVALIDO` y uno dado de baja después del
+    bootstrap se acepta (ADR-063)."""
     motivo = configuracion_service.obtener_motivo(organizacion_id, motivo_id, sesion)
     if motivo is None:
+        if sin_conexion:
+            raise MotivoInvalidoError(
+                f"El motivo {motivo_id} no es un motivo de esta organización."
+            )
         raise RecursoNoEncontradoError(f"El motivo {motivo_id} no existe en esta organización.")
-    if not motivo.activo or motivo.ambito != _AMBITO_ANULACION_VENTA:
-        raise MotivoInvalidoError(
-            f"El motivo {motivo_id} no es un motivo activo del ámbito {_AMBITO_ANULACION_VENTA}."
+    validar_motivo_de_anulacion(
+        ambito=motivo.ambito, activo=motivo.activo, sin_conexion=sin_conexion
+    )
+
+
+def _observaciones_de_anulacion_sin_conexion(
+    organizacion_id: UUID,
+    sesion: Session,
+    movimientos: Sequence[ResultadoDeMovimiento],
+    *,
+    ubicacion_id: UUID,
+    jornada_del_sobre: UUID | None,
+    sin_conexion: bool,
+) -> tuple[ObservacionDeVenta, ...]:
+    """SYN-07, STK-09, RUT-09 (change 22d, D2): lo que la anulación sin conexión acepta pero
+    anota sobre la venta. `UBICACION_TOMADA_AL_SINCRONIZAR`: la ubicación estaba tomada al
+    sincronizar (la propia en rendición o la de otro vendedor); `JORNADA_LIBERADA`: la jornada del
+    sobre fue liberada, una sola vez. Con conexión no anota nada."""
+    if not sin_conexion:
+        return ()
+    observaciones = [
+        ObservacionDeVenta(
+            CODIGO_UBICACION_TOMADA_AL_SINCRONIZAR,
+            {"jornada_id": str(jornada_tomada_id), "ubicacion_id": str(ubicacion_id)},
         )
+        for jornada_tomada_id in stock_service.jornadas_tomadas_de(movimientos)
+    ]
+    assert jornada_del_sobre is not None  # ya validado: la venta es de la jornada del sobre
+    estado_jornada = stock_service.leer_estado_de_jornada(
+        organizacion_id, sesion, jornada_id=jornada_del_sobre
+    )
+    if estado_jornada is not None and estado_jornada.estado == _ESTADO_JORNADA_LIBERADA:
+        observaciones.insert(
+            0,
+            ObservacionDeVenta(
+                CODIGO_JORNADA_LIBERADA,
+                {
+                    "jornada_id": str(estado_jornada.jornada_id),
+                    "liberada_en": (
+                        None
+                        if estado_jornada.liberada_en is None
+                        else estado_jornada.liberada_en.isoformat()
+                    ),
+                },
+            ),
+        )
+    return tuple(observaciones)
 
 
 def anular_venta(
@@ -1791,6 +1846,8 @@ def anular_venta(
     usuario_id: UUID,
     dispositivo_id: UUID,
     occurred_at: datetime,
+    modo: str = "ONLINE",
+    jornada_del_sobre: UUID | None = None,
 ) -> ResultadoDeAnulacionDeVenta:
     """`VENTA_ANULAR` con conexión (VTA-20, VTA-21, VTA-22, INV-01, INV-05, INV-12, INV-13,
     INV-19, INV-21; `design.md` D1 a D10, opción A de D10 aprobada por el usuario el 2026-10-27).
@@ -1811,10 +1868,17 @@ def anular_venta(
     observacion_a_guardar = validar_observacion(observacion)
 
     # 1) La venta: sin bloquear (404 si no es de la organización) y luego `FOR UPDATE`.
+    sin_conexion = modo == "OFFLINE"
     if repository.obtener_venta(organizacion_id, venta_id, sesion) is None:
+        if sin_conexion:  # SYN-06, INV-21 (22d, D1): dependencia inexistente del lote
+            raise VentaInexistenteError(f"La venta {venta_id} no existe en esta organización.")
         raise RecursoNoEncontradoError(f"La venta {venta_id} no existe en esta organización.")
     venta = repository.tomar_venta_para_actualizar(organizacion_id, venta_id, sesion)
     assert venta is not None  # recién se leyó; las ventas no se borran (INV-05)
+    if sin_conexion:  # VTA-24 (22d, D1): solo la jornada en curso, la del sobre
+        validar_jornada_en_curso(
+            jornada_de_la_venta=venta.jornada_id, jornada_del_sobre=jornada_del_sobre
+        )
     validar_venta_anulable(venta.estado)
 
     # 2) Su cobranza de origen `VENTA`, si existe, antes que `saldo_cuenta` (D10).
@@ -1822,7 +1886,9 @@ def anular_venta(
     con_cobranza = cobranza is not None and cobranza.estado == _ESTADO_COBRANZA_CONFIRMADA
 
     # 3) Motivo y dinero cobrado.
-    _validar_motivo_de_anulacion_de_venta(organizacion_id, sesion, motivo_id)
+    _validar_motivo_de_anulacion_de_venta(
+        organizacion_id, sesion, motivo_id, sin_conexion=sin_conexion
+    )
     cliente = clientes_service.obtener_cliente_por_id(organizacion_id, venta.cliente_id, sesion)
     assert cliente is not None  # clave foránea compuesta (INV-02)
     validar_devolucion(con_cobranza, devuelve_dinero, cliente.es_consumidor_final)
@@ -1864,9 +1930,20 @@ def anular_venta(
         operation_id=operation_id,
         occurred_at=occurred_at,
         puede_operar_ubicacion_tomada=puede_liberar_ubicacion,
+        anulacion_sin_conexion=sin_conexion,
+    )
+    observaciones = _observaciones_de_anulacion_sin_conexion(
+        organizacion_id,
+        sesion,
+        movimientos,
+        ubicacion_id=venta.ubicacion_id,
+        jornada_del_sobre=jornada_del_sobre,
+        sin_conexion=sin_conexion,
     )
 
-    # 6) Escrituras. La jornada de la anulación sale del movimiento de stock (D8, STK-09).
+    # 6) Escrituras. La jornada de la anulación sale del movimiento de stock (D8, STK-09); sin
+    # conexión es la del sobre (D3), así la rendición del change 24 la cuenta aunque la jornada
+    # haya sido liberada o la camioneta retomada.
     repository.insertar_anulacion(
         sesion,
         VentaAnulacion(
@@ -1876,7 +1953,9 @@ def anular_venta(
             motivo_id=motivo_id,
             observacion=observacion_a_guardar,
             devuelve_dinero=devuelve_dinero if con_cobranza else None,
-            jornada_id=movimientos[0].movimiento.jornada_id,
+            jornada_id=(
+                jornada_del_sobre if sin_conexion else movimientos[0].movimiento.jornada_id
+            ),
             operation_id=operation_id,
             usuario_id=usuario_id,
             dispositivo_id=dispositivo_id,
@@ -1926,4 +2005,5 @@ def anular_venta(
         cobranza_id=None if cobranza is None else cobranza.id,
         cobranza_anulada=cobranza_anulada,
         jornadas_tomadas=stock_service.jornadas_tomadas_de(movimientos),
+        observaciones=observaciones,
     )

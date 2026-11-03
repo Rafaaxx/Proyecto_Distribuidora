@@ -1,5 +1,7 @@
 import { leerDatosParaVender } from '../../../src/areas/ruta/datos/paraVender'
 import { armarConfirmacionDeRuta, armarVentaDeRuta } from '../../../src/domain/ruta/armadoDeVentaLocal'
+import { baseLocal } from '../../../src/lib/dispositivo/db'
+import { anularVentaLocal } from '../../../src/sync/anularVentaLocal'
 import { confirmarVentaLocal } from '../../../src/sync/confirmarVentaLocal'
 import { carritoDePrueba, IDS_DE_PRUEBA } from './datosParaVender'
 
@@ -9,7 +11,15 @@ import { carritoDePrueba, IDS_DE_PRUEBA } from './datosParaVender'
  */
 export async function sembrarVenta(
   sufijo: string,
-  opciones: { clienteId?: string; usuarioId?: string; cajas?: number; unidades?: number; ahora?: Date } = {},
+  opciones: {
+    clienteId?: string
+    usuarioId?: string
+    cajas?: number
+    unidades?: number
+    ahora?: Date
+    /** Importe cobrado en el acto, en efectivo (sin cobro si se omite). */
+    cobro?: string
+  } = {},
 ) {
   const datos = await leerDatosParaVender()
   if (datos === null) throw new Error('Primero se aplica el bootstrap de prueba.')
@@ -18,6 +28,10 @@ export async function sembrarVenta(
     cobranzaId: `cobranza-${sufijo}`,
     operationId: `op-${sufijo}`,
     clienteId: opciones.clienteId ?? IDS_DE_PRUEBA.cliente,
+    medios:
+      opciones.cobro === undefined
+        ? []
+        : [{ medioPagoId: IDS_DE_PRUEBA.efectivo, importe: opciones.cobro, referencia: '' }],
     items: [
       {
         productoId: IDS_DE_PRUEBA.producto,
@@ -37,4 +51,27 @@ export async function sembrarVenta(
     autorizadoresVerificados: [],
   })
   return confirmarVentaLocal(entrada)
+}
+
+/**
+ * Anula de verdad (transacción de Dexie) la venta sembrada con el mismo sufijo, con el motivo
+ * «Error de carga». El `operation_id` de la anulación es `op-anul-<sufijo>`.
+ */
+export async function sembrarAnulacion(
+  sufijo: string,
+  opciones: { devuelveDinero?: boolean | null; observacion?: string | null; ahora?: Date } = {},
+) {
+  const sesion = await baseLocal.sesion.get('actual')
+  if (sesion === undefined) throw new Error('Primero se aplica el bootstrap de prueba.')
+  return anularVentaLocal({
+    ventaId: `venta-${sufijo}`,
+    motivo: { id: IDS_DE_PRUEBA.motivo, nombre: 'Error de carga' },
+    observacion: opciones.observacion ?? null,
+    devuelveDinero: opciones.devuelveDinero ?? null,
+    operationId: `op-anul-${sufijo}`,
+    usuarioId: sesion.usuario.id,
+    dispositivoId: 'disp-1',
+    ahora: opciones.ahora ?? new Date('2026-10-30T16:00:00.000Z'),
+    appVersion: '1.0.0',
+  })
 }

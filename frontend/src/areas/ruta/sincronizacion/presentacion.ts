@@ -12,10 +12,23 @@ export const TEXTO_DE_NO_SE_PUDO_ENVIAR = 'No se pudo enviar'
 /** Texto de la tarea 10.1 para «Sincronizar» sin señal (no figura en los aprobados de 0.2). */
 export const TEXTO_DE_SIN_SENAL = 'Sincronizar requiere conexión.'
 
-/** Inicio y pantalla «Sincronización»: «Todo enviado», «1 venta sin enviar», «N ventas sin enviar». */
+/**
+ * Inicio y pantalla «Sincronización» (change 22d, D10, aprobado en 0.2): «Todo enviado», «1 venta
+ * sin enviar», «N ventas sin enviar», «1 anulación sin enviar» y «N ventas y M anulaciones sin
+ * enviar».
+ */
+export function textoDePendientes(ventas: number, anulaciones: number): string {
+  if (ventas === 0 && anulaciones === 0) return 'Todo enviado'
+  const deVentas = ventas === 1 ? '1 venta' : `${ventas} ventas`
+  const deAnulaciones = anulaciones === 1 ? '1 anulación' : `${anulaciones} anulaciones`
+  if (anulaciones === 0) return `${deVentas} sin enviar`
+  if (ventas === 0) return `${deAnulaciones} sin enviar`
+  return `${deVentas} y ${deAnulaciones} sin enviar`
+}
+
+/** Solo ventas (22a). */
 export function textoDeSinEnviar(cantidad: number): string {
-  if (cantidad === 0) return 'Todo enviado'
-  return cantidad === 1 ? '1 venta sin enviar' : `${cantidad} ventas sin enviar`
+  return textoDePendientes(cantidad, 0)
 }
 
 /** Cabecera: más corto para el teléfono. */

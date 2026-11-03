@@ -397,6 +397,8 @@ def manejar_venta_anular(
         usuario_id=sobre.usuario_id,
         dispositivo_id=sobre.dispositivo_id,
         occurred_at=sobre.occurred_at,
+        modo=sobre.modo,
+        jornada_del_sobre=sobre.jornada_id,
     )
     cobranza_anulada = (
         f"cobranza anulada {resultado.cobranza_id}"
@@ -413,7 +415,15 @@ def manejar_venta_anular(
             "cobranza_anulada": resultado.cobranza_anulada,
         },
         None,
-        (),
+        tuple(
+            ObservacionProducida(
+                codigo=observacion.codigo,
+                operacion_tipo="VENTA",
+                operacion_id=resultado.venta.id,
+                detalle=observacion.detalle,
+            )
+            for observacion in resultado.observaciones
+        ),
         DatosDeAuditoria(
             motivo_id=contenido.motivo_id,
             observacion=unir_observaciones(
@@ -427,6 +437,7 @@ registrar_handler("VENTA_ANULAR", 1, VentaAnularContenidoV1)(manejar_venta_anula
 declarar_tipo(
     "VENTA_ANULAR",
     admite_online=True,
-    admite_offline=False,
+    admite_offline=True,
     permisos=(PERMISO_ANULAR_VENTA,),
+    operacion_offline=OperacionObservable("VENTA", "venta_id"),
 )

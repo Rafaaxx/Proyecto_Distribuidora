@@ -8,15 +8,19 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
+from uuid import UUID
 
 from app.modules.ventas.domain.errores import (
     ConsumidorFinalSinDevolucionError,
     DevolucionInvalidaError,
+    JornadaAjenaError,
+    MotivoInvalidoError,
     ObservacionInvalidaError,
     VentaYaAnuladaError,
 )
 
 MAXIMO_OBSERVACION = 500
+AMBITO_ANULACION_VENTA = "ANULACION_VENTA"
 _CUANTAS = Decimal("1")
 _COSTO = Decimal("0.000001")
 _REDONDEO = ROUND_HALF_UP
@@ -63,6 +67,29 @@ def validar_observacion(observacion: str | None) -> str | None:
 def validar_venta_anulable(estado: str) -> None:
     if estado == "ANULADA":
         raise VentaYaAnuladaError("La venta ya fue anulada")
+
+
+def validar_jornada_en_curso(
+    *, jornada_de_la_venta: UUID | None, jornada_del_sobre: UUID | None
+) -> None:
+    """VTA-24, SYN-10 (change 22d, D1): sin conexión solo se anula una venta de la jornada en
+    curso, la del sobre. Una venta de otra jornada, o sin jornada (confirmada con conexión desde un
+    depósito), es `JORNADA_AJENA`."""
+    if jornada_del_sobre is None or jornada_de_la_venta != jornada_del_sobre:
+        raise JornadaAjenaError(
+            "Sin conexión solo se anula una venta de la jornada del sobre de la anulación."
+        )
+
+
+def validar_motivo_de_anulacion(*, ambito: str, activo: bool, sin_conexion: bool) -> None:
+    """VTA-20, VTA-24 (change 22d, D2): el motivo es del ámbito `ANULACION_VENTA` y, con conexión,
+    está activo. Sin conexión no se exige que esté activo: un motivo dado de baja después del
+    bootstrap se acepta (ADR-063), pero el ámbito sí (`MOTIVO_INVALIDO`)."""
+    if ambito != AMBITO_ANULACION_VENTA or (not activo and not sin_conexion):
+        raise MotivoInvalidoError(
+            f"El motivo no es un motivo{'' if sin_conexion else ' activo'} del ámbito "
+            f"{AMBITO_ANULACION_VENTA}."
+        )
 
 
 def validar_devolucion(

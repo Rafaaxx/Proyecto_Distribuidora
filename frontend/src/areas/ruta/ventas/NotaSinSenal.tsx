@@ -5,7 +5,7 @@ import { Ayuda } from '../../../components/ui/Ayuda'
 import { Boton } from '../../../components/ui/Button'
 import { armarNotaDeVenta, NotaNoDisponibleParaModoC } from '../../../domain/ventas/notaDeVenta'
 import { datosDeNotaDesdeLocal } from '../../../domain/ventas/notaDesdeLocal'
-import type { VentaLocal } from '../../../lib/dispositivo/db'
+import type { AnulacionLocal, VentaLocal } from '../../../lib/dispositivo/db'
 import { compartirNota, descargarNota, nombreDeArchivoDeNota, puedeCompartirArchivos } from '../../../lib/nota/compartir'
 import { generarPdfDeNota } from '../../../lib/nota/pdf'
 
@@ -22,15 +22,16 @@ function navegadorComparteArchivos(numero: string): boolean {
  * ADR-059, `00` §9 criterio 7): "Compartir nota" (solo si el navegador comparte archivos) y
  * "Descargar nota", sin conexión. El contenido sale de los datos congelados de la venta local
  * (`datosDeNotaDesdeLocal`) y se arma con la misma función que `/admin`; el PDF, con `lib/nota/`.
+ * Con la anulación local (change 22d, D10) la nota lleva la marca «ANULADA» (VTA-13).
  * Sin lógica de negocio: solo orquesta.
  */
-export function NotaSinSenal({ venta }: { venta: VentaLocal }) {
+export function NotaSinSenal({ venta, anulacion = null }: { venta: VentaLocal; anulacion?: AnulacionLocal | null }) {
   const [ocupada, setOcupada] = useState(false)
   const [aviso, setAviso] = useState<string | null>(null)
 
   const generar = async (): Promise<Blob | null> => {
     try {
-      return await generarPdfDeNota(armarNotaDeVenta(datosDeNotaDesdeLocal(venta)))
+      return await generarPdfDeNota(armarNotaDeVenta(datosDeNotaDesdeLocal(venta, anulacion)))
     } catch (error) {
       setAviso(error instanceof NotaNoDisponibleParaModoC ? error.message : AVISO_DE_PDF)
       return null

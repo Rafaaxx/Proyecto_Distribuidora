@@ -31,6 +31,8 @@ import { obtenerOGenerarDispositivoId } from '../../../lib/dispositivo/dispositi
 import { confirmarVentaLocal } from '../../../sync/confirmarVentaLocal'
 import { APP_VERSION } from '../../../sync/appVersion'
 import { dispararTrasVenta } from '../../../sync/disparadores'
+import { AVISO_LO_YA_VENDIDO, textoDeJornadaNoAbierta } from '../../../domain/ruta/avisoDeJornada'
+import { leerJornadaNoAbierta } from '../../../sync/estadoDeJornada'
 import { AVISO_DE_VERSION_MINIMA, ventaBloqueadaPorVersion } from '../../../sync/versionMinima'
 import { useAhora } from '../datos/useAhora'
 import { useDatosParaVender } from '../datos/paraVender'
@@ -136,6 +138,13 @@ function VentaDeRuta({ datos }: { datos: DatosParaVender }) {
         setConfirmando(false)
         return
       }
+      // Change 22d (D9): si el teléfono se enteró de que la jornada ya no está abierta, no se confirma.
+      const noAbierta = await leerJornadaNoAbierta()
+      if (noAbierta !== null) {
+        setError(`${textoDeJornadaNoAbierta(noAbierta.estado)} ${AVISO_LO_YA_VENDIDO}`)
+        setConfirmando(false)
+        return
+      }
       const dispositivoId = await obtenerOGenerarDispositivoId()
       // Se vuelve a armar con la hora de ahora: el número y los precios vigentes son los de confirmar.
       const momento = new Date()
@@ -163,6 +172,11 @@ function VentaDeRuta({ datos }: { datos: DatosParaVender }) {
     // D7: el aviso puede llegar con el carrito abierto; se revisa antes de pedir PIN.
     if (await ventaBloqueadaPorVersion(APP_VERSION)) {
       setError(AVISO_DE_VERSION_MINIMA)
+      return
+    }
+    const noAbierta = await leerJornadaNoAbierta()
+    if (noAbierta !== null) {
+      setError(`${textoDeJornadaNoAbierta(noAbierta.estado)} ${AVISO_LO_YA_VENDIDO}`)
       return
     }
     if (personas.length > 0) {

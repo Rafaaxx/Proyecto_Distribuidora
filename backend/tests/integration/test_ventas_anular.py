@@ -443,10 +443,12 @@ def test_inv21_una_venta_o_un_motivo_de_otra_organizacion_responde_404(
     assert ajeno.anulaciones_de_venta() == [] and entorno.anulaciones_de_venta() == []
 
 
-def test_vta24_un_lote_offline_lo_rechaza_como_tipo_que_no_admite_ese_modo(
+def test_vta24_un_lote_offline_sin_jornada_ya_no_es_modo_no_admitido_sino_jornada_requerida(
     entorno: EntornoAnulacion,
 ) -> None:
-    # Escenario: "Modo sin conexión todavía no admitido" (02 §6.5, SYN-06)
+    # Escenario: "Modo sin conexión todavía no admitido" (02 §6.5, SYN-06), superado por el
+    # change 22d (design D1, D13): `VENTA_ANULAR` admite `OFFLINE` por el lote; sin la jornada en
+    # el sobre el bus la rechaza como a todo comando sin conexión.
     venta_id = entorno.vender_y_obtener_id()
     item = ItemLote(
         operation_id=uuid4(),
@@ -471,7 +473,7 @@ def test_vta24_un_lote_offline_lo_rechaza_como_tipo_que_no_admite_ese_modo(
     )
 
     assert resultado.estado == "RECHAZADO"
-    assert resultado.error_codigo == "MODO_NO_ADMITIDO_PARA_TIPO"
+    assert resultado.error_codigo == "JORNADA_REQUERIDA"
     entorno.sin_efectos_de_anulacion(venta_id, stock=33, saldo="181250.00")
 
 

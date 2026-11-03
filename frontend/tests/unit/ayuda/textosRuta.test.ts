@@ -63,23 +63,23 @@ describe('textos de ayuda de la venta de ruta (change 22a, tarea 15.1)', () => {
     expect(reglas).toEqual(expect.arrayContaining(['SYN-01', 'SYN-09']))
   })
 
-  it('ruta.creditoSinSenal: deuda de la última actualización + lo vendido y cobrado desde el teléfono después (revisada en el 22c)', () => {
+  it('ruta.creditoSinSenal: deuda de la última actualización + lo vendido y cobrado desde el teléfono después (revisada en el 22c y en el 22d)', () => {
     const { titulo, texto, reglas } = AYUDAS['ruta.creditoSinSenal']
     expect(titulo).toBe('Crédito del cliente')
     expect(texto).toBe(
-      'Se calcula con la deuda de la última actualización de datos más lo que le vendiste y cobraste desde el teléfono después.',
+      'Se calcula con la deuda de la última actualización de datos más lo que le vendiste y cobraste, y menos lo que le anulaste, desde el teléfono después.',
     )
-    expect(reglas).toEqual(expect.arrayContaining(['CRE-08', 'CRE-09', 'ADR-065']))
+    expect(reglas).toEqual(expect.arrayContaining(['CRE-08', 'CRE-09', 'ADR-065', 'ADR-066']))
     expect(AYUDAS['ruta.creditoSinSenal'].verMas).toBe('credito')
   })
 
-  it('ruta.stockDelVehiculo: el de la última actualización menos lo vendido desde el teléfono después (revisada en el 22c)', () => {
+  it('ruta.stockDelVehiculo: el de la última actualización menos lo vendido y más lo anulado desde el teléfono después (revisada en el 22c y en el 22d)', () => {
     const { titulo, texto, reglas } = AYUDAS['ruta.stockDelVehiculo']
     expect(titulo).toBe('Stock del vehículo')
     expect(texto).toBe(
-      'Es el stock de la última actualización de datos menos lo que vendiste desde el teléfono después. Si no alcanza, la venta no se confirma: actualizá los datos con señal.',
+      'Es el stock de la última actualización de datos menos lo que vendiste y más lo que anulaste desde el teléfono después. Si no alcanza, la venta no se confirma: actualizá los datos con señal.',
     )
-    expect(reglas).toEqual(expect.arrayContaining(['STK-06', 'RUT-04', 'ADR-065']))
+    expect(reglas).toEqual(expect.arrayContaining(['STK-06', 'RUT-04', 'ADR-065', 'ADR-066']))
   })
 
   it('ruta.pinSupervisor: se escribe en el teléfono y se bloquea hasta actualizar los datos; no fija un número', () => {
@@ -125,7 +125,7 @@ describe('textos de ayuda de la sincronización (change 22b, tarea 12.1)', () =>
     const { titulo, texto, reglas } = AYUDAS['ruta.sincronizar']
     expect(titulo).toBe('Sincronizar')
     expect(texto).toBe(
-      'Envía al sistema las ventas sin enviar de tu usuario, en el orden en que las hiciste. Se hace sola al abrir la aplicación o volver a ella, al volver la señal, después de cada venta y cada 2 minutos. Enviar dos veces la misma venta no la duplica.',
+      'Envía al sistema las ventas y anulaciones sin enviar de tu usuario, en el orden en que las hiciste. Se hace sola al abrir la aplicación o volver a ella, al volver la señal, después de cada venta o anulación y cada 2 minutos. Enviar dos veces lo mismo no lo duplica.',
     )
     expect(texto).not.toMatch(/bot[oó]n|tocá|apretá/i)
     expect(reglas).toEqual(expect.arrayContaining(['SYN-02', 'SYN-03', 'INV-06']))
@@ -178,7 +178,7 @@ describe('textos de ayuda de la conciliación y las observaciones (change 22c, t
     const { titulo, texto, reglas } = AYUDAS['ruta.observacionesYRechazos']
     expect(titulo).toBe('Observaciones y rechazos')
     expect(texto).toBe(
-      'Muestra qué anotó el sistema en cada venta enviada y por qué no aceptó las rechazadas. Las observaciones las revisa administración; no tenés que hacer nada. Una venta rechazada no se vuelve a enviar sola.',
+      'Muestra qué anotó el sistema en cada venta o anulación enviada y por qué no aceptó las rechazadas. Las observaciones las revisa administración; no tenés que hacer nada. Lo rechazado no se vuelve a enviar solo.',
     )
     expect(reglas).toEqual(expect.arrayContaining(['SYN-04', 'SYN-07', 'SYN-08', 'SYN-09']))
   })
@@ -197,5 +197,63 @@ describe('textos de ayuda de la conciliación y las observaciones (change 22c, t
   it('las ayudas de stock y crédito ya no dicen «al abrir la jornada»', () => {
     expect(AYUDAS['ruta.stockDelVehiculo'].texto).not.toMatch(/al abrir la jornada/)
     expect(AYUDAS['ruta.creditoSinSenal'].texto).not.toMatch(/al abrir la jornada/)
+  })
+})
+
+/**
+ * Change 22d, tarea 14.1 (spec `sistema/ayuda-contextual`, «Las pantallas de ruta explican la
+ * anulación y la jornada no abierta»; D12; ADR-051, ADR-066): tres claves nuevas y cuatro
+ * revisadas, con los textos aprobados el 2026-11-03, sin ejemplos. Los IDs citados existen
+ * (`trazabilidad.test.ts`; ADR-066 existe como *Propuesto*).
+ */
+describe('textos de ayuda de la anulación y la jornada no abierta (change 22d, tarea 14.1)', () => {
+  it('ruta.anularVenta: deja sin efecto una venta de la jornada, también sin señal, entera y una sola vez', () => {
+    const { titulo, texto, reglas } = AYUDAS['ruta.anularVenta']
+    expect(titulo).toBe('Anular una venta')
+    expect(texto).toBe(
+      'Deja sin efecto una venta de tu jornada, también sin señal: la mercadería vuelve al stock del vehículo y al cliente se le descuenta el total de su cuenta. Se anula entera y una sola vez, y se envía al sistema como las ventas.',
+    )
+    expect(reglas).toEqual(expect.arrayContaining(['VTA-20', 'VTA-21', 'VTA-24', 'ADR-066']))
+  })
+
+  it('ruta.anulacionRechazada: el motivo está en el detalle, la venta sigue vigente, no se reenvía sola', () => {
+    const { titulo, texto, reglas } = AYUDAS['ruta.anulacionRechazada']
+    expect(titulo).toBe('Anulación rechazada')
+    expect(texto).toBe(
+      'El sistema no aceptó la anulación. En el detalle ves el motivo. La venta sigue vigente: el teléfono la vuelve a descontar del stock y de la cuenta del cliente. No se vuelve a enviar sola: avisá a administración.',
+    )
+    expect(reglas).toEqual(expect.arrayContaining(['SYN-06', 'SYN-09', 'VTA-24', 'ADR-066']))
+  })
+
+  it('ruta.jornadaNoAbierta: no se puede vender ni anular, lo vendido se envía y se abre otra jornada con señal', () => {
+    const { titulo, texto, reglas } = AYUDAS['ruta.jornadaNoAbierta']
+    expect(titulo).toBe('Jornada no abierta')
+    expect(texto).toBe(
+      'El sistema avisó que tu jornada ya no está abierta. No podés vender ni anular ventas; lo que ya vendiste se sigue enviando. Para seguir vendiendo, abrí una jornada nueva con señal.',
+    )
+    expect(reglas).toEqual(expect.arrayContaining(['RUT-09', 'RUT-03', 'ADR-066']))
+  })
+
+  it.each(['ruta.anularVenta', 'ruta.anulacionRechazada', 'ruta.jornadaNoAbierta'] as const)(
+    '%s no lleva ejemplo ni "Ver más"',
+    (clave) => {
+      const entrada: Record<string, unknown> = AYUDAS[clave]
+      expect(entrada.ejemplo).toBeUndefined()
+      expect(entrada.verMas).toBeUndefined()
+    },
+  )
+
+  it('el stock y el crédito nombran lo anulado además de lo vendido', () => {
+    expect(AYUDAS['ruta.stockDelVehiculo'].texto).toContain('más lo que anulaste')
+    expect(AYUDAS['ruta.creditoSinSenal'].texto).toContain('menos lo que le anulaste')
+  })
+
+  it('«Sincronizar» y «Observaciones y rechazos» nombran las anulaciones', () => {
+    expect(AYUDAS['ruta.sincronizar'].texto).toContain('ventas y anulaciones sin enviar')
+    expect(AYUDAS['ruta.observacionesYRechazos'].texto).toContain('venta o anulación enviada')
+  })
+
+  it('«Si no alcanza, la venta no se confirma: actualizá los datos con señal.» sigue en el stock', () => {
+    expect(AYUDAS['ruta.stockDelVehiculo'].texto).toContain('Si no alcanza, la venta no se confirma: actualizá los datos con señal.')
   })
 })

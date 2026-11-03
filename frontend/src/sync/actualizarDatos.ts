@@ -1,5 +1,6 @@
 import { aplicarBootstrap } from './aplicarBootstrap'
 import { pedirBootstrap } from './clienteBootstrap'
+import { marcarJornadaDeLaSesionNoAbierta } from './estadoDeJornada'
 
 /**
  * "Actualizar datos" del inicio de `/ruta` (change 21, `design.md` D2, D3; SYN-11): pide un
@@ -15,6 +16,8 @@ export async function actualizarDatos(): Promise<ResultadoActualizacion> {
       await aplicarBootstrap(r.bootstrap)
       return 'actualizados'
     case 'jornada_requerida':
+      // Change 22d (D8): la jornada de la sesión ya no está abierta; el estado no se conoce.
+      await marcarJornadaDeLaSesionNoAbierta('DESCONOCIDO', new Date())
       return 'sin_jornada'
     case 'sin_sesion':
       return 'sesion_vencida'

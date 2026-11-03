@@ -24,7 +24,7 @@ export function clienteDePrueba(n: number, nombre: string): Bootstrap['clientes'
   }
 }
 
-export function bootstrapDePrueba(opciones: { clientes?: Bootstrap['clientes']; generado?: string } = {}): Bootstrap {
+export function bootstrapDePrueba(opciones: { clientes?: Bootstrap['clientes']; generado?: string; secuenciaProcesada?: number | null } = {}): Bootstrap {
   return {
     generado_en: opciones.generado ?? '2026-10-30T10:00:00Z',
     sesion: {
@@ -37,6 +37,7 @@ export function bootstrapDePrueba(opciones: { clientes?: Bootstrap['clientes']; 
         abierta_en: '2026-10-30T09:00:00Z',
       },
       numeracion: { prefijo: '0001', ultimo_correlativo: 7 },
+      secuencia_procesada: opciones.secuenciaProcesada ?? null,
     },
     configuracion: {
       organizacion_id: ID(9),

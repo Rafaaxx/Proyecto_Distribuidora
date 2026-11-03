@@ -1,7 +1,9 @@
 import { liveQuery } from 'dexie'
 import { useEffect, useState } from 'react'
 
+import { movimientosQueCuentan } from '../../../domain/ruta/disponiblesLocales'
 import {
+  describirStockBase,
   filtrarYOrdenarClientes,
   precioDePresentacion,
   stockEnCajasYUnidades,
@@ -14,6 +16,7 @@ import {
   type ProductoLocal,
   type SesionLocal,
 } from '../../../lib/dispositivo/db'
+import { leerConciliacion, leerSaldoConsiderado, leerStockDeTodos } from './disponibles'
 
 /**
  * Hooks de lectura de la base local del área `/ruta` (change 21, tarea 7.2; spec
@@ -81,6 +84,10 @@ export function useClientesLocales(
 export interface DatosDeCliente {
   /** `null` si el cliente no está en la base local. */
   cliente: ClienteLocal | null
+  /** Saldo local: el del bootstrap más lo que cuenta de la cola (22c, D6; CRE-08). */
+  saldo: string | null
+  /** Hay operaciones del teléfono que cuentan sobre el bootstrap (leyenda). */
+  incluyeVentas: boolean
   /** Lista aplicable: la asignada al cliente o, si no tiene, la predeterminada. */
   listaNombre: string | null
   fechaBootstrap: string
@@ -94,7 +101,15 @@ export function useClienteLocal(id: string): Lectura<DatosDeCliente> {
     const listas = await baseLocal.listas.toArray()
     const lista =
       listas.find((l) => l.id === cliente?.lista_precio_id) ?? listas.find((l) => l.es_predeterminada) ?? null
-    return { estado: 'listo', cliente, listaNombre: lista?.nombre ?? null, fechaBootstrap: fecha }
+    const saldo = cliente === null ? null : await leerSaldoConsiderado(cliente.id)
+    return {
+      estado: 'listo',
+      cliente,
+      saldo,
+      incluyeVentas: cliente !== null && (await hayOperacionesQueCuentan()),
+      listaNombre: lista?.nombre ?? null,
+      fechaBootstrap: fecha,
+    }
   }, [id])
 }
 
@@ -173,6 +188,16 @@ export interface FilaDeStock {
   cantidad_base: number
   cajas: number
   unidades: number
+  /** "3 cajas y 2 unidades"; con prefijo "-" si el disponible local es negativo (22c, D6). */
+  descripcion: string
+}
+
+/** Hay movimientos de la jornada que todavía cuentan sobre los valores del bootstrap (leyenda). */
+async function hayOperacionesQueCuentan(): Promise<boolean> {
+  const sesion = await baseLocal.sesion.get('actual')
+  if (sesion === undefined) return false
+  const movimientos = await baseLocal.movimientos_locales.filter((m) => m.jornada_id === sesion.jornada.id).toArray()
+  return movimientosQueCuentan(movimientos, sesion.jornada.id, await leerConciliacion()).length > 0
 }
 
 /** Stock de la ubicación tomada, en cajas (presentación de referencia) y unidades (INV-04). */
@@ -181,30 +206,37 @@ export function useStockLocal(): Lectura<DatosDeStock> {
     const fecha = await fechaDeLosDatos()
     if (fecha === null) return { estado: 'sin_datos' }
 
-    const [stock, productos, presentaciones] = await Promise.all([
-      baseLocal.stock.toArray(),
+    // Disponible local (22c, D6; RUT-04): bootstrap más lo que cuenta de la cola.
+    const [disponibles, productos, presentaciones, incluyeVentas] = await Promise.all([
+      leerStockDeTodos(),
       baseLocal.productos.toArray(),
       baseLocal.presentaciones.toArray(),
+      hayOperacionesQueCuentan(),
     ])
     const productoPorId = new Map(productos.map((p) => [p.id, p]))
     const unidadesPorCaja = new Map(
       presentaciones.filter((p) => p.es_referencia).map((p) => [p.producto_id, p.unidades_base]),
     )
 
-    const filas: FilaDeStock[] = stock.flatMap((s) => {
-      const producto = productoPorId.get(s.producto_id)
+    const filas: FilaDeStock[] = [...disponibles].flatMap(([productoId, cantidadBase]) => {
+      const producto = productoPorId.get(productoId)
       if (producto === undefined) return []
-      const { cajas, unidades } = stockEnCajasYUnidades(
-        s.cantidad_base,
-        unidadesPorCaja.get(s.producto_id) ?? 1,
-      )
+      const porCaja = unidadesPorCaja.get(productoId) ?? 1
+      const { cajas, unidades } = stockEnCajasYUnidades(cantidadBase, porCaja)
       return [
-        { producto_id: s.producto_id, nombre: producto.nombre, cantidad_base: s.cantidad_base, cajas, unidades },
+        {
+          producto_id: productoId,
+          nombre: producto.nombre,
+          cantidad_base: cantidadBase,
+          cajas,
+          unidades,
+          descripcion: describirStockBase(cantidadBase, porCaja),
+        },
       ]
     })
     filas.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }))
 
-    return { estado: 'listo', filas, fechaBootstrap: fecha }
+    return { estado: 'listo', filas, fechaBootstrap: fecha, incluyeVentas }
   }, [])
 }
 
@@ -221,4 +253,6 @@ export interface DatosDeProductos {
 export interface DatosDeStock {
   filas: FilaDeStock[]
   fechaBootstrap: string
+  /** Hay operaciones del teléfono que cuentan: las pantallas muestran la leyenda. */
+  incluyeVentas: boolean
 }

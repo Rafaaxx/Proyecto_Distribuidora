@@ -126,6 +126,79 @@ describe('aplicar los resultados del lote (tarea 3.1)', () => {
   })
 })
 
+describe('las observaciones se guardan con el resultado (change 22c, tarea 5.1; INV-01, SYN-04, SYN-07)', () => {
+  const OBSERVACIONES = [
+    { codigo: 'STOCK_NEGATIVO', operacion_tipo: 'VENTA_CONFIRMAR', operacion_id: 'x', detalle: { producto_id: 'p1' } },
+    { codigo: 'MEDIO_INACTIVO', operacion_tipo: 'VENTA_CONFIRMAR', operacion_id: 'x', detalle: null },
+  ]
+
+  beforeEach(async () => {
+    await Promise.all(baseLocal.tables.map((t) => t.clear()))
+    await sembrarComando(comandoDePrueba(1))
+    await sembrarComando(comandoDePrueba(2))
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('«Venta con observaciones»: la fila de cola guarda las dos con el estado, en la misma escritura', async () => {
+    await aplicarResultados(
+      [{ ...resultado('op-1', 'ACEPTADO_CON_OBSERVACIONES'), observaciones: OBSERVACIONES }],
+      AHORA,
+    )
+
+    expect(await baseLocal.cola.get(1)).toMatchObject({
+      estado: 'ACEPTADO_CON_OBSERVACIONES',
+      observaciones: OBSERVACIONES,
+    })
+  })
+
+  it('«Falla al escribir los resultados»: con una falla inyectada no queda ninguna observación (INV-01)', async () => {
+    const original = baseLocal.ventas.where.bind(baseLocal.ventas)
+    let llamadas = 0
+    vi.spyOn(baseLocal.ventas, 'where').mockImplementation(((...args: Parameters<typeof original>) => {
+      llamadas += 1
+      if (llamadas === 2) throw new Error('falla inyectada')
+      return original(...args)
+    }) as typeof original)
+
+    await expect(
+      aplicarResultados(
+        [
+          { ...resultado('op-1', 'ACEPTADO_CON_OBSERVACIONES'), observaciones: OBSERVACIONES },
+          { ...resultado('op-2', 'ACEPTADO_CON_OBSERVACIONES'), observaciones: OBSERVACIONES },
+        ],
+        AHORA,
+      ),
+    ).rejects.toThrow('falla inyectada')
+
+    vi.restoreAllMocks()
+    const cola = await baseLocal.cola.orderBy('secuencia').toArray()
+    expect(cola.map((c) => c.estado)).toEqual(['PENDIENTE', 'PENDIENTE'])
+    expect(cola.every((c) => c.observaciones === undefined)).toBe(true)
+  })
+
+  it('«Respuesta sin observaciones»: sin la lista, observaciones queda sin dato; con lista vacía, vacía', async () => {
+    await aplicarResultados([resultado('op-1', 'ACEPTADO')], AHORA)
+    await aplicarResultados([{ ...resultado('op-2', 'ACEPTADO'), observaciones: [] }], AHORA)
+
+    expect((await baseLocal.cola.get(1))?.observaciones).toBeUndefined()
+    expect((await baseLocal.cola.get(2))?.observaciones).toEqual([])
+  })
+
+  it('un rechazo conserva su código y no inventa observaciones', async () => {
+    await aplicarResultados([resultado('op-1', 'RECHAZADO', 'TOTALES_INCONSISTENTES')], AHORA)
+
+    expect(await baseLocal.cola.get(1)).toMatchObject({ estado: 'RECHAZADO', error_codigo: 'TOTALES_INCONSISTENTES' })
+    expect((await baseLocal.cola.get(1))?.observaciones).toBeUndefined()
+  })
+
+  it('la base v3 abre igual: el esquema de cola no cambia (D3, sin versión nueva)', async () => {
+    expect(baseLocal.verno).toBe(3)
+    expect(baseLocal.cola.schema.indexes.map((i) => i.name)).toEqual(['operation_id', 'estado'])
+  })
+})
+
 describe('el stock y el saldo locales siguen contando la venta aceptada (tarea 3.2; D4)', () => {
   beforeEach(async () => {
     await Promise.all(baseLocal.tables.map((t) => t.clear()))

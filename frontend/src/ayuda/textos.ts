@@ -901,15 +901,15 @@ export const AYUDAS = {
   'ruta.creditoSinSenal': {
     titulo: 'Crédito del cliente',
     texto:
-      'Se calcula con la deuda que bajó al abrir la jornada más lo que le vendiste y cobraste desde el teléfono. El sistema lo vuelve a calcular cuando recibe la venta.',
-    reglas: ['CRE-08', 'CRE-09'],
+      'Se calcula con la deuda de la última actualización de datos más lo que le vendiste y cobraste desde el teléfono después.',
+    reglas: ['CRE-08', 'CRE-09', 'ADR-065'],
     verMas: 'credito',
   },
   'ruta.stockDelVehiculo': {
     titulo: 'Stock del vehículo',
     texto:
-      'Es lo que bajó al abrir la jornada menos lo que vendiste desde el teléfono. Si no alcanza, la venta no se confirma: actualizá los datos con señal.',
-    reglas: ['STK-06', 'RUT-04'],
+      'Es el stock de la última actualización de datos menos lo que vendiste desde el teléfono después. Si no alcanza, la venta no se confirma: actualizá los datos con señal.',
+    reglas: ['STK-06', 'RUT-04', 'ADR-065'],
   },
   'ruta.pinSupervisor': {
     titulo: 'PIN del supervisor',
@@ -932,14 +932,21 @@ export const AYUDAS = {
   'ruta.ventaConObservaciones': {
     titulo: 'Con observaciones',
     texto:
-      'El sistema aceptó la venta y anotó algo para que administración lo revise. La venta vale igual; no tenés que hacer nada.',
+      'El sistema aceptó la venta y anotó algo para que administración lo revise. En el detalle de la venta ves qué anotó. La venta vale igual; no tenés que hacer nada.',
     reglas: ['SYN-04', 'SYN-05', 'SYN-08'],
   },
   'ruta.ventaRechazada': {
     titulo: 'Rechazada',
     texto:
-      'El sistema no aceptó la venta por un problema de datos, no por stock ni por crédito. Sigue guardada en el teléfono y no se vuelve a enviar sola: avisá a administración.',
-    reglas: ['SYN-06', 'SYN-09'],
+      'El sistema no aceptó la venta por un problema de datos, no por stock ni por crédito. En el detalle ves el motivo. Sigue guardada, no se vuelve a enviar sola y el teléfono la sigue descontando del stock y de la cuenta del cliente: avisá a administración.',
+    reglas: ['SYN-06', 'SYN-09', 'ADR-065'],
+  },
+  // --- Conciliación y observaciones de ruta (change 22c, ADR-065; textos aprobados el 2026-11-02, sin ejemplos) ---
+  'ruta.observacionesYRechazos': {
+    titulo: 'Observaciones y rechazos',
+    texto:
+      'Muestra qué anotó el sistema en cada venta enviada y por qué no aceptó las rechazadas. Las observaciones las revisa administración; no tenés que hacer nada. Una venta rechazada no se vuelve a enviar sola.',
+    reglas: ['SYN-04', 'SYN-07', 'SYN-08', 'SYN-09'],
   },
   'ruta.versionMinima': {
     titulo: 'Versión desactualizada',

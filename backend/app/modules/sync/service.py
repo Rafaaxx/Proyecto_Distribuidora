@@ -89,6 +89,11 @@ from app.modules.sync.models import Comando as Comando
 # INFO (`02` §18).
 logger = logging.getLogger("app.sync")
 
+# El rechazo de un ítem del lote cuando el dispositivo de la sesión está dado de baja (SYN-06): no
+# es un error de dominio del bus sino el motivo de la cuarentena. El fixture de códigos del
+# teléfono (`shared/fixtures/sync/codigos-de-sincronizacion.json`, change 22c D5) lo cita.
+CODIGO_DISPOSITIVO_REVOCADO = "DISPOSITIVO_REVOCADO"
+
 ResultadoHandler = tuple[str, dict[str, object] | None, str | None]
 """`(estado, resultado, error_codigo)`, tal como lo devuelve un handler."""
 
@@ -610,6 +615,16 @@ class ItemLote:
 
 
 @dataclass(frozen=True)
+class ObservacionDeResultado:
+    """Una observación del comando, tal como viaja en su resultado (change 22c, D3, SYN-07)."""
+
+    codigo: str
+    operacion_tipo: str
+    operacion_id: UUID
+    detalle: dict[str, object] | None
+
+
+@dataclass(frozen=True)
 class ResultadoItemLote:
     """Un resultado por comando del lote (SYN-04, SYN-09, `02` §6.4):
     identificado por su `operation_id`, nunca por su posición -- el cliente
@@ -619,6 +634,9 @@ class ResultadoItemLote:
     estado: str
     resultado: dict[str, object] | None
     error_codigo: str | None
+    # Las observaciones del propio comando (vacía si no hay o si no llegó a registrarse), también
+    # en el reenvío de un comando ya procesado (change 22c, D3; INV-06).
+    observaciones: tuple[ObservacionDeResultado, ...] = ()
 
 
 def poner_en_cuarentena(
@@ -842,6 +860,49 @@ def procesar_lote(
     config: ConfiguracionReintentos | None = None,
     dormir: Callable[[float], None] = time.sleep,
 ) -> list[ResultadoItemLote]:
+    """Procesa el lote de sincronización (`_procesar_lote`) y registra su cierre (change 22c, D7,
+    `02` §17): tamaño, procesados, aceptados, con observaciones, rechazados, si se cortó por un
+    error transitorio y la duración. Solo metadata: nunca el contenido de los comandos ni el
+    detalle de sus observaciones (`02` §18). Un lote rechazado entero (`ColaAjenaError`) no
+    llega a procesarse y no registra cierre."""
+    inicio = time.monotonic()
+    resultados = _procesar_lote(
+        sesion,
+        reloj,
+        organizacion_id=organizacion_id,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        items=items,
+        config=config,
+        dormir=dormir,
+    )
+    estados = [r.estado for r in resultados]
+    logger.info(
+        "Lote de sincronización cerrado",
+        extra={
+            "lote_tamano": len(items),
+            "lote_procesados": sum(1 for e in estados if e != "ERROR_TRANSITORIO"),
+            "lote_aceptados": estados.count("ACEPTADO"),
+            "lote_con_observaciones": estados.count("ACEPTADO_CON_OBSERVACIONES"),
+            "lote_rechazados": estados.count("RECHAZADO"),
+            "lote_cortado": "ERROR_TRANSITORIO" in estados,
+            "lote_duracion_ms": round((time.monotonic() - inicio) * 1000, 2),
+        },
+    )
+    return resultados
+
+
+def _procesar_lote(
+    sesion: Session,
+    reloj: Clock,
+    *,
+    organizacion_id: UUID,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+    items: list[ItemLote],
+    config: ConfiguracionReintentos | None = None,
+    dormir: Callable[[float], None] = time.sleep,
+) -> list[ResultadoItemLote]:
     """Procesa el lote de sincronización (`02` §6.4, change 04, grupo 8).
 
     - Lote vacío: devuelve `[]` sin error (tarea 8.2).
@@ -890,7 +951,7 @@ def procesar_lote(
                         operation_id=item.operation_id,
                         estado="RECHAZADO",
                         resultado=None,
-                        error_codigo="DISPOSITIVO_REVOCADO",
+                        error_codigo=CODIGO_DISPOSITIVO_REVOCADO,
                     )
                 )
                 continue
@@ -903,14 +964,14 @@ def procesar_lote(
                 operation_id=item.operation_id,
                 tipo=item.tipo,
                 contenido=item.contenido,
-                motivo="DISPOSITIVO_REVOCADO",
+                motivo=CODIGO_DISPOSITIVO_REVOCADO,
             )
             resultados_cuarentena.append(
                 ResultadoItemLote(
                     operation_id=item.operation_id,
                     estado="RECHAZADO",
                     resultado=None,
-                    error_codigo="DISPOSITIVO_REVOCADO",
+                    error_codigo=CODIGO_DISPOSITIVO_REVOCADO,
                 )
             )
         return resultados_cuarentena
@@ -962,6 +1023,17 @@ def procesar_lote(
                     estado=comando.estado,
                     resultado=comando.resultado,
                     error_codigo=comando.error_codigo,
+                    observaciones=tuple(
+                        ObservacionDeResultado(
+                            codigo=o.codigo,
+                            operacion_tipo=o.operacion_tipo,
+                            operacion_id=o.operacion_id,
+                            detalle=o.detalle,
+                        )
+                        for o in repository.listar_observaciones_de_comando(
+                            sesion, organizacion_id, comando.id
+                        )
+                    ),
                 )
             )
     return resultados

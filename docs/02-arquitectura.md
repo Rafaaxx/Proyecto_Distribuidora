@@ -304,7 +304,7 @@ Errores transitorios de PostgreSQL (serialización `40001`, deadlock `40P01`) se
 ### 6.4 Lote de sincronización
 
 - El dispositivo envía hasta 50 comandos por lote, ordenados por `secuencia`.
-- El servidor los procesa en orden y responde un resultado por comando.
+- El servidor los procesa en orden y responde un resultado por comando: `operation_id`, `estado`, `resultado`, `error_codigo` y la lista `observaciones` (código, tipo e id de la operación y detalle; vacía si no hay), también al reenviar un comando ya procesado (ADR-065). Una venta o cobranza sin conexión nunca se rechaza por una regla de negocio de SYN-05 (INV-17): se acepta con observaciones.
 - Un resultado ACEPTADO, ACEPTADO_CON_OBSERVACIONES o RECHAZADO no detiene el lote.
 - Un error transitorio detiene el lote en ese comando: los siguientes no se procesan, para preservar el orden (SYN-03).
 - La cola pertenece al usuario que generó los comandos. Solo ese usuario, autenticado en ese dispositivo, puede sincronizarla.
@@ -315,7 +315,7 @@ Errores transitorios de PostgreSQL (serialización `40001`, deadlock `40P01`) se
 | --- | :-: | :-: |
 | `JORNADA_ABRIR`, `JORNADA_RENDIR`, `JORNADA_CERRAR`, `JORNADA_LIBERAR` | ✓ | |
 | `VENTA_CONFIRMAR` | ✓ | ✓ |
-| `VENTA_ANULAR` | ✓ | (change 22c, VTA-24) |
+| `VENTA_ANULAR` | ✓ | (change 22d, VTA-24) |
 | `COBRANZA_REGISTRAR` | ✓ | ✓ |
 | `COBRANZA_ANULAR` | ✓ | |
 | `COMPRA_CONFIRMAR`, `COMPRA_ANULAR` | ✓ | |
@@ -361,7 +361,7 @@ Un handler puede devolver, además del resultado, observaciones de negocio (SYN-
 
 `POST /api/v1/ventas` admite, fuera del contenido, `credenciales` (autorizador y PIN) que el bus entrega al handler sin persistirlas ni incluirlas en la huella; el lote de sincronización no las admite. `POST /api/v1/yo/pin-autorizacion` lleva el PIN nuevo y la contraseña actual del mismo modo, con el contenido del comando vacío; `GET /api/v1/yo/pin-autorizacion` informa `puede_definir` y `tiene_pin_autorizacion` (ADR-055).
 
-`VENTA_ANULAR` (`ANULAR_VENTA`; solo `ONLINE` hasta el change 22c) lleva la venta (`venta_id`, el identificador que generó el dispositivo), un motivo del ámbito `ANULACION_VENTA`, una observación opcional de hasta 500 caracteres y `devuelve_dinero` (booleano estricto: obligatorio si la venta tiene su cobranza confirmada y omitido si no). Errores propios: `VENTA_YA_ANULADA` y `CONSUMIDOR_FINAL_SIN_DEVOLUCION` (409) y `DEVOLUCION_INVALIDA` (422); además `MOTIVO_INVALIDO`, `OBSERVACION_INVALIDA`, `UBICACION_TOMADA` y `UBICACION_INACTIVA`. Ruta `POST /api/v1/ventas/{venta_id}/anulacion`. No emite observaciones de SYN-07: el reingreso nunca deja stock negativo. Una fila de auditoría por comando, con el motivo y, en su observación, la cobranza anulada y la constancia de la ubicación tomada (AUD-01, AUD-02, ADR-058).
+`VENTA_ANULAR` (`ANULAR_VENTA`; solo `ONLINE` hasta el change 22d) lleva la venta (`venta_id`, el identificador que generó el dispositivo), un motivo del ámbito `ANULACION_VENTA`, una observación opcional de hasta 500 caracteres y `devuelve_dinero` (booleano estricto: obligatorio si la venta tiene su cobranza confirmada y omitido si no). Errores propios: `VENTA_YA_ANULADA` y `CONSUMIDOR_FINAL_SIN_DEVOLUCION` (409) y `DEVOLUCION_INVALIDA` (422); además `MOTIVO_INVALIDO`, `OBSERVACION_INVALIDA`, `UBICACION_TOMADA` y `UBICACION_INACTIVA`. Ruta `POST /api/v1/ventas/{venta_id}/anulacion`. No emite observaciones de SYN-07: el reingreso nunca deja stock negativo. Una fila de auditoría por comando, con el motivo y, en su observación, la cobranza anulada y la constancia de la ubicación tomada (AUD-01, AUD-02, ADR-058).
 
 Cada tipo declara sus permisos en el catálogo (`permisos`, reemplaza a `permiso_offline`) y, si siempre recibe un secreto (contraseña o PIN), `exige_credenciales_efimeras`: el secreto viaja fuera del contenido y de la huella, y el lote rechaza ese tipo en cualquier modo con `MODO_NO_ADMITIDO_PARA_TIPO` (`USUARIO_CREAR`, `PIN_AUTORIZACION_ROTAR`, `PIN_AUTORIZACION_PROPIO_DEFINIR`, `USUARIO_CONTRASENA_RESTABLECER`, `CONTRASENA_PROPIA_CAMBIAR`); desde un dispositivo revocado se responde `DISPOSITIVO_REVOCADO` y no se guarda en cuarentena. Ningún error de validación devuelve el valor recibido (ADR-055, ADR-056).
 
@@ -613,7 +613,7 @@ Agrupación de endpoints de la etapa 1:
 | Tabla | Contenido |
 | --- | --- |
 | `meta` | Versión de esquema local, dispositivo, último correlativo y última secuencia, fecha de bootstrap |
-| `sesion` | Usuario, permisos, topes, derivación del PIN, jornada abierta |
+| `sesion` | Usuario, permisos, topes, derivación del PIN, jornada abierta y la **secuencia procesada** del último bootstrap (nula si faltó) |
 | `configuracion` | Parámetros de la organización |
 | `productos`, `presentaciones` | Catálogo activo |
 | `clientes` | Clientes con datos de crédito |
@@ -622,11 +622,11 @@ Agrupación de endpoints de la etapa 1:
 | `stock` | Stock de la ubicación tomada |
 | `autorizadores` | Derivaciones de PIN de supervisores |
 | `ventas`, `cobranzas` | Operaciones locales con estado de envío (`PENDIENTE`, `ACEPTADA`, `CON_OBSERVACIONES`, `RECHAZADA`; solo cambia con el resultado del servidor) y los datos congelados de la nota |
-| `movimientos_locales` | Efectos locales sobre stock y saldos (`VENTA_STOCK`, `VENTA_DEBITO`, `COBRANZA_CREDITO`), para calcular disponibles |
-| `cola` | Comandos ordenados por secuencia; `operation_id` único. `estado` es `PENDIENTE` hasta el resultado y luego `ACEPTADO`, `ACEPTADO_CON_OBSERVACIONES` o `RECHAZADO`, con el código de error y el momento del resultado. Nada se borra; se envían solo los `PENDIENTE` del usuario y del dispositivo de la sesión (ADR-064) |
+| `movimientos_locales` | Efectos locales sobre stock y saldos (`VENTA_STOCK`, `VENTA_DEBITO`, `COBRANZA_CREDITO`), para calcular disponibles. Su `estado_operacion` queda sin uso: qué movimientos cuentan lo decide la secuencia procesada y la secuencia de la operación en `cola` (CRE-08) |
+| `cola` | Comandos ordenados por secuencia; `operation_id` único. `estado` es `PENDIENTE` hasta el resultado y luego `ACEPTADO`, `ACEPTADO_CON_OBSERVACIONES` o `RECHAZADO`, con el código de error, el momento del resultado y las **observaciones** recibidas (se escriben en la misma transacción que el resultado). Nada se borra; se envían solo los `PENDIENTE` del usuario y del dispositivo de la sesión (ADR-064, ADR-065) |
 | `intentos_pin` | Fallos del PIN de supervisor por par (usuario, supervisor) y su bloqueo |
 
-Las tablas de operaciones (versión 3 de Dexie) no las toca el bootstrap. Confirmar una venta local escribe venta, cobranza, movimientos, comando y los dos contadores en **una sola transacción**: todo o nada. Reconfirmar con el mismo `operation_id` no encola otra venta (ADR-063).
+Las tablas de operaciones (versión 3 de Dexie) no las toca el bootstrap. El change 22c no suma versión de Dexie: la marca y las observaciones son campos de filas existentes (ADR-065). Confirmar una venta local escribe venta, cobranza, movimientos, comando y los dos contadores en **una sola transacción**: todo o nada. Reconfirmar con el mismo `operation_id` no encola otra venta (ADR-063).
 
 **DEBE:** confirmar una venta local es una transacción Dexie que escribe la venta, los movimientos locales y el comando en la cola, todo o nada.
 En la versión 2 de Dexie (change 21) el saldo viaja dentro de `clientes` (no hay `saldos_clientes`) y las tablas maestras son las que reemplaza el bootstrap; `meta` guarda también el usuario local, la jornada, la fecha del bootstrap y la derivación del PIN con su contador de fallos (`pin_hash`, `pin_sal`, `pin_iteraciones`, `pin_intentos`). El bootstrap reemplaza las tablas maestras en una sola transacción sobre una lista explícita; `ventas`, `cobranzas`, `movimientos_locales` y `cola` las agrega la versión 3 (change 22a) y el bootstrap no las toca (ADR-062). `meta` guarda además el estado de la sincronización: `ultima_sincronizacion` (momento del último ciclo exitoso), `ultimo_error_sync` (tipo, código y momento del último corte, que un éxito posterior borra) y `app_version_minima` (última mínima conocida, §6.6). No hay versión nueva de Dexie: el índice `estado` de `cola` ya existía (ADR-064).
@@ -638,14 +638,14 @@ En la versión 2 de Dexie (change 21) el saldo viaja dentro de `clientes` (no ha
 - **DEBE:** una sola sincronización a la vez, garantizada con Web Locks API (`distribuidora:sync`, `ifAvailable`), incluso con varias pestañas abiertas: la pestaña que no obtiene el candado no espera ni envía y muestra «Sincronizando en otra pestaña». Si llegan disparadores durante un envío propio, se hace a lo sumo una vuelta más al terminar. Sin Web Locks hay un candado dentro de la pestaña; dos pestañas podrían entrar a la vez y es seguro porque el servidor no duplica (INV-06).
 - Usa una cola propia: envía en lotes de hasta 50, en orden de secuencia, solo los `PENDIENTE` del usuario y del dispositivo de la sesión (de cualquier jornada); un `RECHAZADO` no se reenvía solo. Aplica los resultados por `operation_id` en una sola transacción Dexie por lote (INV-01).
 - Clasifica los cortes: transitorios (sin red, 5xx, 429, `ERROR_TRANSITORIO` de un ítem) se reintentan con espera exponencial de 5, 10, 20, 40, 80 y luego 120 s fijos (±20 %); la sesión vencida (401 tras la renovación) no reintenta y pide iniciar sesión con señal; un error del pedido (403, 422) no reintenta solo y se muestra con su código.
-- Muestra en todo momento, en la cabecera de `/ruta`, el estado de conexión y «N sin enviar» (o «Todo enviado»), con un aviso si hay ventas rechazadas; el inicio y la pantalla «Sincronización» muestran además la última sincronización exitosa, el último error con su texto y código, el botón «Sincronizar» y las ventas «Con observaciones» y «Rechazadas» (ADR-064).
+- Muestra en todo momento, en la cabecera de `/ruta`, el estado de conexión y «N sin enviar» (o «Todo enviado»), con un aviso si hay ventas rechazadas; el inicio y la pantalla «Sincronización» muestran además la última sincronización exitosa, el último error con su texto y código, el botón «Sincronizar» y las ventas «Con observaciones» y «Rechazadas» (ADR-064). Cada venta «Con observaciones» o «Rechazada» muestra, en la pantalla «Sincronización» (resumen) y en el detalle de la venta (explicación), el texto de cada observación o el motivo del rechazo, traducidos con una tabla cerrada de códigos (`shared/fixtures/sync/codigos-de-sincronizacion.json`, validada por el servidor y por el teléfono); un código desconocido muestra un texto general y el código. Los nombres (producto, medio, autorizador) salen de la base local; si ya no están se dice «un producto». Una venta enviada antes del 22c, sin observaciones guardadas, lo dice (ADR-065).
 - Pide almacenamiento persistente (`navigator.storage.persist()`) tras el primer bootstrap y en cada arranque hasta que se conceda, y muestra una advertencia si el navegador lo niega (ADR-062 punto 18).
 
 ### 13.4 Bootstrap
 
 - `GET /api/v1/sync/bootstrap` se ejecuta al abrir la jornada, al iniciar sesión o desbloquear con conexión si faltan los datos de la jornada abierta, y con "Actualizar datos" (RUT-03); devuelve el contenido de SYN-11 en una sola foto (§7.1). Lo compone el módulo `sync` por el `service.py` de cada módulo (ADR-062).
 - El contrato acepta un parámetro `since` para descargas incrementales; en la etapa 1 se ignora y siempre devuelve el conjunto completo (ADR-006).
-- El bootstrap reemplaza los datos maestros locales, pero **DEBE NO** tocar `ventas`, `cobranzas`, `movimientos_locales` ni `cola`.
+- El bootstrap reemplaza los datos maestros locales y guarda la **secuencia procesada** en `sesion`, pero **DEBE NO** tocar `ventas`, `cobranzas`, `movimientos_locales` ni `cola`: los movimientos de las operaciones que el bootstrap ya incluye dejan de contarse por la regla de CRE-08, no porque se borren (ADR-065). Stock, Productos y la ficha del cliente muestran los disponibles locales con la leyenda «Incluye tus ventas desde la última actualización» cuando hay ventas que cuentan.
 
 ### 13.5 Service worker
 
@@ -729,7 +729,7 @@ Un servidor con Docker Compose:
 - Logs estructurados en JSON con `request_id`, `operation_id`, organización, usuario y dispositivo.
 - Nunca se registran contraseñas, PIN, tokens ni contenido completo de comandos con datos personales en nivel INFO.
 - `GET /api/v1/salud` verifica la conexión con la base.
-- Métricas mínimas en logs: duración por comando, comandos por resultado, reintentos transitorios, tamaño de lotes de sync.
+- Métricas mínimas en logs: duración por comando, comandos por resultado, reintentos transitorios, tamaño de lotes de sync. Cada lote termina con un registro «Lote de sincronización cerrado» con `lote_tamano`, `lote_procesados`, `lote_aceptados`, `lote_con_observaciones`, `lote_rechazados`, `lote_cortado` (hubo corte por error transitorio) y `lote_duracion_ms`; nunca el contenido de los comandos ni el detalle de las observaciones. Un reenvío del mismo lote registra su propio cierre (ADR-065).
 - Seguimiento de errores con una herramienta externa es opcional en la etapa 1.
 
 ## 18. Seguridad

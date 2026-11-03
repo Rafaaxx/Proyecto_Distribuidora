@@ -41,6 +41,30 @@ describe('cliente del lote de sincronización (tarea 2.1)', () => {
     expect(respuesta).toEqual({ tipo: 'ok', resultados, corte: false })
   })
 
+  it('el resultado trae las observaciones de cada operación tal cual (SYN-07, change 22c, D3)', async () => {
+    const observaciones = [
+      {
+        codigo: 'STOCK_NEGATIVO',
+        operacion_tipo: 'VENTA_CONFIRMAR',
+        operacion_id: 'op-1',
+        detalle: { producto_id: 'p1' },
+      },
+      { codigo: 'MEDIO_INACTIVO', operacion_tipo: 'VENTA_CONFIRMAR', operacion_id: 'op-1', detalle: null },
+    ]
+    const resultados = [
+      { operation_id: 'op-1', estado: 'ACEPTADO_CON_OBSERVACIONES', resultado: null, error_codigo: null, observaciones },
+      { operation_id: 'op-2', estado: 'ACEPTADO', resultado: null, error_codigo: null, observaciones: [] },
+    ]
+    apiFetchMock.mockResolvedValue(json(200, { resultados }))
+
+    const respuesta = await enviarLote(lote)
+
+    expect(respuesta.tipo).toBe('ok')
+    if (respuesta.tipo !== 'ok') return
+    expect(respuesta.resultados[0]?.observaciones).toEqual(observaciones)
+    expect(respuesta.resultados[1]?.observaciones).toEqual([])
+  })
+
   it('un ítem ERROR_TRANSITORIO marca el corte (y los demás resultados se conservan)', async () => {
     const resultados = [
       { operation_id: 'op-1', estado: 'ACEPTADO', resultado: null, error_codigo: null },

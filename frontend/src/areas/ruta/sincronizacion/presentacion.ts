@@ -5,7 +5,6 @@ import type { ErrorDeSincronizacion } from '../../../sync/sincronizar'
  * Textos del estado de la sincronización de `/ruta` (change 22b, `design.md` D8; SYN-04, SYN-06,
  * SYN-09, `02` §12.3, §13.3). Funciones puras: las pantallas solo las muestran.
  */
-export const TEXTO_DE_VENTA_RECHAZADA = 'El sistema no aceptó esta venta. Sigue guardada en el teléfono; avisá a administración.'
 export const TEXTO_DE_OTRA_PESTANA = 'Sincronizando en otra pestaña'
 export const TEXTO_ENVIANDO = 'Enviando…'
 export const TEXTO_DE_SESION_VENCIDA = 'Iniciá sesión con señal para enviar las ventas'

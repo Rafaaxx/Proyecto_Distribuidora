@@ -1,5 +1,7 @@
 import type { DatosParaVender, MedioPagoLocal, MotivoLocal } from '../../../domain/ruta/armadoDeVentaLocal'
+import { movimientosQueCuentan } from '../../../domain/ruta/disponiblesLocales'
 import { baseLocal } from '../../../lib/dispositivo/db'
+import { leerConciliacion } from './disponibles'
 import { useConsultaLocal, type Lectura } from './lecturas'
 
 /**
@@ -14,7 +16,7 @@ export async function leerDatosParaVender(): Promise<DatosParaVender | null> {
   ])
   if (sesion === undefined || configuracion === undefined) return null
 
-  const [clientes, productos, presentaciones, listas, versiones, precios, reglas, stock, catalogos, autorizadores, movimientos] =
+  const [clientes, productos, presentaciones, listas, versiones, precios, reglas, stock, catalogos, autorizadores, movimientosDeLaJornada, conciliacion] =
     await Promise.all([
       baseLocal.clientes.toArray(),
       baseLocal.productos.toArray(),
@@ -27,7 +29,10 @@ export async function leerDatosParaVender(): Promise<DatosParaVender | null> {
       baseLocal.catalogos.toArray(),
       baseLocal.autorizadores.toArray(),
       baseLocal.movimientos_locales.filter((m) => m.jornada_id === sesion.jornada.id).toArray(),
+      leerConciliacion(),
     ])
+  // Change 22c, D1: solo cuentan los movimientos que el bootstrap todavía no incluye.
+  const movimientos = movimientosQueCuentan(movimientosDeLaJornada, sesion.jornada.id, conciliacion)
   const medios: MedioPagoLocal[] = []
   const motivos: MotivoLocal[] = []
   for (const catalogo of catalogos) {

@@ -17,7 +17,7 @@ import { describe, expect, it } from 'vitest'
 const UNIT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const RAIZ = resolve(UNIT, '..', '..', '..')
 const BACKEND = resolve(RAIZ, 'backend', 'tests')
-const SPECS = resolve(RAIZ, 'openspec', 'changes', '22b-motor-sincronizacion', 'specs')
+const SPECS = resolve(RAIZ, 'openspec', 'changes', 'archive', '2026-11-01-22b-motor-sincronizacion', 'specs')
 
 type Destino = readonly [archivo: string, fragmento: string]
 

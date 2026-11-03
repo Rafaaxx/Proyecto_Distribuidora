@@ -45,6 +45,7 @@ from app.modules.sync.schemas import (
     ItemLoteComandoRequest,
     LoteComandosRequest,
     LoteComandosResponse,
+    ObservacionResponse,
     ResultadoItemLoteResponse,
 )
 from app.modules.sync.service import ItemLote
@@ -103,6 +104,15 @@ def sincronizar_lote(
                 estado=resultado.estado,
                 resultado=resultado.resultado,
                 error_codigo=resultado.error_codigo,
+                observaciones=[
+                    ObservacionResponse(
+                        codigo=o.codigo,
+                        operacion_tipo=o.operacion_tipo,
+                        operacion_id=o.operacion_id,
+                        detalle=o.detalle,
+                    )
+                    for o in resultado.observaciones
+                ],
             )
             for resultado in resultados
         ]

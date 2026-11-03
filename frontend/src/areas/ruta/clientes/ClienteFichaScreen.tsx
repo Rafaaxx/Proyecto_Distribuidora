@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 import { Badge } from '../../../components/ui/Badge'
 import { Boton } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
-import { disponibleDeCredito, formatearDinero } from '../../../domain/ruta/lecturasLocales'
+import { disponibleDeCredito, formatearDinero, LEYENDA_INCLUYE_VENTAS } from '../../../domain/ruta/lecturasLocales'
 import { formatearFechaHora } from '../../../lib/fecha'
 import { Ayuda } from '../../../components/ui/Ayuda'
 import { AVISO_DE_VERSION_MINIMA } from '../../../sync/versionMinima'
@@ -51,7 +51,9 @@ export function ClienteFichaScreen() {
   }
 
   const { cliente } = datos
-  const disponible = disponibleDeCredito(cliente.credito.limite, cliente.saldo)
+  // 22c, D6: saldo local = bootstrap + lo que cuenta de la cola (CRE-08).
+  const saldo = datos.saldo ?? cliente.saldo
+  const disponible = disponibleDeCredito(cliente.credito.limite, saldo)
 
   return (
     <div className="flex flex-col gap-3">
@@ -99,12 +101,18 @@ export function ClienteFichaScreen() {
 
       <Card>
         <dl className="flex flex-col gap-3">
-          <Fila rotulo="Saldo">{formatearDinero(cliente.saldo)}</Fila>
+          <Fila rotulo="Saldo">{formatearDinero(saldo)}</Fila>
           <Fila rotulo="Límite de crédito">
             {cliente.credito.limite === null ? 'Sin límite' : formatearDinero(cliente.credito.limite)}
           </Fila>
           <Fila rotulo="Disponible">{disponible === null ? 'Sin límite' : formatearDinero(disponible)}</Fila>
         </dl>
+        {datos.incluyeVentas && (
+          <p className="mt-2 flex items-center gap-1 text-xs text-primary/70">
+            {LEYENDA_INCLUYE_VENTAS}
+            <Ayuda clave="ruta.creditoSinSenal" />
+          </p>
+        )}
       </Card>
     </div>
   )

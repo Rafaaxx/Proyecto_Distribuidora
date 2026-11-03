@@ -104,7 +104,7 @@ describe('hooks de lectura de la base local (change 21, tarea 7.2)', () => {
     await waitFor(() => expect(result.current.estado).toBe('listo'))
     if (result.current.estado !== 'listo') throw new Error('esperaba datos')
     expect(result.current.filas).toEqual([
-      { producto_id: expect.any(String), nombre: 'Gaseosa', cantidad_base: 20, cajas: 3, unidades: 2 },
+      { producto_id: expect.any(String), nombre: 'Gaseosa', cantidad_base: 20, cajas: 3, unidades: 2, descripcion: '3 cajas y 2 unidades' },
     ])
   })
 })

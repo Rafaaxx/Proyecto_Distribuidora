@@ -225,3 +225,49 @@ describe('ClienteFichaScreen (tarea 14.1)', () => {
     expect(screen.queryByRole('link', { name: 'Vender' })).not.toBeInTheDocument()
   })
 })
+
+/**
+ * Change 22c, tarea 8.1 (spec `ruta/area-de-ruta`, «Clientes desde la base local con cartera
+ * primero», escenario «Ficha con ventas del teléfono»; D6; cita CRE-08, COB-04, INV-03).
+ */
+describe('ClienteFichaScreen con ventas del teléfono (change 22c, tarea 8.1)', () => {
+  const LEYENDA = 'Incluye tus ventas desde la última actualización'
+
+  beforeEach(async () => {
+    await Promise.all(baseLocal.tables.map((t) => t.clear()))
+  })
+
+  async function fichaConVenta(secuenciaProcesada: number | null, secuenciaDeLaVenta: number) {
+    const c = cliente(1, 'Almacén Uno', {
+      saldo: '100000.00',
+      credito: { limite: '200000.00', politica: 'BLOQUEAR', tolerancia_tipo: null, tolerancia_valor: null },
+    })
+    await aplicarBootstrap(bootstrapDePrueba({ clientes: [c], secuenciaProcesada }))
+    const base = { jornada_id: ID(2), producto_id: null, cantidad_base: null, estado_operacion: 'PENDIENTE' as const }
+    await baseLocal.movimientos_locales.bulkAdd([
+      { ...base, operation_id: 'op-1', tipo: 'VENTA_DEBITO', cliente_id: c.id, importe: '70000.00' },
+      { ...base, operation_id: 'op-1', tipo: 'COBRANZA_CREDITO', cliente_id: c.id, importe: '20000.00' },
+    ])
+    await baseLocal.cola.put({ secuencia: secuenciaDeLaVenta, operation_id: 'op-1', estado: 'PENDIENTE', sobre: { operation_id: 'op-1' } as never })
+    montarEnRuta(
+      <Routes>
+        <Route path="/ruta/clientes/:id" element={<ClienteFichaScreen />} />
+      </Routes>,
+      { ruta: `/ruta/clientes/${c.id}` },
+    )
+  }
+
+  it('muestra saldo $ 150.000,00, disponible $ 50.000,00 y la leyenda', async () => {
+    await fichaConVenta(null, 1)
+    expect(await screen.findByText('$ 150.000,00')).toBeInTheDocument()
+    expect(screen.getByText('$ 50.000,00')).toBeInTheDocument()
+    expect(screen.getByText(LEYENDA)).toBeInTheDocument()
+  })
+
+  it('con la venta ya incluida en el bootstrap (marca 7, secuencia 5) muestra el saldo del bootstrap y sin leyenda', async () => {
+    await fichaConVenta(7, 5)
+    // Saldo 100.000 y disponible 200.000 - 100.000 = 100.000.
+    await waitFor(() => expect(screen.getAllByText('$ 100.000,00')).toHaveLength(2))
+    expect(screen.queryByText(LEYENDA)).not.toBeInTheDocument()
+  })
+})

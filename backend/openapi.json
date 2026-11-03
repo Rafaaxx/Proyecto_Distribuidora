@@ -20128,6 +20128,44 @@
         "title": "NumeracionResponse",
         "description": "Prefijo del dispositivo de la sesión, último correlativo y el número que sigue (D4)."
       },
+      "ObservacionResponse": {
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "title": "Codigo"
+          },
+          "operacion_tipo": {
+            "type": "string",
+            "title": "Operacion Tipo"
+          },
+          "operacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Operacion Id"
+          },
+          "detalle": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detalle"
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo",
+          "operacion_tipo",
+          "operacion_id",
+          "detalle"
+        ],
+        "title": "ObservacionResponse",
+        "description": "Una observación del comando (change 22c, D3, SYN-07)."
+      },
       "OrganizacionDatosConfigurarRequest": {
         "properties": {
           "nombre": {
@@ -23508,6 +23546,13 @@
               }
             ],
             "title": "Error Codigo"
+          },
+          "observaciones": {
+            "items": {
+              "$ref": "#/components/schemas/ObservacionResponse"
+            },
+            "type": "array",
+            "title": "Observaciones"
           }
         },
         "type": "object",
@@ -23949,6 +23994,17 @@
           },
           "numeracion": {
             "$ref": "#/components/schemas/NumeracionBootstrap"
+          },
+          "secuencia_procesada": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secuencia Procesada"
           }
         },
         "type": "object",
@@ -23956,7 +24012,8 @@
           "usuario",
           "permisos",
           "jornada",
-          "numeracion"
+          "numeracion",
+          "secuencia_procesada"
         ],
         "title": "SesionBootstrap"
       },

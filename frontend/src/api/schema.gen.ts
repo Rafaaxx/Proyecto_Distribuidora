@@ -5966,6 +5966,25 @@ export interface components {
             siguiente_numero: string;
         };
         /**
+         * ObservacionResponse
+         * @description Una observación del comando (change 22c, D3, SYN-07).
+         */
+        ObservacionResponse: {
+            /** Codigo */
+            codigo: string;
+            /** Operacion Tipo */
+            operacion_tipo: string;
+            /**
+             * Operacion Id
+             * Format: uuid
+             */
+            operacion_id: string;
+            /** Detalle */
+            detalle: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
          * OrganizacionDatosConfigurarRequest
          * @description `nombre` y `cuit` obligatorios en el cuerpo (el CUIT vacío es `null` o texto en blanco).
          *     La normalización y el largo se validan en el dominio: `NOMBRE_DE_ORGANIZACION_INVALIDO` y
@@ -7338,6 +7357,8 @@ export interface components {
             } | null;
             /** Error Codigo */
             error_codigo: string | null;
+            /** Observaciones */
+            observaciones?: components["schemas"]["ObservacionResponse"][];
         };
         /**
          * ResumenReglaIvaResponse
@@ -7546,6 +7567,8 @@ export interface components {
             permisos: string[];
             jornada: components["schemas"]["JornadaBootstrap"];
             numeracion: components["schemas"]["NumeracionBootstrap"];
+            /** Secuencia Procesada */
+            secuencia_procesada: number | null;
         };
         /** StockBootstrap */
         StockBootstrap: {

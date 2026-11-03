@@ -6,13 +6,54 @@ import { Card } from '../../../components/ui/Card'
 import { formatearDinero } from '../../../domain/ruta/lecturasLocales'
 import { formatearFechaHora } from '../../../lib/fecha'
 import { useVentaLocal } from '../datos/ventas'
-import { Alert } from '../../../components/ui/Alert'
-import { TEXTO_DE_VENTA_RECHAZADA } from '../sincronizacion/presentacion'
+import { useExplicacionDeEnvio } from '../datos/sincronizacion'
+import type { VentaLocal } from '../../../lib/dispositivo/db'
 import { NotaSinSenal } from './NotaSinSenal'
 import { claveDeAyudaDeEnvio, etiquetaDeEnvio } from './presentacionDeVentas'
 
 const CLASE_ENLACE =
   'inline-flex items-center justify-center rounded-md border border-border bg-surface-muted px-3 py-3 text-sm font-medium text-primary hover:bg-surface'
+
+/**
+ * Observaciones o motivo del rechazo de la venta (change 22c, D4, D5; SYN-04, SYN-06, SYN-07):
+ * sale de la fila de `cola` de la operación, sin conexión. Una «Enviada» no muestra nada.
+ */
+function ExplicacionDeLaVenta({ venta }: { venta: VentaLocal }) {
+  const explicacion = useExplicacionDeEnvio(venta)
+  if (explicacion === undefined || explicacion === null) return null
+  if (explicacion.tipo === 'rechazo') {
+    return (
+      <Card className="flex flex-col gap-1 text-sm text-primary">
+        <h2 className="flex items-center gap-1 text-sm font-semibold">
+          Motivo del rechazo
+          <Ayuda clave="ruta.observacionesYRechazos" />
+        </h2>
+        <p className="break-words">{explicacion.texto}</p>
+        {explicacion.codigo !== null && <p className="text-xs font-medium text-danger">{explicacion.codigo}</p>}
+        <p className="text-xs text-primary/70">{explicacion.aviso}</p>
+      </Card>
+    )
+  }
+  return (
+    <Card className="flex flex-col gap-1 text-sm text-primary">
+      <h2 className="flex items-center gap-1 text-sm font-semibold">
+        Observaciones
+        <Ayuda clave="ruta.observacionesYRechazos" />
+      </h2>
+      {explicacion.tipo === 'sin_detalle' ? (
+        <p className="break-words">{explicacion.texto}</p>
+      ) : (
+        <ul className="flex list-disc flex-col gap-1 pl-4">
+          {explicacion.textos.map((texto, i) => (
+            <li key={i} className="break-words">
+              {texto}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  )
+}
 
 /**
  * Venta guardada en el teléfono (change 22a, tarea 10.3; `design.md` D13, D14; VTA-06): número
@@ -53,7 +94,7 @@ export function VentaGuardadaScreen() {
         <p className="text-xs text-primary/70">{formatearFechaHora(venta.occurred_at).trim()}</p>
         <p className="text-base font-semibold">{formatearDinero(venta.calculo.total)}</p>
       </Card>
-      {venta.estado_envio === 'RECHAZADA' && <Alert>{TEXTO_DE_VENTA_RECHAZADA}</Alert>}
+      <ExplicacionDeLaVenta venta={venta} />
       <NotaSinSenal venta={venta} />
       <div className="grid grid-cols-2 gap-2">
         <Link to="/ruta/vender" className={CLASE_ENLACE}>

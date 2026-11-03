@@ -5,8 +5,8 @@ import type { ResultadoDeItem } from './clienteLote'
  * Escribe en el teléfono el resultado de cada operación del lote (change 22b, `design.md` D3, D4;
  * **INV-01**, SYN-04, SYN-09). Una transacción `rw` por respuesta: o se aplican todos o ninguno.
  * Se busca por `operation_id`, nunca por posición. Nada se borra: la cola queda como constancia y
- * `estado_operacion` de los movimientos NO se toca (lo concilia el 22c): el stock y el saldo
- * locales siguen contando la venta.
+ * `estado_operacion` de los movimientos NO se toca (desde el 22c ni se usa): el stock y el saldo
+ * locales siguen contando la venta hasta que un bootstrap la incluya (marca de secuencia, D1).
  */
 const DESTINO_POR_ESTADO: Record<string, { comando: EstadoDeComando; venta: EstadoDeEnvio }> = {
   ACEPTADO: { comando: 'ACEPTADO', venta: 'ACEPTADA' },
@@ -39,6 +39,8 @@ export async function aplicarResultados(resultados: ResultadoDeItem[], ahora: Da
         estado: destino.comando,
         error_codigo: item.error_codigo,
         resultado_en: ahora.toISOString(),
+        // Change 22c, D3: las observaciones viajan en la misma escritura (INV-01); sin la lista no hay dato.
+        ...(item.observaciones === undefined ? {} : { observaciones: item.observaciones }),
       })
       await baseLocal.ventas.where('operation_id').equals(item.operation_id).modify({ estado_envio: destino.venta })
       aplicados += 1

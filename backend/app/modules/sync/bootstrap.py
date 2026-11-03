@@ -32,6 +32,7 @@ from app.modules.descuentos import service as descuentos_service
 from app.modules.identidad import service as identidad_service
 from app.modules.precios import service as precios_service
 from app.modules.stock import service as stock_service
+from app.modules.sync import repository as sync_repository
 from app.modules.sync.schemas import (
     AlcanceBootstrap,
     AlicuotaBootstrap,
@@ -129,6 +130,13 @@ def generar_bootstrap(
         puede_vender = PERMISO_VENDER in permisos
 
         pausa("sesion")
+        secuencia_procesada = sync_repository.secuencia_procesada_de_jornada(
+            sesion,
+            organizacion_id,
+            jornada_id=jornada.jornada_id,
+            usuario_id=usuario_id,
+            dispositivo_id=dispositivo_id,
+        )
         usuario = identidad_service.obtener_usuario_para_dispositivo(
             organizacion_id, usuario_id, sesion
         )
@@ -245,6 +253,7 @@ def generar_bootstrap(
                 numeracion=NumeracionBootstrap(
                     prefijo=numeracion.prefijo, ultimo_correlativo=numeracion.ultimo_correlativo
                 ),
+                secuencia_procesada=secuencia_procesada,
             ),
             configuracion=configuracion,
             contexto_venta=contexto,

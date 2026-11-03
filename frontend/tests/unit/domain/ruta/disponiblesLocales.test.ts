@@ -6,8 +6,11 @@ import { describe, expect, it } from 'vitest'
 
 import {
   creditoDisponibleLocal,
+  movimientosQueCuentan,
   saldoConsiderado,
   stockDisponible,
+  stockDeTodos,
+  type Conciliacion,
 } from '../../../../src/domain/ruta/disponiblesLocales'
 import type { MovimientoLocal } from '../../../../src/lib/dispositivo/db'
 
@@ -57,14 +60,10 @@ describe('saldoConsiderado (CRE-08, COB-04)', () => {
     expect(saldo).toBe('101000.00')
   })
 
-  it('no cuenta las operaciones con resultado del servidor ni las de otro cliente', () => {
+  it('no cuenta las operaciones de otro cliente', () => {
     const saldo = saldoConsiderado(
       '100000.00',
-      [
-        debito('70000.00', { estado_operacion: 'RESUELTA' }),
-        debito('5000.00', { cliente_id: 'otro' }),
-        debito('300.25'),
-      ],
+      [debito('5000.00', { cliente_id: 'otro' }), debito('300.25')],
       CLIENTE,
       JORNADA,
     )
@@ -90,17 +89,138 @@ describe('stockDisponible (RUT-04, STK-04)', () => {
     expect(stockDisponible(63, [venta(15), venta(50)], VINO, JORNADA)).toBe(-2)
   })
 
-  it('ignora otra jornada, otro producto y operaciones resueltas', () => {
-    const movimientos = [
-      venta(10, { jornada_id: 'jornada-vieja' }),
-      venta(7, { producto_id: 'otro' }),
-      venta(5, { estado_operacion: 'RESUELTA' }),
-      venta(3),
-    ]
+  it('ignora otra jornada y otro producto', () => {
+    const movimientos = [venta(10, { jornada_id: 'jornada-vieja' }), venta(7, { producto_id: 'otro' }), venta(3)]
     expect(stockDisponible(63, movimientos, VINO, JORNADA)).toBe(60)
   })
 
   it('un producto sin stock en el bootstrap parte de cero', () => {
     expect(stockDisponible(0, [venta(4)], VINO, JORNADA)).toBe(-4)
+  })
+})
+
+/**
+ * Change 22c, tarea 7.1 (spec `sync/cola-local`, «El saldo y el stock locales suman lo que hizo el
+ * teléfono»; D1, D2; CRE-08, RUT-04, COB-04, SYN-06, INV-06, INV-03, INV-04): conciliación por
+ * secuencia procesada.
+ */
+function conciliacion(
+  secuenciaProcesada: number | null,
+  operaciones: Record<string, { secuencia: number; rechazada?: boolean }>,
+): Conciliacion {
+  return {
+    secuenciaProcesada,
+    operaciones: new Map(
+      Object.entries(operaciones).map(([id, o]) => [id, { secuencia: o.secuencia, rechazada: o.rechazada ?? false }]),
+    ),
+  }
+}
+
+describe('conciliación por secuencia procesada (D1, D2)', () => {
+  it('una venta aceptada que el bootstrap todavía no incluye (sin marca) sigue descontando: 48 (RUT-04)', () => {
+    const c = conciliacion(null, { 'op-1': { secuencia: 1 } })
+    expect(stockDisponible(63, [venta(15)], VINO, JORNADA, c)).toBe(48)
+  })
+
+  it('con la marca 7 y la venta en la secuencia 5 el bootstrap ya la incluye: 48 y no 33 (INV-06)', () => {
+    const c = conciliacion(7, { 'op-1': { secuencia: 5 } })
+    expect(stockDisponible(48, [venta(15)], VINO, JORNADA, c)).toBe(48)
+    expect(saldoConsiderado('150000.00', [debito('70000.00')], CLIENTE, JORNADA, c)).toBe('150000.00')
+  })
+
+  it('respuesta perdida: la marca cubre la venta aunque el teléfono nunca supo su resultado: 48 (SYN-06)', () => {
+    const c = conciliacion(9, { 'op-1': { secuencia: 9 } })
+    expect(stockDisponible(48, [venta(15)], VINO, JORNADA, c)).toBe(48)
+  })
+
+  it('con la marca 7 y operaciones 7 y 8 cuenta solo la 8 (límite exacto)', () => {
+    const c = conciliacion(7, { 'op-7': { secuencia: 7 }, 'op-8': { secuencia: 8 } })
+    const movimientos = [venta(10, { operation_id: 'op-7' }), venta(4, { operation_id: 'op-8' })]
+    expect(stockDisponible(50, movimientos, VINO, JORNADA, c)).toBe(46)
+    const debitos = [debito('100.00', { operation_id: 'op-7' }), debito('30.50', { operation_id: 'op-8' })]
+    expect(saldoConsiderado('1000.00', debitos, CLIENTE, JORNADA, c)).toBe('1030.50')
+  })
+
+  it('la cobranza sigue la misma regla (COB-04)', () => {
+    const c = conciliacion(7, { 'op-1': { secuencia: 5 }, 'op-2': { secuencia: 8 } })
+    const movimientos = [credito('20000.00', { operation_id: 'op-1' }), credito('5000.00', { operation_id: 'op-2' })]
+    expect(saldoConsiderado('100000.00', movimientos, CLIENTE, JORNADA, c)).toBe('95000.00')
+  })
+
+  it('una venta rechazada sigue descontando aunque la marca la cubra (D2, SYN-06)', () => {
+    const c = conciliacion(9, { 'op-1': { secuencia: 3, rechazada: true } })
+    expect(stockDisponible(63, [venta(15)], VINO, JORNADA, c)).toBe(48)
+    expect(saldoConsiderado('100000.00', [debito('70000.00')], CLIENTE, JORNADA, c)).toBe('170000.00')
+  })
+
+  it('una venta rechazada de 50.000 cobrada 50.000 en el momento cuenta completa: el saldo no cambia y el stock sigue descontado (D2, precisión 2026-11-02)', () => {
+    const c = conciliacion(9, { 'op-1': { secuencia: 3, rechazada: true } })
+    const movimientos = [debito('50000.00'), credito('50000.00'), venta(15)]
+    expect(saldoConsiderado('100000.00', movimientos, CLIENTE, JORNADA, c)).toBe('100000.00')
+    expect(stockDisponible(63, movimientos, VINO, JORNADA, c)).toBe(48)
+  })
+
+  it('la precisión de la rechazada vale por operación: otra aceptada y cubierta por la marca no cuenta', () => {
+    const c = conciliacion(9, { 'op-1': { secuencia: 3, rechazada: true }, 'op-2': { secuencia: 4 } })
+    const movimientos = [debito('50000.00'), credito('20000.00'), credito('7000.00', { operation_id: 'op-2' })]
+    expect(saldoConsiderado('100000.00', movimientos, CLIENTE, JORNADA, c)).toBe('130000.00')
+  })
+
+  it('sin marca (bootstrap anterior al 22c) cuenta todo, como antes', () => {
+    const c = conciliacion(null, { 'op-1': { secuencia: 1 }, 'op-2': { secuencia: 2 } })
+    expect(stockDisponible(63, [venta(15), venta(5, { operation_id: 'op-2' })], VINO, JORNADA, c)).toBe(43)
+  })
+
+  it('un movimiento sin operación en la cola cuenta (no hay evidencia de que el servidor lo tenga)', () => {
+    expect(stockDisponible(63, [venta(15)], VINO, JORNADA, conciliacion(9, {}))).toBe(48)
+  })
+
+  it('otra jornada nunca cuenta, ni con la marca ni sin ella', () => {
+    const c = conciliacion(null, { 'op-1': { secuencia: 1 } })
+    expect(stockDisponible(63, [venta(15, { jornada_id: 'jornada-vieja' })], VINO, JORNADA, c)).toBe(63)
+  })
+
+  it('doble sincronización: aplicar la misma conciliación dos veces da lo mismo', () => {
+    const c = conciliacion(7, { 'op-1': { secuencia: 5 }, 'op-2': { secuencia: 8 } })
+    const movimientos = [venta(15, { operation_id: 'op-1' }), venta(3, { operation_id: 'op-2' })]
+    const una = stockDisponible(48, movimientos, VINO, JORNADA, c)
+    expect(stockDisponible(48, movimientos, VINO, JORNADA, c)).toBe(una)
+    expect(una).toBe(45)
+  })
+
+  it('INV-04: el stock sigue entero y un stock negativo se conserva negativo', () => {
+    expect(stockDisponible(5, [venta(15)], VINO, JORNADA, conciliacion(null, {}))).toBe(-10)
+  })
+
+  it('movimientosQueCuentan devuelve solo los que cuentan (sirve para la leyenda)', () => {
+    const c = conciliacion(7, { 'op-1': { secuencia: 5 }, 'op-2': { secuencia: 8 } })
+    const cuentan = movimientosQueCuentan(
+      [venta(1, { operation_id: 'op-1' }), venta(2, { operation_id: 'op-2' })],
+      JORNADA,
+      c,
+    )
+    expect(cuentan.map((m) => m.operation_id)).toEqual(['op-2'])
+    expect(movimientosQueCuentan([], JORNADA, c)).toEqual([])
+  })
+})
+
+describe('stockDeTodos (RUT-04, INV-04)', () => {
+  it('arma el disponible de cada producto, incluso uno sin fila de stock', () => {
+    const c = conciliacion(7, { 'op-1': { secuencia: 5 }, 'op-2': { secuencia: 8 } })
+    const movimientos = [
+      venta(15, { operation_id: 'op-1' }),
+      venta(3, { operation_id: 'op-2' }),
+      venta(2, { operation_id: 'op-2', producto_id: 'sin-fila' }),
+    ]
+    const stock = stockDeTodos(
+      [
+        { producto_id: VINO, cantidad_base: 48 },
+        { producto_id: 'otro', cantidad_base: 10 },
+      ],
+      movimientos,
+      JORNADA,
+      c,
+    )
+    expect(Object.fromEntries(stock)).toEqual({ [VINO]: 45, otro: 10, 'sin-fila': -2 })
   })
 })

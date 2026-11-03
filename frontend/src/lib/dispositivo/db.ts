@@ -27,6 +27,11 @@ export interface SesionLocal {
   jornada: Esquema['SesionBootstrap']['jornada']
   numeracion: Esquema['SesionBootstrap']['numeracion']
   contexto_venta: Esquema['ContextoVentaBootstrap'] | null
+  /**
+   * Mayor `secuencia` de la jornada del bootstrap que el servidor ya tenía registrada (change 22c,
+   * D1; SYN-11). `null` (o ausente, bootstrap anterior al 22c) = el servidor no tiene ninguna.
+   */
+  secuencia_procesada?: number | null
 }
 
 /** Fila única (`clave = 'organizacion'`): parámetros de la organización. */
@@ -167,7 +172,11 @@ export interface MovimientoLocal {
   cliente_id: string | null
   cantidad_base: number | null
   importe: string | null
-  /** `PENDIENTE` hasta la conciliación con un bootstrap posterior (la escribe el change 22c; el 22b NO la cambia, D4). */
+  /**
+   * Sin uso desde el change 22c (D1): nadie la cambia ni la lee. Lo que ya cuenta el servidor se
+   * decide con `secuencia_procesada` de la sesión y la `secuencia` de la operación en `cola`.
+   * Queda en el tipo para no cambiar el esquema ni las filas ya guardadas.
+   */
   estado_operacion: 'PENDIENTE' | 'RESUELTA'
 }
 
@@ -187,7 +196,15 @@ export interface ComandoEnCola {
   error_codigo?: string | null
   /** Momento local (ISO) en que se escribió el resultado. */
   resultado_en?: string
+  /**
+   * Observaciones del servidor para este comando (change 22c, D3; SYN-07), guardadas con el
+   * resultado en la misma transacción. Sin dato si la respuesta no las traía; no cambia el
+   * esquema de Dexie (la v3 abre como está).
+   */
+  observaciones?: ObservacionLocal[]
 }
+
+export type ObservacionLocal = Esquema['ObservacionResponse']
 
 /** Fallos del PIN de un supervisor por par (usuario, autorizador); no guarda horas (D10). */
 export interface IntentoPinLocal {

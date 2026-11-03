@@ -1,4 +1,5 @@
-import { describirStock } from '../../../domain/ruta/lecturasLocales'
+import { Ayuda } from '../../../components/ui/Ayuda'
+import { LEYENDA_INCLUYE_VENTAS } from '../../../domain/ruta/lecturasLocales'
 import { formatearFechaHora } from '../../../lib/fecha'
 import { useStockLocal } from '../datos/lecturas'
 
@@ -20,6 +21,12 @@ export function StockScreen() {
       {datos.estado === 'listo' && (
         <>
           <p className="text-xs text-primary/70">Datos de {formatearFechaHora(datos.fechaBootstrap).trim()}</p>
+          {datos.incluyeVentas && (
+            <p className="flex items-center gap-1 text-xs text-primary/70">
+              {LEYENDA_INCLUYE_VENTAS}
+              <Ayuda clave="ruta.stockDelVehiculo" />
+            </p>
+          )}
           {datos.filas.length === 0 ? (
             <p className="text-sm text-primary">No hay stock en tu ubicación.</p>
           ) : (
@@ -27,7 +34,7 @@ export function StockScreen() {
               {datos.filas.map((fila) => (
                 <li key={fila.producto_id} className="flex items-center justify-between gap-2 px-3 py-3 text-sm text-primary">
                   <span className="font-medium">{fila.nombre}</span>
-                  <span>{describirStock(fila.cajas, fila.unidades)}</span>
+                  <span>{fila.descripcion}</span>
                 </li>
               ))}
             </ul>

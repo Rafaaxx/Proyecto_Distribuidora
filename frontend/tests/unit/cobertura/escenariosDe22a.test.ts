@@ -70,7 +70,7 @@ const MAPA: Record<string, Destino> = {
   'Doble envío del mismo sobre': servidor(INTEGRACION, 'el_reenvio_no_duplica'),
   'El saldo y el stock locales suman lo que hizo el teléfono': unit('domain/ruta/disponiblesLocales.test.ts', 'suma débitos y resta cobranzas'),
   'Stock después de vender': unit('domain/ruta/disponiblesLocales.test.ts', '63 botellas del bootstrap menos una venta de 15 = 48'),
-  'Bootstrap con ventas sin enviar': unit('domain/ruta/disponiblesLocales.test.ts', 'no cuenta las operaciones con resultado del servidor'),
+  'Bootstrap con ventas sin enviar': unit('domain/ruta/disponiblesLocales.test.ts', 'sin marca (bootstrap anterior al 22c) cuenta todo'),
   // ventas/nota-de-venta
   'La nota de una venta del teléfono se arma con sus datos congelados y sin señal': unit('domain/ventas/notaDesdeLocal.test.ts', 'produce DatosDeNotaDeVenta'),
   'Compartir sin señal': unit(NOTA, 'sin red, "Compartir nota" abre el menú de compartir'),

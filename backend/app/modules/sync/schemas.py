@@ -70,11 +70,21 @@ class LoteComandosRequest(BaseModel):
     )
 
 
+class ObservacionResponse(BaseModel):
+    """Una observación del comando (change 22c, D3, SYN-07)."""
+
+    codigo: str
+    operacion_tipo: str
+    operacion_id: UUID
+    detalle: dict[str, object] | None
+
+
 class ResultadoItemLoteResponse(BaseModel):
     operation_id: UUID
     estado: str
     resultado: dict[str, object] | None
     error_codigo: str | None
+    observaciones: list[ObservacionResponse] = Field(default_factory=list)
 
 
 class LoteComandosResponse(BaseModel):
@@ -110,6 +120,9 @@ class SesionBootstrap(BaseModel):
     permisos: list[str]
     jornada: JornadaBootstrap
     numeracion: NumeracionBootstrap
+    # Change 22c, D1 (SYN-11): la mayor secuencia de los comandos de la jornada que la foto ya
+    # incluye en el stock y los saldos; nula si no hay ninguno.
+    secuencia_procesada: int | None
 
 
 class NotaBootstrap(BaseModel):

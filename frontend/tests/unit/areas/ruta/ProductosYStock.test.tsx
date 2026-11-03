@@ -9,7 +9,7 @@ import { montarEnRuta } from '../../utils/rutaDePrueba'
 
 import { ProductosScreen } from '../../../../src/areas/ruta/productos/ProductosScreen'
 import { StockScreen } from '../../../../src/areas/ruta/stock/StockScreen'
-import { describirStock } from '../../../../src/domain/ruta/lecturasLocales'
+import { describirStock, describirStockBase } from '../../../../src/domain/ruta/lecturasLocales'
 import { baseLocal } from '../../../../src/lib/dispositivo/db'
 import { aplicarBootstrap } from '../../../../src/sync/aplicarBootstrap'
 
@@ -71,6 +71,18 @@ describe('describirStock (INV-04, CAT-08)', () => {
     [0, 0, 'Sin stock'],
   ])('%i cajas, %i unidades -> %s', (cajas, unidades, esperado) => {
     expect(describirStock(cajas, unidades)).toBe(esperado)
+  })
+})
+
+describe('describirStockBase (INV-04, change 22c)', () => {
+  it.each([
+    [20, 6, '3 cajas y 2 unidades'],
+    [0, 6, 'Sin stock'],
+    [-10, 6, '-1 caja y 4 unidades'],
+    [-2, 6, '-2 unidades'],
+    [-3, 1, '-3 unidades'],
+  ])('%i unidades base con cajas de %i -> %s', (cantidad, porCaja, esperado) => {
+    expect(describirStockBase(cantidad, porCaja)).toBe(esperado)
   })
 })
 
@@ -169,5 +181,74 @@ describe('StockScreen (tarea 14.2)', () => {
     montarEnRuta(<StockScreen />)
     expect(await screen.findByText(/no hay stock en tu ubicación/i)).toBeInTheDocument()
     expect(document.body.textContent).not.toMatch(/costo|margen/i)
+  })
+})
+
+/**
+ * Change 22c, tarea 8.1 (spec `ruta/area-de-ruta`, «Productos y stock desde la base local»; D6;
+ * cita RUT-04, CRE-08, INV-03, INV-04): Stock y Productos muestran el stock local con la leyenda
+ * cuando hay operaciones que cuentan.
+ */
+const LEYENDA = 'Incluye tus ventas desde la última actualización'
+
+async function ventaLocalDeMalbec(cantidad: number, secuencia: number, operationId = 'op-1') {
+  await baseLocal.movimientos_locales.add({
+    operation_id: operationId,
+    jornada_id: ID(2),
+    tipo: 'VENTA_STOCK',
+    producto_id: ID(301),
+    cliente_id: null,
+    cantidad_base: -cantidad,
+    importe: null,
+    estado_operacion: 'PENDIENTE',
+  })
+  await baseLocal.cola.put({ secuencia, operation_id: operationId, estado: 'PENDIENTE', sobre: { operation_id: operationId } as never })
+}
+
+describe('Stock y Productos con ventas del teléfono (change 22c, tarea 8.1)', () => {
+  beforeEach(async () => {
+    await Promise.all(baseLocal.tables.map((t) => t.clear()))
+  })
+
+  it('Stock: 63 menos una venta local de 12 = 51 (8 cajas y 3 unidades) y la leyenda (RUT-04)', async () => {
+    await sembrar({ stock: [[301, 63]] })
+    await ventaLocalDeMalbec(12, 1)
+    montarEnRuta(<StockScreen />)
+    expect(await screen.findByText('8 cajas y 3 unidades')).toBeInTheDocument()
+    expect(screen.getByText(LEYENDA)).toBeInTheDocument()
+  })
+
+  it('Productos muestra el mismo stock local y la leyenda', async () => {
+    await sembrar({ stock: [[301, 63]] })
+    await ventaLocalDeMalbec(15, 1)
+    montarEnRuta(<ProductosScreen />)
+    const malbec = (await screen.findByText('Malbec 750')).closest('li') as HTMLElement
+    expect(await within(malbec).findByText('8 cajas')).toBeInTheDocument()
+    expect(screen.getByText(LEYENDA)).toBeInTheDocument()
+  })
+
+  it('después de actualizar (bootstrap con 48 y marca 7) la venta de la secuencia 5 no se descuenta otra vez ni hay leyenda (CRE-08)', async () => {
+    const b = bootstrapDePrueba({ secuenciaProcesada: 7 })
+    b.productos = [producto(1, 'Malbec 750', 'MAL')]
+    b.stock = [{ producto_id: ID(301), cantidad_base: 48 }]
+    await aplicarBootstrap(b)
+    await ventaLocalDeMalbec(15, 5)
+    montarEnRuta(<StockScreen />)
+    expect(await screen.findByText('8 cajas')).toBeInTheDocument()
+    expect(screen.queryByText(LEYENDA)).not.toBeInTheDocument()
+  })
+
+  it('sin operaciones que cuenten no hay leyenda', async () => {
+    await sembrar()
+    montarEnRuta(<StockScreen />)
+    await screen.findByText('3 cajas y 2 unidades')
+    expect(screen.queryByText(LEYENDA)).not.toBeInTheDocument()
+  })
+
+  it('un stock local negativo se muestra negativo (INV-04)', async () => {
+    await sembrar({ stock: [[301, 5]] })
+    await ventaLocalDeMalbec(15, 1)
+    montarEnRuta(<StockScreen />)
+    expect(await screen.findByText('-1 caja y 4 unidades')).toBeInTheDocument()
   })
 })

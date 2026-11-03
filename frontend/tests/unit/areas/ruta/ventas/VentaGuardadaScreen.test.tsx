@@ -5,9 +5,9 @@ import { Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { VentaGuardadaScreen } from '../../../../../src/areas/ruta/ventas/VentaGuardadaScreen'
-import { baseLocal } from '../../../../../src/lib/dispositivo/db'
+import { baseLocal, type ObservacionLocal } from '../../../../../src/lib/dispositivo/db'
 import { aplicarBootstrap } from '../../../../../src/sync/aplicarBootstrap'
-import { bootstrapParaVender } from '../../../utils/datosParaVender'
+import { bootstrapParaVender, IDS_DE_PRUEBA } from '../../../utils/datosParaVender'
 import { montarEnRuta } from '../../../utils/rutaDePrueba'
 import { sembrarVenta } from '../../../utils/sembrarVenta'
 
@@ -95,10 +95,86 @@ describe('VentaGuardadaScreen (tarea 10.3)', () => {
 
     expect(await screen.findByText(etiqueta)).toBeInTheDocument()
     if (estado === 'RECHAZADA') {
-      expect(
-        screen.getByText('El sistema no aceptó esta venta. Sigue guardada en el teléfono; avisá a administración.'),
-      ).toBeInTheDocument()
+      expect((await screen.findByText('Sigue guardada en el teléfono; avisá a administración.'))).toBeInTheDocument()
     }
+  })
+})
+
+/**
+ * Change 22c, tarea 9.2 (spec `ruta/area-de-ruta`, «El detalle de una venta explica sus
+ * observaciones o su rechazo»; D3, D4, D5; cita SYN-04, SYN-05, SYN-06, SYN-07).
+ */
+async function ventaConResultado(
+  estado: 'ACEPTADA' | 'CON_OBSERVACIONES' | 'RECHAZADA',
+  resultado: { error_codigo?: string | null; observaciones?: ObservacionLocal[] },
+) {
+  await sembrarVenta('a')
+  await baseLocal.ventas.update('venta-a', { estado_envio: estado })
+  const comando = await baseLocal.cola.where('operation_id').equals('op-a').first()
+  await baseLocal.cola.update(comando?.secuencia as number, resultado)
+}
+
+const observacion = (codigo: string, detalle: Record<string, unknown> | null = null): ObservacionLocal => ({
+  codigo,
+  operacion_tipo: 'VENTA',
+  operacion_id: 'op-a',
+  detalle,
+})
+
+describe('VentaGuardadaScreen: observaciones y rechazo (change 22c, tarea 9.2)', () => {
+  beforeEach(async () => {
+    await Promise.all(baseLocal.tables.map((t) => t.clear()))
+    await aplicarBootstrap(bootstrapParaVender())
+  })
+
+  it('muestra todas las observaciones traducidas, con el medio y el producto de la base local, sin señal', async () => {
+    await ventaConResultado('CON_OBSERVACIONES', {
+      observaciones: [
+        observacion('MEDIO_INACTIVO', { medio_pago_id: IDS_DE_PRUEBA.efectivo }),
+        observacion('VENTA_SIN_COSTO', { producto_id: IDS_DE_PRUEBA.producto }),
+      ],
+    })
+    montar('venta-a')
+
+    expect(await screen.findByRole('heading', { name: /^Observaciones/ })).toBeInTheDocument()
+    expect(screen.getByText('El medio Efectivo estaba dado de baja cuando llegó el cobro.')).toBeInTheDocument()
+    expect(screen.getByText('Gaseosa no tenía costo; la línea quedó sin costo.')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /ayuda: observaciones y rechazos/i }).length).toBeGreaterThan(0)
+  })
+
+  it('un producto que ya no está en la base local se nombra «un producto»', async () => {
+    await ventaConResultado('CON_OBSERVACIONES', {
+      observaciones: [observacion('STOCK_NEGATIVO', { producto_id: 'ya-no-esta' })],
+    })
+    montar('venta-a')
+
+    expect(await screen.findByText('Quedó stock negativo de un producto.')).toBeInTheDocument()
+  })
+
+  it('el motivo del rechazo trae el texto, el código y el aviso de que sigue guardada', async () => {
+    await ventaConResultado('RECHAZADA', { error_codigo: 'TOTALES_INCONSISTENTES' })
+    montar('venta-a')
+
+    expect(await screen.findByRole('heading', { name: /^Motivo del rechazo/ })).toBeInTheDocument()
+    expect(screen.getByText('Los importes de la venta no cierran con el cálculo del sistema.')).toBeInTheDocument()
+    expect(screen.getByText('TOTALES_INCONSISTENTES')).toBeInTheDocument()
+    expect(screen.getByText('Sigue guardada en el teléfono; avisá a administración.')).toBeInTheDocument()
+  })
+
+  it('una «Con observaciones» sin la lista guardada dice que el detalle no está en el teléfono', async () => {
+    await ventaConResultado('CON_OBSERVACIONES', {})
+    montar('venta-a')
+
+    expect(await screen.findByText('El detalle no está en el teléfono; consultalo con administración.')).toBeInTheDocument()
+  })
+
+  it('una «Enviada» no muestra ninguna de las dos secciones', async () => {
+    await ventaConResultado('ACEPTADA', { observaciones: [] })
+    montar('venta-a')
+
+    await screen.findByText('Enviada')
+    expect(screen.queryByRole('heading', { name: /^Observaciones/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /^Motivo del rechazo/ })).not.toBeInTheDocument()
   })
 })
 

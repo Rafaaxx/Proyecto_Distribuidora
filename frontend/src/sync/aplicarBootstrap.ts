@@ -64,6 +64,8 @@ export function adaptarBootstrap(b: BootstrapRespuesta): FilasLocales {
       jornada: b.sesion.jornada,
       numeracion: b.sesion.numeracion,
       contexto_venta: b.contexto_venta,
+      // Change 22c, D1: sin el campo (servidor anterior) se guarda null = se cuenta todo.
+      secuencia_procesada: b.sesion.secuencia_procesada ?? null,
     },
     configuracion: { clave: 'organizacion', ...b.configuracion },
     productos,

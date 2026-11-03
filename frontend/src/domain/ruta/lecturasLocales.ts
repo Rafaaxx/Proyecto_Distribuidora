@@ -102,3 +102,17 @@ export function describirStock(cajas: number, unidades: number): string {
   if (unidades > 0) partes.push(unidades === 1 ? '1 unidad' : `${unidades} unidades`)
   return partes.length === 0 ? 'Sin stock' : partes.join(' y ')
 }
+
+/** Leyenda de las pantallas de consulta cuando hay operaciones del teléfono que cuentan (22c, D6). */
+export const LEYENDA_INCLUYE_VENTAS = 'Incluye tus ventas desde la última actualización'
+
+/**
+ * RUT-04, INV-04: el disponible en unidad base como "3 cajas y 2 unidades"; un disponible negativo
+ * se muestra negativo ("-1 caja y 4 unidades").
+ */
+export function describirStockBase(cantidadBase: number, unidadesPorCaja: number): string {
+  const absoluto = Math.abs(cantidadBase)
+  const { cajas, unidades } = stockEnCajasYUnidades(absoluto, unidadesPorCaja)
+  const texto = describirStock(cajas, unidades)
+  return cantidadBase < 0 ? `-${texto}` : texto
+}

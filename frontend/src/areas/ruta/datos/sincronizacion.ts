@@ -1,7 +1,12 @@
 import { liveQuery } from 'dexie'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 
-import { baseLocal, type VentaLocal } from '../../../lib/dispositivo/db'
+import {
+  explicarEnvio,
+  type ExplicacionDeEnvio,
+  type NombresLocales,
+} from '../../../domain/ruta/textosDeSincronizacion'
+import { baseLocal, type EstadoDeEnvio, type VentaLocal } from '../../../lib/dispositivo/db'
 import {
   estadoDeSincronizacion,
   suscribirEstadoDeSincronizacion,
@@ -71,25 +76,65 @@ export function useResumenDeSincronizacion(): ResumenDeSincronizacion {
   return useConsulta(leerResumen, RESUMEN_VACIO)
 }
 
+/** Los nombres que la base local todavía conoce, para armar los textos de las observaciones (22c, D5). */
+async function leerNombresLocales(): Promise<NombresLocales> {
+  const [productos, catalogoDeMedios, autorizadores] = await Promise.all([
+    baseLocal.productos.toArray(),
+    baseLocal.catalogos.get('medios_pago'),
+    baseLocal.autorizadores.toArray(),
+  ])
+  return {
+    productos: new Map(productos.map((p) => [p.id, p.nombre])),
+    medios: new Map(catalogoDeMedios?.clave === 'medios_pago' ? catalogoDeMedios.items.map((m) => [m.id, m.nombre]) : []),
+    autorizadores: new Map(autorizadores.map((a) => [a.id, a.nombre])),
+  }
+}
+
+/** Lo que explica el estado de envío de una venta, leído de la fila de `cola` de su operación. */
+async function leerExplicacion(
+  operationId: string,
+  estado: EstadoDeEnvio,
+  nombres: NombresLocales,
+): Promise<ExplicacionDeEnvio | null> {
+  const comando = await baseLocal.cola.where('operation_id').equals(operationId).first()
+  return explicarEnvio(estado, comando, nombres)
+}
+
 export interface VentaConProblema {
   venta: VentaLocal
   codigo: string | null
+  explicacion: ExplicacionDeEnvio | null
 }
 
-/** Ventas de la jornada que volvieron «Con observaciones» o «Rechazada», con el código del rechazo. */
+/** Ventas de la jornada que volvieron «Con observaciones» o «Rechazada», con su explicación traducida. */
 export function useVentasConProblemas(): VentaConProblema[] {
   return useConsulta(async () => {
     const ventas = (await ventasDeLaJornada()).filter(
       (v) => v.estado_envio === 'CON_OBSERVACIONES' || v.estado_envio === 'RECHAZADA',
     )
     ventas.sort((a, b) => a.occurred_at.localeCompare(b.occurred_at) || a.numero.localeCompare(b.numero))
+    const nombres = await leerNombresLocales()
     return Promise.all(
-      ventas.map(async (venta) => ({
-        venta,
-        codigo: (await baseLocal.cola.where('operation_id').equals(venta.operation_id).first())?.error_codigo ?? null,
-      })),
+      ventas.map(async (venta) => {
+        const explicacion = await leerExplicacion(venta.operation_id, venta.estado_envio, nombres)
+        return { venta, codigo: explicacion?.tipo === 'rechazo' ? explicacion.codigo : null, explicacion }
+      }),
     )
   }, [] as VentaConProblema[])
+}
+
+/** Explicación de las observaciones o del rechazo de una venta, sin conexión (22c, D4). `undefined` mientras carga. */
+export function useExplicacionDeEnvio(venta: VentaLocal): ExplicacionDeEnvio | null | undefined {
+  const [explicacion, setExplicacion] = useState<ExplicacionDeEnvio | null | undefined>(undefined)
+  const { operation_id: operacionId, estado_envio: estado } = venta
+  useEffect(() => {
+    const suscripcion = liveQuery(async () => leerExplicacion(operacionId, estado, await leerNombresLocales())).subscribe({
+      next: setExplicacion,
+      error: () => setExplicacion(null),
+    })
+    return () => suscripcion.unsubscribe()
+  }, [operacionId, estado])
+  return explicacion
 }
 
 /** `true` si la aplicación está por debajo de la última versión mínima conocida (no se venden ventas nuevas). */

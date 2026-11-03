@@ -560,6 +560,22 @@
       "sessions": 0,
       "memories": 7,
       "prompts": 0
+    },
+    {
+      "id": "a9269a2d",
+      "created_by": "rafan",
+      "created_at": "2026-11-02T14:51:23Z",
+      "sessions": 0,
+      "memories": 5,
+      "prompts": 0
+    },
+    {
+      "id": "32025085",
+      "created_by": "rafan",
+      "created_at": "2026-11-02T18:11:27Z",
+      "sessions": 0,
+      "memories": 5,
+      "prompts": 0
     }
   ]
 }

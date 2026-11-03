@@ -6,12 +6,12 @@ import { Ayuda } from '../../../components/ui/Ayuda'
 import { Card } from '../../../components/ui/Card'
 import type { ClaveDeAyuda } from '../../../ayuda/textos'
 import { formatearDinero } from '../../../domain/ruta/lecturasLocales'
+import { resumenDeObservaciones } from '../../../domain/ruta/textosDeSincronizacion'
 import { useConectado } from '../../../lib/conexion'
 import { useResumenDeSincronizacion, useVentasConProblemas, type VentaConProblema } from '../datos/sincronizacion'
 import { etiquetaDeEnvio } from '../ventas/presentacionDeVentas'
 import { BotonSincronizar } from './BotonSincronizar'
 import {
-  TEXTO_DE_VENTA_RECHAZADA,
   textoDeSinEnviar,
   textoDeUltimaSincronizacion,
   textoDelUltimoError,
@@ -24,8 +24,9 @@ import {
  * una con su detalle. Lee de la base local; sin lógica de negocio.
  */
 function FilaDeVenta({ item }: { item: VentaConProblema }) {
-  const { venta, codigo } = item
+  const { venta, codigo, explicacion } = item
   const rechazada = venta.estado_envio === 'RECHAZADA'
+  const resumen = explicacion?.tipo === 'observaciones' ? resumenDeObservaciones(explicacion.textos) : null
   return (
     <li className="rounded-md border border-border bg-surface">
       <Link to={`/ruta/ventas/${venta.venta_id}`} className="flex min-w-0 flex-col gap-1 p-3">
@@ -38,7 +39,21 @@ function FilaDeVenta({ item }: { item: VentaConProblema }) {
           <Badge variante={rechazada ? 'negativo' : 'neutral'}>{etiquetaDeEnvio(venta.estado_envio)}</Badge>
           {rechazada && codigo !== null && <span className="text-xs font-medium text-danger">{codigo}</span>}
         </span>
-        {rechazada && <span className="break-words text-sm text-primary">{TEXTO_DE_VENTA_RECHAZADA}</span>}
+        {explicacion?.tipo === 'rechazo' && (
+          <>
+            <span className="break-words text-sm text-primary">{explicacion.texto}</span>
+            <span className="break-words text-xs text-primary/70">{explicacion.aviso}</span>
+          </>
+        )}
+        {explicacion?.tipo === 'sin_detalle' && (
+          <span className="break-words text-sm text-primary">{explicacion.texto}</span>
+        )}
+        {resumen !== null && (
+          <>
+            <span className="break-words text-sm text-primary">{resumen.primera}</span>
+            {resumen.mas !== null && <span className="text-xs text-primary/70">{resumen.mas}</span>}
+          </>
+        )}
       </Link>
     </li>
   )
@@ -90,6 +105,12 @@ export function SincronizacionScreen() {
         )}
         <BotonSincronizar />
       </Card>
+      {problemas.length > 0 && (
+        <p className="flex items-center gap-1 text-sm text-primary">
+          Observaciones y rechazos
+          <Ayuda clave="ruta.observacionesYRechazos" />
+        </p>
+      )}
       <Lista titulo="Con observaciones" clave="ruta.ventaConObservaciones" items={problemas.filter((p) => p.venta.estado_envio === 'CON_OBSERVACIONES')} />
       <Lista titulo="Rechazadas" clave="ruta.ventaRechazada" items={problemas.filter((p) => p.venta.estado_envio === 'RECHAZADA')} />
     </div>

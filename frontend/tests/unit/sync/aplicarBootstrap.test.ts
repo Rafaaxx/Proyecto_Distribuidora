@@ -108,6 +108,53 @@ describe('aplicar el bootstrap en una sola transacción (change 21, tarea 6.1)',
     }
   })
 
+  describe('la secuencia procesada en la sesión local (change 22c, tarea 6.1; D1, SYN-09, SYN-11, 02 §13.4)', () => {
+    it('la sesión local guarda la marca del servidor', async () => {
+      await aplicarBootstrap(bootstrap({ secuenciaProcesada: 7 }))
+
+      expect((await baseLocal.sesion.get('actual'))?.secuencia_procesada).toBe(7)
+    })
+
+    it('sin comandos del lado del servidor la marca es null; un bootstrap anterior al 22c (sin el campo) también', async () => {
+      await aplicarBootstrap(bootstrap({ secuenciaProcesada: null }))
+      expect((await baseLocal.sesion.get('actual'))?.secuencia_procesada).toBeNull()
+
+      const anterior = bootstrap()
+      delete (anterior.sesion as { secuencia_procesada?: number | null }).secuencia_procesada
+      await aplicarBootstrap(anterior)
+      expect((await baseLocal.sesion.get('actual'))?.secuencia_procesada ?? null).toBeNull()
+    })
+
+    it('un bootstrap nuevo reemplaza la marca y deja iguales movimientos, cola y ventas', async () => {
+      await baseLocal.movimientos_locales.add({
+        operation_id: 'op-1',
+        jornada_id: ID(2),
+        tipo: 'VENTA_STOCK',
+        producto_id: ID(30),
+        cliente_id: null,
+        cantidad_base: -15,
+        importe: null,
+        estado_operacion: 'PENDIENTE',
+      })
+      await baseLocal.cola.put({ secuencia: 8, operation_id: 'op-1', estado: 'ACEPTADO', sobre: {} as never })
+      await aplicarBootstrap(bootstrap({ secuenciaProcesada: 7 }))
+      const antes = {
+        movimientos: await baseLocal.movimientos_locales.toArray(),
+        cola: await baseLocal.cola.toArray(),
+        ventas: await baseLocal.ventas.toArray(),
+      }
+
+      await aplicarBootstrap(bootstrap({ secuenciaProcesada: 9, generado: '2026-10-30T12:00:00Z' }))
+
+      expect((await baseLocal.sesion.get('actual'))?.secuencia_procesada).toBe(9)
+      expect({
+        movimientos: await baseLocal.movimientos_locales.toArray(),
+        cola: await baseLocal.cola.toArray(),
+        ventas: await baseLocal.ventas.toArray(),
+      }).toEqual(antes)
+    })
+  })
+
   describe('no toca las operaciones locales (change 22a, tarea 1.2; INV-01, SYN-09, 02 §13.4)', () => {
     async function sembrarOperaciones(): Promise<void> {
       await baseLocal.ventas.put({

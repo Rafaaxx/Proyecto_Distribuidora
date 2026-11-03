@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -261,6 +261,40 @@ def listar_observaciones_de_operacion(
             Observacion.operacion_tipo == operacion_tipo,
             Observacion.operacion_id == operacion_id,
         )
+        .order_by(Observacion.id)
+    )
+    return list(sesion.scalars(consulta).all())
+
+
+def secuencia_procesada_de_jornada(
+    sesion: Session,
+    organizacion_id: UUID,
+    *,
+    jornada_id: UUID,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+) -> int | None:
+    """La mayor `secuencia` de los comandos registrados de la jornada, del usuario y del
+    dispositivo (SYN-11, change 22c D1); `None` si no hay ninguno. Usa
+    `ix_comando__org_dispositivo_secuencia`. Un comando cortado por un error transitorio no deja
+    fila (su reserva se revierte), así que la marca nunca pasa de lo realmente procesado."""
+    consulta = select(func.max(Comando.secuencia)).where(
+        Comando.organizacion_id == organizacion_id,
+        Comando.dispositivo_id == dispositivo_id,
+        Comando.usuario_id == usuario_id,
+        Comando.jornada_id == jornada_id,
+    )
+    return sesion.execute(consulta).scalar_one_or_none()
+
+
+def listar_observaciones_de_comando(
+    sesion: Session, organizacion_id: UUID, comando_id: UUID
+) -> list[Observacion]:
+    """Las observaciones del propio comando (change 22c, D3), en el orden en que se registraron
+    (UUIDv7: el orden por `id` es el de creación). Solo las de `comando_id` en la organización."""
+    consulta = (
+        select(Observacion)
+        .where(Observacion.organizacion_id == organizacion_id, Observacion.comando_id == comando_id)
         .order_by(Observacion.id)
     )
     return list(sesion.scalars(consulta).all())

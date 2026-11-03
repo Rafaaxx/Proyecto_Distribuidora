@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
-import { describirStock, formatearDinero } from '../../../domain/ruta/lecturasLocales'
+import { Ayuda } from '../../../components/ui/Ayuda'
+import { formatearDinero, LEYENDA_INCLUYE_VENTAS } from '../../../domain/ruta/lecturasLocales'
 import { formatearFechaHora } from '../../../lib/fecha'
 import { useProductosLocales, useStockLocal } from '../datos/lecturas'
 import { useAhora } from '../datos/useAhora'
@@ -30,6 +31,12 @@ export function ProductosScreen() {
       {datos.estado === 'listo' && (
         <>
           <p className="text-xs text-primary/70">Datos de {formatearFechaHora(datos.fechaBootstrap).trim()}</p>
+          {stock.estado === 'listo' && stock.incluyeVentas && (
+            <p className="flex items-center gap-1 text-xs text-primary/70">
+              {LEYENDA_INCLUYE_VENTAS}
+              <Ayuda clave="ruta.stockDelVehiculo" />
+            </p>
+          )}
           <div className="flex flex-col gap-1">
             <label htmlFor="buscar-producto" className="text-sm font-medium text-primary">
               Buscar producto
@@ -62,7 +69,7 @@ export function ProductosScreen() {
                       ))}
                     </ul>
                     <p className="mt-2 text-sm text-primary">
-                      {describirStock(fila?.cajas ?? 0, fila?.unidades ?? 0)}
+                      {fila?.descripcion ?? 'Sin stock'}
                     </p>
                   </li>
                 )

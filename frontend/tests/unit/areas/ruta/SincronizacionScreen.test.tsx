@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { bootstrapParaVender } from '../../utils/datosParaVender'
 import { ID } from '../../utils/bootstrapDePrueba'
 import { montarEnRuta } from '../../utils/rutaDePrueba'
-import { sembrarAnulacion, sembrarVenta } from '../../utils/sembrarVenta'
+import { sembrarAnulacion, sembrarCobranza, sembrarVenta } from '../../utils/sembrarVenta'
 import { sincronizadorDePrueba } from '../../utils/sincronizadorDePrueba'
 
 import { SincronizacionScreen } from '../../../../src/areas/ruta/sincronizacion/SincronizacionScreen'
@@ -269,5 +269,78 @@ describe('SincronizacionScreen (tarea 10.2)', () => {
     montarEnRuta(<SincronizacionScreen />, { ruta: '/ruta/sincronizacion' })
 
     expect(await screen.findByText('2 ventas y 1 anulación sin enviar')).toBeInTheDocument()
+  })
+
+  /**
+   * Change 23, tarea 10.1 (spec `ruta/area-de-ruta`, «Cobranza rechazada en Sincronización»,
+   * «Pendientes»; `design.md` D10, D11; cita SYN-06, SYN-09).
+   */
+  async function cobranzaConResultado(
+    sufijo: string,
+    estado: 'ACEPTADA' | 'CON_OBSERVACIONES' | 'RECHAZADA',
+    resultado: { error_codigo?: string | null; observaciones?: ObservacionLocal[] },
+  ) {
+    await sembrarCobranza(sufijo)
+    await baseLocal.cobranzas.update(`cobranza-s-${sufijo}`, { estado_envio: estado })
+    const comando = await baseLocal.cola.where('operation_id').equals(`op-cob-${sufijo}`).first()
+    await baseLocal.cola.update(comando?.secuencia as number, {
+      estado: estado === 'RECHAZADA' ? 'RECHAZADO' : 'ACEPTADO_CON_OBSERVACIONES',
+      ...resultado,
+    })
+  }
+
+  it('una cobranza rechazada se lista como «Cobranza a {cliente}» con su texto, el código y el aviso, y abre su detalle', async () => {
+    await cobranzaConResultado('a', 'RECHAZADA', { error_codigo: 'RECURSO_NO_ENCONTRADO' })
+    montarEnRuta(<SincronizacionScreen />, { ruta: '/ruta/sincronizacion' })
+
+    const fila = (await screen.findByText('Cobranza a Almacén Uno')).closest('li') as HTMLElement
+    expect(within(fila).getByText('Rechazada')).toBeInTheDocument()
+    expect(within(fila).getByText('El sistema no tiene el cliente o el medio de pago de la cobranza.')).toBeInTheDocument()
+    expect(within(fila).getByText('RECURSO_NO_ENCONTRADO')).toBeInTheDocument()
+    expect(
+      within(fila).getByText(
+        'El cobro no quedó registrado en el sistema y el teléfono ya no lo descuenta de la cuenta del cliente; avisá a administración.',
+      ),
+    ).toBeInTheDocument()
+    expect(within(fila).getByRole('link')).toHaveAttribute('href', '/ruta/cobranzas/cobranza-s-a')
+  })
+
+  it('una cobranza con observaciones muestra la primera traducida con el texto de la cobranza', async () => {
+    await cobranzaConResultado('a', 'CON_OBSERVACIONES', {
+      observaciones: [obs('JORNADA_LIBERADA'), obs('PERMISO_REVOCADO')],
+    })
+    montarEnRuta(<SincronizacionScreen />, { ruta: '/ruta/sincronizacion' })
+
+    const fila = (await screen.findByText('Cobranza a Almacén Uno')).closest('li') as HTMLElement
+    expect(within(fila).getByText('Con observaciones')).toBeInTheDocument()
+    expect(within(fila).getByText('La jornada había sido liberada cuando llegó la cobranza.')).toBeInTheDocument()
+    expect(within(fila).getByText('1 más')).toBeInTheDocument()
+  })
+
+  it('una cobranza con un código desconocido muestra el texto general de la cobranza y el código', async () => {
+    await cobranzaConResultado('a', 'RECHAZADA', { error_codigo: 'CODIGO_NUEVO' })
+    montarEnRuta(<SincronizacionScreen />, { ruta: '/ruta/sincronizacion' })
+
+    const fila = (await screen.findByText('Cobranza a Almacén Uno')).closest('li') as HTMLElement
+    expect(within(fila).getByText('El sistema no aceptó esta cobranza.')).toBeInTheDocument()
+    expect(within(fila).getByText('CODIGO_NUEVO')).toBeInTheDocument()
+  })
+
+  it('una cobranza aceptada sin problemas no se lista (y sincronizar otra vez no cambia nada)', async () => {
+    await cobranzaConResultado('a', 'ACEPTADA', {})
+    montarEnRuta(<SincronizacionScreen />, { ruta: '/ruta/sincronizacion' })
+
+    await screen.findByRole('heading', { name: 'Sincronización' })
+    expect(screen.queryByText(/Cobranza a/)).not.toBeInTheDocument()
+  })
+
+  it('dos ventas, una anulación y una cobranza sin enviar: «2 ventas, 1 anulación y 1 cobranza sin enviar»', async () => {
+    await sembrarVenta('a', { cajas: 1, unidades: 0 })
+    await sembrarVenta('b', { cajas: 1, unidades: 0 })
+    await sembrarAnulacion('a')
+    await sembrarCobranza('a')
+    montarEnRuta(<SincronizacionScreen />, { ruta: '/ruta/sincronizacion' })
+
+    expect(await screen.findByText('2 ventas, 1 anulación y 1 cobranza sin enviar')).toBeInTheDocument()
   })
 })

@@ -8,6 +8,7 @@ import { formatearDinero } from '../../../domain/ruta/lecturasLocales'
 import { autorizadoresPara, type TipoDeAutorizacion } from '../../../domain/ventas/autorizacionDeVenta'
 import { AVISO_CONSUMIDOR_FINAL_DE_CONTADO } from '../../../domain/ventas/calculoDeVenta'
 import { textoDeDecisionDeCredito } from '../../../domain/ventas/creditoDeVenta'
+import { MediosDeCobro } from './MediosDeCobro'
 
 /**
  * Paso 3 de la venta de ruta: cobro y confirmación (change 22a, `design.md` D6 a D10, D14; CLI-03,
@@ -42,7 +43,6 @@ export interface PasoCobroProps {
 export function PasoCobro(props: PasoCobroProps) {
   const { armada, carrito, mediosPago } = props
   const panel = armada.panelDeCredito
-  const requiereReferencia = new Set(mediosPago.filter((m) => m.requiere_referencia).map((m) => m.id))
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
@@ -58,49 +58,13 @@ export function PasoCobro(props: PasoCobroProps) {
           <h2 className="text-sm font-semibold text-primary">Cobro en el acto (opcional)</h2>
           <Ayuda clave="ventas.cobranza" />
         </div>
-        {carrito.medios.map((medio, i) => {
-          const n = i + 1
-          return (
-            <div key={n} className="flex min-w-0 flex-col gap-2 rounded-md border border-border p-2">
-              <select
-                aria-label={`Medio de cobro ${n}`}
-                className={CLASE_CONTROL}
-                value={medio.medioPagoId}
-                onChange={(e) => props.alCambiarMedio(i, { medioPagoId: e.target.value })}
-              >
-                <option value="">Elegí el medio</option>
-                {mediosPago.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.nombre}
-                  </option>
-                ))}
-              </select>
-              <input
-                aria-label={`Importe del medio ${n}`}
-                inputMode="decimal"
-                placeholder="Importe"
-                className={CLASE_CONTROL}
-                value={medio.importe}
-                onChange={(e) => props.alCambiarMedio(i, { importe: e.target.value })}
-              />
-              {requiereReferencia.has(medio.medioPagoId) && (
-                <input
-                  aria-label={`Referencia del medio ${n}`}
-                  placeholder="Referencia"
-                  className={CLASE_CONTROL}
-                  value={medio.referencia}
-                  onChange={(e) => props.alCambiarMedio(i, { referencia: e.target.value })}
-                />
-              )}
-              <Boton variante="secundario" className="self-start" aria-label={`Quitar medio ${n}`} onClick={() => props.alQuitarMedio(i)}>
-                Quitar
-              </Boton>
-            </div>
-          )
-        })}
-        <Boton variante="secundario" className="self-start" onClick={props.alAgregarMedio}>
-          Agregar medio de cobro
-        </Boton>
+        <MediosDeCobro
+          medios={carrito.medios}
+          mediosPago={mediosPago}
+          alAgregar={props.alAgregarMedio}
+          alCambiar={props.alCambiarMedio}
+          alQuitar={props.alQuitarMedio}
+        />
         {carrito.medios.length > 0 && (
           <div className="flex flex-col gap-1">
             <label htmlFor="vender-observacion" className="text-xs text-primary/70">

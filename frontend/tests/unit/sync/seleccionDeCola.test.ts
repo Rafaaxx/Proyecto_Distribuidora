@@ -57,7 +57,7 @@ describe('la base v3 del 22a abre igual con los estados ampliados (sin version(4
     await Promise.all(baseLocal.tables.map((t) => t.clear()))
     await baseLocal.cola.bulkPut([comandoDePrueba(1), comandoDePrueba(2, { estado: 'ACEPTADO' })])
 
-    expect(baseLocal.verno).toBe(4)
+    expect(baseLocal.verno).toBe(5)
     expect(await baseLocal.cola.where('estado').equals('ACEPTADO').count()).toBe(1)
     expect(await baseLocal.cola.where('estado').equals('PENDIENTE').count()).toBe(1)
   })

@@ -1,0 +1,81 @@
+{
+  "id": "SYN-COBRANZA-REGISTRAR-OFFLINE-01",
+  "reglas": ["SYN-01", "SYN-03", "COB-01", "COB-02", "INV-03", "INV-06", "INV-08"],
+  "comentario": "Fixture de contrato del sobre que arma el telefono al registrar una cobranza independiente (change 23, design.md D2). Tres sobres de COBRANZA_REGISTRAR v1, modo OFFLINE, con la jornada de la sesion en el sobre: un_medio (efectivo, referencia null), dos_medios_con_referencia (efectivo y transferencia con referencia '0042'; la suma es el importe) y con_observacion (un medio y una observacion de hasta 500 caracteres). Importes como string con dos decimales (INV-03). La observacion es un texto o null. Los identificadores {{simbolicos}} se sustituyen por UUID reales: en el frontend la prueba los pasa como entrada y compara; en el backend la prueba de integracion los reemplaza por los de la base de prueba.",
+  "simbolos": [
+    "{{operation_id}}",
+    "{{usuario_id}}",
+    "{{dispositivo_id}}",
+    "{{jornada_id}}",
+    "{{cobranza_id}}",
+    "{{cliente_id}}",
+    "{{medio_efectivo_id}}",
+    "{{medio_transferencia_id}}"
+  ],
+  "sobres": {
+    "un_medio": {
+      "operation_id": "{{operation_id}}",
+      "tipo": "COBRANZA_REGISTRAR",
+      "version": 1,
+      "modo": "OFFLINE",
+      "usuario_id": "{{usuario_id}}",
+      "dispositivo_id": "{{dispositivo_id}}",
+      "jornada_id": "{{jornada_id}}",
+      "occurred_at": "2026-10-19T12:30:00.000Z",
+      "secuencia": 8,
+      "app_version": "1.0.0",
+      "contenido": {
+        "cobranza_id": "{{cobranza_id}}",
+        "cliente_id": "{{cliente_id}}",
+        "importe": "50000.00",
+        "medios": [
+          { "medio_pago_id": "{{medio_efectivo_id}}", "importe": "50000.00", "referencia": null }
+        ],
+        "observacion": null
+      }
+    },
+    "dos_medios_con_referencia": {
+      "operation_id": "{{operation_id}}",
+      "tipo": "COBRANZA_REGISTRAR",
+      "version": 1,
+      "modo": "OFFLINE",
+      "usuario_id": "{{usuario_id}}",
+      "dispositivo_id": "{{dispositivo_id}}",
+      "jornada_id": "{{jornada_id}}",
+      "occurred_at": "2026-10-19T12:30:00.000Z",
+      "secuencia": 8,
+      "app_version": "1.0.0",
+      "contenido": {
+        "cobranza_id": "{{cobranza_id}}",
+        "cliente_id": "{{cliente_id}}",
+        "importe": "50000.00",
+        "medios": [
+          { "medio_pago_id": "{{medio_efectivo_id}}", "importe": "30000.00", "referencia": null },
+          { "medio_pago_id": "{{medio_transferencia_id}}", "importe": "20000.00", "referencia": "0042" }
+        ],
+        "observacion": null
+      }
+    },
+    "con_observacion": {
+      "operation_id": "{{operation_id}}",
+      "tipo": "COBRANZA_REGISTRAR",
+      "version": 1,
+      "modo": "OFFLINE",
+      "usuario_id": "{{usuario_id}}",
+      "dispositivo_id": "{{dispositivo_id}}",
+      "jornada_id": "{{jornada_id}}",
+      "occurred_at": "2026-10-19T12:30:00.000Z",
+      "secuencia": 8,
+      "app_version": "1.0.0",
+      "contenido": {
+        "cobranza_id": "{{cobranza_id}}",
+        "cliente_id": "{{cliente_id}}",
+        "importe": "12500.50",
+        "medios": [
+          { "medio_pago_id": "{{medio_efectivo_id}}", "importe": "12500.50", "referencia": null }
+        ],
+        "observacion": "Pago de la cuota de octubre"
+      }
+    }
+  }
+}

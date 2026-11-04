@@ -1,5 +1,6 @@
 import { formatearFechaHora } from '../../../lib/fecha'
 import type { ErrorDeSincronizacion } from '../../../sync/sincronizar'
+import { nombreDeLoPendiente } from '../../../sync/ventasPendientes'
 
 /**
  * Textos del estado de la sincronización de `/ruta` (change 22b, `design.md` D8; SYN-04, SYN-06,
@@ -13,17 +14,12 @@ export const TEXTO_DE_NO_SE_PUDO_ENVIAR = 'No se pudo enviar'
 export const TEXTO_DE_SIN_SENAL = 'Sincronizar requiere conexión.'
 
 /**
- * Inicio y pantalla «Sincronización» (change 22d, D10, aprobado en 0.2): «Todo enviado», «1 venta
- * sin enviar», «N ventas sin enviar», «1 anulación sin enviar» y «N ventas y M anulaciones sin
- * enviar».
+ * Inicio y pantalla «Sincronización» (change 22d, D10; change 23, D10, aprobados en 0.2): «Todo
+ * enviado» o las partes que no son cero, por ejemplo «2 ventas, 1 anulación y 1 cobranza sin enviar».
  */
-export function textoDePendientes(ventas: number, anulaciones: number): string {
-  if (ventas === 0 && anulaciones === 0) return 'Todo enviado'
-  const deVentas = ventas === 1 ? '1 venta' : `${ventas} ventas`
-  const deAnulaciones = anulaciones === 1 ? '1 anulación' : `${anulaciones} anulaciones`
-  if (anulaciones === 0) return `${deVentas} sin enviar`
-  if (ventas === 0) return `${deAnulaciones} sin enviar`
-  return `${deVentas} y ${deAnulaciones} sin enviar`
+export function textoDePendientes(ventas: number, anulaciones: number, cobranzas = 0): string {
+  if (ventas === 0 && anulaciones === 0 && cobranzas === 0) return 'Todo enviado'
+  return `${nombreDeLoPendiente({ ventas, anulaciones, cobranzas })} sin enviar`
 }
 
 /** Solo ventas (22a). */

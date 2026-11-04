@@ -3,6 +3,7 @@ import { armarConfirmacionDeRuta, armarVentaDeRuta } from '../../../src/domain/r
 import { baseLocal } from '../../../src/lib/dispositivo/db'
 import { anularVentaLocal } from '../../../src/sync/anularVentaLocal'
 import { confirmarVentaLocal } from '../../../src/sync/confirmarVentaLocal'
+import { registrarCobranzaLocal } from '../../../src/sync/registrarCobranzaLocal'
 import { carritoDePrueba, IDS_DE_PRUEBA } from './datosParaVender'
 
 /**
@@ -72,6 +73,31 @@ export async function sembrarAnulacion(
     usuarioId: sesion.usuario.id,
     dispositivoId: 'disp-1',
     ahora: opciones.ahora ?? new Date('2026-10-30T16:00:00.000Z'),
+    appVersion: '1.0.0',
+  })
+}
+
+/**
+ * Registra de verdad (transacción de Dexie) una cobranza independiente en efectivo (change 23).
+ * Ids: `cobranza-s-<sufijo>` y `op-cob-<sufijo>`; $100,00 salvo que se indique otro importe.
+ */
+export async function sembrarCobranza(
+  sufijo: string,
+  opciones: { clienteId?: string; importe?: string; ahora?: Date; observacion?: string | null } = {},
+) {
+  const sesion = await baseLocal.sesion.get('actual')
+  if (sesion === undefined) throw new Error('Primero se aplica el bootstrap de prueba.')
+  const importe = opciones.importe ?? '100.00'
+  return registrarCobranzaLocal({
+    cobranzaId: `cobranza-s-${sufijo}`,
+    operationId: `op-cob-${sufijo}`,
+    clienteId: opciones.clienteId ?? IDS_DE_PRUEBA.cliente,
+    importe,
+    medios: [{ medio_pago_id: IDS_DE_PRUEBA.efectivo, importe, referencia: null }],
+    observacion: opciones.observacion ?? null,
+    usuarioId: sesion.usuario.id,
+    dispositivoId: 'disp-1',
+    ahora: opciones.ahora ?? new Date('2026-10-30T16:30:00.000Z'),
     appVersion: '1.0.0',
   })
 }

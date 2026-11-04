@@ -67,7 +67,7 @@ describe('textos de ayuda de la venta de ruta (change 22a, tarea 15.1)', () => {
     const { titulo, texto, reglas } = AYUDAS['ruta.creditoSinSenal']
     expect(titulo).toBe('Crédito del cliente')
     expect(texto).toBe(
-      'Se calcula con la deuda de la última actualización de datos más lo que le vendiste y cobraste, y menos lo que le anulaste, desde el teléfono después.',
+      'Se calcula con la deuda de la última actualización de datos, más lo que le vendiste y menos lo que le cobraste y le anulaste desde el teléfono después.',
     )
     expect(reglas).toEqual(expect.arrayContaining(['CRE-08', 'CRE-09', 'ADR-065', 'ADR-066']))
     expect(AYUDAS['ruta.creditoSinSenal'].verMas).toBe('credito')
@@ -125,7 +125,7 @@ describe('textos de ayuda de la sincronización (change 22b, tarea 12.1)', () =>
     const { titulo, texto, reglas } = AYUDAS['ruta.sincronizar']
     expect(titulo).toBe('Sincronizar')
     expect(texto).toBe(
-      'Envía al sistema las ventas y anulaciones sin enviar de tu usuario, en el orden en que las hiciste. Se hace sola al abrir la aplicación o volver a ella, al volver la señal, después de cada venta o anulación y cada 2 minutos. Enviar dos veces lo mismo no lo duplica.',
+      'Envía al sistema las ventas, anulaciones y cobranzas sin enviar de tu usuario, en el orden en que las hiciste. Se hace sola al abrir la aplicación o volver a ella, al volver la señal, después de cada operación y cada 2 minutos. Enviar dos veces lo mismo no lo duplica.',
     )
     expect(texto).not.toMatch(/bot[oó]n|tocá|apretá/i)
     expect(reglas).toEqual(expect.arrayContaining(['SYN-02', 'SYN-03', 'INV-06']))
@@ -153,9 +153,9 @@ describe('textos de ayuda de la sincronización (change 22b, tarea 12.1)', () =>
     const { titulo, texto, reglas } = AYUDAS['ruta.versionMinima']
     expect(titulo).toBe('Versión desactualizada')
     expect(texto).toBe(
-      'Esta versión de la aplicación ya no puede confirmar ventas nuevas. Las ventas guardadas se siguen enviando. Actualizá la aplicación para volver a vender.',
+      'Esta versión de la aplicación ya no puede confirmar ventas ni cobranzas nuevas. Lo guardado se sigue enviando. Actualizá la aplicación para seguir.',
     )
-    expect(reglas).toEqual(['ADR-064'])
+    expect(reglas).toEqual(['ADR-064', 'ADR-067'])
   })
 
   it.each(['ruta.sincronizar', 'ruta.ventaConObservaciones', 'ruta.ventaRechazada', 'ruta.versionMinima'] as const)(
@@ -178,7 +178,7 @@ describe('textos de ayuda de la conciliación y las observaciones (change 22c, t
     const { titulo, texto, reglas } = AYUDAS['ruta.observacionesYRechazos']
     expect(titulo).toBe('Observaciones y rechazos')
     expect(texto).toBe(
-      'Muestra qué anotó el sistema en cada venta o anulación enviada y por qué no aceptó las rechazadas. Las observaciones las revisa administración; no tenés que hacer nada. Lo rechazado no se vuelve a enviar solo.',
+      'Muestra qué anotó el sistema en cada venta, anulación o cobranza enviada y por qué no aceptó las rechazadas. Las observaciones las revisa administración; no tenés que hacer nada. Lo rechazado no se vuelve a enviar solo.',
     )
     expect(reglas).toEqual(expect.arrayContaining(['SYN-04', 'SYN-07', 'SYN-08', 'SYN-09']))
   })
@@ -229,7 +229,7 @@ describe('textos de ayuda de la anulación y la jornada no abierta (change 22d, 
     const { titulo, texto, reglas } = AYUDAS['ruta.jornadaNoAbierta']
     expect(titulo).toBe('Jornada no abierta')
     expect(texto).toBe(
-      'El sistema avisó que tu jornada ya no está abierta. No podés vender ni anular ventas; lo que ya vendiste se sigue enviando. Para seguir vendiendo, abrí una jornada nueva con señal.',
+      'El sistema avisó que tu jornada ya no está abierta. No podés vender, anular ventas ni cobrar; lo que ya hiciste se sigue enviando. Para seguir, abrí una jornada nueva con señal.',
     )
     expect(reglas).toEqual(expect.arrayContaining(['RUT-09', 'RUT-03', 'ADR-066']))
   })
@@ -245,15 +245,81 @@ describe('textos de ayuda de la anulación y la jornada no abierta (change 22d, 
 
   it('el stock y el crédito nombran lo anulado además de lo vendido', () => {
     expect(AYUDAS['ruta.stockDelVehiculo'].texto).toContain('más lo que anulaste')
-    expect(AYUDAS['ruta.creditoSinSenal'].texto).toContain('menos lo que le anulaste')
+    expect(AYUDAS['ruta.creditoSinSenal'].texto).toContain('menos lo que le cobraste y le anulaste')
   })
 
   it('«Sincronizar» y «Observaciones y rechazos» nombran las anulaciones', () => {
-    expect(AYUDAS['ruta.sincronizar'].texto).toContain('ventas y anulaciones sin enviar')
-    expect(AYUDAS['ruta.observacionesYRechazos'].texto).toContain('venta o anulación enviada')
+    expect(AYUDAS['ruta.sincronizar'].texto).toContain('ventas, anulaciones y cobranzas sin enviar')
+    expect(AYUDAS['ruta.observacionesYRechazos'].texto).toContain('venta, anulación o cobranza enviada')
   })
 
   it('«Si no alcanza, la venta no se confirma: actualizá los datos con señal.» sigue en el stock', () => {
     expect(AYUDAS['ruta.stockDelVehiculo'].texto).toContain('Si no alcanza, la venta no se confirma: actualizá los datos con señal.')
+  })
+})
+
+/**
+ * Change 23, tarea 12.1 (spec `sistema/ayuda-contextual`, «Las pantallas de ruta explican la
+ * cobranza»; D12; ADR-051, ADR-067): cuatro claves nuevas y cinco revisadas, con los textos
+ * aprobados el 2026-11-03, sin ejemplos. Los IDs citados existen (`trazabilidad.test.ts`; ADR-067
+ * existe como *Propuesto*).
+ */
+describe('textos de ayuda de la cobranza de ruta (change 23, tarea 12.1)', () => {
+  it('ruta.cobrar: registra un pago también sin señal, libera crédito en el teléfono y se anula desde la oficina', () => {
+    const { titulo, texto, reglas } = AYUDAS['ruta.cobrar']
+    expect(titulo).toBe('Cobrar a un cliente')
+    expect(texto).toBe(
+      'Registra un pago del cliente, también sin señal. Baja lo que debe en total y le libera crédito enseguida en el teléfono. Se envía al sistema como las ventas. Si te equivocaste, avisá a administración: la cobranza se anula desde la oficina.',
+    )
+    expect(reglas).toEqual(expect.arrayContaining(['COB-01', 'COB-03', 'COB-04', 'COB-05', 'CRE-08', 'ADR-067']))
+  })
+
+  it('ruta.cobranzaRechazada: el motivo está en el detalle, el teléfono la deja de descontar y se avisa a administración', () => {
+    const { titulo, texto, reglas } = AYUDAS['ruta.cobranzaRechazada']
+    expect(titulo).toBe('Cobranza rechazada')
+    expect(texto).toBe(
+      'El sistema no aceptó la cobranza. En el detalle ves el motivo. El teléfono deja de descontarla de la cuenta del cliente. No se vuelve a enviar sola: avisá a administración.',
+    )
+    expect(reglas).toEqual(expect.arrayContaining(['SYN-06', 'SYN-09', 'ADR-067']))
+  })
+
+  it('ruta.medios: se reparte el importe entre varios medios y la suma tiene que dar justo el importe', () => {
+    const { titulo, texto, reglas } = AYUDAS['ruta.medios']
+    expect(titulo).toBe('Medios de pago')
+    expect(texto).toBe(
+      'Cómo te pagó el cliente. Podés repartir el importe entre varios medios y la suma tiene que dar justo el importe. Algunos medios piden el número de la operación.',
+    )
+    expect(reglas).toEqual(expect.arrayContaining(['COB-01', 'COB-02', 'INV-08']))
+  })
+
+  it('ruta.saldoDespuesDelCobro: lo que va a deber el cliente según el teléfono; si paga de más, le queda a favor', () => {
+    const { titulo, texto, reglas } = AYUDAS['ruta.saldoDespuesDelCobro']
+    expect(titulo).toBe('Saldo después del cobro')
+    expect(texto).toBe(
+      'Lo que el cliente va a deber después de este pago, según el teléfono. Si paga de más, le queda a favor.',
+    )
+    expect(reglas).toEqual(expect.arrayContaining(['COB-01', 'COB-03', 'CC-04', 'CRE-08']))
+  })
+
+  it.each(['ruta.cobrar', 'ruta.cobranzaRechazada', 'ruta.medios', 'ruta.saldoDespuesDelCobro'] as const)(
+    '%s no lleva ejemplo ni "Ver más"',
+    (clave) => {
+      const entrada: Record<string, unknown> = AYUDAS[clave]
+      expect(entrada.ejemplo).toBeUndefined()
+      expect(entrada.verMas).toBeUndefined()
+    },
+  )
+
+  it('las cinco revisadas nombran también las cobranzas y citan ADR-067', () => {
+    expect(AYUDAS['ruta.creditoSinSenal'].texto).toBe(
+      'Se calcula con la deuda de la última actualización de datos, más lo que le vendiste y menos lo que le cobraste y le anulaste desde el teléfono después.',
+    )
+    expect(AYUDAS['ruta.creditoSinSenal'].reglas).toEqual(expect.arrayContaining(['CRE-08', 'CRE-09', 'ADR-065', 'ADR-066', 'ADR-067']))
+    expect(AYUDAS['ruta.sincronizar'].texto).toContain('ventas, anulaciones y cobranzas sin enviar')
+    expect(AYUDAS['ruta.observacionesYRechazos'].texto).toContain('venta, anulación o cobranza enviada')
+    expect(AYUDAS['ruta.jornadaNoAbierta'].texto).toContain('No podés vender, anular ventas ni cobrar')
+    expect(AYUDAS['ruta.jornadaNoAbierta'].reglas).toEqual(expect.arrayContaining(['RUT-09', 'RUT-03', 'ADR-066', 'ADR-067']))
+    expect(AYUDAS['ruta.versionMinima'].texto).toContain('ventas ni cobranzas nuevas')
+    expect(AYUDAS['ruta.versionMinima'].reglas).toEqual(expect.arrayContaining(['ADR-064', 'ADR-067']))
   })
 })

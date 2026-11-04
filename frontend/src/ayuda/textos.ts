@@ -901,8 +901,8 @@ export const AYUDAS = {
   'ruta.creditoSinSenal': {
     titulo: 'Crédito del cliente',
     texto:
-      'Se calcula con la deuda de la última actualización de datos más lo que le vendiste y cobraste, y menos lo que le anulaste, desde el teléfono después.',
-    reglas: ['CRE-08', 'CRE-09', 'ADR-065', 'ADR-066'],
+      'Se calcula con la deuda de la última actualización de datos, más lo que le vendiste y menos lo que le cobraste y le anulaste desde el teléfono después.',
+    reglas: ['CRE-08', 'CRE-09', 'ADR-065', 'ADR-066', 'ADR-067'],
     verMas: 'credito',
   },
   'ruta.stockDelVehiculo': {
@@ -926,7 +926,7 @@ export const AYUDAS = {
   'ruta.sincronizar': {
     titulo: 'Sincronizar',
     texto:
-      'Envía al sistema las ventas y anulaciones sin enviar de tu usuario, en el orden en que las hiciste. Se hace sola al abrir la aplicación o volver a ella, al volver la señal, después de cada venta o anulación y cada 2 minutos. Enviar dos veces lo mismo no lo duplica.',
+      'Envía al sistema las ventas, anulaciones y cobranzas sin enviar de tu usuario, en el orden en que las hiciste. Se hace sola al abrir la aplicación o volver a ella, al volver la señal, después de cada operación y cada 2 minutos. Enviar dos veces lo mismo no lo duplica.',
     reglas: ['SYN-02', 'SYN-03', 'INV-06'],
   },
   'ruta.ventaConObservaciones': {
@@ -945,7 +945,7 @@ export const AYUDAS = {
   'ruta.observacionesYRechazos': {
     titulo: 'Observaciones y rechazos',
     texto:
-      'Muestra qué anotó el sistema en cada venta o anulación enviada y por qué no aceptó las rechazadas. Las observaciones las revisa administración; no tenés que hacer nada. Lo rechazado no se vuelve a enviar solo.',
+      'Muestra qué anotó el sistema en cada venta, anulación o cobranza enviada y por qué no aceptó las rechazadas. Las observaciones las revisa administración; no tenés que hacer nada. Lo rechazado no se vuelve a enviar solo.',
     reglas: ['SYN-04', 'SYN-07', 'SYN-08', 'SYN-09'],
   },
   // --- Anulación sin conexión y jornada no abierta (change 22d, ADR-066; textos aprobados el 2026-11-03, sin ejemplos) ---
@@ -964,14 +964,38 @@ export const AYUDAS = {
   'ruta.jornadaNoAbierta': {
     titulo: 'Jornada no abierta',
     texto:
-      'El sistema avisó que tu jornada ya no está abierta. No podés vender ni anular ventas; lo que ya vendiste se sigue enviando. Para seguir vendiendo, abrí una jornada nueva con señal.',
-    reglas: ['RUT-09', 'RUT-03', 'ADR-066'],
+      'El sistema avisó que tu jornada ya no está abierta. No podés vender, anular ventas ni cobrar; lo que ya hiciste se sigue enviando. Para seguir, abrí una jornada nueva con señal.',
+    reglas: ['RUT-09', 'RUT-03', 'ADR-066', 'ADR-067'],
   },
   'ruta.versionMinima': {
     titulo: 'Versión desactualizada',
     texto:
-      'Esta versión de la aplicación ya no puede confirmar ventas nuevas. Las ventas guardadas se siguen enviando. Actualizá la aplicación para volver a vender.',
-    reglas: ['ADR-064'],
+      'Esta versión de la aplicación ya no puede confirmar ventas ni cobranzas nuevas. Lo guardado se sigue enviando. Actualizá la aplicación para seguir.',
+    reglas: ['ADR-064', 'ADR-067'],
+  },
+  // --- Cobranza sin conexión en el teléfono (change 23, ADR-067; textos aprobados el 2026-11-03, sin ejemplos) ---
+  'ruta.cobrar': {
+    titulo: 'Cobrar a un cliente',
+    texto:
+      'Registra un pago del cliente, también sin señal. Baja lo que debe en total y le libera crédito enseguida en el teléfono. Se envía al sistema como las ventas. Si te equivocaste, avisá a administración: la cobranza se anula desde la oficina.',
+    reglas: ['COB-01', 'COB-03', 'COB-04', 'COB-05', 'CRE-08', 'ADR-067'],
+  },
+  'ruta.cobranzaRechazada': {
+    titulo: 'Cobranza rechazada',
+    texto:
+      'El sistema no aceptó la cobranza. En el detalle ves el motivo. El teléfono deja de descontarla de la cuenta del cliente. No se vuelve a enviar sola: avisá a administración.',
+    reglas: ['SYN-06', 'SYN-09', 'ADR-067'],
+  },
+  'ruta.medios': {
+    titulo: 'Medios de pago',
+    texto:
+      'Cómo te pagó el cliente. Podés repartir el importe entre varios medios y la suma tiene que dar justo el importe. Algunos medios piden el número de la operación.',
+    reglas: ['COB-01', 'COB-02', 'INV-08'],
+  },
+  'ruta.saldoDespuesDelCobro': {
+    titulo: 'Saldo después del cobro',
+    texto: 'Lo que el cliente va a deber después de este pago, según el teléfono. Si paga de más, le queda a favor.',
+    reglas: ['COB-01', 'COB-03', 'CC-04', 'CRE-08'],
   },
 } as const satisfies Record<string, EntradaDeAyuda>
 

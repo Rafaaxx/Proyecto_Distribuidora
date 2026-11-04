@@ -349,3 +349,103 @@ describe('la anulación local cuenta en el saldo y el stock locales (D7, INV-19)
     expect(Object.fromEntries(stock)).toEqual({ [VINO]: 63, 'sin-fila': 2 })
   })
 })
+
+/**
+ * Change 23, tarea 5.1 (spec `sync/cola-local`, «La cobranza local cuenta en el saldo local»;
+ * D6; CRE-08, CRE-01, COB-04, SYN-06, SYN-11, INV-06, CC-04): la cobranza independiente cuenta
+ * desde que se confirma, por la regla de la secuencia procesada; rechazada, deja de contar. El
+ * cobro de una venta rechazada sigue la regla de su venta.
+ */
+function conCobranzas(
+  secuenciaProcesada: number | null,
+  operaciones: Record<string, { secuencia: number; rechazada?: boolean; independiente?: boolean }>,
+): Conciliacion {
+  return {
+    secuenciaProcesada,
+    operaciones: new Map(
+      Object.entries(operaciones).map(([id, o]) => [
+        id,
+        {
+          secuencia: o.secuencia,
+          rechazada: o.rechazada ?? false,
+          ...(o.independiente === true ? { cobranzaIndependiente: true } : {}),
+        },
+      ]),
+    ),
+  }
+}
+
+const cobranza = (importe: string, extra: Partial<MovimientoLocal> = {}) =>
+  credito(importe, { operation_id: 'op-cob', ...extra })
+
+describe('la cobranza local cuenta en el saldo local (D6)', () => {
+  it('saldo 150.000 y una cobranza de 50.000 sin enviar: saldo 100.000 y disponible 100.000 con límite 200.000 (CRE-08, CRE-01)', () => {
+    const c = conCobranzas(null, { 'op-cob': { secuencia: 8, independiente: true } })
+    const saldo = saldoConsiderado('150000.00', [cobranza('50000.00')], CLIENTE, JORNADA, c)
+
+    expect(saldo).toBe('100000.00')
+    expect(creditoDisponibleLocal('200000.00', saldo)).toBe('100000.00')
+  })
+
+  it('incluida en el bootstrap (marca 8, saldo 100.000) no se cuenta dos veces: 100.000 y no 50.000 (INV-06, SYN-11)', () => {
+    const c = conCobranzas(8, { 'op-cob': { secuencia: 8, independiente: true } })
+
+    expect(saldoConsiderado('100000.00', [cobranza('50000.00')], CLIENTE, JORNADA, c)).toBe('100000.00')
+  })
+
+  it('pendiente después de actualizar los datos (marca 7, saldo 150.000, secuencia 8): 100.000 (SYN-11)', () => {
+    const c = conCobranzas(7, { 'op-cob': { secuencia: 8, independiente: true } })
+
+    expect(saldoConsiderado('150000.00', [cobranza('50000.00')], CLIENTE, JORNADA, c)).toBe('100000.00')
+  })
+
+  it('rechazada: no cuenta, con o sin marca que la cubra (CRE-08, SYN-06)', () => {
+    const rechazada = { 'op-cob': { secuencia: 8, rechazada: true, independiente: true } }
+
+    expect(saldoConsiderado('150000.00', [cobranza('50000.00')], CLIENTE, JORNADA, conCobranzas(9, rechazada))).toBe('150000.00')
+    expect(saldoConsiderado('150000.00', [cobranza('50000.00')], CLIENTE, JORNADA, conCobranzas(null, rechazada))).toBe('150000.00')
+    expect(saldoConsiderado('150000.00', [cobranza('50000.00')], CLIENTE, JORNADA, conCobranzas(7, rechazada))).toBe('150000.00')
+  })
+
+  it('rechazada y otra aceptada del mismo cliente: solo cuenta la aceptada', () => {
+    const c = conCobranzas(7, {
+      'op-cob': { secuencia: 8, rechazada: true, independiente: true },
+      'op-cob-2': { secuencia: 9, independiente: true },
+    })
+    const movimientos = [cobranza('50000.00'), credito('10000.00', { operation_id: 'op-cob-2' })]
+
+    expect(saldoConsiderado('150000.00', movimientos, CLIENTE, JORNADA, c)).toBe('140000.00')
+  })
+
+  it('el cobro de una venta rechazada sigue contando completo con su venta (CRE-08, ADR-065)', () => {
+    // Sin `cobranzaIndependiente`: es el cobro en el momento de la venta, con el operation_id de la venta.
+    const c = conCobranzas(9, { 'op-1': { secuencia: 3, rechazada: true } })
+    const movimientos = [debito('50000.00'), credito('50000.00')]
+
+    expect(saldoConsiderado('100000.00', movimientos, CLIENTE, JORNADA, c)).toBe('100000.00')
+    expect(saldoConsiderado('100000.00', [debito('50000.00')], CLIENTE, JORNADA, c)).toBe('150000.00')
+  })
+
+  it('saldo a favor: debe 150.000, cobra 160.000 y queda -10.000 (COB-01, CC-04)', () => {
+    const c = conCobranzas(null, { 'op-cob': { secuencia: 8, independiente: true } })
+    const saldo = saldoConsiderado('150000.00', [cobranza('160000.00')], CLIENTE, JORNADA, c)
+
+    expect(saldo).toBe('-10000.00')
+    // Un saldo a favor deja más crédito disponible que el límite.
+    expect(creditoDisponibleLocal('200000.00', saldo)).toBe('210000.00')
+  })
+
+  it('doble sincronización: el mismo resultado dos veces no cambia el saldo (INV-06, SYN-02)', () => {
+    const c = conCobranzas(8, { 'op-cob': { secuencia: 8, independiente: true } })
+    const una = saldoConsiderado('100000.00', [cobranza('50000.00')], CLIENTE, JORNADA, c)
+    const otra = saldoConsiderado('100000.00', [cobranza('50000.00')], CLIENTE, JORNADA, c)
+
+    expect([una, otra]).toEqual(['100000.00', '100000.00'])
+  })
+
+  it('movimientosQueCuentan deja afuera la cobranza rechazada (sirve para la leyenda)', () => {
+    const c = conCobranzas(null, { 'op-cob': { secuencia: 8, rechazada: true, independiente: true } })
+
+    expect(movimientosQueCuentan([cobranza('50000.00'), debito('10.00')], JORNADA, c)).toHaveLength(1)
+  })
+})

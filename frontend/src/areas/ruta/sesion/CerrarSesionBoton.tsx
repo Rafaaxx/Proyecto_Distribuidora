@@ -22,14 +22,14 @@ export function CerrarSesionBoton({ onCerrada }: CerrarSesionBotonProps) {
   const [confirmando, setConfirmando] = useState(false)
   const [cerrando, setCerrando] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [sinEnviar, setSinEnviar] = useState<Pendientes>({ ventas: 0, anulaciones: 0 })
+  const [sinEnviar, setSinEnviar] = useState<Pendientes>({ ventas: 0, anulaciones: 0, cobranzas: 0 })
 
   // D16: al abrir el aviso se cuentan las ventas sin enviar del usuario de este teléfono.
   useEffect(() => {
     if (!confirmando) return undefined
     let vigente = true
     void usuarioLocalId()
-      .then((id) => (id === undefined ? { ventas: 0, anulaciones: 0 } : contarPendientes(id)))
+      .then((id) => (id === undefined ? { ventas: 0, anulaciones: 0, cobranzas: 0 } : contarPendientes(id)))
       .then((cantidad) => {
         if (vigente) setSinEnviar(cantidad)
       })
@@ -65,7 +65,7 @@ export function CerrarSesionBoton({ onCerrada }: CerrarSesionBotonProps) {
           Se borran tu sesión, tu PIN y los datos descargados de este teléfono. Lo que tengas
           pendiente de enviar no se pierde.
         </p>
-        {sinEnviar.ventas + sinEnviar.anulaciones > 0 && <p className="mb-3 text-sm font-medium">{avisoDeCierreConPendientes(sinEnviar)}</p>}
+        {sinEnviar.ventas + sinEnviar.anulaciones + sinEnviar.cobranzas > 0 && <p className="mb-3 text-sm font-medium">{avisoDeCierreConPendientes(sinEnviar)}</p>}
         {error && <Alert className="mb-3">{error}</Alert>}
         <div className="flex justify-end gap-2">
           <Boton variante="secundario" onClick={() => setConfirmando(false)}>

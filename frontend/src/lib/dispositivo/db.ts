@@ -13,6 +13,9 @@ import type { components } from '../../api/schema.gen'
  * y las cantidades, enteros en unidad base (INV-04).
  * Versión 4 (change 22d, `design.md` D6): agrega `anulaciones` (una por venta anulada en el
  * teléfono). Solo suma una tabla: no toca las otras ni entra en `TABLAS_MAESTRAS`.
+ * Versión 5 (change 23, `design.md` D5): `cobranzas` suma los índices `operation_id`, `cliente_id`,
+ * `jornada_id` y `estado_envio` para la cobranza independiente. Solo agrega índices: no modifica
+ * filas (los cobros de una venta guardados antes siguen igual) ni entra en `TABLAS_MAESTRAS`.
  */
 type Esquema = components['schemas']
 
@@ -149,13 +152,33 @@ export interface VentaLocal {
   nota: NotaCongelada | null
 }
 
+/** Origen de una cobranza local (change 23, D5): el cobro de una venta o una cobranza suelta. */
+export type OrigenDeCobranza = 'VENTA' | 'INDEPENDIENTE'
+
+/**
+ * Cobranza guardada en el teléfono. Hasta la v4 solo era el cobro en el momento de una venta
+ * (`venta_id` obligatorio, sin `origen` ni estado de envío propio: sigue la suerte de su venta).
+ * Desde el change 23 (`design.md` D5; COB-01, COB-04) también es la cobranza INDEPENDIENTE: sin
+ * venta (`venta_id: null`), con cliente, momento, observación y estado de envío propio. Una fila
+ * sin `origen` es el cobro de una venta. `cliente_nombre` y `medios_nombres` se congelan para el
+ * detalle aunque un bootstrap posterior cambie los maestros. Los importes son string (INV-03).
+ */
 export interface CobranzaLocal {
   cobranza_id: string
-  venta_id: string
+  venta_id: string | null
   operation_id: string
   jornada_id: string
   medios: { medio_pago_id: string; importe: string; referencia: string | null }[]
   total: string
+  origen?: OrigenDeCobranza
+  cliente_id?: string
+  cliente_nombre?: string
+  /** Nombre del vendedor congelado al cobrar, para avisar de los pendientes de otro usuario (change 23, D10). */
+  vendedor_nombre?: string
+  occurred_at?: string
+  observacion?: string | null
+  estado_envio?: EstadoDeEnvio
+  medios_nombres?: { medio_pago_id: string; nombre: string }[]
 }
 
 export type TipoDeMovimientoLocal =
@@ -294,6 +317,9 @@ class BaseLocal extends Dexie {
     })
     this.version(4).stores({
       anulaciones: 'venta_id, &operation_id, jornada_id, estado_envio',
+    })
+    this.version(5).stores({
+      cobranzas: 'cobranza_id, venta_id, operation_id, cliente_id, jornada_id, estado_envio',
     })
   }
 }

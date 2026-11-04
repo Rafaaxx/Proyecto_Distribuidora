@@ -12,6 +12,10 @@ import { marcarJornadaNoAbierta } from './estadoDeJornada'
  * Change 22d (D6): el resultado de un `VENTA_ANULAR` cambia el estado de la ANULACIÓN (tabla
  * `anulaciones`, por `operation_id`) y el de su comando; el estado de envío de la venta anulada no
  * se toca. Todo en la misma transacción.
+ *
+ * Change 23 (D5, D7): el resultado de un `COBRANZA_REGISTRAR` cambia el estado de la COBRANZA
+ * (tabla `cobranzas`, por `operation_id`) y el de su comando; ninguna venta se toca. El cobro en
+ * el momento de una venta no tiene comando propio: sigue la suerte de su venta.
  */
 const DESTINO_POR_ESTADO: Record<string, { comando: EstadoDeComando; venta: EstadoDeEnvio }> = {
   ACEPTADO: { comando: 'ACEPTADO', venta: 'ACEPTADA' },
@@ -20,6 +24,7 @@ const DESTINO_POR_ESTADO: Record<string, { comando: EstadoDeComando; venta: Esta
 }
 
 const TIPO_DE_ANULACION = 'VENTA_ANULAR'
+const TIPO_DE_COBRANZA = 'COBRANZA_REGISTRAR'
 const OBSERVACION_JORNADA_LIBERADA = 'JORNADA_LIBERADA'
 
 export interface ResumenDeAplicacion {
@@ -28,7 +33,7 @@ export interface ResumenDeAplicacion {
 }
 
 export async function aplicarResultados(resultados: ResultadoDeItem[], ahora: Date): Promise<ResumenDeAplicacion> {
-  const tablas = [baseLocal.cola, baseLocal.ventas, baseLocal.anulaciones, baseLocal.sesion, baseLocal.meta]
+  const tablas = [baseLocal.cola, baseLocal.ventas, baseLocal.anulaciones, baseLocal.cobranzas, baseLocal.sesion, baseLocal.meta]
   return baseLocal.transaction('rw', tablas, async (): Promise<ResumenDeAplicacion> => {
     let aplicados = 0
     let ignorados = 0
@@ -53,6 +58,8 @@ export async function aplicarResultados(resultados: ResultadoDeItem[], ahora: Da
       })
       if (comando.sobre.tipo === TIPO_DE_ANULACION) {
         await baseLocal.anulaciones.where('operation_id').equals(item.operation_id).modify({ estado_envio: destino.venta })
+      } else if (comando.sobre.tipo === TIPO_DE_COBRANZA) {
+        await baseLocal.cobranzas.where('operation_id').equals(item.operation_id).modify({ estado_envio: destino.venta })
       } else {
         await baseLocal.ventas.where('operation_id').equals(item.operation_id).modify({ estado_envio: destino.venta })
       }

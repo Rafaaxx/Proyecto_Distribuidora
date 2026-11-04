@@ -298,4 +298,63 @@ describe('aplicar el bootstrap en una sola transacción (change 21, tarea 6.1)',
       expect((await baseLocal.anulaciones.get('v-1'))?.estado_envio).toBe('RECHAZADA')
     })
   })
+
+  describe('no toca las cobranzas independientes (change 23, tarea 3.1; INV-01, INV-05, SYN-09, 02 §13.4)', () => {
+    async function sembrarCobranza(estado: 'PENDIENTE' | 'RECHAZADA'): Promise<void> {
+      await baseLocal.cobranzas.put({
+        cobranza_id: 'cob-1',
+        venta_id: null,
+        operation_id: 'op-cob-1',
+        jornada_id: ID(2),
+        origen: 'INDEPENDIENTE',
+        cliente_id: ID(101),
+        cliente_nombre: 'Kiosco La Esquina',
+        occurred_at: '2026-10-30T11:00:00.000Z',
+        observacion: null,
+        estado_envio: estado,
+        medios: [{ medio_pago_id: ID(60), importe: '50000.00', referencia: null }],
+        total: '50000.00',
+      })
+      await baseLocal.movimientos_locales.add({
+        operation_id: 'op-cob-1',
+        jornada_id: ID(2),
+        tipo: 'COBRANZA_CREDITO',
+        producto_id: null,
+        cliente_id: ID(101),
+        cantidad_base: null,
+        importe: '50000.00',
+        estado_operacion: 'PENDIENTE',
+      })
+      await baseLocal.cola.put({ secuencia: 8, operation_id: 'op-cob-1', estado: 'PENDIENTE', sobre: {} as never })
+    }
+
+    async function instantanea(): Promise<unknown> {
+      return {
+        cobranzas: await baseLocal.cobranzas.toArray(),
+        movimientos: await baseLocal.movimientos_locales.toArray(),
+        cola: await baseLocal.cola.toArray(),
+      }
+    }
+
+    it('un bootstrap con una cobranza sin enviar la deja con su movimiento y su comando', async () => {
+      await sembrarCobranza('PENDIENTE')
+      const antes = await instantanea()
+
+      await aplicarBootstrap(bootstrap({ generado: '2026-10-30T11:00:00Z' }))
+      await aplicarBootstrap(bootstrap({ clientes: [cliente(1, 'Otro')], generado: '2026-10-30T12:00:00Z' }))
+
+      expect(await instantanea()).toEqual(antes)
+    })
+
+    it('cerrar la sesión local no borra una cobranza rechazada (SYN-09)', async () => {
+      await aplicarBootstrap(bootstrap())
+      await sembrarCobranza('RECHAZADA')
+      const antes = await instantanea()
+
+      await borrarSesionLocal()
+
+      expect(await instantanea()).toEqual(antes)
+      expect((await baseLocal.cobranzas.get('cob-1'))?.estado_envio).toBe('RECHAZADA')
+    })
+  })
 })

@@ -10,9 +10,11 @@ import { resumenDeObservaciones } from '../../../domain/ruta/textosDeSincronizac
 import { useConectado } from '../../../lib/conexion'
 import {
   useAnulacionesConProblemas,
+  useCobranzasConProblemas,
   useResumenDeSincronizacion,
   useVentasConProblemas,
   type AnulacionConProblema,
+  type CobranzaConProblema,
   type VentaConProblema,
 } from '../datos/sincronizacion'
 import { etiquetaDeEnvio } from '../ventas/presentacionDeVentas'
@@ -29,7 +31,8 @@ import {
  * texto y su código, el botón «Sincronizar» y las ventas «Con observaciones» y «Rechazadas», cada
  * una con su detalle. Lee de la base local; sin lógica de negocio. Change 22d (D10): también lista
  * las anulaciones «Con observaciones» y «Rechazadas» como «Anulación de {número}», con el acceso
- * al detalle de la venta, y lo pendiente cuenta ventas y anulaciones.
+ * al detalle de la venta, y lo pendiente cuenta ventas y anulaciones. Change 23 (D10): también las
+ * cobranzas «Con observaciones» y «Rechazadas» como «Cobranza a {cliente}», con el acceso a su detalle.
  */
 function FilaDeVenta({ item }: { item: VentaConProblema }) {
   const { venta, codigo, explicacion } = item
@@ -100,18 +103,60 @@ function FilaDeAnulacion({ item }: { item: AnulacionConProblema }) {
   )
 }
 
+function FilaDeCobranza({ item }: { item: CobranzaConProblema }) {
+  const { cobranza, codigo, explicacion } = item
+  const rechazada = cobranza.estado_envio === 'RECHAZADA'
+  const resumen = explicacion?.tipo === 'observaciones' ? resumenDeObservaciones(explicacion.textos) : null
+  return (
+    <li className="rounded-md border border-border bg-surface">
+      <Link to={`/ruta/cobranzas/${cobranza.cobranza_id}`} className="flex min-w-0 flex-col gap-1 p-3">
+        <span className="flex flex-wrap items-center justify-between gap-2">
+          <span className="break-words text-sm font-semibold text-primary">Cobranza a {cobranza.cliente_nombre ?? '—'}</span>
+          <span className="text-sm font-semibold text-primary">{formatearDinero(cobranza.total)}</span>
+        </span>
+        <span className="flex flex-wrap items-center gap-2">
+          <Badge variante={rechazada ? 'negativo' : 'neutral'}>{etiquetaDeEnvio(cobranza.estado_envio ?? 'PENDIENTE')}</Badge>
+          {rechazada && codigo !== null && <span className="text-xs font-medium text-danger">{codigo}</span>}
+        </span>
+        {explicacion?.tipo === 'rechazo' && (
+          <>
+            <span className="break-words text-sm text-primary">{explicacion.texto}</span>
+            <span className="break-words text-xs text-primary/70">{explicacion.aviso}</span>
+          </>
+        )}
+        {explicacion?.tipo === 'sin_detalle' && (
+          <span className="break-words text-sm text-primary">{explicacion.texto}</span>
+        )}
+        {resumen !== null && (
+          <>
+            <span className="break-words text-sm text-primary">{resumen.primera}</span>
+            {resumen.mas !== null && <span className="text-xs text-primary/70">{resumen.mas}</span>}
+          </>
+        )}
+      </Link>
+      {rechazada && (
+        <div className="flex items-center gap-1 px-3 pb-3">
+          <Ayuda clave="ruta.cobranzaRechazada" />
+        </div>
+      )}
+    </li>
+  )
+}
+
 function Lista({
   titulo,
   clave,
   items,
   anulaciones,
+  cobranzas,
 }: {
   titulo: string
   clave: ClaveDeAyuda
   items: VentaConProblema[]
   anulaciones: AnulacionConProblema[]
+  cobranzas: CobranzaConProblema[]
 }) {
-  if (items.length === 0 && anulaciones.length === 0) return null
+  if (items.length === 0 && anulaciones.length === 0 && cobranzas.length === 0) return null
   return (
     <section className="flex flex-col gap-2">
       <h2 className="flex items-center gap-1 text-sm font-semibold text-primary">
@@ -125,6 +170,9 @@ function Lista({
         {anulaciones.map((item) => (
           <FilaDeAnulacion key={item.anulacion.venta_id} item={item} />
         ))}
+        {cobranzas.map((item) => (
+          <FilaDeCobranza key={item.cobranza.cobranza_id} item={item} />
+        ))}
       </ul>
     </section>
   )
@@ -135,6 +183,7 @@ export function SincronizacionScreen() {
   const resumen = useResumenDeSincronizacion()
   const problemas = useVentasConProblemas()
   const problemasDeAnulacion = useAnulacionesConProblemas()
+  const problemasDeCobranza = useCobranzasConProblemas()
   const error = resumen.ultimoError === null ? null : textoDelUltimoError(resumen.ultimoError)
 
   return (
@@ -145,7 +194,7 @@ export function SincronizacionScreen() {
       </div>
       <Card className="flex flex-col gap-2">
         <p className="text-sm text-primary">{conectado ? 'Con conexión' : 'Sin conexión'}</p>
-        <p className="text-sm font-semibold text-primary">{textoDePendientes(resumen.sinEnviar, resumen.anulacionesSinEnviar)}</p>
+        <p className="text-sm font-semibold text-primary">{textoDePendientes(resumen.sinEnviar, resumen.anulacionesSinEnviar, resumen.cobranzasSinEnviar)}</p>
         <p className="text-sm text-primary">{textoDeUltimaSincronizacion(resumen.ultimaSincronizacion)}</p>
         {error !== null && (
           <Alert>
@@ -160,7 +209,7 @@ export function SincronizacionScreen() {
         )}
         <BotonSincronizar />
       </Card>
-      {problemas.length + problemasDeAnulacion.length > 0 && (
+      {problemas.length + problemasDeAnulacion.length + problemasDeCobranza.length > 0 && (
         <p className="flex items-center gap-1 text-sm text-primary">
           Observaciones y rechazos
           <Ayuda clave="ruta.observacionesYRechazos" />
@@ -171,12 +220,14 @@ export function SincronizacionScreen() {
         clave="ruta.ventaConObservaciones"
         items={problemas.filter((p) => p.venta.estado_envio === 'CON_OBSERVACIONES')}
         anulaciones={problemasDeAnulacion.filter((p) => p.anulacion.estado_envio === 'CON_OBSERVACIONES')}
+        cobranzas={problemasDeCobranza.filter((p) => p.cobranza.estado_envio === 'CON_OBSERVACIONES')}
       />
       <Lista
         titulo="Rechazadas"
         clave="ruta.ventaRechazada"
         items={problemas.filter((p) => p.venta.estado_envio === 'RECHAZADA')}
         anulaciones={problemasDeAnulacion.filter((p) => p.anulacion.estado_envio === 'RECHAZADA')}
+        cobranzas={problemasDeCobranza.filter((p) => p.cobranza.estado_envio === 'RECHAZADA')}
       />
     </div>
   )

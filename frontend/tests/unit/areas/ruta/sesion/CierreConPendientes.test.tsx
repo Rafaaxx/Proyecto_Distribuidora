@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ID } from '../../../utils/bootstrapDePrueba'
 import { bootstrapParaVender, IDS_DE_PRUEBA } from '../../../utils/datosParaVender'
 import { anularVentaLocal } from '../../../../../src/sync/anularVentaLocal'
-import { sembrarVenta } from '../../../utils/sembrarVenta'
+import { sembrarCobranza, sembrarVenta } from '../../../utils/sembrarVenta'
 
 const mocks = vi.hoisted(() => ({
   apiFetch: vi.fn(),
@@ -180,7 +180,7 @@ describe('Otro usuario inicia sesión en el teléfono (tarea 14.1, D16, `02` §6
     const r = await registrarUsuarioTrasLogin()
 
     expect(r.cambioDeUsuario).toBe(true)
-    expect(r.pendientesDeOtro).toEqual([{ vendedor: 'Vendedor Uno', ventas: 1, anulaciones: 0 }])
+    expect(r.pendientesDeOtro).toEqual([{ vendedor: 'Vendedor Uno', ventas: 1, anulaciones: 0, cobranzas: 0 }])
     expect(await baseLocal.ventas.count()).toBe(1)
     expect(await baseLocal.cola.count()).toBe(1)
     expect(await baseLocal.clientes.count()).toBe(0)
@@ -192,7 +192,7 @@ describe('Otro usuario inicia sesión en el teléfono (tarea 14.1, D16, `02` §6
 
     const r = await registrarUsuarioTrasLogin()
 
-    expect(r.pendientesDeOtro).toEqual([{ vendedor: 'Vendedor Uno', ventas: 1, anulaciones: 1 }])
+    expect(r.pendientesDeOtro).toEqual([{ vendedor: 'Vendedor Uno', ventas: 1, anulaciones: 1, cobranzas: 0 }])
   })
 
   it('el mismo usuario que vuelve a entrar no recibe aviso de otro', async () => {
@@ -211,7 +211,7 @@ describe('Otro usuario inicia sesión en el teléfono (tarea 14.1, D16, `02` §6
     const r = await registrarUsuarioTrasLogin()
 
     expect(r.cambioDeUsuario).toBe(false)
-    expect(r.pendientesDeOtro).toEqual([{ vendedor: 'Vendedor Uno', ventas: 1, anulaciones: 0 }])
+    expect(r.pendientesDeOtro).toEqual([{ vendedor: 'Vendedor Uno', ventas: 1, anulaciones: 0, cobranzas: 0 }])
     expect(await baseLocal.ventas.count()).toBe(1)
     expect(await baseLocal.cola.count()).toBe(1)
   })
@@ -248,5 +248,73 @@ describe('Otro usuario inicia sesión en el teléfono (tarea 14.1, D16, `02` §6
     await u.click(screen.getByRole('button', { name: 'Continuar' }))
     expect(await screen.findByLabelText(/repetí el PIN/i)).toBeInTheDocument()
     expect(await baseLocal.ventas.count()).toBe(1)
+  })
+})
+
+/**
+ * Change 23, tarea 10.1 (spec `ruta/area-de-ruta`, escenarios «Pendientes» y «Solo cobranzas
+ * pendientes»; `design.md` D10; cita SYN-09, INV-05): las cobranzas sin enviar también se avisan al
+ * cerrar sesión y cuando otro usuario inicia sesión, y no se borran.
+ */
+describe('Cerrar sesión con cobranzas sin enviar (change 23, tarea 10.1, D10)', () => {
+  beforeEach(async () => {
+    for (const m of Object.values(mocks)) m.mockReset()
+    await Promise.all(baseLocal.tables.map((t) => t.clear()))
+    vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(true)
+    await aplicarBootstrap(bootstrapParaVender())
+    await baseLocal.meta.put({ clave: 'usuario_local_id', valor: ID(1) })
+    await definirPin('482915', '482915')
+    mocks.apiFetch.mockResolvedValue(respuesta(204))
+  })
+
+  afterEach(() => vi.restoreAllMocks())
+
+  it('dos ventas, una anulación y una cobranza: el aviso las une y cerrar no borra ninguna (SYN-09)', async () => {
+    await sembrarVenta('a', { cajas: 1, unidades: 0 })
+    await sembrarVenta('b', { cajas: 0, unidades: 2 })
+    await anularDeLaSesion('a')
+    await sembrarCobranza('a')
+    const antes = await baseLocal.cola.count()
+    const alCerrar = vi.fn()
+    const u = userEvent.setup()
+    render(<CerrarSesionBoton onCerrada={alCerrar} />)
+
+    await u.click(screen.getByRole('button', { name: /cerrar sesión/i }))
+    expect(
+      await screen.findByText(
+        'Tenés 2 ventas, 1 anulación y 1 cobranza sin enviar. Quedan guardadas en el teléfono y se envían cuando vuelvas a entrar vos.',
+      ),
+    ).toBeInTheDocument()
+    await u.click(screen.getByRole('button', { name: /^confirmar$/i }))
+
+    await waitFor(() => expect(alCerrar).toHaveBeenCalledTimes(1))
+    expect(await baseLocal.cola.count()).toBe(antes)
+    expect(await baseLocal.cobranzas.get('cobranza-s-a')).toMatchObject({ estado_envio: 'PENDIENTE' })
+  })
+
+  it('solo una cobranza sin enviar: «Tenés 1 cobranza sin enviar.» en singular', async () => {
+    await sembrarCobranza('a')
+    const u = userEvent.setup()
+    render(<CerrarSesionBoton onCerrada={vi.fn()} />)
+
+    await u.click(screen.getByRole('button', { name: /cerrar sesión/i }))
+
+    expect(
+      await screen.findByText('Tenés 1 cobranza sin enviar. Queda guardada en el teléfono y se envía cuando vuelvas a entrar vos.'),
+    ).toBeInTheDocument()
+  })
+
+  it('tres cobranzas sin enviar y nada más: otro usuario que inicia sesión ve «Hay 3 cobranzas sin enviar de {vendedor}.» (INV-05)', async () => {
+    await sembrarCobranza('a')
+    await sembrarCobranza('b')
+    await sembrarCobranza('c')
+    await borrarSesionLocal()
+    mocks.obtenerYo.mockResolvedValue({ usuario: { id: ID(90), nombre: 'Vendedor Dos' } })
+
+    const r = await registrarUsuarioTrasLogin()
+
+    expect(r.pendientesDeOtro).toEqual([{ vendedor: 'Vendedor Uno', ventas: 0, anulaciones: 0, cobranzas: 3 }])
+    expect(await baseLocal.cobranzas.count()).toBe(3)
+    expect(await baseLocal.cola.count()).toBe(3)
   })
 })

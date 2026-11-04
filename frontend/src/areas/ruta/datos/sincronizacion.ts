@@ -6,7 +6,7 @@ import {
   type ExplicacionDeEnvio,
   type NombresLocales,
 } from '../../../domain/ruta/textosDeSincronizacion'
-import { baseLocal, type AnulacionLocal, type EstadoDeEnvio, type VentaLocal } from '../../../lib/dispositivo/db'
+import { baseLocal, type AnulacionLocal, type CobranzaLocal, type EstadoDeEnvio, type VentaLocal } from '../../../lib/dispositivo/db'
 import {
   estadoDeSincronizacion,
   suscribirEstadoDeSincronizacion,
@@ -27,6 +27,8 @@ export interface ResumenDeSincronizacion {
   /** Ventas sin enviar (change 22d: las anulaciones se cuentan aparte). */
   sinEnviar: number
   anulacionesSinEnviar: number
+  /** Change 23: cobranzas independientes sin enviar. */
+  cobranzasSinEnviar: number
   conObservaciones: number
   rechazadas: number
   ultimaSincronizacion: string | null
@@ -36,6 +38,7 @@ export interface ResumenDeSincronizacion {
 const RESUMEN_VACIO: ResumenDeSincronizacion = {
   sinEnviar: 0,
   anulacionesSinEnviar: 0,
+  cobranzasSinEnviar: 0,
   conObservaciones: 0,
   rechazadas: 0,
   ultimaSincronizacion: null,
@@ -54,20 +57,32 @@ async function anulacionesDeLaJornada(): Promise<AnulacionLocal[]> {
   return baseLocal.anulaciones.where('jornada_id').equals(sesion.jornada.id).toArray()
 }
 
+/** Las cobranzas independientes de la jornada de la sesión (las filas sin `origen` son cobros de una venta). */
+export async function cobranzasDeLaJornada(): Promise<CobranzaLocal[]> {
+  const sesion = await baseLocal.sesion.get('actual')
+  if (sesion === undefined) return []
+  const filas = await baseLocal.cobranzas.where('jornada_id').equals(sesion.jornada.id).toArray()
+  return filas.filter((c) => c.origen === 'INDEPENDIENTE')
+}
+
 async function leerResumen(): Promise<ResumenDeSincronizacion> {
   const sesion = await baseLocal.sesion.get('actual')
-  const [ventas, anulaciones, ultima, error] = await Promise.all([
+  const [ventas, anulaciones, cobranzas, ultima, error] = await Promise.all([
     ventasDeLaJornada(),
     anulacionesDeLaJornada(),
+    cobranzasDeLaJornada(),
     baseLocal.meta.get(CLAVE_ULTIMA_SINCRONIZACION),
     baseLocal.meta.get(CLAVE_ULTIMO_ERROR_SYNC),
   ])
-  const pendientes = sesion === undefined ? { ventas: 0, anulaciones: 0 } : await contarPendientes(sesion.usuario.id)
+  const pendientes = sesion === undefined ? { ventas: 0, anulaciones: 0, cobranzas: 0 } : await contarPendientes(sesion.usuario.id)
   const conEstado = (estado: EstadoDeEnvio) =>
-    ventas.filter((v) => v.estado_envio === estado).length + anulaciones.filter((a) => a.estado_envio === estado).length
+    ventas.filter((v) => v.estado_envio === estado).length +
+    anulaciones.filter((a) => a.estado_envio === estado).length +
+    cobranzas.filter((c) => c.estado_envio === estado).length
   return {
     sinEnviar: pendientes.ventas,
     anulacionesSinEnviar: pendientes.anulaciones,
+    cobranzasSinEnviar: pendientes.cobranzas,
     conObservaciones: conEstado('CON_OBSERVACIONES'),
     rechazadas: conEstado('RECHAZADA'),
     ultimaSincronizacion: ultima?.valor ?? null,
@@ -165,6 +180,29 @@ export function useAnulacionesConProblemas(): AnulacionConProblema[] {
       }),
     )
   }, [] as AnulacionConProblema[])
+}
+
+export interface CobranzaConProblema {
+  cobranza: CobranzaLocal
+  codigo: string | null
+  explicacion: ExplicacionDeEnvio | null
+}
+
+/** Cobranzas de la jornada «Con observaciones» o «Rechazadas», con su explicación traducida (change 23, D10). */
+export function useCobranzasConProblemas(): CobranzaConProblema[] {
+  return useConsulta(async () => {
+    const cobranzas = (await cobranzasDeLaJornada()).filter(
+      (c) => c.estado_envio === 'CON_OBSERVACIONES' || c.estado_envio === 'RECHAZADA',
+    )
+    cobranzas.sort((a, b) => (a.occurred_at ?? '').localeCompare(b.occurred_at ?? ''))
+    const nombres = await leerNombresLocales()
+    return Promise.all(
+      cobranzas.map(async (cobranza) => {
+        const explicacion = await leerExplicacion(cobranza.operation_id, cobranza.estado_envio ?? 'PENDIENTE', nombres)
+        return { cobranza, codigo: explicacion?.tipo === 'rechazo' ? explicacion.codigo : null, explicacion }
+      }),
+    )
+  }, [] as CobranzaConProblema[])
 }
 
 /** Explicación de las observaciones o del rechazo de una venta, sin conexión (22c, D4). `undefined` mientras carga. */

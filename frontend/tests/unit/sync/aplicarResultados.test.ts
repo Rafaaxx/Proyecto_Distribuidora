@@ -7,6 +7,8 @@ import { baseLocal } from '../../../src/lib/dispositivo/db'
 import { aplicarBootstrap } from '../../../src/sync/aplicarBootstrap'
 import { anularVentaLocal } from '../../../src/sync/anularVentaLocal'
 import { aplicarResultados } from '../../../src/sync/aplicarResultados'
+import { leerJornadaNoAbierta } from '../../../src/sync/estadoDeJornada'
+import { registrarCobranzaLocal } from '../../../src/sync/registrarCobranzaLocal'
 import { seleccionarCola } from '../../../src/sync/seleccionDeCola'
 import { comandoDePrueba, sembrarComando } from '../utils/colaDePrueba'
 import { bootstrapParaVender, IDS_DE_PRUEBA } from '../utils/datosParaVender'
@@ -195,8 +197,8 @@ describe('las observaciones se guardan con el resultado (change 22c, tarea 5.1; 
     expect((await baseLocal.cola.get(1))?.observaciones).toBeUndefined()
   })
 
-  it('la base v3 abre igual: el esquema de cola no cambia (D3, sin versión nueva)', async () => {
-    expect(baseLocal.verno).toBe(4)
+  it('el esquema de cola no cambia desde la v3 (D3); la base abre en la v5 (change 23)', async () => {
+    expect(baseLocal.verno).toBe(5)
     expect(baseLocal.cola.schema.indexes.map((i) => i.name)).toEqual(['operation_id', 'estado'])
   })
 })
@@ -347,5 +349,131 @@ describe('el resultado de una anulación se escribe en el teléfono (change 22d,
 
     // La venta (1 caja = 6 unidades) sigue vigente en el servidor: se descuenta de nuevo.
     expect(await leerStockDisponible(IDS_DE_PRUEBA.producto)).toBe(14)
+  })
+})
+
+describe('el resultado de una cobranza se escribe en el teléfono (change 23, tarea 6.1)', () => {
+  const OBSERVACION_MEDIO = {
+    codigo: 'MEDIO_INACTIVO',
+    operacion_tipo: 'COBRANZA',
+    operacion_id: '0190a000-0000-7000-8000-0000000000bb',
+    detalle: { linea: 1 },
+  }
+  const OBSERVACION_LIBERADA = { ...OBSERVACION_MEDIO, codigo: 'JORNADA_LIBERADA', detalle: { jornada_id: 'j1' } }
+
+  async function cobrar(sufijo: string, importe = '500.00') {
+    return registrarCobranzaLocal({
+      cobranzaId: `cobranza-${sufijo}`,
+      operationId: `op-cob-${sufijo}`,
+      clienteId: IDS_DE_PRUEBA.cliente,
+      importe,
+      medios: [{ medio_pago_id: IDS_DE_PRUEBA.efectivo, importe, referencia: null }],
+      observacion: null,
+      usuarioId: '00000000-0000-4000-8000-000000000001',
+      dispositivoId: 'disp-1',
+      ahora: AHORA,
+      appVersion: '1.0.0',
+    })
+  }
+
+  beforeEach(async () => {
+    await Promise.all(baseLocal.tables.map((t) => t.clear()))
+    await aplicarBootstrap(bootstrapParaVender())
+    await sembrarVenta('a', { cajas: 1, unidades: 0, cobro: '1000.00' })
+    await cobrar('x')
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('aceptada: la cobranza y su comando quedan «Enviada» y ninguna venta ni cobro de venta cambia (SYN-04, SYN-09)', async () => {
+    const ventaAntes = await baseLocal.ventas.get('venta-a')
+
+    await aplicarResultados([resultado('op-cob-x', 'ACEPTADO')], AHORA)
+
+    expect((await baseLocal.cobranzas.get('cobranza-x'))?.estado_envio).toBe('ACEPTADA')
+    expect(await baseLocal.cola.where('operation_id').equals('op-cob-x').first()).toMatchObject({
+      estado: 'ACEPTADO',
+      resultado_en: AHORA.toISOString(),
+    })
+    expect(await baseLocal.ventas.get('venta-a')).toEqual(ventaAntes)
+    // El cobro en el momento de la venta no tiene estado de envío propio: sigue la suerte de su venta.
+    expect(await baseLocal.cobranzas.where('venta_id').equals('venta-a').first()).not.toHaveProperty('estado_envio')
+  })
+
+  it('con observaciones: queda «Con observaciones» y el comando guarda la observación con su detalle (SYN-07)', async () => {
+    await aplicarResultados(
+      [{ ...resultado('op-cob-x', 'ACEPTADO_CON_OBSERVACIONES'), observaciones: [OBSERVACION_MEDIO] }],
+      AHORA,
+    )
+
+    expect((await baseLocal.cobranzas.get('cobranza-x'))?.estado_envio).toBe('CON_OBSERVACIONES')
+    expect((await baseLocal.cola.where('operation_id').equals('op-cob-x').first())?.observaciones).toEqual([OBSERVACION_MEDIO])
+    expect((await baseLocal.ventas.get('venta-a'))?.estado_envio).toBe('PENDIENTE')
+  })
+
+  it('rechazada: queda «Rechazada» con su código, sigue visible y no vuelve a la selección de envío (SYN-06, SYN-09)', async () => {
+    await aplicarResultados([resultado('op-cob-x', 'RECHAZADO', 'RECURSO_NO_ENCONTRADO')], AHORA)
+
+    expect((await baseLocal.cobranzas.get('cobranza-x'))?.estado_envio).toBe('RECHAZADA')
+    expect(await baseLocal.cola.where('operation_id').equals('op-cob-x').first()).toMatchObject({
+      estado: 'RECHAZADO',
+      error_codigo: 'RECURSO_NO_ENCONTRADO',
+    })
+    const pendientes = await seleccionarCola('00000000-0000-4000-8000-000000000001', 'disp-1')
+    expect(pendientes.map((c) => c.operation_id)).not.toContain('op-cob-x')
+    expect(await baseLocal.cobranzas.count()).toBe(2)
+    expect(await baseLocal.movimientos_locales.where('operation_id').equals('op-cob-x').count()).toBe(1)
+  })
+
+  it('«JORNADA_LIBERADA» sobre la cobranza marca la jornada como liberada (RUT-09, SYN-07)', async () => {
+    const sesion = await baseLocal.sesion.get('actual')
+
+    await aplicarResultados(
+      [{ ...resultado('op-cob-x', 'ACEPTADO_CON_OBSERVACIONES'), observaciones: [OBSERVACION_LIBERADA] }],
+      AHORA,
+    )
+
+    const marca = await leerJornadaNoAbierta()
+    expect(marca).toMatchObject({ estado: 'LIBERADA', jornada_id: sesion?.jornada.id })
+  })
+
+  it('falla a mitad de la respuesta: ni la cobranza ni la venta cambian y el próximo envío las manda otra vez (INV-01, INV-06)', async () => {
+    vi.spyOn(baseLocal.cobranzas, 'where').mockImplementation((() => {
+      throw new Error('falla inyectada')
+    }) as unknown as typeof baseLocal.cobranzas.where)
+
+    await expect(
+      aplicarResultados([resultado('op-a', 'ACEPTADO'), resultado('op-cob-x', 'ACEPTADO')], AHORA),
+    ).rejects.toThrow('falla inyectada')
+
+    vi.restoreAllMocks()
+    expect((await baseLocal.ventas.get('venta-a'))?.estado_envio).toBe('PENDIENTE')
+    expect((await baseLocal.cobranzas.get('cobranza-x'))?.estado_envio).toBe('PENDIENTE')
+    expect((await baseLocal.cola.where('operation_id').equals('op-a').first())?.estado).toBe('PENDIENTE')
+    expect((await baseLocal.cola.where('operation_id').equals('op-cob-x').first())?.estado).toBe('PENDIENTE')
+  })
+
+  it('reenvío: el mismo resultado otra vez no cambia la cobranza, su comando ni sus observaciones (INV-06, SYN-02)', async () => {
+    const respuesta = { ...resultado('op-cob-x', 'ACEPTADO_CON_OBSERVACIONES'), observaciones: [OBSERVACION_MEDIO] }
+    await aplicarResultados([respuesta], AHORA)
+    const cobranza = await baseLocal.cobranzas.get('cobranza-x')
+    const comando = await baseLocal.cola.where('operation_id').equals('op-cob-x').first()
+
+    await aplicarResultados([respuesta], new Date('2026-11-03T13:00:00.000Z'))
+
+    expect(await baseLocal.cobranzas.get('cobranza-x')).toEqual(cobranza)
+    expect(await baseLocal.cola.where('operation_id').equals('op-cob-x').first()).toEqual(comando)
+  })
+
+  it('una cobranza rechazada deja de contar en el saldo local y la aceptada no cambia nada (D6)', async () => {
+    const antes = await leerSaldoConsiderado(IDS_DE_PRUEBA.cliente)
+
+    await aplicarResultados([resultado('op-cob-x', 'ACEPTADO')], AHORA)
+    expect(await leerSaldoConsiderado(IDS_DE_PRUEBA.cliente)).toBe(antes)
+
+    await aplicarResultados([resultado('op-cob-x', 'RECHAZADO', 'RECURSO_NO_ENCONTRADO')], AHORA)
+    // Sin la cobranza de 500,00 el saldo local sube 500,00.
+    expect(Number(await leerSaldoConsiderado(IDS_DE_PRUEBA.cliente)) - Number(antes)).toBe(500)
   })
 })

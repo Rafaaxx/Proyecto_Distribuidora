@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { bootstrapDePrueba } from '../../utils/bootstrapDePrueba'
 import { bootstrapParaVender } from '../../utils/datosParaVender'
-import { sembrarVenta } from '../../utils/sembrarVenta'
+import { sembrarAnulacion, sembrarCobranza, sembrarVenta } from '../../utils/sembrarVenta'
 import { montarEnRuta } from '../../utils/rutaDePrueba'
 
 const mocks = vi.hoisted(() => ({ pedirBootstrap: vi.fn() }))
@@ -248,3 +248,53 @@ describe('InicioScreen: ventas sin enviar y "Vender" (tarea 11.2)', () => {
   })
 })
 
+
+/**
+ * Change 23, tarea 10.1 (spec `ruta/area-de-ruta`, escenario «Pendientes»; `design.md` D10; cita
+ * SYN-09): lo pendiente en el inicio une ventas, anulaciones y cobranzas.
+ */
+describe('InicioScreen: cobranzas sin enviar (change 23, tarea 10.1)', () => {
+  beforeEach(async () => {
+    mocks.pedirBootstrap.mockReset()
+    await Promise.all(baseLocal.tables.map((t) => t.clear()))
+    conectado(true)
+    almacenamiento(true)
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    Reflect.deleteProperty(window.navigator, 'storage')
+  })
+
+  it('dos ventas, una anulación y una cobranza dicen «2 ventas, 1 anulación y 1 cobranza sin enviar»', async () => {
+    await aplicarBootstrap(bootstrapParaVender((b) => b.sesion.permisos.push('REGISTRAR_COBRANZA')))
+    await sembrarVenta('a', { cajas: 1, unidades: 0 })
+    await sembrarVenta('b', { cajas: 0, unidades: 2 })
+    await sembrarAnulacion('a')
+    await sembrarCobranza('a')
+    montarEnRuta(<InicioScreen />)
+
+    expect(await screen.findByText('2 ventas, 1 anulación y 1 cobranza sin enviar')).toBeInTheDocument()
+  })
+
+  it('solo cobranzas: «3 cobranzas sin enviar»; las de otro usuario no cuentan', async () => {
+    await aplicarBootstrap(bootstrapParaVender((b) => b.sesion.permisos.push('REGISTRAR_COBRANZA')))
+    await sembrarCobranza('a')
+    await sembrarCobranza('b')
+    await sembrarCobranza('c')
+    const ajena = await sembrarCobranza('d')
+    await baseLocal.cola.update(ajena.comando.secuencia, { sobre: { ...ajena.comando.sobre, usuario_id: 'otro-usuario' } })
+    montarEnRuta(<InicioScreen />)
+
+    expect(await screen.findByText('3 cobranzas sin enviar')).toBeInTheDocument()
+  })
+
+  it('un usuario que solo cobra ve lo pendiente y «Sincronizar» aunque no tenga VENDER', async () => {
+    await aplicarBootstrap(bootstrapParaVender((b) => { b.sesion.permisos = ['REGISTRAR_COBRANZA'] }))
+    await sembrarCobranza('a')
+    montarEnRuta(<InicioScreen />)
+
+    expect(await screen.findByText('1 cobranza sin enviar')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sincronizar' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Vender' })).not.toBeInTheDocument()
+  })
+})

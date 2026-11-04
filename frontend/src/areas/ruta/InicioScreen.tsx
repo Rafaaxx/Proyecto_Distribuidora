@@ -15,6 +15,7 @@ import { useJornadaNoAbierta } from './datos/anulacion'
 import { useDatosDeInicio } from './datos/lecturas'
 import { useResumenDeSincronizacion, useVersionBloqueada } from './datos/sincronizacion'
 import { useVentasSinEnviar } from './datos/ventas'
+import { BotonCobrar } from './cobranzas/BotonCobrar'
 import { useSesionRutaActiva } from './sesion/contextoSesion'
 import { BotonSincronizar } from './sincronizacion/BotonSincronizar'
 import { textoDePendientes, textoDeUltimaSincronizacion } from './sincronizacion/presentacion'
@@ -94,6 +95,8 @@ export function InicioScreen() {
   const puedeAbrir = datos.estado === 'listo' && datos.permisos.includes('ABRIR_JORNADA')
   // Vender (change 22a, D1, D13, D14): con VENDER en el bootstrap, jornada abierta y datos del día.
   const ofreceVender = datos.estado === 'sin_datos' || (datos.estado === 'listo' && datos.permisos.includes('VENDER'))
+  // Cobrar (change 23, D3, D8): con REGISTRAR_COBRANZA en el bootstrap.
+  const ofreceCobrar = datos.estado === 'listo' && datos.permisos.includes('REGISTRAR_COBRANZA')
   // D7: por debajo de la versión mínima no se venden ventas nuevas; la cola se sigue enviando.
   const jornadaCortada = jornadaNoAbierta !== null && jornadaNoAbierta !== undefined
   const motivoSinVender =
@@ -181,11 +184,11 @@ export function InicioScreen() {
         </Card>
       )}
 
-      {ofreceVender && (
+      {(ofreceVender || ofreceCobrar) && (
         <Card className="flex flex-col gap-2">
           {sinEnviar !== null && (
             <div className="flex items-center gap-1">
-              <p className="text-sm font-semibold text-primary">{textoDePendientes(sinEnviar.ventas, sinEnviar.anulaciones)}</p>
+              <p className="text-sm font-semibold text-primary">{textoDePendientes(sinEnviar.ventas, sinEnviar.anulaciones, sinEnviar.cobranzas)}</p>
               <Ayuda clave="ruta.ventaSinEnviar" />
             </div>
           )}
@@ -194,7 +197,7 @@ export function InicioScreen() {
             <BotonSincronizar />
             <Ayuda clave="ruta.sincronizar" />
           </div>
-          {motivoSinVender === null ? (
+          {!ofreceVender ? null : motivoSinVender === null ? (
             <Link to="/ruta/vender" className={CLASE_ENLACE}>
               Vender
             </Link>
@@ -209,9 +212,15 @@ export function InicioScreen() {
               </p>
             </div>
           )}
-          {datos.estado === 'listo' && (
+          {datos.estado === 'listo' && ofreceVender && (
             <Link to="/ruta/ventas" className={CLASE_ENLACE}>
               Ventas de hoy
+            </Link>
+          )}
+          {ofreceCobrar && <BotonCobrar motivoDeJornada={false} motivoDeVersion={!ofreceVender} />}
+          {ofreceCobrar && (
+            <Link to="/ruta/cobranzas" className={CLASE_ENLACE}>
+              Cobranzas de hoy
             </Link>
           )}
         </Card>

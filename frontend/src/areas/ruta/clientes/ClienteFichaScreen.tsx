@@ -12,6 +12,7 @@ import { AVISO_LO_YA_VENDIDO, textoDeJornadaNoAbierta } from '../../../domain/ru
 import { useJornadaNoAbierta } from '../datos/anulacion'
 import { useClienteLocal, useDatosDeInicio } from '../datos/lecturas'
 import { useVersionBloqueada } from '../datos/sincronizacion'
+import { BotonCobrar } from '../cobranzas/BotonCobrar'
 import { useSesionRutaActiva } from '../sesion/contextoSesion'
 
 /**
@@ -39,6 +40,9 @@ export function ClienteFichaScreen() {
   const jornadaNoAbierta = useJornadaNoAbierta()
   const tieneVender = inicio.estado === 'listo' && inicio.permisos.includes('VENDER')
   const puedeVender = tieneVender && entrada.tipo !== 'sin_jornada' && !jornadaNoAbierta
+  // Change 23 (D3, D8): «Cobrar» con REGISTRAR_COBRANZA; el consumidor final no tiene cuenta donde cobrar (CLI-03).
+  // «Vender» ya muestra el mismo motivo cuando la jornada no está abierta o la versión es vieja: no se repite.
+  const tieneCobrar = inicio.estado === 'listo' && inicio.permisos.includes('REGISTRAR_COBRANZA')
 
   if (datos.estado === 'cargando') return <p className="text-sm text-primary">Cargando…</p>
   if (datos.estado === 'sin_datos') {
@@ -113,6 +117,15 @@ export function ClienteFichaScreen() {
           className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-3 text-sm font-medium text-primary-foreground hover:opacity-90"
         >
           Vender
+        </Link>
+      )}
+
+      {tieneCobrar && !cliente.es_consumidor_final && (
+        <BotonCobrar clienteId={cliente.id} motivoDeJornada={!(tieneVender && !!jornadaNoAbierta)} motivoDeVersion={!(puedeVender && versionBloqueada)} />
+      )}
+      {tieneCobrar && (
+        <Link to="/ruta/cobranzas" className="text-sm underline">
+          Cobranzas de hoy
         </Link>
       )}
 

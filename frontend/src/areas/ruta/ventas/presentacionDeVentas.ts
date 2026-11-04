@@ -52,3 +52,16 @@ export function estaAnulada(anulacion: Pick<AnulacionLocal, 'estado_envio'> | nu
 export function claveDeAyudaDeEnvioDeAnulacion(estado: EstadoDeEnvio): ClaveDeAyuda | null {
   return estado === 'RECHAZADA' ? 'ruta.anulacionRechazada' : AYUDA_DE_ENVIO[estado]
 }
+
+/**
+ * Ayuda «(?)» del estado de envío de una cobranza (change 23, D12): solo la rechazada tiene la suya;
+ * el resto se explica en «Observaciones y rechazos».
+ */
+export function claveDeAyudaDeEnvioDeCobranza(estado: EstadoDeEnvio): ClaveDeAyuda | null {
+  return estado === 'RECHAZADA' ? 'ruta.cobranzaRechazada' : null
+}
+
+/** Ayudas de una lista de cobranzas: la de la rechazada, una sola vez. */
+export function ayudasDeProblemasEnListaDeCobranzas(estados: EstadoDeEnvio[]): ClaveDeAyuda[] {
+  return estados.includes('RECHAZADA') ? ['ruta.cobranzaRechazada'] : []
+}

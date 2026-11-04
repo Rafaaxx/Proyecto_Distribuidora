@@ -21,6 +21,6 @@ describe('textoDeJornadaNoAbierta (D9)', () => {
   })
 
   it('lo ya vendido se sigue enviando', () => {
-    expect(AVISO_LO_YA_VENDIDO).toBe('Lo que ya vendiste se sigue enviando.')
+    expect(AVISO_LO_YA_VENDIDO).toBe('Lo que ya vendiste y cobraste se sigue enviando.')
   })
 })

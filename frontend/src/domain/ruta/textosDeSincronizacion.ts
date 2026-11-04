@@ -18,6 +18,12 @@ export const AVISO_DE_RECHAZO_DE_ANULACION = 'La venta sigue vigente en el telé
 export const TEXTO_DE_RECHAZO_GENERAL_DE_ANULACION = 'El sistema no aceptó esta anulación.'
 /** Tipo de comando de la cola de una anulación. */
 export const TIPO_DE_ANULACION = 'VENTA_ANULAR'
+/** Change 23 (D11): lo mismo para una cobranza (el teléfono la deja de descontar de la cuenta). */
+export const AVISO_DE_RECHAZO_DE_COBRANZA =
+  'El cobro no quedó registrado en el sistema y el teléfono ya no lo descuenta de la cuenta del cliente; avisá a administración.'
+export const TEXTO_DE_RECHAZO_GENERAL_DE_COBRANZA = 'El sistema no aceptó esta cobranza.'
+/** Tipo de comando de la cola de una cobranza. */
+export const TIPO_DE_COBRANZA = 'COBRANZA_REGISTRAR'
 
 /** Nombres que la base local todavía conoce, por id. */
 export interface NombresLocales {
@@ -184,6 +190,54 @@ export function textoDeObservacionDeAnulacion(observacion: ObservacionLocal, nom
   return FIJOS_DE_OBSERVACION_DE_ANULACION[observacion.codigo] ?? TEXTO_DE_OBSERVACION_GENERAL
 }
 
+const TEXTO_DE_DATOS_INVALIDOS_DE_COBRANZA = 'La cobranza llegó con datos incompletos o inválidos.'
+
+/**
+ * Change 23, D11 (aprobados en 0.2): los rechazos de una cobranza. Los códigos propios dicen qué
+ * pasó; el resto (datos, contenido, tipo, versión y modo del comando, jornada inexistente o
+ * requerida) comparte el texto de datos incompletos.
+ */
+const TEXTOS_DE_RECHAZO_DE_COBRANZA: Readonly<Record<string, string>> = {
+  RECURSO_NO_ENCONTRADO: 'El sistema no tiene el cliente o el medio de pago de la cobranza.',
+  COBRANZA_DUPLICADA: 'El sistema ya tenía otra cobranza con el mismo identificador.',
+  JORNADA_AJENA: 'La cobranza es de otra jornada.',
+  DISPOSITIVO_REVOCADO: 'Este teléfono fue dado de baja; la cobranza quedó para revisión.',
+  MEDIOS_INVALIDOS: TEXTO_DE_DATOS_INVALIDOS_DE_COBRANZA,
+  MEDIOS_NO_SUMAN_IMPORTE: TEXTO_DE_DATOS_INVALIDOS_DE_COBRANZA,
+  IMPORTE_INVALIDO: TEXTO_DE_DATOS_INVALIDOS_DE_COBRANZA,
+  OBSERVACION_INVALIDA: TEXTO_DE_DATOS_INVALIDOS_DE_COBRANZA,
+  CONTENIDO_DE_COMANDO_INVALIDO: TEXTO_DE_DATOS_INVALIDOS_DE_COBRANZA,
+  TIPO_DE_COMANDO_DESCONOCIDO: TEXTO_DE_DATOS_INVALIDOS_DE_COBRANZA,
+  VERSION_DE_COMANDO_SIN_HANDLER: TEXTO_DE_DATOS_INVALIDOS_DE_COBRANZA,
+  MODO_NO_ADMITIDO_PARA_TIPO: TEXTO_DE_DATOS_INVALIDOS_DE_COBRANZA,
+  COMANDO_INCONSISTENTE: TEXTO_DE_DATOS_INVALIDOS_DE_COBRANZA,
+  JORNADA_INEXISTENTE: TEXTO_DE_DATOS_INVALIDOS_DE_COBRANZA,
+  JORNADA_REQUERIDA: TEXTO_DE_DATOS_INVALIDOS_DE_COBRANZA,
+}
+
+/** SYN-06: el texto del motivo del rechazo de una cobranza. */
+export function textoDeRechazoDeCobranza(codigo: string | null): TextoDeRechazo {
+  const propio = codigo === null ? undefined : TEXTOS_DE_RECHAZO_DE_COBRANZA[codigo]
+  if (propio === undefined) return { texto: TEXTO_DE_RECHAZO_GENERAL_DE_COBRANZA, codigo, conocido: false }
+  return { texto: propio, codigo, conocido: true }
+}
+
+/** Observaciones de una cobranza (SYN-07): el medio y la referencia reutilizan los de la venta. */
+const FIJOS_DE_OBSERVACION_DE_COBRANZA: Readonly<Record<string, string>> = {
+  PERMISO_REVOCADO: 'Cuando llegó la operación, tu usuario ya no tenía el permiso.',
+  JORNADA_LIBERADA: 'La jornada había sido liberada cuando llegó la cobranza.',
+  CLIENTE_NO_HABILITADO: 'El consumidor final no lleva cobranzas sueltas; administración la revisa.',
+}
+
+export function textoDeObservacionDeCobranza(observacion: ObservacionLocal, nombres: NombresLocales): string {
+  const fijo = FIJOS_DE_OBSERVACION_DE_COBRANZA[observacion.codigo]
+  if (fijo !== undefined) return fijo
+  if (observacion.codigo === 'MEDIO_INACTIVO' || observacion.codigo === 'REFERENCIA_FALTANTE') {
+    return textoDeObservacion(observacion, nombres)
+  }
+  return TEXTO_DE_OBSERVACION_GENERAL
+}
+
 /** D4: la primera observación y cuántas más hay («1 más», «N más»). */
 export function resumenDeObservaciones(textos: readonly string[]): { primera: string; mas: string | null } | null {
   const [primera, ...resto] = textos
@@ -215,19 +269,24 @@ export function explicarEnvio(
   tipoDeOperacion?: string,
 ): ExplicacionDeEnvio | null {
   const esAnulacion = tipoDeOperacion === TIPO_DE_ANULACION
+  const esCobranza = tipoDeOperacion === TIPO_DE_COBRANZA
   if (estado === 'RECHAZADA') {
     const codigo = resultado?.error_codigo ?? null
-    const rechazo = esAnulacion ? textoDeRechazoDeAnulacion(codigo) : textoDeRechazo(codigo)
-    return {
-      tipo: 'rechazo',
-      texto: rechazo.texto,
-      codigo: rechazo.codigo,
-      aviso: esAnulacion ? AVISO_DE_RECHAZO_DE_ANULACION : AVISO_DE_RECHAZO,
-    }
+    const rechazo = esCobranza
+      ? textoDeRechazoDeCobranza(codigo)
+      : esAnulacion
+        ? textoDeRechazoDeAnulacion(codigo)
+        : textoDeRechazo(codigo)
+    const aviso = esCobranza ? AVISO_DE_RECHAZO_DE_COBRANZA : esAnulacion ? AVISO_DE_RECHAZO_DE_ANULACION : AVISO_DE_RECHAZO
+    return { tipo: 'rechazo', texto: rechazo.texto, codigo: rechazo.codigo, aviso }
   }
   if (estado !== 'CON_OBSERVACIONES') return null
   const observaciones = resultado?.observaciones
   if (observaciones === undefined || observaciones.length === 0) return { tipo: 'sin_detalle', texto: TEXTO_SIN_DETALLE }
-  const traducir = esAnulacion ? textoDeObservacionDeAnulacion : textoDeObservacion
+  const traducir = esCobranza
+    ? textoDeObservacionDeCobranza
+    : esAnulacion
+      ? textoDeObservacionDeAnulacion
+      : textoDeObservacion
   return { tipo: 'observaciones', textos: observaciones.map((o) => traducir(o, nombres)) }
 }

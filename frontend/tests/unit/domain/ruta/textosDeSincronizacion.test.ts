@@ -20,6 +20,10 @@ import {
   textoDeRechazo,
   textoDeObservacionDeAnulacion,
   textoDeRechazoDeAnulacion,
+  AVISO_DE_RECHAZO_DE_COBRANZA,
+  TEXTO_DE_RECHAZO_GENERAL_DE_COBRANZA,
+  textoDeObservacionDeCobranza,
+  textoDeRechazoDeCobranza,
   type NombresLocales,
 } from '../../../../src/domain/ruta/textosDeSincronizacion'
 import type { ObservacionLocal } from '../../../../src/lib/dispositivo/db'
@@ -30,6 +34,8 @@ const CODIGOS = JSON.parse(readFileSync(FIXTURE, 'utf-8')) as {
   rechazos: string[]
   rechazos_de_anulacion: string[]
   observaciones_de_anulacion: string[]
+  rechazos_de_cobranza: string[]
+  observaciones_de_cobranza: string[]
 }
 
 const NOMBRES: NombresLocales = {
@@ -290,5 +296,101 @@ describe('explicarEnvio de una anulación (D11; SYN-06, SYN-07)', () => {
   it('una anulación aceptada o sin enviar no explica nada', () => {
     expect(explicarEnvio('ACEPTADA', undefined, NOMBRES, 'VENTA_ANULAR')).toBeNull()
     expect(explicarEnvio('PENDIENTE', undefined, NOMBRES, 'VENTA_ANULAR')).toBeNull()
+  })
+})
+
+/**
+ * Change 23, tarea 9.1 (D11, aprobados en 0.2; SYN-06, SYN-07): rechazos y observaciones de la
+ * cobranza, elegidos por el tipo de operación de la cola.
+ */
+const DATOS_INVALIDOS_COBRANZA = 'La cobranza llegó con datos incompletos o inválidos.'
+
+describe('textoDeRechazoDeCobranza (D11, SYN-06)', () => {
+  it.each(CODIGOS.rechazos_de_cobranza)('%s tiene texto aprobado para la cobranza y se reconoce', (codigo) => {
+    const rechazo = textoDeRechazoDeCobranza(codigo)
+    expect(rechazo.conocido).toBe(true)
+    expect(rechazo.codigo).toBe(codigo)
+    expect(rechazo.texto).not.toBe(TEXTO_DE_RECHAZO_GENERAL_DE_COBRANZA)
+  })
+
+  it.each([
+    ['RECURSO_NO_ENCONTRADO', 'El sistema no tiene el cliente o el medio de pago de la cobranza.'],
+    ['COBRANZA_DUPLICADA', 'El sistema ya tenía otra cobranza con el mismo identificador.'],
+    ['JORNADA_AJENA', 'La cobranza es de otra jornada.'],
+    ['DISPOSITIVO_REVOCADO', 'Este teléfono fue dado de baja; la cobranza quedó para revisión.'],
+    ['MEDIOS_INVALIDOS', DATOS_INVALIDOS_COBRANZA],
+    ['MEDIOS_NO_SUMAN_IMPORTE', DATOS_INVALIDOS_COBRANZA],
+    ['IMPORTE_INVALIDO', DATOS_INVALIDOS_COBRANZA],
+    ['JORNADA_REQUERIDA', DATOS_INVALIDOS_COBRANZA],
+  ])('%s -> %s', (codigo, esperado) => {
+    expect(textoDeRechazoDeCobranza(codigo).texto).toBe(esperado)
+  })
+
+  it('el mismo código dice una cosa para la venta y otra para la cobranza', () => {
+    expect(textoDeRechazo('JORNADA_AJENA').texto).toBe('La jornada de la venta es de otro usuario o de otro teléfono.')
+    expect(textoDeRechazoDeCobranza('JORNADA_AJENA').texto).toBe('La cobranza es de otra jornada.')
+  })
+
+  it('un código desconocido o nulo da el texto general de la cobranza', () => {
+    expect(textoDeRechazoDeCobranza('CODIGO_NUEVO')).toEqual({
+      texto: TEXTO_DE_RECHAZO_GENERAL_DE_COBRANZA,
+      codigo: 'CODIGO_NUEVO',
+      conocido: false,
+    })
+    expect(textoDeRechazoDeCobranza(null).conocido).toBe(false)
+  })
+})
+
+describe('textoDeObservacionDeCobranza (D11, SYN-07)', () => {
+  it.each(CODIGOS.observaciones_de_cobranza)('%s tiene un texto propio de la cobranza', (codigo) => {
+    const texto = textoDeObservacionDeCobranza(observacion(codigo), NOMBRES)
+    expect(texto).not.toBe(textoDeObservacionDeCobranza(observacion('NUEVO'), NOMBRES))
+  })
+
+  it.each([
+    ['MEDIO_INACTIVO', { medio_pago_id: 'm-1' }, 'El medio Transferencia estaba dado de baja cuando llegó el cobro.'],
+    ['MEDIO_INACTIVO', { nombre: 'Billetera' }, 'El medio Billetera estaba dado de baja cuando llegó el cobro.'],
+    ['REFERENCIA_FALTANTE', { medio_pago_id: 'm-1' }, 'El cobro con Transferencia llegó sin la referencia que pide ese medio.'],
+    ['PERMISO_REVOCADO', null, 'Cuando llegó la operación, tu usuario ya no tenía el permiso.'],
+    ['JORNADA_LIBERADA', null, 'La jornada había sido liberada cuando llegó la cobranza.'],
+    ['CLIENTE_NO_HABILITADO', null, 'El consumidor final no lleva cobranzas sueltas; administración la revisa.'],
+  ])('%s -> %s', (codigo, detalle, esperado) => {
+    expect(textoDeObservacionDeCobranza(observacion(codigo, detalle), NOMBRES)).toBe(esperado)
+  })
+
+  it('un código desconocido no rompe: texto general', () => {
+    expect(textoDeObservacionDeCobranza(observacion('NUEVO'), NOMBRES)).toBe(
+      'El sistema anotó algo para que administración lo revise.',
+    )
+  })
+})
+
+describe('explicarEnvio de una cobranza (D11; SYN-06, SYN-07)', () => {
+  it('una cobranza rechazada trae su texto, el código y el aviso de que el teléfono ya no la descuenta', () => {
+    expect(explicarEnvio('RECHAZADA', { error_codigo: 'RECURSO_NO_ENCONTRADO' }, NOMBRES, 'COBRANZA_REGISTRAR')).toEqual({
+      tipo: 'rechazo',
+      texto: 'El sistema no tiene el cliente o el medio de pago de la cobranza.',
+      codigo: 'RECURSO_NO_ENCONTRADO',
+      aviso: AVISO_DE_RECHAZO_DE_COBRANZA,
+    })
+    expect(AVISO_DE_RECHAZO_DE_COBRANZA).toBe(
+      'El cobro no quedó registrado en el sistema y el teléfono ya no lo descuenta de la cuenta del cliente; avisá a administración.',
+    )
+  })
+
+  it('una cobranza con observaciones las traduce con los textos de la cobranza', () => {
+    expect(
+      explicarEnvio(
+        'CON_OBSERVACIONES',
+        { error_codigo: null, observaciones: [observacion('MEDIO_INACTIVO', { nombre: 'Billetera' })] },
+        NOMBRES,
+        'COBRANZA_REGISTRAR',
+      ),
+    ).toEqual({ tipo: 'observaciones', textos: ['El medio Billetera estaba dado de baja cuando llegó el cobro.'] })
+  })
+
+  it('una cobranza aceptada o sin enviar no explica nada', () => {
+    expect(explicarEnvio('ACEPTADA', undefined, NOMBRES, 'COBRANZA_REGISTRAR')).toBeNull()
+    expect(explicarEnvio('PENDIENTE', undefined, NOMBRES, 'COBRANZA_REGISTRAR')).toBeNull()
   })
 })

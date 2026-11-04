@@ -29,7 +29,7 @@ import { montarEnRuta } from '../../utils/rutaDePrueba'
  */
 const AHORA = new Date('2026-11-03T12:00:00.000Z')
 const J1 = ID(2)
-const LO_YA_VENDIDO = 'Lo que ya vendiste se sigue enviando.'
+const LO_YA_VENDIDO = 'Lo que ya vendiste y cobraste se sigue enviando.'
 
 function conectado(valor: boolean) {
   vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(valor)

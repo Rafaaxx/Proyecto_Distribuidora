@@ -231,7 +231,7 @@ describe('Flujo de anulación sin conexión de punta a punta (tarea 15.1)', () =
     await u.click(await screen.findByRole('button', { name: 'Sincronizar' }))
     await irA(u, 'Inicio')
     expect(await screen.findByText('Tu jornada fue liberada.')).toBeInTheDocument()
-    expect(screen.getByText(/Lo que ya vendiste se sigue enviando\./)).toBeInTheDocument()
+    expect(screen.getByText(/Lo que ya vendiste y cobraste se sigue enviando\./)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Vender' })).toBeDisabled()
 
     // «Sincronizar» otra vez no envía ni cambia nada (INV-06).

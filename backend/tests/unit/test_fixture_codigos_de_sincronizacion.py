@@ -21,6 +21,10 @@ import pytest
 from app.commands import errores as errores_del_bus
 from app.core.errors import DomainError
 from app.modules.clientes.domain import errores as errores_de_credito
+from app.modules.cobranzas import service as servicio_de_cobranzas
+from app.modules.cobranzas.domain import cobranza as dominio_de_cobranza
+from app.modules.cobranzas.domain import errores as errores_de_cobranzas
+from app.modules.configuracion.domain import medios as dominio_de_medios
 from app.modules.stock.domain import errores as errores_de_stock
 from app.modules.sync.models import CODIGOS_OBSERVACION
 from app.modules.sync.service import CODIGO_DISPOSITIVO_REVOCADO
@@ -242,3 +246,108 @@ def test_syn07_las_observaciones_de_la_anulacion_son_las_tres_de_la_spec_y_del_c
     assert set(observaciones) == OBSERVACIONES_DE_LA_ANULACION
     assert set(observaciones) <= set(CODIGOS_OBSERVACION)
     assert not set(observaciones) & set(_cargar()["rechazos_de_anulacion"])
+
+
+# --- Change 23, tarea 2.2 (D11; SYN-06, SYN-07): los códigos de la cobranza sin conexión ----------
+
+# `registrar_cobranza` también levanta, solo con conexión, `MedioPagoInactivoError` (sin conexión es
+# la observación `MEDIO_INACTIVO`) y `ReferenciaObligatoriaError` (sin conexión,
+# `REFERENCIA_FALTANTE`); el consumidor final (`CONSUMIDOR_FINAL_SIN_CUENTA`) también es solo con
+# conexión (sin conexión, `CLIENTE_NO_HABILITADO`). INV-17.
+SOLO_CON_CONEXION_DE_LA_COBRANZA = frozenset(
+    {"MEDIO_PAGO_INACTIVO", "REFERENCIA_OBLIGATORIA", "CONSUMIDOR_FINAL_SIN_CUENTA"}
+)
+OBSERVACIONES_DE_LA_COBRANZA = frozenset(
+    {
+        "MEDIO_INACTIVO",
+        "REFERENCIA_FALTANTE",
+        "PERMISO_REVOCADO",
+        "JORNADA_LIBERADA",
+        "CLIENTE_NO_HABILITADO",
+    }
+)
+
+
+def _levantados_leyendo_la_cobranza() -> set[str]:
+    """Los códigos de los errores que nombran `registrar_cobranza`, la resolución de los medios, la
+    evaluación sin conexión y la validación de medios (leyendo el código fuente: un rechazo nuevo
+    rompe la prueba)."""
+    fuentes = [
+        inspect.getsource(servicio_de_cobranzas.registrar_cobranza),
+        inspect.getsource(servicio_de_cobranzas._resolver_medios),
+        inspect.getsource(servicio_de_cobranzas._jornada_de_la_cobranza_offline),
+        inspect.getsource(dominio_de_cobranza.evaluar_cobranza_offline),
+        inspect.getsource(dominio_de_cobranza.validar_observacion),
+        inspect.getsource(dominio_de_medios.validar_importe),
+        inspect.getsource(dominio_de_medios.validar_medios),
+    ]
+    clases = {
+        nombre: clase
+        for modulo in (errores_de_cobranzas, dominio_de_medios)
+        for nombre, clase in inspect.getmembers(modulo, inspect.isclass)
+        if issubclass(clase, DomainError) and "codigo" in vars(clase)
+    }
+    nombres = {
+        nombre
+        for fuente in fuentes
+        for nombre in re.findall(r"raise (\w+Error)\(", fuente)
+        if nombre in clases
+    }
+    return {str(vars(clases[nombre])["codigo"]) for nombre in nombres}
+
+
+def test_syn06_el_fixture_separa_los_rechazos_de_la_cobranza() -> None:
+    datos = _cargar()
+
+    assert "COBRANZA_DUPLICADA" in datos["rechazos_de_cobranza"]
+    assert "COBRANZA_DUPLICADA" not in datos["rechazos"]
+    assert "COBRANZA_DUPLICADA" not in datos["rechazos_de_anulacion"]
+    assert "TOTALES_INCONSISTENTES" not in datos["rechazos_de_cobranza"]
+    assert "VENTA_INEXISTENTE" not in datos["rechazos_de_cobranza"]
+
+
+def test_syn06_cada_rechazo_de_la_cobranza_existe_en_el_bus_en_cobranzas_o_en_medios() -> None:
+    existentes = _codigos_de_errores(errores_del_bus, errores_de_cobranzas, dominio_de_medios) | {
+        CODIGO_DISPOSITIVO_REVOCADO
+    }
+
+    rechazos = _cargar()["rechazos_de_cobranza"]
+
+    assert len(rechazos) == len(set(rechazos))
+    assert set(rechazos) <= existentes, sorted(set(rechazos) - existentes)
+
+
+def test_syn06_los_rechazos_de_la_cobranza_son_el_bus_mas_registrar_cobranza() -> None:
+    """La lista se fija recorriendo el bus (los rechazos que alcanzan a todo comando sin conexión)
+    y `registrar_cobranza`; ni más ni menos."""
+    levantados = _levantados_leyendo_la_cobranza()
+    esperados = RECHAZOS_DEL_BUS_PARA_TODO_COMANDO | (levantados - SOLO_CON_CONEXION_DE_LA_COBRANZA)
+
+    assert {
+        "RECURSO_NO_ENCONTRADO",
+        "COBRANZA_DUPLICADA",
+        "JORNADA_AJENA",
+        "MEDIOS_INVALIDOS",
+        "MEDIOS_NO_SUMAN_IMPORTE",
+    } <= levantados
+    assert set(_cargar()["rechazos_de_cobranza"]) == esperados
+
+
+@pytest.mark.parametrize(
+    "codigo", sorted(SOLO_CON_CONEXION | SOLO_CON_CONEXION_DE_LA_COBRANZA | {"UBICACION_TOMADA"})
+)
+def test_inv17_un_codigo_que_solo_rige_con_conexion_no_es_un_rechazo_de_la_cobranza(
+    codigo: str,
+) -> None:
+    """El medio inactivo, la referencia faltante y el consumidor final se aceptan con
+    observación sin conexión (SYN-05)."""
+    assert codigo not in _cargar()["rechazos_de_cobranza"]
+
+
+def test_syn07_las_observaciones_de_la_cobranza_son_las_cinco_de_la_spec_y_del_catalogo() -> None:
+    observaciones = _cargar()["observaciones_de_cobranza"]
+
+    assert len(observaciones) == len(set(observaciones))
+    assert set(observaciones) == OBSERVACIONES_DE_LA_COBRANZA
+    assert set(observaciones) <= set(CODIGOS_OBSERVACION)
+    assert not set(observaciones) & set(_cargar()["rechazos_de_cobranza"])

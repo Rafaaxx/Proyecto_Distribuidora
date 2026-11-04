@@ -18,6 +18,11 @@ import { parsearImporteDesdeApi, redondearImporte } from '../../lib/money'
  * Change 22d (D7; VTA-22, INV-19): los movimientos de una anulación cuentan por la misma regla,
  * con su propia secuencia. Una anulación «Rechazada» NO cuenta (la venta sigue vigente en el
  * servidor), salvo que su venta también esté rechazada: entonces cuentan las dos y se compensan.
+ *
+ * Change 23 (D6; COB-04, CRE-08): una cobranza INDEPENDIENTE cuenta por la misma regla, con su
+ * propia secuencia. Una cobranza independiente «Rechazada» NO cuenta (el servidor solo la rechaza
+ * por datos: no está en la cuenta del cliente y contarla liberaría crédito que el sistema no
+ * reconoce). El cobro en el momento de una venta sigue la regla de su venta (sin cambios).
  */
 export interface OperacionConciliable {
   /** Secuencia del comando en la cola. */
@@ -26,6 +31,8 @@ export interface OperacionConciliable {
   rechazada: boolean
   /** Solo en una anulación: si su venta está «Rechazada» (D7). */
   anulacion?: { ventaRechazada: boolean }
+  /** `true` solo en una cobranza independiente (change 23, D6); el cobro de una venta no la lleva. */
+  cobranzaIndependiente?: boolean
 }
 
 export interface Conciliacion {
@@ -45,10 +52,12 @@ function cuenta(m: MovimientoLocal, jornadaId: string, conciliacion: Conciliacio
   // D7 (22d): una anulación rechazada no cuenta, tenga o no marca el bootstrap, salvo que su venta
   // también esté rechazada (se compensan).
   if (operacion?.rechazada === true && operacion.anulacion !== undefined) return operacion.anulacion.ventaRechazada
+  // Change 23 (D6): una cobranza independiente rechazada no cuenta, tenga o no marca el bootstrap.
+  if (operacion?.rechazada === true && operacion.cobranzaIndependiente === true) return false
   if (marca === null || operacion === undefined) return true
   // D2 (precisión aprobada 2026-11-02): una operación rechazada cuenta COMPLETA (stock, débito y el
-  // cobro en el momento, todos con su operation_id). La cobranza suelta sin conexión llega en el
-  // change 23, que decidirá su propia regla.
+  // cobro en el momento, todos con su operation_id). La cobranza independiente rechazada, en
+  // cambio, no cuenta (change 23, D6: arriba).
   if (operacion.rechazada) return true
   return operacion.secuencia > marca
 }

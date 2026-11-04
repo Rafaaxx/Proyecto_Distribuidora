@@ -16,6 +16,9 @@ import { AnularVentaScreen } from './ventas/AnularVentaScreen'
 import { VenderScreen } from './ventas/VenderScreen'
 import { VentaGuardadaScreen } from './ventas/VentaGuardadaScreen'
 import { VentasDeHoyScreen } from './ventas/VentasDeHoyScreen'
+import { CobranzaGuardadaScreen } from './cobranzas/CobranzaGuardadaScreen'
+import { CobranzasDeHoyScreen } from './cobranzas/CobranzasDeHoyScreen'
+import { CobrarScreen } from './cobranzas/CobrarScreen'
 
 /**
  * Pantallas de `/ruta` con la sesión local ya desbloqueada (change 21, `design.md` D19): inicio,
@@ -53,6 +56,9 @@ export function RutaLayout() {
           <Route path="ventas" element={<VentasDeHoyScreen />} />
           <Route path="ventas/:id" element={<VentaGuardadaScreen />} />
           <Route path="ventas/:id/anular" element={<AnularVentaScreen />} />
+          <Route path="cobrar" element={<CobrarScreen />} />
+          <Route path="cobranzas" element={<CobranzasDeHoyScreen />} />
+          <Route path="cobranzas/:id" element={<CobranzaGuardadaScreen />} />
           <Route path="sincronizacion" element={<SincronizacionScreen />} />
           <Route path="cuenta" element={<MiCuentaScreen />} />
           <Route path="cuenta/contrasena" element={<MiContrasenaRutaScreen />} />

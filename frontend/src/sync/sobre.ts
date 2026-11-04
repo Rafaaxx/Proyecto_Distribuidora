@@ -85,3 +85,57 @@ export function armarSobreDeAnulacion(entrada: EntradaDeSobreDeAnulacion): Sobre
     },
   }
 }
+
+/**
+ * Sobre del comando `COBRANZA_REGISTRAR` sin conexión (change 23, `design.md` D1, D2; COB-01,
+ * COB-02, SYN-01, SYN-03, INV-03). Función pura; el fixture
+ * `shared/fixtures/sync/cobranza-registrar-offline.json` fija su forma. Los importes viajan como
+ * string; la referencia vacía y la observación ausente, como `null`. El contenido nunca lleva
+ * credenciales ni la organización (sale del token, INV-21).
+ */
+export interface MedioDeSobreDeCobranza {
+  medio_pago_id: string
+  importe: string
+  referencia: string | null
+}
+
+export interface EntradaDeSobreDeCobranza {
+  operationId: string
+  usuarioId: string
+  dispositivoId: string
+  jornadaId: string
+  occurredAt: Date
+  secuencia: number
+  appVersion: string
+  cobranzaId: string
+  clienteId: string
+  importe: string
+  medios: MedioDeSobreDeCobranza[]
+  observacion: string | null
+}
+
+export function armarSobreDeCobranza(entrada: EntradaDeSobreDeCobranza): SobreEnCola {
+  return {
+    operation_id: entrada.operationId,
+    tipo: 'COBRANZA_REGISTRAR',
+    version: 1,
+    modo: 'OFFLINE',
+    usuario_id: entrada.usuarioId,
+    dispositivo_id: entrada.dispositivoId,
+    jornada_id: entrada.jornadaId,
+    occurred_at: entrada.occurredAt.toISOString(),
+    secuencia: entrada.secuencia,
+    app_version: entrada.appVersion,
+    contenido: {
+      cobranza_id: entrada.cobranzaId,
+      cliente_id: entrada.clienteId,
+      importe: entrada.importe,
+      medios: entrada.medios.map((medio) => ({
+        medio_pago_id: medio.medio_pago_id,
+        importe: medio.importe,
+        referencia: medio.referencia,
+      })),
+      observacion: entrada.observacion,
+    },
+  }
+}

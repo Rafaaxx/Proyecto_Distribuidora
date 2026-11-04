@@ -11,7 +11,7 @@ const TEXTOS: Readonly<Record<EstadoDeJornadaNoAbierta, string>> = {
   DESCONOCIDO: 'Tu jornada ya no está abierta.',
 }
 
-export const AVISO_LO_YA_VENDIDO = 'Lo que ya vendiste se sigue enviando.'
+export const AVISO_LO_YA_VENDIDO = 'Lo que ya vendiste y cobraste se sigue enviando.'
 
 export function textoDeJornadaNoAbierta(estado: EstadoDeJornadaNoAbierta): string {
   return TEXTOS[estado]

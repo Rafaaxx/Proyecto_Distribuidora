@@ -76,7 +76,7 @@ const MAPA: Record<string, Destino> = {
   'sistema/ayuda-contextual: Stock y crédito': unit(AYUDA, 'el stock y el crédito nombran lo anulado además de lo vendido'),
   'sistema/ayuda-contextual: Trazabilidad': unit('ayuda/trazabilidad.test.ts', 'cada clave de <Ayuda clave> y de ayuda= existe en AYUDAS'),
   // sync/base-local
-  'sync/base-local: Actualización de la base con ventas guardadas': unit(DB, 'una base v3 con sesión, PIN, datos y dos ventas con su cola abre en v4'),
+  'sync/base-local: Actualización de la base con ventas guardadas': unit(DB, 'una base v3 con sesión, PIN, datos y dos ventas con su cola abre en v5'),
   'sync/base-local: Bootstrap con una anulación sin enviar': unit(BOOTSTRAP, 'un bootstrap con una anulación sin enviar la deja con sus movimientos y su comando'),
   'sync/base-local: Anulación rechazada': unit(BOOTSTRAP, 'cerrar la sesión local no borra una anulación rechazada (SYN-09)'),
   // sync/cola-local

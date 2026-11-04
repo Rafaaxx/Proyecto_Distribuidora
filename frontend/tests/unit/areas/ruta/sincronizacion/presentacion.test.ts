@@ -20,3 +20,16 @@ describe('textoDePendientes (D10, SYN-09)', () => {
     expect(textoDePendientes(ventas, anulaciones)).toBe(esperado)
   })
 })
+
+describe('textoDePendientes con cobranzas (change 23, D10, SYN-09)', () => {
+  it.each([
+    [0, 0, 1, '1 cobranza sin enviar'],
+    [0, 0, 3, '3 cobranzas sin enviar'],
+    [2, 1, 1, '2 ventas, 1 anulación y 1 cobranza sin enviar'],
+    [1, 0, 2, '1 venta y 2 cobranzas sin enviar'],
+    [0, 2, 1, '2 anulaciones y 1 cobranza sin enviar'],
+    [3, 2, 4, '3 ventas, 2 anulaciones y 4 cobranzas sin enviar'],
+  ])('%i ventas, %i anulaciones y %i cobranzas -> «%s»', (ventas, anulaciones, cobranzas, esperado) => {
+    expect(textoDePendientes(ventas, anulaciones, cobranzas)).toBe(esperado)
+  })
+})

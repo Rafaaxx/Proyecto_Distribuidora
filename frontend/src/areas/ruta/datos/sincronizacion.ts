@@ -3,10 +3,18 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 
 import {
   explicarEnvio,
+  TIPO_DE_ENTREGA,
   type ExplicacionDeEnvio,
   type NombresLocales,
 } from '../../../domain/ruta/textosDeSincronizacion'
-import { baseLocal, type AnulacionLocal, type CobranzaLocal, type EstadoDeEnvio, type VentaLocal } from '../../../lib/dispositivo/db'
+import {
+  baseLocal,
+  type AnulacionLocal,
+  type CobranzaLocal,
+  type EstadoDeComando,
+  type EstadoDeEnvio,
+  type VentaLocal,
+} from '../../../lib/dispositivo/db'
 import {
   estadoDeSincronizacion,
   suscribirEstadoDeSincronizacion,
@@ -203,6 +211,37 @@ export function useCobranzasConProblemas(): CobranzaConProblema[] {
       }),
     )
   }, [] as CobranzaConProblema[])
+}
+
+export interface EntregaDelDia {
+  estado: EstadoDeEnvio
+  codigo: string | null
+  explicacion: ExplicacionDeEnvio | null
+}
+
+const ESTADO_DE_ENVIO_DE_LA_ENTREGA: Record<EstadoDeComando, EstadoDeEnvio> = {
+  PENDIENTE: 'PENDIENTE',
+  ACEPTADO: 'ACEPTADA',
+  ACEPTADO_CON_OBSERVACIONES: 'ACEPTADA',
+  RECHAZADO: 'RECHAZADA',
+}
+
+/**
+ * La entrega del día de la jornada de la sesión, con su estado y, si el servidor la rechazó, su
+ * explicación traducida (change 24, D10, D11); `null` si el vendedor todavía no terminó el día.
+ */
+export function useEntregaDelDia(): EntregaDelDia | null {
+  return useConsulta(async () => {
+    const sesion = await baseLocal.sesion.get('actual')
+    if (sesion === undefined) return null
+    const comando = (await baseLocal.cola.toArray()).find(
+      (c) => c.sobre.tipo === TIPO_DE_ENTREGA && c.sobre.jornada_id === sesion.jornada.id,
+    )
+    if (comando === undefined) return null
+    const estado = ESTADO_DE_ENVIO_DE_LA_ENTREGA[comando.estado]
+    const explicacion = explicarEnvio(estado, comando, await leerNombresLocales(), TIPO_DE_ENTREGA)
+    return { estado, codigo: explicacion?.tipo === 'rechazo' ? explicacion.codigo : null, explicacion }
+  }, null as EntregaDelDia | null)
 }
 
 /** Explicación de las observaciones o del rechazo de una venta, sin conexión (22c, D4). `undefined` mientras carga. */

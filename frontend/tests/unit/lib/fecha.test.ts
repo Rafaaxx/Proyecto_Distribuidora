@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatearFechaHora, formatearFechaHoraEnZona } from '../../../src/lib/fecha'
+import { formatearFechaHora, formatearFechaHoraEnZona, formatearHora } from '../../../src/lib/fecha'
 
 /**
  * Change 06, tarea 14.5 (corrección de la verificación manual 13.5):
@@ -36,5 +36,16 @@ describe('formatearFechaHoraEnZona', () => {
   it('cruza el día cuando la zona lo exige', () => {
     expect(formatearFechaHoraEnZona('2026-03-10T15:00:00Z', 'Asia/Tokyo')).toBe('11/03/2026 00:00')
     expect(formatearFechaHoraEnZona('2026-03-10T02:30:00Z', 'America/Argentina/Mendoza')).toBe('09/03/2026 23:30')
+  })
+})
+
+/** Change 24 (D9): «Entregada por el vendedor a las {hora}.» muestra solo la hora local, `hh:mm`. */
+describe('formatearHora', () => {
+  it.each([
+    [new Date(2026, 8, 10, 8, 5), '08:05'],
+    [new Date(2026, 11, 25, 23, 59), '23:59'],
+    [new Date(2026, 0, 1, 0, 0), '00:00'],
+  ])('%s se muestra como %s', (momento, esperado) => {
+    expect(formatearHora(momento.toISOString())).toBe(esperado)
   })
 })

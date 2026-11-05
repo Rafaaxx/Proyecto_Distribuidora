@@ -25,6 +25,17 @@ export const TEXTO_DE_RECHAZO_GENERAL_DE_COBRANZA = 'El sistema no aceptó esta 
 /** Tipo de comando de la cola de una cobranza. */
 export const TIPO_DE_COBRANZA = 'COBRANZA_REGISTRAR'
 
+/**
+ * Change 24 (D11, aprobados en 0.2): lo mismo para la entrega del día. Todo rechazo termina en
+ * «Avisá a tu supervisor.»; el resto de los códigos comparte el texto de datos incompletos.
+ */
+export const AVISO_DE_RECHAZO_DE_ENTREGA = 'Avisá a tu supervisor.'
+export const TEXTO_DE_RECHAZO_GENERAL_DE_ENTREGA = 'La entrega llegó con datos incompletos o inválidos.'
+/** Tipo de comando de la cola de la entrega del día. */
+export const TIPO_DE_ENTREGA = 'JORNADA_ENTREGAR'
+/** Cómo se nombra la entrega en «Sincronización» (D10). */
+export const NOMBRE_DE_LA_ENTREGA = 'Entrega del día'
+
 /** Nombres que la base local todavía conoce, por id. */
 export interface NombresLocales {
   productos: ReadonlyMap<string, string>
@@ -69,6 +80,7 @@ const FIJOS_DE_OBSERVACION: Readonly<Record<string, string>> = {
   CLIENTE_NO_HABILITADO: 'El cliente estaba suspendido o inactivo cuando llegó la venta.',
   PERMISO_REVOCADO: 'Cuando llegó la operación, tu usuario ya no tenía el permiso.',
   JORNADA_LIBERADA: 'La jornada había sido liberada cuando llegó la venta.',
+  JORNADA_RENDIDA: 'Llegó cuando la jornada ya estaba rendida; no entra en el conteo.',
   ANULACION_COMPRA_SIN_RECALCULO: 'La anulación de la compra no recalculó el costo.',
   CONSUMIDOR_FINAL_CON_DEUDA: 'La venta al consumidor final quedó con deuda.',
   UBICACION_TOMADA_AL_SINCRONIZAR:
@@ -170,6 +182,28 @@ const TEXTOS_DE_RECHAZO_DE_ANULACION: Readonly<Record<string, string>> = {
   JORNADA_REQUERIDA: TEXTO_DE_DATOS_INVALIDOS_DE_ANULACION,
 }
 
+const TEXTOS_DE_RECHAZO_DE_ENTREGA: Readonly<Record<string, string>> = {
+  JORNADA_ESTADO_INVALIDO: 'La jornada ya no estaba abierta cuando llegó la entrega.',
+  JORNADA_YA_ENTREGADA: 'La jornada ya estaba entregada.',
+  JORNADA_INEXISTENTE: TEXTO_DE_RECHAZO_GENERAL_DE_ENTREGA,
+  JORNADA_REQUERIDA: TEXTO_DE_RECHAZO_GENERAL_DE_ENTREGA,
+  JORNADA_AJENA: TEXTO_DE_RECHAZO_GENERAL_DE_ENTREGA,
+  DISPOSITIVO_REVOCADO: TEXTO_DE_RECHAZO_GENERAL_DE_ENTREGA,
+  COMANDO_INCONSISTENTE: TEXTO_DE_RECHAZO_GENERAL_DE_ENTREGA,
+  MODO_NO_ADMITIDO_PARA_TIPO: TEXTO_DE_RECHAZO_GENERAL_DE_ENTREGA,
+  TIPO_DE_COMANDO_DESCONOCIDO: TEXTO_DE_RECHAZO_GENERAL_DE_ENTREGA,
+  VERSION_DE_COMANDO_SIN_HANDLER: TEXTO_DE_RECHAZO_GENERAL_DE_ENTREGA,
+  CONTENIDO_DE_COMANDO_INVALIDO: TEXTO_DE_RECHAZO_GENERAL_DE_ENTREGA,
+  PERMISO_REQUERIDO: TEXTO_DE_RECHAZO_GENERAL_DE_ENTREGA,
+}
+
+/** SYN-06: el texto del motivo del rechazo de la entrega del día. */
+export function textoDeRechazoDeEntrega(codigo: string | null): TextoDeRechazo {
+  const propio = codigo === null ? undefined : TEXTOS_DE_RECHAZO_DE_ENTREGA[codigo]
+  if (propio === undefined) return { texto: TEXTO_DE_RECHAZO_GENERAL_DE_ENTREGA, codigo, conocido: false }
+  return { texto: propio, codigo, conocido: true }
+}
+
 /** SYN-06: el texto del motivo del rechazo de una anulación. */
 export function textoDeRechazoDeAnulacion(codigo: string | null): TextoDeRechazo {
   const propio = codigo === null ? undefined : TEXTOS_DE_RECHAZO_DE_ANULACION[codigo]
@@ -181,6 +215,7 @@ export function textoDeRechazoDeAnulacion(codigo: string | null): TextoDeRechazo
 const FIJOS_DE_OBSERVACION_DE_ANULACION: Readonly<Record<string, string>> = {
   PERMISO_REVOCADO: 'Cuando llegó la operación, tu usuario ya no tenía el permiso.',
   JORNADA_LIBERADA: 'La jornada había sido liberada cuando llegó la anulación.',
+  JORNADA_RENDIDA: 'Llegó cuando la jornada ya estaba rendida; no entra en el conteo.',
   UBICACION_TOMADA_AL_SINCRONIZAR:
     'Cuando llegó la anulación, el vehículo estaba en rendición o en la jornada de otro vendedor.',
 }
@@ -226,6 +261,7 @@ export function textoDeRechazoDeCobranza(codigo: string | null): TextoDeRechazo 
 const FIJOS_DE_OBSERVACION_DE_COBRANZA: Readonly<Record<string, string>> = {
   PERMISO_REVOCADO: 'Cuando llegó la operación, tu usuario ya no tenía el permiso.',
   JORNADA_LIBERADA: 'La jornada había sido liberada cuando llegó la cobranza.',
+  JORNADA_RENDIDA: 'Llegó cuando la jornada ya estaba rendida; no entra en el conteo.',
   CLIENTE_NO_HABILITADO: 'El consumidor final no lleva cobranzas sueltas; administración la revisa.',
 }
 
@@ -270,6 +306,12 @@ export function explicarEnvio(
 ): ExplicacionDeEnvio | null {
   const esAnulacion = tipoDeOperacion === TIPO_DE_ANULACION
   const esCobranza = tipoDeOperacion === TIPO_DE_COBRANZA
+  if (tipoDeOperacion === TIPO_DE_ENTREGA) {
+    // La entrega solo se acepta o se rechaza: no lleva observaciones.
+    if (estado !== 'RECHAZADA') return null
+    const rechazo = textoDeRechazoDeEntrega(resultado?.error_codigo ?? null)
+    return { tipo: 'rechazo', texto: rechazo.texto, codigo: rechazo.codigo, aviso: AVISO_DE_RECHAZO_DE_ENTREGA }
+  }
   if (estado === 'RECHAZADA') {
     const codigo = resultado?.error_codigo ?? null
     const rechazo = esCobranza

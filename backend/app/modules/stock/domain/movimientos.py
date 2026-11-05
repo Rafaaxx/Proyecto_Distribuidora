@@ -56,7 +56,9 @@ etapa 2). Solo `STOCK_INICIAL` tiene comando en este change (D13)."""
 TRANSFERENCIA_SALIDA = "TRANSFERENCIA_SALIDA"
 TRANSFERENCIA_ENTRADA = "TRANSFERENCIA_ENTRADA"
 AJUSTE = "AJUSTE"
+DIFERENCIA_RENDICION = "DIFERENCIA_RENDICION"
 
+ORIGEN_RENDICION = "RENDICION"
 ORIGEN_TRANSFERENCIA = "TRANSFERENCIA"
 ORIGEN_AJUSTE = "AJUSTE_STOCK"
 ORIGEN_ANULACION_TRANSFERENCIA = "ANULACION_TRANSFERENCIA"
@@ -67,10 +69,11 @@ TIPOS_QUE_INGRESAN_CON_COSTO = frozenset({STOCK_INICIAL, "COMPRA", ANULACION_VEN
 inicial y anulación de venta). `ANULACION_COMPRA` es un egreso (lo define el change 11,
 CMP-06)."""
 
-TIPOS_QUE_INGRESAN_SIN_COSTO = frozenset({TRANSFERENCIA_ENTRADA, AJUSTE})
+TIPOS_QUE_INGRESAN_SIN_COSTO = frozenset({TRANSFERENCIA_ENTRADA, AJUSTE, DIFERENCIA_RENDICION})
 """Change 14, D9 (CST-12): un ingreso de transferencia o de ajuste no recalcula el promedio
-y se valoriza al promedio vigente, así que no lleva costo de entrada. Un ingreso de otro
-tipo (rendición, venta) sigue sin reglas de costo y se rechaza: lo define el change 24."""
+y se valoriza al promedio vigente, así que no lleva costo de entrada. Change 24 (D5): el
+sobrante de una rendición también; sin promedio, queda con costo nulo. Un ingreso de otro
+tipo (venta) sigue sin reglas de costo y se rechaza."""
 
 ORIGENES_DE_ANULACION: dict[str, frozenset[str]] = {
     ORIGEN_ANULACION_TRANSFERENCIA: frozenset({TRANSFERENCIA_SALIDA, TRANSFERENCIA_ENTRADA}),
@@ -167,11 +170,16 @@ def validar_lineas_de_movimiento(
 
     Change 14: un ingreso `TRANSFERENCIA_ENTRADA` o `AJUSTE` no lleva costo (con costo es
     `COSTO_INVALIDO`, D9) salvo que sea el inverso de una anulación (D5.2); un ingreso
-    `DIFERENCIA_RENDICION` sigue siendo `TIPO_MOVIMIENTO_INVALIDO`."""
+    `DIFERENCIA_RENDICION` (change 24, D5) solo se admite con origen `RENDICION` y, como el ajuste,
+    no lleva costo: se valoriza al promedio vigente."""
     if not lineas:
         raise LineasInvalidasError("El movimiento necesita al menos una línea.")
     for linea in lineas:
         validar_tipo_de_movimiento(linea.tipo)
+        if linea.tipo == DIFERENCIA_RENDICION and linea.origen_tipo != ORIGEN_RENDICION:
+            raise TipoDeMovimientoInvalidoError(
+                "Una diferencia de rendición solo se registra con origen RENDICION."
+            )
         cantidad = _validar_cantidad(linea.cantidad_base)
         if cantidad > 0 and not (
             linea.tipo in TIPOS_QUE_INGRESAN_CON_COSTO or linea.tipo in TIPOS_QUE_INGRESAN_SIN_COSTO
@@ -231,11 +239,20 @@ def productos_que_exigen_estar_activos(
 
     Change 18a (tarea 11.2, D1 punto 5, SYN-05, INV-17): con `venta_sin_conexion` el egreso
     `VENTA` tampoco lo exige. La mercadería de una venta recibida sin conexión ya se entregó;
-    un producto desactivado después del bootstrap no la rechaza."""
+    un producto desactivado después del bootstrap no la rechaza.
+
+    Change 24 (ADR-068 punto 6, decisión 2026-11-05): el faltante de una rendición (línea
+    `DIFERENCIA_RENDICION` negativa) tampoco lo exige, porque registra una pérdida ya ocurrida;
+    el sobrante (positivo) sí, y obliga a reactivar el producto."""
     exentos = {ANULACION_COMPRA, ANULACION_VENTA}
     if venta_sin_conexion:
         exentos.add(VENTA)
-    return {linea.producto_id for linea in lineas if linea.tipo not in exentos}
+    return {
+        linea.producto_id
+        for linea in lineas
+        if linea.tipo not in exentos
+        and not (linea.tipo == DIFERENCIA_RENDICION and linea.cantidad_base < 0)
+    }
 
 
 def validar_lineas_de_stock_inicial(

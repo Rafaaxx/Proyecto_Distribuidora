@@ -211,20 +211,21 @@ def test_rut09_una_jornada_liberada_se_acepta_con_jornada_liberada(entorno: Ento
 
 
 @pytest.mark.parametrize("estado", ["EN_RENDICION", "CERRADA"])
-def test_syn05_una_jornada_en_rendicion_o_cerrada_se_acepta_sin_observacion(
+def test_syn05_una_jornada_en_rendicion_o_cerrada_se_acepta_con_jornada_rendida(
     entorno: Entorno, estado: str
 ) -> None:
-    """Escenario "Jornada ya cerrada" (D12): el dinero se cobró; sin observación nueva y la
-    cobranza lleva la jornada del sobre."""
+    """Escenario "Jornada ya cerrada" (D12): el dinero se cobró; desde el change 24 (D7) se acepta
+    con `JORNADA_RENDIDA` y la cobranza lleva la jornada del sobre."""
     jornada = entorno.crear_jornada(estado=estado)
     item = _item(entorno, jornada_id=jornada)
 
     resultados = _lote(entorno, item)
 
-    assert resultados[item.operation_id].estado == "ACEPTADO"
+    assert resultados[item.operation_id].estado == "ACEPTADO_CON_OBSERVACIONES"
     (cobranza,) = entorno.cobranzas()
     assert cobranza.jornada_id == jornada
-    assert _observaciones(entorno) == []
+    (observacion,) = _observaciones(entorno)
+    assert observacion.codigo == "JORNADA_RENDIDA"
     assert entorno.saldo() == Decimal("100000.00")
 
 

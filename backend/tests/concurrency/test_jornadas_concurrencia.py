@@ -61,7 +61,12 @@ from tests.concurrency.test_stock_concurrencia import (
 )
 from tests.concurrency.test_transferencias_ajustes_concurrencia import OK, _encadenado
 from tests.integration.cuentas_corrientes_utiles import crear_usuario_y_dispositivo
-from tests.integration.stock_utiles import crear_jornada_sql, crear_motivo_sql, crear_ubicacion_sql
+from tests.integration.stock_utiles import (
+    crear_jornada_sql,
+    crear_motivo_sql,
+    crear_ubicacion_sql,
+    rendir_sin_diferencias_sql,
+)
 
 ABRIR = "JORNADA_ABRIR"
 RENDIR = "JORNADA_RENDIR"
@@ -156,11 +161,13 @@ class _Mundo(_Escenario):
     def rendir(self, jornada_id: UUID) -> None:
         sesion = _sesion_independiente(self.database_url)
         try:
-            stock_service.rendir_jornada(
-                self.org,
+            rendir_sin_diferencias_sql(  # JORNADA_RENDIR v2: entrega y conteo exacto
                 sesion,
-                jornada_id=jornada_id,
+                self.org,
+                jornada_id,
                 usuario_id=self.sofia.usuario_id,
+                dispositivo_id=self.sofia.dispositivo_id,
+                reloj=RELOJ,
                 occurred_at=MOMENTO,
             )
             sesion.commit()

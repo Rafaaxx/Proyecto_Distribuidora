@@ -157,7 +157,11 @@ REGLAS_DE_LA_VENTA: dict[str, tuple[Callable[[Session], Armado], set[str]]] = {
     "referencia_faltante": (_referencia_faltante, {"REFERENCIA_FALTANTE"}),
     "producto_desactivado": (_desactivar("producto"), set()),
     "presentacion_desactivada": (_desactivar("presentacion"), set()),
-    "ubicacion_tomada": (_ubicacion_tomada, {"UBICACION_TOMADA_AL_SINCRONIZAR"}),
+    # Change 24 (D7): la propia jornada en rendición también observa `JORNADA_RENDIDA`.
+    "ubicacion_tomada": (
+        _ubicacion_tomada,
+        {"UBICACION_TOMADA_AL_SINCRONIZAR", "JORNADA_RENDIDA"},
+    ),
     # El motivo dado de baja no tiene observación propia; lo que queda es la de la lista.
     "motivo_dado_de_baja": (_motivo_dado_de_baja, {"LISTA_NO_VIGENTE"}),
 }

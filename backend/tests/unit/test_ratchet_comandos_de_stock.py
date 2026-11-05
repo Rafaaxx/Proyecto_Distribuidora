@@ -30,6 +30,7 @@ import app.modules.stock
 from app.commands import registro
 from app.commands.auditoria import DatosDeAuditoria
 from app.commands.catalogo import tipo_declarado
+from app.commands.errores import VersionDeComandoSinHandlerError
 
 TIPOS_NUEVOS = (
     "STOCK_TRANSFERIR",
@@ -160,14 +161,16 @@ TIPOS_DE_JORNADA = ("JORNADA_ABRIR", "JORNADA_RENDIR", "JORNADA_CERRAR", "JORNAD
 
 
 @pytest.mark.parametrize("tipo", TIPOS_DE_JORNADA)
-def test_los_tipos_de_jornada_estan_declarados_solo_online_y_con_handler_v1(tipo: str) -> None:
+def test_los_tipos_de_jornada_estan_declarados_solo_online_y_con_su_handler(tipo: str) -> None:
     """Con `app.main` importado, el tipo está en el catálogo y en el registro de handlers
-    (`02` §6.5): sin el import de `jornadas_commands` en `app/main.py` no estaría."""
+    (`02` §6.5): sin el import de `jornadas_commands` (y, desde el change 24, de
+    `rendicion_commands`, que registra `JORNADA_RENDIR` v2) en `app/main.py` no estaría."""
     declarado = tipo_declarado(tipo)
 
     assert declarado is not None, f"{tipo} no está en el catálogo de comandos"
     assert (declarado.admite_online, declarado.admite_offline) == (True, False)
-    assert registro.resolver_handler(tipo, 1).tipo == tipo
+    version = 2 if tipo == "JORNADA_RENDIR" else 1
+    assert registro.resolver_handler(tipo, version).tipo == tipo
 
 
 def _importa_service(codigo_fuente: str) -> bool:
@@ -195,6 +198,59 @@ def test_jornadas_casos_no_importa_service_para_evitar_el_ciclo() -> None:
     base = Path(app.modules.stock.__file__).parent
     for nombre in ("jornadas_casos.py", "jornadas_repository.py", "domain/jornadas.py"):
         assert not _importa_service((base / nombre).read_text(encoding="utf-8")), nombre
+
+
+def test_los_archivos_de_la_rendicion_no_importan_el_service_propio() -> None:
+    """Change 24, tarea 11.1 (D3): `service.py` delega en `rendicion_casos.py` (que recibe la puerta
+    del libro y la transferencia como parámetro); ningún archivo de la rendición por debajo de
+    `service` lo importa, así que no hay ciclo. Los comandos (`rendicion_commands.py`) sí usan
+    `service.py`, como los demás handlers."""
+    base = Path(app.modules.stock.__file__).parent
+    for nombre in (
+        "rendicion_casos.py",
+        "rendicion_repository.py",
+        "domain/rendicion.py",
+        "domain/resumen.py",
+    ):
+        assert not _importa_service((base / nombre).read_text(encoding="utf-8")), nombre
+    assert _importa_service((base / "rendicion_commands.py").read_text(encoding="utf-8"))
+
+
+# --- la rendición (change 24, tarea 11.1) ----------------------------------------------------
+
+
+def test_la_entrega_del_dia_es_solo_offline_y_tiene_handler_v1() -> None:
+    """`JORNADA_ENTREGAR` solo viaja por el lote del teléfono (RUT-05, `02` §6.5)."""
+    declarado = tipo_declarado("JORNADA_ENTREGAR")
+
+    assert declarado is not None
+    assert (declarado.admite_online, declarado.admite_offline) == (False, True)
+    assert declarado.permisos == ("ABRIR_JORNADA",)
+    assert registro.resolver_handler("JORNADA_ENTREGAR", 1).tipo == "JORNADA_ENTREGAR"
+
+
+def test_la_rendicion_no_tiene_version_1_y_el_cierre_conserva_las_dos() -> None:
+    """D2, D6: `JORNADA_RENDIR` v1 se retira (responde `VERSION_DE_COMANDO_SIN_HANDLER`);
+    `JORNADA_CERRAR` v1 (sin devolución) sigue registrada junto a la v2."""
+    with pytest.raises(VersionDeComandoSinHandlerError):
+        registro.resolver_handler("JORNADA_RENDIR", 1)
+    assert registro.resolver_handler("JORNADA_RENDIR", 2).tipo == "JORNADA_RENDIR"
+    assert registro.resolver_handler("JORNADA_CERRAR", 1).tipo == "JORNADA_CERRAR"
+    assert registro.resolver_handler("JORNADA_CERRAR", 2).tipo == "JORNADA_CERRAR"
+
+
+@pytest.mark.parametrize("tipo", ["JORNADA_ENTREGAR", "JORNADA_RENDIR", "JORNADA_CERRAR"])
+def test_la_entrega_la_rendicion_y_el_cierre_no_llevan_motivo_ni_constancia(tipo: str) -> None:
+    """D5, D6: las diferencias no llevan motivo (la fila de auditoría del bus alcanza) y la
+    devolución del remanente pasa STK-09 por la rendición, no por la excepción de
+    `LIBERAR_UBICACION`: ninguno devuelve motivo ni constancia de ubicación tomada."""
+    handlers = [h for h in registro._REGISTRO.values() if h.tipo == tipo]  # noqa: SLF001
+
+    assert handlers
+    for handler in handlers:
+        nombres = _nombres(handler.funcion.__code__)
+        assert NOMBRE_DEL_DATO not in nombres
+        assert not (NOMBRES_DE_LA_CONSTANCIA & nombres)
 
 
 @pytest.mark.parametrize(

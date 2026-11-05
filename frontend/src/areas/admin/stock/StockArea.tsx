@@ -7,6 +7,7 @@ import { JornadaAbrirScreen } from './JornadaAbrirScreen'
 import { JornadaDetalleScreen } from './JornadaDetalleScreen'
 import { JornadasListScreen } from './JornadasListScreen'
 import { KardexScreen } from './KardexScreen'
+import { RendicionScreen } from './RendicionScreen'
 import { StockInicialScreen } from './StockInicialScreen'
 import { StockPorUbicacionScreen } from './StockPorUbicacionScreen'
 import { TransferenciaDetalleScreen } from './TransferenciaDetalleScreen'
@@ -27,6 +28,8 @@ import { UbicacionFormScreen } from './UbicacionFormScreen'
  *
  * Change 15 (grupo 14): Jornadas (`ABRIR_JORNADA`, `RENDIR_JORNADA` o `LIBERAR_UBICACION`, D15/D16)
  * cuelga de la misma sección; `/jornadas/abrir` va antes que su `:jornadaId`.
+ *
+ * Change 24 (tarea 12.1): `/jornadas/:jornadaId/rendicion` es la pantalla de conteo (`RENDIR_JORNADA`).
  *
  * `/ubicaciones/nueva` se declara antes que `/ubicaciones/:ubicacionId` (mismo
  * criterio que `/nuevo` en `ClientesArea`).
@@ -49,6 +52,7 @@ export function StockArea() {
       <Route path="/jornadas" element={<JornadasListScreen />} />
       <Route path="/jornadas/abrir" element={<JornadaAbrirScreen />} />
       <Route path="/jornadas/:jornadaId" element={<JornadaDetalleScreen />} />
+      <Route path="/jornadas/:jornadaId/rendicion" element={<RendicionScreen />} />
     </Routes>
   )
 }

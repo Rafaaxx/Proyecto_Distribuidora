@@ -433,21 +433,14 @@ describe('abrir una jornada (tarea 14.2; RUT-01, RUT-03, INV-16)', () => {
   })
 })
 
-describe('rendir, cerrar y liberar desde el detalle (tarea 14.2; RUT-09, D13)', () => {
+// Change 24: «Rendir» ya no es un diálogo de confirmación sino la pantalla de conteo (`RendicionScreen.test.tsx`).
+describe('cerrar y liberar desde el detalle (tarea 14.2; RUT-09, D13)', () => {
   function reglasMutables(inicial: Estado) {
     let actual: Estado = inicial
     let extra: Record<string, unknown> = {}
     return [
       { ruta: `/stock/jornadas/${JORNADA}`, responder: () => ({ status: 200, cuerpo: detalle(actual, extra) }) },
       REGLA_MOTIVOS,
-      {
-        metodo: 'POST',
-        ruta: `/stock/jornadas/${JORNADA}/rendicion`,
-        responder: () => {
-          actual = 'EN_RENDICION'
-          return { status: 200, cuerpo: { id: JORNADA, estado: 'EN_RENDICION' } }
-        },
-      },
       {
         metodo: 'POST',
         ruta: `/stock/jornadas/${JORNADA}/cierre`,
@@ -472,35 +465,6 @@ describe('rendir, cerrar y liberar desde el detalle (tarea 14.2; RUT-09, D13)', 
       },
     ]
   }
-
-  it('Rendir pide confirmación y, al aceptarse, el detalle pasa a En rendición', async () => {
-    enrutar(apiFetchMock, reglasMutables('ABIERTA'))
-    const usuario = userEvent.setup()
-    renderEn(`/admin/stock/jornadas/${JORNADA}`, 'SUP')
-
-    await usuario.click(await screen.findByRole('button', { name: 'Rendir' }))
-    expect(llamadas(apiFetchMock, 'POST', `/stock/jornadas/${JORNADA}/rendicion`)).toHaveLength(0)
-    const dialogo = await screen.findByRole('dialog')
-    expect(within(dialogo).getByText(/requiere conexión/)).toBeInTheDocument()
-    await usuario.click(within(dialogo).getByRole('button', { name: 'Confirmar' }))
-
-    expect(await screen.findByText('En rendición', { selector: 'span' })).toBeInTheDocument()
-    expect(llamadas(apiFetchMock, 'POST', `/stock/jornadas/${JORNADA}/rendicion`)).toHaveLength(1)
-    expect(screen.queryByRole('button', { name: 'Rendir' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Cerrar' })).toBeInTheDocument()
-  })
-
-  it('cancelar la confirmación no envía nada', async () => {
-    enrutar(apiFetchMock, reglasMutables('ABIERTA'))
-    const usuario = userEvent.setup()
-    renderEn(`/admin/stock/jornadas/${JORNADA}`, 'SUP')
-
-    await usuario.click(await screen.findByRole('button', { name: 'Rendir' }))
-    await usuario.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancelar' }))
-
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(llamadas(apiFetchMock, 'POST', `/stock/jornadas/${JORNADA}/rendicion`)).toHaveLength(0)
-  })
 
   it('Cerrar pide confirmación y deja la jornada Cerrada sin acciones', async () => {
     enrutar(apiFetchMock, reglasMutables('EN_RENDICION'))
@@ -551,22 +515,6 @@ describe('rendir, cerrar y liberar desde el detalle (tarea 14.2; RUT-09, D13)', 
     }
     const envio = llamadas(apiFetchMock, 'POST', `/stock/jornadas/${JORNADA}/liberacion`)[0]
     expect(JSON.parse(String(envio?.init.body))).toEqual({ motivo_id: MOTIVO, observacion: 'No vino' })
-  })
-
-  it('un rechazo JORNADA_ESTADO_INVALIDO se muestra en el diálogo', async () => {
-    const reglas = reglasMutables('ABIERTA').map((r) =>
-      r.ruta === `/stock/jornadas/${JORNADA}/rendicion`
-        ? { ...r, responder: () => ({ status: 409, cuerpo: { title: 'x', codigo: 'JORNADA_ESTADO_INVALIDO' } }) }
-        : r,
-    )
-    enrutar(apiFetchMock, reglas)
-    const usuario = userEvent.setup()
-    renderEn(`/admin/stock/jornadas/${JORNADA}`, 'SUP')
-
-    await usuario.click(await screen.findByRole('button', { name: 'Rendir' }))
-    await usuario.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Confirmar' }))
-
-    expect(await screen.findByText(/La jornada ya cambió de estado/)).toBeInTheDocument()
   })
 })
 

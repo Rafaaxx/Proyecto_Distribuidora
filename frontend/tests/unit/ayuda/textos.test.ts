@@ -11,8 +11,8 @@ const claves = Object.keys(AYUDAS) as ClaveDeAyuda[]
 const temas = Object.keys(TEMAS) as TemaDeAyuda[]
 
 describe('AYUDAS: cada entrada tiene título, texto y regla citada', () => {
-  it('tiene las 101 claves aprobadas (27 del 16b, 5 de cobranzas, 5 de medios de pago y roles, 9 de ventas, 12 del 18b, 6 de la anulación de venta del 19, 4 de la nota de venta del 20 y 6 de usuarios, roles y cartera del 20b y 6 de motivos, alícuotas y redondeo por defecto del 20c y 4 del área de ruta del 21, 5 de la venta de ruta del 22a y 4 de la sincronización del 22b y 1 de las observaciones y rechazos del 22c y 3 de la anulación sin conexión del 22d y 4 de la cobranza sin conexión del 23; la de "Operador" y la de compartir la nota se eliminaron)', () => {
-    expect(claves).toHaveLength(101)
+  it('tiene las 108 claves aprobadas (27 del 16b, 5 de cobranzas, 5 de medios de pago y roles, 9 de ventas, 12 del 18b, 6 de la anulación de venta del 19, 4 de la nota de venta del 20 y 6 de usuarios, roles y cartera del 20b y 6 de motivos, alícuotas y redondeo por defecto del 20c y 4 del área de ruta del 21, 5 de la venta de ruta del 22a y 4 de la sincronización del 22b y 1 de las observaciones y rechazos del 22c y 3 de la anulación sin conexión del 22d y 4 de la cobranza sin conexión del 23 y 7 de la rendición del 24; la de "Operador" y la de compartir la nota se eliminaron)', () => {
+    expect(claves).toHaveLength(108)
     expect(claves).not.toContain('descuentos.operador')
     expect(claves).not.toContain('ventas.compartirNota')
     expect(claves).toEqual(

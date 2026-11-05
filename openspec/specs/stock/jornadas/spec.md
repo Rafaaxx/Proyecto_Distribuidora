@@ -134,15 +134,22 @@ Un usuario NO DEBE tener más de una jornada no cerrada (`USUARIO_CON_JORNADA`, 
 
 ### Requirement: La jornada se rinde y se cierra siguiendo su máquina de estados
 
-`JORNADA_RENDIR` DEBE pasar una jornada de `ABIERTA` a `EN_RENDICION` y `JORNADA_CERRAR` de `EN_RENDICION` a `CERRADA`; ambos exigen `RENDIR_JORNADA`, son solo `ONLINE` y valen sobre la jornada de cualquier usuario de la organización (`01` §18, §19). El cierre DEBE liberar la ubicación (RUT-08). En este change la rendición NO registra conteo ni diferencias (change 24; `design.md` D2). Cualquier otra transición DEBE rechazarse con `JORNADA_ESTADO_INVALIDO` (409) sin modificar la jornada. Cada transición DEBE guardar su momento y su usuario.
+`JORNADA_RENDIR` DEBE pasar una jornada de `ABIERTA` a `EN_RENDICION` y `JORNADA_CERRAR` de `EN_RENDICION` a `CERRADA`; ambos exigen `RENDIR_JORNADA`, son solo `ONLINE` y valen sobre la jornada de cualquier usuario de la organización (`01` §18, §19). Desde el change 24, `JORNADA_RENDIR` (v2) DEBE exigir que la jornada esté entregada (`JORNADA_SIN_ENTREGA`) y DEBE registrar el conteo físico y sus diferencias (RUT-05, RUT-06; spec `stock/rendicion-de-jornada`); la v1, sin conteo, NO DEBE aceptarse más. `JORNADA_CERRAR` (v1 y v2) DEBE liberar la ubicación (RUT-08); la v2 admite devolver el remanente. Cualquier otra transición DEBE rechazarse con `JORNADA_ESTADO_INVALIDO` (409) sin modificar la jornada. Cada transición DEBE guardar su momento y su usuario. La entrega del día NO es una transición: la jornada entregada sigue `ABIERTA` (`design.md` D1).
 
 #### Scenario: Rendir una jornada abierta
 
-- **GIVEN** una jornada `ABIERTA` de Juan sobre "Camioneta 1" y una Supervisora con `RENDIR_JORNADA`
-- **WHEN** la Supervisora envía `JORNADA_RENDIR` sobre esa jornada
-- **THEN** la jornada queda `EN_RENDICION` con el momento y el usuario de la rendición
+- **GIVEN** una jornada `ABIERTA` y entregada de Juan sobre "Camioneta 1" y una Supervisora con `RENDIR_JORNADA`
+- **WHEN** la Supervisora envía `JORNADA_RENDIR` v2 con el conteo completo
+- **THEN** la jornada queda `EN_RENDICION` con el momento y el usuario de la rendición y su conteo
 - **AND** "Camioneta 1" sigue tomada
-- **Regla:** `01` §18; RUT-05; `design.md` D2
+- **Regla:** `01` §18; RUT-05; RUT-06
+
+#### Scenario: Rendir una jornada sin entrega
+
+- **GIVEN** una jornada `ABIERTA` sin entrega
+- **WHEN** se envía `JORNADA_RENDIR` v2
+- **THEN** se rechaza con `JORNADA_SIN_ENTREGA` y la jornada sigue `ABIERTA`
+- **Regla:** RUT-05
 
 #### Scenario: Cerrar una jornada en rendición libera la ubicación
 
@@ -154,7 +161,7 @@ Un usuario NO DEBE tener más de una jornada no cerrada (`USUARIO_CON_JORNADA`, 
 
 #### Scenario: Cerrar una jornada que no se rindió
 
-- **GIVEN** una jornada `ABIERTA`
+- **GIVEN** una jornada `ABIERTA`, entregada o no
 - **WHEN** un usuario con `RENDIR_JORNADA` envía `JORNADA_CERRAR`
 - **THEN** se rechaza con `JORNADA_ESTADO_INVALIDO` y la jornada sigue `ABIERTA`
 - **Regla:** `01` §18

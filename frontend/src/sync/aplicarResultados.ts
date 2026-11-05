@@ -16,6 +16,9 @@ import { marcarJornadaNoAbierta } from './estadoDeJornada'
  * Change 23 (D5, D7): el resultado de un `COBRANZA_REGISTRAR` cambia el estado de la COBRANZA
  * (tabla `cobranzas`, por `operation_id`) y el de su comando; ninguna venta se toca. El cobro en
  * el momento de una venta no tiene comando propio: sigue la suerte de su venta.
+ *
+ * Change 24 (D10): el resultado de un `JORNADA_ENTREGAR` solo se escribe en la cola; la marca local
+ * `ENTREGADA` no se toca (la reemplaza el estado que informe el servidor).
  */
 const DESTINO_POR_ESTADO: Record<string, { comando: EstadoDeComando; venta: EstadoDeEnvio }> = {
   ACEPTADO: { comando: 'ACEPTADO', venta: 'ACEPTADA' },
@@ -25,6 +28,7 @@ const DESTINO_POR_ESTADO: Record<string, { comando: EstadoDeComando; venta: Esta
 
 const TIPO_DE_ANULACION = 'VENTA_ANULAR'
 const TIPO_DE_COBRANZA = 'COBRANZA_REGISTRAR'
+const TIPO_DE_ENTREGA = 'JORNADA_ENTREGAR'
 const OBSERVACION_JORNADA_LIBERADA = 'JORNADA_LIBERADA'
 
 export interface ResumenDeAplicacion {
@@ -60,6 +64,8 @@ export async function aplicarResultados(resultados: ResultadoDeItem[], ahora: Da
         await baseLocal.anulaciones.where('operation_id').equals(item.operation_id).modify({ estado_envio: destino.venta })
       } else if (comando.sobre.tipo === TIPO_DE_COBRANZA) {
         await baseLocal.cobranzas.where('operation_id').equals(item.operation_id).modify({ estado_envio: destino.venta })
+      } else if (comando.sobre.tipo === TIPO_DE_ENTREGA) {
+        // Change 24 (D10): la entrega no tiene fila propia; su resultado es el de la cola.
       } else {
         await baseLocal.ventas.where('operation_id').equals(item.operation_id).modify({ estado_envio: destino.venta })
       }

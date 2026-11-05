@@ -353,9 +353,9 @@ def test_solo_los_tres_tipos_de_ingreso_con_costo_pueden_ingresar_stock() -> Non
     assert frozenset({"STOCK_INICIAL", "COMPRA", "ANULACION_VENTA"}) == TIPOS_QUE_INGRESAN_CON_COSTO
 
 
-@pytest.mark.parametrize("tipo", ["DIFERENCIA_RENDICION", "VENTA", "ANULACION_COMPRA"])
+@pytest.mark.parametrize("tipo", ["VENTA", "ANULACION_COMPRA"])
 def test_un_ingreso_de_un_tipo_sin_reglas_de_costo_se_rechaza(tipo: str) -> None:
-    """`DIFERENCIA_RENDICION` sigue sin reglas hasta el change 24 (ADR-039, RUT-06)."""
+    """Desde el change 24 `DIFERENCIA_RENDICION` tiene reglas de costo (D5)."""
     with pytest.raises(TipoDeMovimientoInvalidoError):
         validar_lineas_de_movimiento([_movimiento(10, "5", tipo=tipo)])
     with pytest.raises(TipoDeMovimientoInvalidoError):
@@ -363,10 +363,16 @@ def test_un_ingreso_de_un_tipo_sin_reglas_de_costo_se_rechaza(tipo: str) -> None
 
 
 @pytest.mark.parametrize(
-    "tipo", ["AJUSTE", "VENTA", "TRANSFERENCIA_SALIDA", "DIFERENCIA_RENDICION"]
+    ("tipo", "origen"),
+    [
+        ("AJUSTE", None),
+        ("VENTA", None),
+        ("TRANSFERENCIA_SALIDA", None),
+        ("DIFERENCIA_RENDICION", "RENDICION"),
+    ],
 )
-def test_un_egreso_de_cualquier_tipo_del_catalogo_es_valido(tipo: str) -> None:
-    linea = _movimiento(-5, None, tipo=tipo)
+def test_un_egreso_de_cualquier_tipo_del_catalogo_es_valido(tipo: str, origen: str | None) -> None:
+    linea = _movimiento(-5, None, tipo=tipo, origen_tipo=origen)
 
     assert validar_lineas_de_movimiento([linea]) == [linea]
 
@@ -699,6 +705,22 @@ def test_una_venta_sin_conexion_admite_producto_inactivo_pero_otros_tipos_no() -
     assert productos_que_exigen_estar_activos(lineas) == {vendido, vendido_y_comprado}
 
 
+def test_un_faltante_de_rendicion_admite_producto_inactivo_pero_un_sobrante_no() -> None:
+    """Change 24, ADR-068 punto 6 (decisión 2026-11-05, CAT-05): la diferencia negativa de
+    una rendición (faltante) no exige el producto activo; el sobrante sí; una línea de otro
+    tipo del mismo producto sí; el faltante de un tipo distinto (AJUSTE) tampoco se exime."""
+    faltante, sobrante, faltante_y_compra, ajuste = uuid4(), uuid4(), uuid4(), uuid4()
+    lineas = [
+        _movimiento(-3, None, tipo="DIFERENCIA_RENDICION", producto_id=faltante),
+        _movimiento(2, None, tipo="DIFERENCIA_RENDICION", producto_id=sobrante),
+        _movimiento(-1, None, tipo="DIFERENCIA_RENDICION", producto_id=faltante_y_compra),
+        _movimiento(1, "5", tipo="COMPRA", producto_id=faltante_y_compra),
+        _movimiento(-1, None, tipo="AJUSTE", producto_id=ajuste),
+    ]
+
+    assert productos_que_exigen_estar_activos(lineas) == {sobrante, faltante_y_compra, ajuste}
+
+
 # --- transferencias y ajustes (change 14, D1, D3, D4, D5.2, D9) ---------------------
 
 
@@ -723,9 +745,22 @@ def test_un_ingreso_de_transferencia_o_ajuste_con_costo_es_costo_invalido(
         validar_lineas_de_movimiento([_movimiento(48, costo, tipo=tipo, origen_tipo=origen)])
 
 
-def test_un_ingreso_de_rendicion_sigue_siendo_tipo_invalido() -> None:
+@pytest.mark.parametrize("cantidad", [5, -5])
+def test_la_diferencia_de_rendicion_con_origen_rendicion_es_valida_sin_costo(
+    cantidad: int,
+) -> None:
+    """Change 24, D5: ingreso o egreso, sin costo (se valoriza al promedio vigente)."""
+    linea = _movimiento(cantidad, None, tipo="DIFERENCIA_RENDICION", origen_tipo="RENDICION")
+
+    assert validar_lineas_de_movimiento([linea]) == [linea]
+
+
+@pytest.mark.parametrize("origen", [None, "AJUSTE_STOCK", "TRANSFERENCIA"])
+def test_la_diferencia_de_rendicion_con_otro_origen_es_tipo_invalido(origen: str | None) -> None:
     with pytest.raises(TipoDeMovimientoInvalidoError):
-        validar_lineas_de_movimiento([_movimiento(5, None, tipo="DIFERENCIA_RENDICION")])
+        validar_lineas_de_movimiento(
+            [_movimiento(5, None, tipo="DIFERENCIA_RENDICION", origen_tipo=origen)]
+        )
 
 
 # `ANULACION_VENTA` ya no está: desde el change 19 (D5) una línea vendida sin costo se revierte

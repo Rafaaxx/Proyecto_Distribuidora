@@ -90,7 +90,7 @@ from app.modules.descuentos import service as descuentos_service
 from app.modules.identidad import service as identidad_service
 from app.modules.precios import service as precios_service
 from app.modules.stock import service as stock_service
-from app.modules.stock.service import LineaDeMovimiento, ResultadoDeMovimiento
+from app.modules.stock.service import EstadoDeJornada, LineaDeMovimiento, ResultadoDeMovimiento
 from app.modules.ventas import repository
 from app.modules.ventas.domain.anulacion import (
     lineas_de_reingreso,
@@ -167,7 +167,31 @@ __all__ = [
     "anular_venta",
     "confirmar_venta",
     "presentacion_usada_en_venta",
+    "ventas_de_jornada",
 ]
+
+
+def ventas_de_jornada(
+    organizacion_id: UUID, sesion: Session, *, jornada_id: UUID, corte: datetime | None
+) -> stock_service.VentasDeJornada:
+    """Las ventas de la jornada, sumadas en la base. Las anuladas se cuentan por la jornada de
+    la anulación, aunque la jornada se haya liberado (ADR-066); `corte` es el momento de la
+    rendición (las posteriores van aparte) o `None`. Solo lectura, filtrada por organización
+    (INV-21)."""
+    vigentes, anuladas, vigentes_tardias, anuladas_tardias = (
+        repository.totales_de_ventas_de_jornada(organizacion_id, jornada_id, corte, sesion)
+    )
+
+    def _total(fila: tuple[int, Decimal]) -> stock_service.TotalDeVentas:
+        return stock_service.TotalDeVentas(fila[0], redondear_importe(fila[1]))
+
+    return stock_service.VentasDeJornada(
+        vigentes=_total(vigentes),
+        anuladas=_total(anuladas),
+        vigentes_tardias=_total(vigentes_tardias),
+        anuladas_tardias=_total(anuladas_tardias),
+    )
+
 
 _CUENTA_CLIENTE = "CLIENTE"
 _TIPO_MOVIMIENTO_VENTA = "VENTA"
@@ -200,9 +224,50 @@ _VERSION_VIGENTE = "VIGENTE"
 CODIGO_STOCK_NEGATIVO = "STOCK_NEGATIVO"
 CODIGO_VENTA_SIN_COSTO = "VENTA_SIN_COSTO"
 CODIGO_JORNADA_LIBERADA = "JORNADA_LIBERADA"
+CODIGO_JORNADA_RENDIDA = "JORNADA_RENDIDA"
 _ESTADO_JORNADA_LIBERADA = "LIBERADA"
+_ESTADOS_JORNADA_RENDIDA = frozenset({"EN_RENDICION", "CERRADA"})
 _CODIGOS_DE_PRECIO_NO_RESOLUBLE = frozenset({"SIN_LISTA_APLICABLE", "LISTA_SIN_VERSION_VIGENTE"})
 _CERO = Decimal("0.00")
+
+
+_CODIGOS_DE_JORNADA = frozenset({CODIGO_JORNADA_LIBERADA, CODIGO_JORNADA_RENDIDA})
+"""Las observaciones de jornada se anotan una sola vez, sobre la venta: la cobranza en el acto no
+las repite."""
+
+
+def _observacion_de_jornada(estado_jornada: EstadoDeJornada | None) -> ObservacionDeVenta | None:
+    """SYN-07, RUT-09 y change 24 (D7): lo que se anota sobre la operación sin conexión según la
+    jornada del sobre. `LIBERADA`: `JORNADA_LIBERADA` (jornada y momento de la liberación);
+    `EN_RENDICION` o `CERRADA`: `JORNADA_RENDIDA` (jornada y momento de la rendición); `ABIERTA`,
+    nada."""
+    if estado_jornada is None:
+        return None
+    if estado_jornada.estado == _ESTADO_JORNADA_LIBERADA:
+        return ObservacionDeVenta(
+            CODIGO_JORNADA_LIBERADA,
+            {
+                "jornada_id": str(estado_jornada.jornada_id),
+                "liberada_en": (
+                    None
+                    if estado_jornada.liberada_en is None
+                    else estado_jornada.liberada_en.isoformat()
+                ),
+            },
+        )
+    if estado_jornada.estado in _ESTADOS_JORNADA_RENDIDA:
+        return ObservacionDeVenta(
+            CODIGO_JORNADA_RENDIDA,
+            {
+                "jornada_id": str(estado_jornada.jornada_id),
+                "rendida_en": (
+                    None
+                    if estado_jornada.rendida_en is None
+                    else estado_jornada.rendida_en.isoformat()
+                ),
+            },
+        )
+    return None
 
 
 def presentacion_usada_en_venta(
@@ -1671,20 +1736,9 @@ def confirmar_venta(
         estado_jornada = stock_service.leer_estado_de_jornada(
             organizacion_id, sesion, jornada_id=jornada_del_sobre
         )
-        if estado_jornada is not None and estado_jornada.estado == _ESTADO_JORNADA_LIBERADA:
-            observaciones_de_venta.append(
-                ObservacionDeVenta(
-                    CODIGO_JORNADA_LIBERADA,
-                    {
-                        "jornada_id": str(estado_jornada.jornada_id),
-                        "liberada_en": (
-                            None
-                            if estado_jornada.liberada_en is None
-                            else estado_jornada.liberada_en.isoformat()
-                        ),
-                    },
-                )
-            )
+        observacion_de_jornada = _observacion_de_jornada(estado_jornada)
+        if observacion_de_jornada is not None:
+            observaciones_de_venta.append(observacion_de_jornada)
 
     # 9) Débito `VENTA` por el total, con el saldo ya bloqueado.
     debito = cuentas_corrientes_service.registrar_movimiento(
@@ -1733,7 +1787,7 @@ def confirmar_venta(
         observaciones_de_venta.extend(
             ObservacionDeVenta(observacion.codigo, observacion.detalle, sobre_cobranza=True)
             for observacion in resultado_cobranza.observaciones
-            if observacion.codigo != CODIGO_JORNADA_LIBERADA
+            if observacion.codigo not in _CODIGOS_DE_JORNADA
         )
 
     # 10) LO ÚLTIMO, nivel 6: el correlativo del dispositivo (`max(actual, propuesto)`).
@@ -1814,21 +1868,9 @@ def _observaciones_de_anulacion_sin_conexion(
     estado_jornada = stock_service.leer_estado_de_jornada(
         organizacion_id, sesion, jornada_id=jornada_del_sobre
     )
-    if estado_jornada is not None and estado_jornada.estado == _ESTADO_JORNADA_LIBERADA:
-        observaciones.insert(
-            0,
-            ObservacionDeVenta(
-                CODIGO_JORNADA_LIBERADA,
-                {
-                    "jornada_id": str(estado_jornada.jornada_id),
-                    "liberada_en": (
-                        None
-                        if estado_jornada.liberada_en is None
-                        else estado_jornada.liberada_en.isoformat()
-                    ),
-                },
-            ),
-        )
+    observacion_de_jornada = _observacion_de_jornada(estado_jornada)
+    if observacion_de_jornada is not None:
+        observaciones.insert(0, observacion_de_jornada)
     return tuple(observaciones)
 
 
@@ -2007,3 +2049,10 @@ def anular_venta(
         jornadas_tomadas=stock_service.jornadas_tomadas_de(movimientos),
         observaciones=observaciones,
     )
+
+
+stock_service.registrar_lector_de_ventas_de_jornada(
+    lambda organizacion_id, sesion, jornada_id, corte: ventas_de_jornada(
+        organizacion_id, sesion, jornada_id=jornada_id, corte=corte
+    )
+)

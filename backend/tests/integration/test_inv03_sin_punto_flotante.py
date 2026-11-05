@@ -237,6 +237,10 @@ COLUMNAS_DE_JORNADA = {
     "liberada_por_id": "uuid",
     "motivo_liberacion_id": "uuid",
     "observacion_liberacion": "text",
+    # Change 24: la entrega del día.
+    "entregada_en": "timestamp with time zone",
+    "entrega_occurred_at": "timestamp with time zone",
+    "entrega_secuencia": "integer",
 }
 
 
@@ -316,3 +320,21 @@ def test_inv03_el_catalogo_incluye_el_credito_y_los_descuentos_de_la_venta_sin_p
     for columna, esperado in COLUMNAS_DE_VENTAS_18B.items():
         assert tipos.get(columna) == esperado, columna
     assert not de_las_tablas_nuevas & set(TIPOS_PROHIBIDOS)
+
+
+def test_inv03_el_costo_de_la_linea_de_rendicion_es_numeric_y_las_cantidades_integer(
+    _engine_de_sesion: Engine,
+) -> None:
+    """Change 24 (`design.md` D4, D5): el costo con que se valorizó la diferencia es `numeric`
+    exacto; el resto de la línea son cantidades en unidad base (`integer`)."""
+    with _engine_de_sesion.connect() as conexion:
+        tipos = {
+            columna: tipo
+            for tabla, columna, tipo in conexion.execute(_CONSULTA_CATALOGO).all()
+            if tabla == "rendicion_linea"
+        }
+
+    assert tipos["costo_unitario"] == "numeric"
+    for columna in ("stock_al_abrir", "ingresos", "ventas", "anulaciones", "otros"):
+        assert tipos[columna] == "integer"
+    assert not {tipo.lower() for tipo in tipos.values()} & set(TIPOS_PROHIBIDOS)

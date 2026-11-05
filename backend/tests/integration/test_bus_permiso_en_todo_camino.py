@@ -36,8 +36,9 @@ RELOJ = FixedClock(MOMENTO)
 
 _CATALOGO_REAL = dict(catalogo._CATALOGO)
 TIPOS_PARAMETRIZADOS = sorted(
-    t.tipo for t in _CATALOGO_REAL.values() if not t.exige_credenciales_efimeras
+    t.tipo for t in _CATALOGO_REAL.values() if not t.exige_credenciales_efimeras and t.admite_online
 )
+TIPOS_SOLO_OFFLINE = sorted(t.tipo for t in _CATALOGO_REAL.values() if not t.admite_online)
 TIPOS_CON_SECRETOS = sorted(
     t.tipo for t in _CATALOGO_REAL.values() if t.exige_credenciales_efimeras
 )
@@ -120,6 +121,24 @@ def test_seg06_un_usuario_sin_los_permisos_del_tipo_recibe_permiso_requerido_por
 
     assert resultado.estado == "RECHAZADO"
     assert resultado.error_codigo == "PERMISO_REQUERIDO"
+    assert entorno.comandos(item.operation_id) == 0
+
+
+@pytest.mark.parametrize("tipo", TIPOS_SOLO_OFFLINE)
+def test_change24_un_tipo_solo_offline_no_entra_en_online_ni_con_el_permiso(
+    db_session: Session, tipo: str
+) -> None:
+    """Change 24 (`JORNADA_ENTREGAR`, D1): un tipo que solo admite `OFFLINE` se rechaza en
+    `ONLINE` con `MODO_NO_ADMITIDO_PARA_TIPO`, tenga o no el permiso (el permiso de un
+    comando sin conexión se evalúa como `PERMISO_REVOCADO` o en su handler, SYN-05)."""
+    permisos = frozenset(_CATALOGO_REAL[tipo].permisos)
+    entorno = Entorno(db_session, permisos=permisos)
+    item = entorno.item(tipo, {}, version=_version_del_tipo(tipo))
+
+    resultado = entorno.lote(item)
+
+    assert resultado.estado == "RECHAZADO"
+    assert resultado.error_codigo == "MODO_NO_ADMITIDO_PARA_TIPO"
     assert entorno.comandos(item.operation_id) == 0
 
 

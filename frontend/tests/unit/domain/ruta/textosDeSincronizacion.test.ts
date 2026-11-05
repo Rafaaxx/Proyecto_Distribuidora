@@ -24,6 +24,7 @@ import {
   TEXTO_DE_RECHAZO_GENERAL_DE_COBRANZA,
   textoDeObservacionDeCobranza,
   textoDeRechazoDeCobranza,
+  textoDeRechazoDeEntrega,
   type NombresLocales,
 } from '../../../../src/domain/ruta/textosDeSincronizacion'
 import type { ObservacionLocal } from '../../../../src/lib/dispositivo/db'
@@ -35,6 +36,7 @@ const CODIGOS = JSON.parse(readFileSync(FIXTURE, 'utf-8')) as {
   rechazos_de_anulacion: string[]
   observaciones_de_anulacion: string[]
   rechazos_de_cobranza: string[]
+  rechazos_de_entrega: string[]
   observaciones_de_cobranza: string[]
 }
 
@@ -66,6 +68,7 @@ describe('textoDeObservacion (D5, SYN-07)', () => {
     ['AUTORIZACION_OFFLINE', { autorizador_id: 'a-1', tipo: 'CREDITO' }, 'Sup Uno autorizó el exceso de crédito sin señal.'],
     ['LISTA_NO_VIGENTE', null, 'Los precios no eran los de la versión vigente de la lista en ese momento.'],
     ['JORNADA_LIBERADA', null, 'La jornada había sido liberada cuando llegó la venta.'],
+    ['JORNADA_RENDIDA', null, 'Llegó cuando la jornada ya estaba rendida; no entra en el conteo.'],
   ])('%s arma el texto con los nombres locales', (codigo, detalle, esperado) => {
     expect(textoDeObservacion(observacion(codigo, detalle), NOMBRES)).toBe(esperado)
   })
@@ -392,5 +395,63 @@ describe('explicarEnvio de una cobranza (D11; SYN-06, SYN-07)', () => {
   it('una cobranza aceptada o sin enviar no explica nada', () => {
     expect(explicarEnvio('ACEPTADA', undefined, NOMBRES, 'COBRANZA_REGISTRAR')).toBeNull()
     expect(explicarEnvio('PENDIENTE', undefined, NOMBRES, 'COBRANZA_REGISTRAR')).toBeNull()
+  })
+})
+
+describe('JORNADA_RENDIDA (change 24, D7, D11; SYN-07)', () => {
+  it.each([
+    ['venta', textoDeObservacion],
+    ['anulación', textoDeObservacionDeAnulacion],
+    ['cobranza', textoDeObservacionDeCobranza],
+  ])('la %s tardía lleva el mismo texto aprobado', (_operacion, traducir) => {
+    expect(traducir(observacion('JORNADA_RENDIDA', { jornada_id: 'j-1', rendida_en: '2026-11-04T18:00:00+00:00' }), NOMBRES)).toBe(
+      'Llegó cuando la jornada ya estaba rendida; no entra en el conteo.',
+    )
+  })
+})
+
+/**
+ * Change 24, tarea 15.1 (D11, aprobados en 0.2; cita SYN-06, SYN-07): los rechazos de la entrega del
+ * día, todos seguidos de «Avisá a tu supervisor.», se eligen por el tipo de operación de la cola.
+ */
+describe('explicarEnvio de la entrega del día (D11; SYN-06)', () => {
+  it.each(CODIGOS.rechazos_de_entrega)('%s tiene texto aprobado para la entrega y se reconoce', (codigo) => {
+    const r = textoDeRechazoDeEntrega(codigo)
+    expect(r.conocido).toBe(true)
+    expect(r.codigo).toBe(codigo)
+    expect(r.texto).toMatch(/^La (jornada|entrega) /)
+  })
+
+  it.each([
+    ['JORNADA_ESTADO_INVALIDO', 'La jornada ya no estaba abierta cuando llegó la entrega.'],
+    ['JORNADA_YA_ENTREGADA', 'La jornada ya estaba entregada.'],
+    ['JORNADA_AJENA', 'La entrega llegó con datos incompletos o inválidos.'],
+    ['PERMISO_REQUERIDO', 'La entrega llegó con datos incompletos o inválidos.'],
+    ['VERSION_DE_COMANDO_SIN_HANDLER', 'La entrega llegó con datos incompletos o inválidos.'],
+  ])('%s dice «%s»', (codigo, esperado) => {
+    expect(textoDeRechazoDeEntrega(codigo).texto).toBe(esperado)
+  })
+
+  it('un código que el teléfono no conoce da el texto general con su código', () => {
+    expect(textoDeRechazoDeEntrega('CODIGO_NUEVO')).toEqual({
+      texto: 'La entrega llegó con datos incompletos o inválidos.',
+      codigo: 'CODIGO_NUEVO',
+      conocido: false,
+    })
+  })
+
+  it('una entrega RECHAZADA se explica con su texto, su código y «Avisá a tu supervisor.»', () => {
+    const e = explicarEnvio('RECHAZADA', { error_codigo: 'JORNADA_YA_ENTREGADA' }, NOMBRES, 'JORNADA_ENTREGAR')
+    expect(e).toEqual({
+      tipo: 'rechazo',
+      texto: 'La jornada ya estaba entregada.',
+      codigo: 'JORNADA_YA_ENTREGADA',
+      aviso: 'Avisá a tu supervisor.',
+    })
+  })
+
+  it('una entrega sin error o aceptada no explica nada', () => {
+    expect(explicarEnvio('ACEPTADA', undefined, NOMBRES, 'JORNADA_ENTREGAR')).toBeNull()
+    expect(explicarEnvio('PENDIENTE', undefined, NOMBRES, 'JORNADA_ENTREGAR')).toBeNull()
   })
 })

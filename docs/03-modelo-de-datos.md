@@ -404,8 +404,9 @@ El origen es genérico (`origen_tipo` + `origen_id`) y no una clave foránea por
 | `rendida_por_id`, `cerrada_por_id`, `liberada_por_id` | `uuid` | Quién rindió, cerró y liberó; FK compuestas a `usuario`; nulos si y solo si su momento es nulo |
 | `motivo_liberacion_id` | `uuid` | RUT-09. FK compuesta a `motivo` (ámbito `LIBERACION_JORNADA`); no nulo si y solo si `liberada_en` no es nulo |
 | `observacion_liberacion` | `text` | Opcional, de 1 a 500 caracteres; solo en una `LIBERADA` |
+| `entregada_en`, `entrega_occurred_at`, `entrega_secuencia` | `timestamptz`, `timestamptz`, `integer` | RUT-05. La entrega del día: nulas juntas; solo en `ABIERTA`, `EN_RENDICION`, `CERRADA` o `LIBERADA` (`ck_jornada__entrega_coherente`: una jornada entregada y luego liberada la conserva); toda `EN_RENDICION` o `CERRADA` posterior al change 24 la tiene (ADR-068) |
 
-`CHECK` de coherencia por estado: `CERRADA` tiene cierre y rendición; `LIBERADA` tiene liberación y motivo y no cierre; `EN_RENDICION` tiene rendición; `ABIERTA` no tiene rendición. El usuario de aplicación tiene `SELECT` e `INSERT`, y `UPDATE` **solo** de `estado` y de las columnas de transición (nunca de `ubicacion_id`, `usuario_id`, `dispositivo_id` ni `abierta_en`); no tiene `DELETE` (INV-05, TR-06). No hay tabla de toma: la toma es la fila en `ABIERTA` o `EN_RENDICION` más sus índices.
+`CHECK` de coherencia por estado: `CERRADA` tiene cierre y rendición; `LIBERADA` tiene liberación y motivo y no cierre; `EN_RENDICION` tiene rendición; `ABIERTA` no tiene rendición. El usuario de aplicación tiene `SELECT` e `INSERT`, y `UPDATE` **solo** de `estado`, de las columnas de transición **y de las de la entrega** (nunca de `ubicacion_id`, `usuario_id`, `dispositivo_id` ni `abierta_en`); no tiene `DELETE` (INV-05, TR-06). No hay tabla de toma: la toma es la fila en `ABIERTA` o `EN_RENDICION` más sus índices.
 
 ```sql
 CREATE UNIQUE INDEX ux_jornada__ubicacion_abierta
@@ -425,10 +426,10 @@ CREATE INDEX ix_jornada__abierta_en
 
 | Tabla | Columnas |
 | --- | --- |
-| `rendicion` | `id`, `organizacion_id`, `jornada_id` (único), columnas de operación |
-| `rendicion_linea` | `id`, `organizacion_id`, `rendicion_id`, `producto_id`, `cantidad_esperada`, `cantidad_contada`, `diferencia` `integer` |
+| `rendicion` | `id`, `organizacion_id`, `jornada_id` (único), **`observacion` (opcional, de 1 a 500)**, columnas de operación |
+| `rendicion_linea` | `id`, `organizacion_id`, `rendicion_id`, `producto_id`, **`stock_al_abrir`, `ingresos`, `ventas`, `anulaciones`, `otros`**, `cantidad_esperada`, `cantidad_contada` (**`CHECK (>= 0)`**), `diferencia` `integer`; **`costo_unitario` `numeric(18,6)` nulable; `UNIQUE (organizacion_id, rendicion_id, producto_id)`; `CHECK (diferencia = cantidad_contada - cantidad_esperada)` y `CHECK (cantidad_esperada = stock_al_abrir + ingresos - ventas + anulaciones + otros)`** |
 
-Las diferencias generan movimientos `DIFERENCIA_RENDICION` con origen en la rendición (RUT-06).
+Las diferencias generan movimientos `DIFERENCIA_RENDICION` con origen en la rendición (RUT-06). **FK compuestas a `jornada`, `producto`, `usuario` y `dispositivo`. El usuario de aplicación tiene `SELECT` e `INSERT` y nunca `UPDATE` ni `DELETE` (INV-05). Las columnas de la línea son el resumen de stock congelado al rendir (RUT-07, ADR-068). Migración: revisión `d2f4a6c8e0b1_rendicion_de_jornada` (sobre el head anterior): crea `rendicion` y `rendicion_linea`, agrega las tres columnas de `jornada` y rehace el `CHECK` de `observacion.codigo`; sube y baja limpia sobre una base con datos y el `downgrade` aborta con un mensaje claro si hay rendiciones o entregas.**
 
 ## 10. Clientes
 
@@ -595,7 +596,7 @@ El índice único es el mecanismo de idempotencia (`02` §6.3). El contenido com
 
 ### `observacion`
 
-`id`, `organizacion_id`, `comando_id`, `operacion_tipo`, `operacion_id`, `codigo` (SYN-07; `CHECK` `ck_observacion__codigo` con el catálogo, que el change 17 amplía con `MEDIO_INACTIVO` y `REFERENCIA_FALTANTE`, el change 18a con `VENTA_SIN_COSTO`, `CONSUMIDOR_FINAL_CON_DEUDA` y `UBICACION_TOMADA_AL_SINCRONIZAR` y el change 18b con `AUTORIZACION_OFFLINE`), `detalle` `jsonb`, `estado` (`PENDIENTE`, `RESUELTA`), `resuelto_por_id`, `resuelto_en`, `comentario`. En las observaciones de un medio de cobranza, `detalle` lleva `medio` (posición de la línea), `medio_pago_id`, `nombre` e `importe` (ADR-052).
+`id`, `organizacion_id`, `comando_id`, `operacion_tipo`, `operacion_id`, `codigo` (SYN-07; `CHECK` `ck_observacion__codigo` con el catálogo, que el change 17 amplía con `MEDIO_INACTIVO` y `REFERENCIA_FALTANTE`, el change 18a con `VENTA_SIN_COSTO`, `CONSUMIDOR_FINAL_CON_DEUDA` y `UBICACION_TOMADA_AL_SINCRONIZAR` el change 18b con `AUTORIZACION_OFFLINE` y el change 24 con `JORNADA_RENDIDA`), `detalle` `jsonb`, `estado` (`PENDIENTE`, `RESUELTA`), `resuelto_por_id`, `resuelto_en`, `comentario`. En las observaciones de un medio de cobranza, `detalle` lleva `medio` (posición de la línea), `medio_pago_id`, `nombre` e `importe` (ADR-052).
 
 Índice parcial `(organizacion_id, codigo) WHERE estado = 'PENDIENTE'`.
 

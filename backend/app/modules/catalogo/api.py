@@ -81,6 +81,9 @@ PERMISO_GESTIONAR_LISTAS = "GESTIONAR_LISTAS"
 # D18 (change 16, ADR-047 punto 16): el selector de alcance de una regla de descuento lee las
 # mismas cuatro lecturas (categorías, marcas, productos y detalle de producto), solo en lectura.
 PERMISO_GESTIONAR_DESCUENTOS = "GESTIONAR_DESCUENTOS"
+# D9 (change 24, `01` §19): «Agregar producto» de la rendición lee la lista de productos activos
+# con solo este permiso, solo en lectura.
+PERMISO_RENDIR_JORNADA = "RENDIR_JORNADA"
 
 
 def _resultado_de(comando: sync_service.Comando) -> dict[str, object]:
@@ -468,6 +471,7 @@ def listar_productos(
                 PERMISO_REGISTRAR_COMPRA,
                 PERMISO_GESTIONAR_LISTAS,
                 PERMISO_GESTIONAR_DESCUENTOS,
+                PERMISO_RENDIR_JORNADA,
             )
         ),
     ],

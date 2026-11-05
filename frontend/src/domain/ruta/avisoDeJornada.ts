@@ -9,7 +9,12 @@ const TEXTOS: Readonly<Record<EstadoDeJornadaNoAbierta, string>> = {
   EN_RENDICION: 'Tu jornada está en rendición.',
   CERRADA: 'Tu jornada fue cerrada.',
   DESCONOCIDO: 'Tu jornada ya no está abierta.',
+  // Change 24 (D10, aprobado en 0.2; RUT-05): estado local, el vendedor tocó «Terminar el día».
+  ENTREGADA: 'Terminaste el día. Pasá a rendir con tu supervisor.',
 }
+
+/** Change 24 (D10): con la entrega hecha y algo todavía sin enviar. */
+export const AVISO_FALTA_ENVIAR_ANTES_DE_LA_ENTREGA = 'Lo que falta enviar se envía antes de la entrega.'
 
 export const AVISO_LO_YA_VENDIDO = 'Lo que ya vendiste y cobraste se sigue enviando.'
 

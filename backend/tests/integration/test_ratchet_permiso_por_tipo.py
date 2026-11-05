@@ -39,8 +39,10 @@ confirma la actual con el límite de intentos del login; es `ONLINE` y `exige_cr
 (el lote lo rechaza), así que ningún permiso protegería nada que la sesión y la contraseña actual no
 protejan."""
 
-TIPOS_SIN_RUTA: frozenset[str] = frozenset()
-"""Tipos que no tienen una ruta REST de escritura (solo el lote). Vacía hoy."""
+TIPOS_SIN_RUTA: frozenset[str] = frozenset({"JORNADA_ENTREGAR"})
+"""Tipos que no tienen una ruta REST de escritura (solo el lote). Único: `JORNADA_ENTREGAR`
+(change 24, ADR-068): la entrega del día la encola el teléfono en modo `OFFLINE` y solo la acepta
+el lote; no hay ruta de `/admin` que la envíe (declara `ABRIR_JORNADA`)."""
 
 
 def _tipos_que_envia(route: APIRoute, tipos: frozenset[str]) -> set[str]:

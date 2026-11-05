@@ -26,6 +26,12 @@ export function formatearFechaHora(momentoIso: string): string {
   return `${dia}/${mes}/${anio} ${horas}:${minutos}`
 }
 
+/** Solo la hora local, `hh:mm` (24 h): «Entregada por el vendedor a las {hora}.» (change 24, D9). */
+export function formatearHora(momentoIso: string): string {
+  const momento = new Date(momentoIso)
+  return `${conDosDigitos(momento.getHours())}:${conDosDigitos(momento.getMinutes())}`
+}
+
 /**
  * Igual que `formatearFechaHora` pero en la zona horaria pasada (IANA, por
  * ejemplo `America/Argentina/Mendoza`) en vez de la del navegador: las fechas

@@ -45,6 +45,13 @@ export type Jornada = components['schemas']['JornadaResponse']
 export type JornadaDelListado = components['schemas']['JornadaDelListadoResponse']
 export type PaginaJornadas = components['schemas']['PaginaDeJornadasResponse']
 export type JornadaDetalle = components['schemas']['DetalleDeJornadaResponse']
+export type LineaDeConteoDatos = components['schemas']['LineaDeRendicionRequest']
+export type RendicionResultado = components['schemas']['RendicionResponse']
+export type DevolucionDatos = components['schemas']['DevolucionRequest']
+export type CierreResultado = components['schemas']['CierreResponse']
+export type ResumenDeJornada = components['schemas']['ResumenDeJornadaResponse']
+export type LineaDelResumen = components['schemas']['LineaDelResumenResponse']
+export type DineroDeLaJornada = components['schemas']['DineroDeLaJornadaResponse']
 export type TomaDeUbicacion = components['schemas']['TomaDeUbicacionResponse']
 
 /** Tamaño de página por defecto (ADR-034 punto 6). */
@@ -277,21 +284,38 @@ export async function abrirJornada(ubicacionId: string, operationId: string): Pr
   return leerJsonOLanzar(respuesta)
 }
 
-export async function rendirJornada(id: string, operationId: string): Promise<Jornada> {
+/** `JORNADA_RENDIR` v2 (change 24, D2): el conteo y una observación opcional. */
+export async function rendirJornada(
+  id: string,
+  lineas: LineaDeConteoDatos[],
+  observacion: string | undefined,
+  operationId: string,
+): Promise<RendicionResultado> {
   const respuesta = await apiFetch(`/stock/jornadas/${id}/rendicion`, {
     method: 'POST',
     headers: conOperationId(operationId),
-    body: JSON.stringify({}),
+    body: JSON.stringify({ lineas, ...(observacion ? { observacion } : {}) }),
   })
   return leerJsonOLanzar(respuesta)
 }
 
-export async function cerrarJornada(id: string, operationId: string): Promise<Jornada> {
+/** `JORNADA_CERRAR` v2 (change 24, D6): con una devolución opcional del remanente. */
+export async function cerrarJornada(
+  id: string,
+  devolucion: DevolucionDatos | undefined,
+  operationId: string,
+): Promise<CierreResultado> {
   const respuesta = await apiFetch(`/stock/jornadas/${id}/cierre`, {
     method: 'POST',
     headers: conOperationId(operationId),
-    body: JSON.stringify({}),
+    body: JSON.stringify(devolucion === undefined ? {} : { devolucion }),
   })
+  return leerJsonOLanzar(respuesta)
+}
+
+/** El resumen de la jornada (change 24, D4; RUT-07). */
+export async function obtenerResumenDeJornada(id: string): Promise<ResumenDeJornada> {
+  const respuesta = await apiFetch(`/stock/jornadas/${id}/resumen`)
   return leerJsonOLanzar(respuesta)
 }
 

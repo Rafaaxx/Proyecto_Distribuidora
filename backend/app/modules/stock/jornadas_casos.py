@@ -72,6 +72,8 @@ class EstadoDeJornada:
     jornada_id: UUID
     estado: str
     liberada_en: datetime | None
+    rendida_en: datetime | None = None
+    """Momento de la rendición (change 24, D7): nulo mientras la jornada no se rindió."""
 
 
 @dataclass(frozen=True)
@@ -137,7 +139,10 @@ def leer_estado_de_jornada(
     if jornada is None:
         return None
     return EstadoDeJornada(
-        jornada_id=jornada.id, estado=jornada.estado, liberada_en=jornada.liberada_en
+        jornada_id=jornada.id,
+        estado=jornada.estado,
+        liberada_en=jornada.liberada_en,
+        rendida_en=jornada.rendida_en,
     )
 
 
@@ -172,20 +177,23 @@ def _jornada_bloqueada(organizacion_id: UUID, sesion: Session, jornada_id: UUID)
     return jornada
 
 
-def rendir_jornada(
+def entregar_jornada(
     organizacion_id: UUID,
     sesion: Session,
+    reloj: Clock,
     *,
     jornada_id: UUID,
-    usuario_id: UUID,
     occurred_at: datetime,
+    secuencia: int,
 ) -> Jornada:
-    """`JORNADA_RENDIR` (`01` §18, D2): `ABIERTA → EN_RENDICION` con el momento y el usuario de
-    la rendición. Sin conteo hasta el change 24. La ubicación sigue tomada (INV-16)."""
+    """`JORNADA_ENTREGAR` (RUT-05, `design.md` D1): con la jornada `FOR UPDATE` guarda el momento
+    de registro, el de origen y la secuencia de la entrega. La jornada sigue `ABIERTA`. Que la
+    jornada sea del usuario y del dispositivo del sobre lo valida el lote antes de reservar."""
     jornada = _jornada_bloqueada(organizacion_id, sesion, jornada_id)
-    jornada.estado = dominio.rendir(jornada.estado)
-    jornada.rendida_en = occurred_at
-    jornada.rendida_por_id = usuario_id
+    dominio.validar_entrega(jornada.estado, ya_entregada=jornada.entregada_en is not None)
+    jornada.entregada_en = reloj.now()
+    jornada.entrega_occurred_at = occurred_at
+    jornada.entrega_secuencia = secuencia
     sesion.flush()
     return jornada
 

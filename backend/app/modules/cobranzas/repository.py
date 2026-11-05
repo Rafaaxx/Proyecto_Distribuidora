@@ -13,7 +13,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import select, tuple_
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -313,4 +313,90 @@ def tomar_cobranza_de_venta(
             Cobranza.origen == "VENTA",
         )
         .with_for_update()
+    )
+
+
+@dataclass(frozen=True)
+class TotalDeCobranzas:
+    """Cobranzas de una jornada de un estado: cuántas y su importe, sumado en la base."""
+
+    estado: str
+    tardia: bool
+    cantidad: int
+    total: Decimal
+
+
+@dataclass(frozen=True)
+class TotalDeMedio:
+    """El importe de un medio de pago en las cobranzas de una jornada de un estado."""
+
+    estado: str
+    tardia: bool
+    medio_pago_id: UUID
+    total: Decimal
+
+
+def totales_de_cobranzas_de_jornada(
+    organizacion_id: UUID, jornada_id: UUID, corte: datetime | None, sesion: Session
+) -> tuple[list[TotalDeCobranzas], list[TotalDeMedio]]:
+    """Las cobranzas de la jornada (RUT-07, change 24 D4) agrupadas en la base por estado y por
+    si se registraron después de `corte` (la rendición; sin `corte`, ninguna): cantidad e importe
+    y, por medio de pago, el importe de cada medio. Ninguna suma se hace en Python."""
+    # Sin `corte` ninguna es tardía: no se agrupa por una constante.
+    tardia = Cobranza.registered_at > corte if corte is not None else None
+    columnas_de_grupo = [Cobranza.estado] + ([tardia] if tardia is not None else [])
+    marca = [tardia.label("tardia")] if tardia is not None else []
+    totales = (
+        sesion.execute(
+            select(
+                Cobranza.estado,
+                *marca,
+                func.count().label("cantidad"),
+                func.coalesce(func.sum(Cobranza.importe), 0).label("total"),
+            )
+            .where(Cobranza.organizacion_id == organizacion_id, Cobranza.jornada_id == jornada_id)
+            .group_by(*columnas_de_grupo)
+        )
+        .mappings()
+        .all()
+    )
+    por_medio = (
+        sesion.execute(
+            select(
+                Cobranza.estado,
+                *marca,
+                CobranzaMedio.medio_pago_id,
+                func.coalesce(func.sum(CobranzaMedio.importe), 0).label("total"),
+            )
+            .select_from(CobranzaMedio)
+            .join(
+                Cobranza,
+                (Cobranza.organizacion_id == CobranzaMedio.organizacion_id)
+                & (Cobranza.id == CobranzaMedio.cobranza_id),
+            )
+            .where(Cobranza.organizacion_id == organizacion_id, Cobranza.jornada_id == jornada_id)
+            .group_by(*columnas_de_grupo, CobranzaMedio.medio_pago_id)
+        )
+        .mappings()
+        .all()
+    )
+    return (
+        [
+            TotalDeCobranzas(
+                fila["estado"],
+                bool(fila.get("tardia", False)),
+                int(fila["cantidad"]),
+                Decimal(fila["total"]),
+            )
+            for fila in totales
+        ],
+        [
+            TotalDeMedio(
+                fila["estado"],
+                bool(fila.get("tardia", False)),
+                fila["medio_pago_id"],
+                Decimal(fila["total"]),
+            )
+            for fila in por_medio
+        ],
     )

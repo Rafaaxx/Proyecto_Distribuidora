@@ -5,11 +5,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import and_, exists, select, tuple_
+from sqlalchemy import and_, exists, false, func, select, tuple_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import InstrumentedAttribute, Session
+from sqlalchemy.sql import ColumnElement
 
 from app.modules.ventas.domain.consultas import codificar_cursor, decodificar_cursor
 from app.modules.ventas.domain.errores import NumeroDuplicadoError
@@ -194,4 +196,60 @@ def listar_descuentos_de_venta(
             )
             .order_by(VentaLinea.orden, VentaLineaDescuento.orden)
         ).all()
+    )
+
+
+def totales_de_ventas_de_jornada(
+    organizacion_id: UUID, jornada_id: UUID, corte: datetime | None, sesion: Session
+) -> tuple[tuple[int, Decimal], tuple[int, Decimal], tuple[int, Decimal], tuple[int, Decimal]]:
+    """Cantidad y total de las ventas de una jornada, sumados en la base (RUT-07, change 24 D4):
+    `(vigentes, anuladas, vigentes_tardias, anuladas_tardias)`.
+
+    Vigentes: ventas `CONFIRMADA` de la jornada. Anuladas: las ventas cuya anulación se hizo con
+    esa jornada (`venta_anulacion.jornada_id`, aunque la jornada ya esté liberada, ADR-066).
+    Tardías: registradas después de `corte` (el momento de la rendición); sin `corte` ninguna es
+    tardía."""
+
+    def _tardia(momento: InstrumentedAttribute[datetime]) -> ColumnElement[bool]:
+        return momento > corte if corte is not None else false()
+
+    vigentes_tardia = _tardia(Venta.registered_at)
+    vigentes = sesion.execute(
+        select(
+            func.count().filter(~vigentes_tardia),
+            func.coalesce(func.sum(Venta.total).filter(~vigentes_tardia), 0),
+            func.count().filter(vigentes_tardia),
+            func.coalesce(func.sum(Venta.total).filter(vigentes_tardia), 0),
+        ).where(
+            Venta.organizacion_id == organizacion_id,
+            Venta.jornada_id == jornada_id,
+            Venta.estado == "CONFIRMADA",
+        )
+    ).one()
+    anulada_tardia = _tardia(VentaAnulacion.registered_at)
+    anuladas = sesion.execute(
+        select(
+            func.count().filter(~anulada_tardia),
+            func.coalesce(func.sum(Venta.total).filter(~anulada_tardia), 0),
+            func.count().filter(anulada_tardia),
+            func.coalesce(func.sum(Venta.total).filter(anulada_tardia), 0),
+        )
+        .select_from(VentaAnulacion)
+        .join(
+            Venta,
+            and_(
+                Venta.organizacion_id == VentaAnulacion.organizacion_id,
+                Venta.id == VentaAnulacion.venta_id,
+            ),
+        )
+        .where(
+            VentaAnulacion.organizacion_id == organizacion_id,
+            VentaAnulacion.jornada_id == jornada_id,
+        )
+    ).one()
+    return (
+        (int(vigentes[0]), Decimal(vigentes[1])),
+        (int(anuladas[0]), Decimal(anuladas[1])),
+        (int(vigentes[2]), Decimal(vigentes[3])),
+        (int(anuladas[2]), Decimal(anuladas[3])),
     )

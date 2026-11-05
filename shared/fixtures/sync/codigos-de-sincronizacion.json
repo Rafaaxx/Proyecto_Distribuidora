@@ -8,7 +8,7 @@
     "COB-01",
     "INV-08"
   ],
-  "comentario": "Fixture de contrato del change 22c (design.md D5, ADR-065): los codigos que el telefono traduce a un texto. 'observaciones' son los del catalogo de SYN-07 (la venta se acepto y se anoto algo); 'rechazos' son los codigos con que puede volver RECHAZADA una venta sin conexion (SYN-06): los del bus, los de la validacion de la venta y el rechazo por dispositivo dado de baja. Change 22d (D11): 'rechazos_de_anulacion' y 'observaciones_de_anulacion' son los equivalentes para VENTA_ANULAR sin conexion (los rechazos del bus que alcanzan a todo comando, los que levanta la anulacion en el servidor, incluido VENTA_INEXISTENTE, y el reingreso sobre una ubicacion inactiva; y las tres observaciones que una anulacion puede llevar); el telefono elige el texto por el tipo de operacion de la cola. Un codigo desconocido muestra el texto general con el codigo. La prueba del servidor exige que 'observaciones' sea exactamente el catalogo del servidor y que cada rechazo sea el codigo de un error real; la del telefono, que cada codigo tenga su texto aprobado. Change 23 (D11): 'rechazos_de_cobranza' y 'observaciones_de_cobranza' son los equivalentes para COBRANZA_REGISTRAR sin conexion (los rechazos del bus que alcanzan a todo comando, mas lo que levanta registrar_cobranza sin conexion: cobranza repetida, cliente o medio inexistente, medios invalidos o que no suman el importe, importe y observacion invalidos; y las cinco observaciones que una cobranza puede llevar). El medio inactivo, la referencia faltante y el consumidor final son observaciones sin conexion, nunca rechazos (INV-17).",
+  "comentario": "Fixture de contrato del change 22c (design.md D5, ADR-065): los codigos que el telefono traduce a un texto. 'observaciones' son los del catalogo de SYN-07 (la venta se acepto y se anoto algo); 'rechazos' son los codigos con que puede volver RECHAZADA una venta sin conexion (SYN-06): los del bus, los de la validacion de la venta y el rechazo por dispositivo dado de baja. Change 22d (D11): 'rechazos_de_anulacion' y 'observaciones_de_anulacion' son los equivalentes para VENTA_ANULAR sin conexion (los rechazos del bus que alcanzan a todo comando, los que levanta la anulacion en el servidor, incluido VENTA_INEXISTENTE, y el reingreso sobre una ubicacion inactiva; y las tres observaciones que una anulacion puede llevar); el telefono elige el texto por el tipo de operacion de la cola. Un codigo desconocido muestra el texto general con el codigo. La prueba del servidor exige que 'observaciones' sea exactamente el catalogo del servidor y que cada rechazo sea el codigo de un error real; la del telefono, que cada codigo tenga su texto aprobado. Change 23 (D11): 'rechazos_de_cobranza' y 'observaciones_de_cobranza' son los equivalentes para COBRANZA_REGISTRAR sin conexion (los rechazos del bus que alcanzan a todo comando, mas lo que levanta registrar_cobranza sin conexion: cobranza repetida, cliente o medio inexistente, medios invalidos o que no suman el importe, importe y observacion invalidos; y las cinco observaciones que una cobranza puede llevar). El medio inactivo, la referencia faltante y el consumidor final son observaciones sin conexion, nunca rechazos (INV-17). Change 24 (D7, D11): 'JORNADA_RENDIDA' es una observacion mas de la venta, de la anulacion y de la cobranza sin conexion (llegaron con la jornada ya rendida o cerrada; se aceptan, INV-17). 'rechazos_de_entrega' son los de JORNADA_ENTREGAR (solo por el lote, modo OFFLINE): los rechazos del bus que alcanzan a todo comando, el permiso que exige su handler y los de la regla de la entrega (jornada que ya no esta abierta, entrega repetida).",
   "observaciones": [
     "STOCK_NEGATIVO",
     "EXCESO_CREDITO_ADVERTIDO",
@@ -19,6 +19,7 @@
     "CLIENTE_NO_HABILITADO",
     "PERMISO_REVOCADO",
     "JORNADA_LIBERADA",
+    "JORNADA_RENDIDA",
     "ANULACION_COMPRA_SIN_RECALCULO",
     "MEDIO_INACTIVO",
     "REFERENCIA_FALTANTE",
@@ -71,6 +72,7 @@
   "observaciones_de_anulacion": [
     "PERMISO_REVOCADO",
     "JORNADA_LIBERADA",
+    "JORNADA_RENDIDA",
     "UBICACION_TOMADA_AL_SINCRONIZAR"
   ],
   "rechazos_de_cobranza": [
@@ -95,6 +97,21 @@
     "REFERENCIA_FALTANTE",
     "PERMISO_REVOCADO",
     "JORNADA_LIBERADA",
+    "JORNADA_RENDIDA",
     "CLIENTE_NO_HABILITADO"
+  ],
+  "rechazos_de_entrega": [
+    "JORNADA_INEXISTENTE",
+    "JORNADA_REQUERIDA",
+    "JORNADA_AJENA",
+    "DISPOSITIVO_REVOCADO",
+    "COMANDO_INCONSISTENTE",
+    "MODO_NO_ADMITIDO_PARA_TIPO",
+    "TIPO_DE_COMANDO_DESCONOCIDO",
+    "VERSION_DE_COMANDO_SIN_HANDLER",
+    "CONTENIDO_DE_COMANDO_INVALIDO",
+    "PERMISO_REQUERIDO",
+    "JORNADA_ESTADO_INVALIDO",
+    "JORNADA_YA_ENTREGADA"
   ]
 }

@@ -116,7 +116,8 @@ describe('ayuda de la toma de ubicación', () => {
 
     await usuario.click(ayuda('Toma actual'))
 
-    expect(screen.getByText(/cuando pasa a rendición, ya nadie puede/i)).toBeVisible()
+    // Change 24 (D12): texto revisado de `stock.tomaActual`.
+    expect(screen.getByText(/cuando pasa a rendición, solo la rendición registra las diferencias/i)).toBeVisible()
   })
 
   it('la apertura de jornada explica la toma actual', async () => {

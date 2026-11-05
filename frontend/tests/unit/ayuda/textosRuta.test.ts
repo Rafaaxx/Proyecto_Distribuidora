@@ -125,7 +125,7 @@ describe('textos de ayuda de la sincronización (change 22b, tarea 12.1)', () =>
     const { titulo, texto, reglas } = AYUDAS['ruta.sincronizar']
     expect(titulo).toBe('Sincronizar')
     expect(texto).toBe(
-      'Envía al sistema las ventas, anulaciones y cobranzas sin enviar de tu usuario, en el orden en que las hiciste. Se hace sola al abrir la aplicación o volver a ella, al volver la señal, después de cada operación y cada 2 minutos. Enviar dos veces lo mismo no lo duplica.',
+      'Envía al sistema las ventas, anulaciones y cobranzas sin enviar de tu usuario y la entrega del día, en el orden en que las hiciste. Se hace sola al abrir la aplicación o volver a ella, al volver la señal, después de cada operación y cada 2 minutos. Enviar dos veces lo mismo no lo duplica.',
     )
     expect(texto).not.toMatch(/bot[oó]n|tocá|apretá/i)
     expect(reglas).toEqual(expect.arrayContaining(['SYN-02', 'SYN-03', 'INV-06']))

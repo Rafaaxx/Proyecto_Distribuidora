@@ -139,3 +139,35 @@ export function armarSobreDeCobranza(entrada: EntradaDeSobreDeCobranza): SobreEn
     },
   }
 }
+
+/**
+ * Sobre del comando `JORNADA_ENTREGAR` sin conexión (change 24, `design.md` D1, D10; RUT-05,
+ * SYN-01, SYN-03). Función pura. «Terminar el día»: contenido vacío, la jornada del sobre y la
+ * siguiente secuencia del dispositivo, así que cuando el servidor la procesa todo lo anterior de
+ * ese dispositivo ya tiene resultado.
+ */
+export interface EntradaDeSobreDeEntrega {
+  operationId: string
+  usuarioId: string
+  dispositivoId: string
+  jornadaId: string
+  occurredAt: Date
+  secuencia: number
+  appVersion: string
+}
+
+export function armarSobreDeEntrega(entrada: EntradaDeSobreDeEntrega): SobreEnCola {
+  return {
+    operation_id: entrada.operationId,
+    tipo: 'JORNADA_ENTREGAR',
+    version: 1,
+    modo: 'OFFLINE',
+    usuario_id: entrada.usuarioId,
+    dispositivo_id: entrada.dispositivoId,
+    jornada_id: entrada.jornadaId,
+    occurred_at: entrada.occurredAt.toISOString(),
+    secuencia: entrada.secuencia,
+    app_version: entrada.appVersion,
+    contenido: {},
+  }
+}

@@ -85,6 +85,10 @@ COLUMNAS = {
     "liberada_por_id": ("uuid", True),
     "motivo_liberacion_id": ("uuid", True),
     "observacion_liberacion": ("text", True),
+    # Change 24 (revisión `d2f4a6c8e0b1`, `test_rendicion_migracion.py`): la entrega del día.
+    "entregada_en": ("timestamp with time zone", True),
+    "entrega_occurred_at": ("timestamp with time zone", True),
+    "entrega_secuencia": ("integer", True),
 }
 COLUMNAS_MUTABLES = {
     "estado",
@@ -96,6 +100,10 @@ COLUMNAS_MUTABLES = {
     "liberada_por_id",
     "motivo_liberacion_id",
     "observacion_liberacion",
+    # Change 24: la entrega del día se registra con un `UPDATE` de estas tres columnas.
+    "entregada_en",
+    "entrega_occurred_at",
+    "entrega_secuencia",
 }
 FKS = {
     "fk_jornada__organizacion",

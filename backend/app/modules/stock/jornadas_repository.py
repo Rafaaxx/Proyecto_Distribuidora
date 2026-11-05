@@ -155,14 +155,28 @@ def leer_jornada_compartida(
     ).one_or_none()
 
 
-def bloquear_jornada(organizacion_id: UUID, sesion: Session, *, jornada_id: UUID) -> Jornada | None:
+def bloquear_jornada(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    jornada_id: UUID,
+    despues_de_la_ubicacion: bool = False,
+) -> Jornada | None:
     """La jornada de la organización `FOR UPDATE`, o `None` (D9): las transiciones la toman
     así, revalidan el estado y no tocan stock ni saldos. Una jornada de otra organización no
-    se ve (INV-21)."""
+    se ve (INV-21).
+
+    `despues_de_la_ubicacion` (la rendición y el cierre con devolución, change 24, D3): quien ya
+    tiene la ubicación `FOR UPDATE` toma la jornada `FOR NO KEY UPDATE`. La fila de `comando` de
+    una operación sin conexión referencia a la jornada y le toma un bloqueo de clave
+    (`FOR KEY SHARE`) ANTES de pedir la ubicación; `FOR UPDATE` choca con ese bloqueo y cerraría un
+    ciclo (la operación espera la ubicación, la rendición espera a la operación). `FOR NO KEY
+    UPDATE` no choca con él y sigue chocando con el `FOR SHARE` de los movimientos y con otra
+    transición, que es lo que la serialización necesita; la jornada no cambia de clave."""
     return sesion.scalars(
         select(Jornada)
         .where(Jornada.organizacion_id == organizacion_id, Jornada.id == jornada_id)
-        .with_for_update()
+        .with_for_update(key_share=despues_de_la_ubicacion)
     ).one_or_none()
 
 

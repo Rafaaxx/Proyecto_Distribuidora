@@ -268,6 +268,8 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("get", "/api/v1/stock/jornadas"),
         ("get", "/api/v1/stock/jornadas/actual"),
         ("get", "/api/v1/stock/jornadas/{jornada_id}"),
+        # Change 24: el resumen, con su prueba real en `test_jornadas_api.py` (404 de otra org).
+        ("get", "/api/v1/stock/jornadas/{jornada_id}/resumen"),
         ("get", "/api/v1/stock/kardex"),
         ("get", "/api/v1/catalogo/productos/{producto_id}/costo"),
         # Change 10, grupo 4 (`importacion/api.py`, tarea 4.3): la escritura dedicada de

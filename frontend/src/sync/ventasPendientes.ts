@@ -8,6 +8,8 @@ import { baseLocal } from '../lib/dispositivo/db'
  */
 const TIPO_DE_ANULACION = 'VENTA_ANULAR'
 const TIPO_DE_COBRANZA = 'COBRANZA_REGISTRAR'
+/** Change 24: la entrega del día va por la cola pero no es una venta, una anulación ni una cobranza. */
+const TIPO_DE_ENTREGA = 'JORNADA_ENTREGAR'
 
 export interface Pendientes {
   ventas: number
@@ -18,7 +20,8 @@ export interface Pendientes {
 function contarPorTipo(tipos: readonly string[]): Pendientes {
   const anulaciones = tipos.filter((t) => t === TIPO_DE_ANULACION).length
   const cobranzas = tipos.filter((t) => t === TIPO_DE_COBRANZA).length
-  return { ventas: tipos.length - anulaciones - cobranzas, anulaciones, cobranzas }
+  const entregas = tipos.filter((t) => t === TIPO_DE_ENTREGA).length
+  return { ventas: tipos.length - anulaciones - cobranzas - entregas, anulaciones, cobranzas }
 }
 
 export async function contarPendientes(usuarioId: string): Promise<Pendientes> {
@@ -40,7 +43,7 @@ export interface PendientesDeUnVendedor extends Pendientes {
 /** Lo que sin enviar dejó OTRO usuario en este teléfono, por nombre del vendedor (nota congelada de la venta o de la cobranza). */
 export async function pendientesDeOtrosUsuarios(usuarioId: string): Promise<PendientesDeUnVendedor[]> {
   const comandos = (await baseLocal.cola.where('estado').equals('PENDIENTE').toArray()).filter(
-    (c) => c.sobre.usuario_id !== usuarioId,
+    (c) => c.sobre.usuario_id !== usuarioId && c.sobre.tipo !== TIPO_DE_ENTREGA,
   )
   const cuenta = new Map<string, Pendientes>()
   for (const comando of comandos) {

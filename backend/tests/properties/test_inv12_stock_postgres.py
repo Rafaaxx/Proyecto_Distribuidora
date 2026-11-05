@@ -67,6 +67,7 @@ from tests.integration.stock_utiles import (
     crear_motivo_sql,
     crear_producto_sql,
     crear_ubicacion_sql,
+    rendir_sin_diferencias_sql,
 )
 
 MOMENTO = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
@@ -583,11 +584,13 @@ class _MundoConJornadas(_Mundo):
         try:
             with self.sesion.begin_nested():
                 if nombre == "rendir":
-                    stock_service.rendir_jornada(
-                        self.org,
+                    rendir_sin_diferencias_sql(  # JORNADA_RENDIR v2: entrega y conteo exacto
                         self.sesion,
-                        jornada_id=jornada["id"],
+                        self.org,
+                        jornada["id"],
                         usuario_id=quien.usuario_id,
+                        dispositivo_id=quien.dispositivo_id,
+                        reloj=RELOJ,
                         occurred_at=MOMENTO,
                     )
                 elif nombre == "cerrar":

@@ -495,14 +495,52 @@ export const AYUDAS = {
   'stock.tomaActual': {
     titulo: 'Toma actual',
     texto:
-      "Muestra qué jornada tiene tomada esta ubicación. Mientras la jornada está abierta, solo ese vendedor (desde su dispositivo) puede mover el stock. Cuando pasa a rendición, ya nadie puede, salvo quien tiene el permiso 'Liberar ubicación'.",
-    reglas: ['STK-09', 'RUT-01'],
+      "Muestra qué jornada tiene tomada esta ubicación. Mientras la jornada está abierta, solo ese vendedor (desde su dispositivo) puede mover el stock. Cuando pasa a rendición, solo la rendición registra las diferencias y devuelve el remanente al cerrar, además de quien tiene el permiso 'Liberar ubicación'.",
+    reglas: ['STK-09', 'RUT-01', 'RUT-06', 'RUT-08'],
   },
   'stock.liberacion': {
     titulo: 'Liberar ubicación',
     texto:
       'Destraba la ubicación cuando una jornada quedó trabada (por ejemplo, se le rompió el teléfono al vendedor). No toca el stock del vehículo. Pide un motivo y queda registrado quién lo hizo. Si después llegan ventas de esa jornada desde el dispositivo, se aceptan, pero quedan marcadas para revisar.',
     reglas: ['RUT-09', 'STK-09', 'AUD-01'],
+  },
+
+  // --- Rendición de la jornada (change 24, ADR-068; textos aprobados el 2026-11-04, sin ejemplos) ---
+  'stock.entregaDelDia': {
+    titulo: 'Entrega del día',
+    texto:
+      'El vendedor la hace desde el teléfono con «Terminar el día». Llega al sistema después de todo lo que vendió, anuló y cobró, así que cuando aparece no queda nada de esa jornada sin enviar.',
+    reglas: ['RUT-05', 'ADR-068'],
+  },
+  'stock.rendicion': {
+    titulo: 'Rendición',
+    texto:
+      'Se cuenta lo que quedó en el vehículo, producto por producto. El sistema compara lo contado con lo que debería haber y registra cada diferencia en el stock. Solo se puede rendir cuando el vendedor terminó el día en el teléfono.',
+    reglas: ['RUT-05', 'RUT-06', 'ADR-068'],
+  },
+  'stock.esperado': {
+    titulo: 'Esperado',
+    texto:
+      'Lo que debería haber en el vehículo según el sistema: lo que había al abrir, más lo cargado, menos lo vendido, más lo anulado, más o menos otros movimientos. Si cambia mientras contás, el sistema te pide revisarlo.',
+    reglas: ['RUT-07', 'STK-04', 'ADR-068'],
+  },
+  'stock.diferenciaRendicion': {
+    titulo: 'Diferencia',
+    texto:
+      'Contado menos esperado. Un faltante baja el stock y un sobrante lo sube; queda registrado como diferencia de rendición, sin cambiar el costo promedio.',
+    reglas: ['RUT-06', 'CST-12', 'ADR-068'],
+  },
+  'stock.resumenJornada': {
+    titulo: 'Resumen de la jornada',
+    texto:
+      'Qué pasó en la jornada: el stock al abrir, lo cargado, lo vendido y anulado, lo esperado, lo contado y las diferencias, y lo cobrado por medio de pago. Lo que llegó después de la rendición se muestra aparte y no entra en el conteo.',
+    reglas: ['RUT-07', 'ADR-068'],
+  },
+  'stock.remanente': {
+    titulo: 'Devolver el remanente',
+    texto:
+      'Pasa lo que quedó en el vehículo a un depósito al cerrar la jornada. Es una transferencia común: se ve en Transferencias y se puede anular.',
+    reglas: ['RUT-08', 'STK-07', 'ADR-068'],
   },
 
   // --- Cobranzas ---
@@ -926,8 +964,14 @@ export const AYUDAS = {
   'ruta.sincronizar': {
     titulo: 'Sincronizar',
     texto:
-      'Envía al sistema las ventas, anulaciones y cobranzas sin enviar de tu usuario, en el orden en que las hiciste. Se hace sola al abrir la aplicación o volver a ella, al volver la señal, después de cada operación y cada 2 minutos. Enviar dos veces lo mismo no lo duplica.',
-    reglas: ['SYN-02', 'SYN-03', 'INV-06'],
+      'Envía al sistema las ventas, anulaciones y cobranzas sin enviar de tu usuario y la entrega del día, en el orden en que las hiciste. Se hace sola al abrir la aplicación o volver a ella, al volver la señal, después de cada operación y cada 2 minutos. Enviar dos veces lo mismo no lo duplica.',
+    reglas: ['SYN-02', 'SYN-03', 'INV-06', 'RUT-05'],
+  },
+  'ruta.terminarDia': {
+    titulo: 'Terminar el día',
+    texto:
+      'Avisa al sistema que terminaste de vender. Después no podés vender, anular ventas ni cobrar en esta jornada. Lo que falta enviar se envía primero, también si ahora no tenés señal. Con eso tu supervisor puede rendir la jornada.',
+    reglas: ['RUT-05', 'ADR-068'],
   },
   'ruta.ventaConObservaciones': {
     titulo: 'Con observaciones',

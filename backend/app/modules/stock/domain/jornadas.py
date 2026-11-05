@@ -14,8 +14,12 @@ from uuid import UUID
 
 from app.modules.stock.domain.errores import (
     JornadaEstadoInvalidoError,
+    JornadaSinEntregaError,
+    JornadaYaEntregadaError,
     MotivoInvalidoError,
     ObservacionInvalidaError,
+    UbicacionConTomaError,
+    UbicacionesIgualesError,
     UbicacionInactivaError,
     UbicacionSinTomaError,
     UbicacionTomadaError,
@@ -44,10 +48,44 @@ def _transitar(estado: str, *, desde: frozenset[str], hacia: str, accion: str) -
     return hacia
 
 
+def validar_entrega(estado: str, *, ya_entregada: bool) -> None:
+    """RUT-05, D1: solo se entrega una jornada `ABIERTA` (la entrega no cambia el estado) y una
+    sola vez. Primero el estado: una jornada liberada o rendida es `JORNADA_ESTADO_INVALIDO`
+    aunque tuviera entrega."""
+    if estado != ABIERTA:
+        raise JornadaEstadoInvalidoError(f"No se puede entregar una jornada {estado}.")
+    if ya_entregada:
+        raise JornadaYaEntregadaError("La jornada ya tiene su entrega del día.")
+
+
 def rendir(estado: str) -> str:
     """`ABIERTA → EN_RENDICION`; cualquier otro estado (rendir dos veces incluido) es
     `JORNADA_ESTADO_INVALIDO`."""
     return _transitar(estado, desde=frozenset({ABIERTA}), hacia=EN_RENDICION, accion="rendir")
+
+
+def validar_para_rendir(estado: str, *, entregada: bool) -> str:
+    """RUT-05, RUT-06 (change 24, D2): solo se rinde una jornada `ABIERTA` y entregada. Primero
+    el estado (`JORNADA_ESTADO_INVALIDO`) y después la entrega (`JORNADA_SIN_ENTREGA`). Devuelve
+    el estado nuevo."""
+    nuevo = rendir(estado)
+    if not entregada:
+        raise JornadaSinEntregaError("El vendedor todavía no entregó el día en el teléfono.")
+    return nuevo
+
+
+def validar_destino_de_devolucion(
+    *, origen_id: UUID, destino_id: UUID, activa: bool, requiere_toma: bool
+) -> None:
+    """RUT-08, D6: el remanente vuelve a una ubicación distinta de la del vehículo
+    (`UBICACIONES_IGUALES`), activa (`UBICACION_INACTIVA`) y sin toma (`UBICACION_CON_TOMA`: un
+    vehículo no recibe el remanente de otro)."""
+    if origen_id == destino_id:
+        raise UbicacionesIgualesError("El origen y el destino de la devolución son iguales.")
+    if not activa:
+        raise UbicacionInactivaError("El destino de la devolución está inactivo.")
+    if requiere_toma:
+        raise UbicacionConTomaError("El destino de la devolución es un vehículo con jornada.")
 
 
 def cerrar(estado: str) -> str:

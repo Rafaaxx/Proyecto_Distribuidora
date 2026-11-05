@@ -16,6 +16,7 @@ import {
   useLiberarJornada,
   useMotivosDeStock,
   useRendirJornada,
+  useResumenDeJornada,
 } from '../../../../src/features/stock/hooks'
 
 function respuesta(status: number, cuerpo: unknown) {
@@ -27,6 +28,9 @@ const USUARIO = '22222222-2222-4222-8222-222222222222'
 const JORNADA = '33333333-3333-4333-8333-333333333333'
 const MOTIVO = '44444444-4444-4444-8444-444444444444'
 const PAGINA_VACIA = { items: [], cursor_siguiente: null }
+const PRODUCTO = '55555555-5555-4555-8555-555555555555'
+const DEPOSITO = '66666666-6666-4666-8666-666666666666'
+const LINEAS_DE_CONTEO = [{ producto_id: PRODUCTO, cantidad_contada: 37, cantidad_esperada: 40 }]
 
 function envoltorio() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -146,7 +150,13 @@ describe('lecturas de jornadas (tarea 13.2)', () => {
 describe('escrituras de jornadas (tarea 13.2)', () => {
   const ESCRITURAS = [
     ['abrir', () => useAbrirJornada(), { ubicacion_id: UBICACION }, '/stock/jornadas', { ubicacion_id: UBICACION }],
-    ['rendir', () => useRendirJornada(), { id: JORNADA }, `/stock/jornadas/${JORNADA}/rendicion`, {}],
+    [
+      'rendir',
+      () => useRendirJornada(),
+      { id: JORNADA, lineas: LINEAS_DE_CONTEO, observacion: 'Faltó una caja' },
+      `/stock/jornadas/${JORNADA}/rendicion`,
+      { lineas: LINEAS_DE_CONTEO, observacion: 'Faltó una caja' },
+    ],
     ['cerrar', () => useCerrarJornada(), { id: JORNADA }, `/stock/jornadas/${JORNADA}/cierre`, {}],
     [
       'liberar',
@@ -197,6 +207,24 @@ describe('escrituras de jornadas (tarea 13.2)', () => {
     expect(operationId(1)).toBe(operationId(0))
   })
 
+  it('rendir sin observación no la manda; cerrar con devolución manda destino y líneas (change 24, D2, D6)', async () => {
+    apiFetchMock.mockResolvedValue(respuesta(200, { id: JORNADA }))
+    const { wrapper } = envoltorio()
+    const rendir = renderHook(() => useRendirJornada(), { wrapper })
+    const cerrar = renderHook(() => useCerrarJornada(), { wrapper })
+    const devolucion = { ubicacion_destino_id: DEPOSITO, lineas: [{ producto_id: PRODUCTO, cantidad_base: 37 }] }
+
+    await act(async () => {
+      await rendir.result.current.mutateAsync({ id: JORNADA, lineas: LINEAS_DE_CONTEO })
+    })
+    await act(async () => {
+      await cerrar.result.current.mutateAsync({ id: JORNADA, devolucion })
+    })
+
+    expect(JSON.parse(String(opciones(0).body))).toEqual({ lineas: LINEAS_DE_CONTEO })
+    expect(JSON.parse(String(opciones(1).body))).toEqual({ devolucion })
+  })
+
   it('dos aperturas distintas sin operationId explícito usan Operation-Id distintos', async () => {
     apiFetchMock.mockResolvedValue(respuesta(201, { id: JORNADA }))
     const { wrapper } = envoltorio()
@@ -238,6 +266,76 @@ describe('escrituras de jornadas (tarea 13.2)', () => {
     })
 
     expect(apiFetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('el resumen de la jornada (change 24, tarea 13.1; RUT-07)', () => {
+  it('useResumenDeJornada pide GET /stock/jornadas/{id}/resumen y sin id no pide nada', async () => {
+    apiFetchMock.mockResolvedValueOnce(respuesta(200, { jornada_id: JORNADA, con_conteo: false, lineas: [] }))
+    const { wrapper } = envoltorio()
+
+    const { result } = renderHook(() => useResumenDeJornada(JORNADA), { wrapper })
+    renderHook(() => useResumenDeJornada(undefined), { wrapper })
+
+    await waitFor(() => expect(result.current.data).toMatchObject({ jornada_id: JORNADA }))
+    expect(apiFetchMock).toHaveBeenCalledTimes(1)
+    expect(url(0).pathname).toBe(`/stock/jornadas/${JORNADA}/resumen`)
+  })
+
+  it('un 404 del resumen es RecursoNoEncontradoStockError', async () => {
+    apiFetchMock.mockResolvedValueOnce(respuesta(404, { title: 'No existe', codigo: 'RECURSO_NO_ENCONTRADO' }))
+    const { wrapper } = envoltorio()
+
+    const { result } = renderHook(() => useResumenDeJornada(JORNADA), { wrapper })
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(result.current.error).toMatchObject({ codigo: 'RECURSO_NO_ENCONTRADO' })
+  })
+})
+
+describe('errores de la rendición y del cierre (change 24, D2, D6, D11)', () => {
+  it('conserva la extensión de CONTEO_INCOMPLETO y de ESPERADO_DIFIERE', async () => {
+    apiFetchMock
+      .mockResolvedValueOnce(respuesta(422, { title: 'Falta', codigo: 'CONTEO_INCOMPLETO', productos: [PRODUCTO] }))
+      .mockResolvedValueOnce(
+        respuesta(409, { title: 'Cambió', codigo: 'ESPERADO_DIFIERE', distintos: [PRODUCTO], esperados: { [PRODUCTO]: 38 } }),
+      )
+    const { wrapper } = envoltorio()
+    const { result } = renderHook(() => useRendirJornada(), { wrapper })
+
+    let primero: unknown
+    let segundo: unknown
+    await act(async () => {
+      primero = await result.current.mutateAsync({ id: JORNADA, lineas: [] }).catch((e: unknown) => e)
+      segundo = await result.current.mutateAsync({ id: JORNADA, lineas: [] }).catch((e: unknown) => e)
+    })
+
+    expect(primero).toMatchObject({ codigo: 'CONTEO_INCOMPLETO' })
+    expect((primero as ErrorDeStock).idsDe('productos')).toEqual([PRODUCTO])
+    expect(segundo).toMatchObject({ codigo: 'ESPERADO_DIFIERE' })
+    expect((segundo as ErrorDeStock).idsDe('distintos')).toEqual([PRODUCTO])
+    expect((segundo as ErrorDeStock).esperadosActuales()).toEqual({ [PRODUCTO]: 38 })
+  })
+
+  it.each([
+    ['JORNADA_SIN_ENTREGA', 'El vendedor todavía no terminó el día en el teléfono.'],
+    ['ESPERADO_DIFIERE', 'El stock del vehículo cambió mientras contabas. Revisá los esperados marcados y volvé a confirmar.'],
+    ['UBICACION_CON_TOMA', 'El destino es un vehículo con jornada; elegí un depósito.'],
+  ])('%s tiene el texto aprobado', (codigo, texto) => {
+    expect(mensajeDeErrorDeStock(new ErrorDeStock(codigo, 'del servidor'), 'jornada')).toBe(texto)
+  })
+
+  it('STOCK_INSUFICIENTE y UBICACIONES_IGUALES tienen su texto en el contexto de la jornada', () => {
+    expect(mensajeDeErrorDeStock(new ErrorDeStock('STOCK_INSUFICIENTE', 'x'), 'jornada')).toBe(
+      'No hay stock suficiente para devolver esa cantidad.',
+    )
+    expect(mensajeDeErrorDeStock(new ErrorDeStock('UBICACIONES_IGUALES', 'x'), 'jornada')).toBe(
+      'El origen y el destino tienen que ser distintos.',
+    )
+  })
+
+  it('CONTEO_INCOMPLETO sin los nombres dice que falta contar algún producto', () => {
+    expect(mensajeDeErrorDeStock(new ErrorDeStock('CONTEO_INCOMPLETO', 'x'), 'jornada')).toBe('Falta contar algún producto.')
   })
 })
 

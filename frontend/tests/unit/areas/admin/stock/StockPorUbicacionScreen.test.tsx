@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -258,6 +258,80 @@ describe('StockPorUbicacionScreen (tarea 8.3, CAT-08, D3)', () => {
       )
       const otra = screen.getByText('Cerveza B').closest('tr') as HTMLElement
       expect(within(otra).queryByText('Negativo')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('acceso al kardex de cualquier producto (change 24, decisión 2026-11-05)', () => {
+    const PRODUCTO_SIN_SALDO = '44444444-4444-4444-8444-444444444444'
+    const CATALOGO = [
+      { id: PRODUCTO_A, codigo: 'COD-1', nombre: 'Vino A', activo: true },
+      { id: PRODUCTO_SIN_SALDO, codigo: 'COD-7', nombre: 'Gaseosa vieja', activo: false },
+    ]
+
+    function reglas(items: unknown[]) {
+      enrutar(apiFetchMock, [
+        {
+          ruta: `/stock/ubicaciones/${UBICACION}/saldos`,
+          responder: () => ({ status: 200, cuerpo: { items, cursor_siguiente: null } }),
+        },
+        {
+          ruta: '/catalogo/productos',
+          responder: (url) => {
+            const texto = url.searchParams.get('texto')?.toLowerCase()
+            const filtrados = texto ? CATALOGO.filter((p) => p.nombre.toLowerCase().includes(texto)) : CATALOGO
+            return { status: 200, cuerpo: { items: filtrados, cursor_siguiente: null } }
+          },
+        },
+      ])
+    }
+
+    it('en una ubicación sin stock ofrece "Ver kardex de…" y lleva al kardex del producto elegido', async () => {
+      reglas([])
+      const usuario = userEvent.setup()
+      renderStock('ADM')
+
+      expect(await screen.findByText('No hay stock en esta ubicación.')).toBeInTheDocument()
+      const selector = await screen.findByLabelText('Ver kardex de…')
+      await screen.findByRole('option', { name: 'COD-7 · Gaseosa vieja' })
+      await usuario.selectOptions(selector, PRODUCTO_SIN_SALDO)
+
+      expect(await screen.findByText('Pantalla de kardex')).toBeInTheDocument()
+    })
+
+    it('con stock lo muestra además de la lista y ofrece también productos inactivos', async () => {
+      reglas([CON_COSTO])
+      renderStock('ADM')
+
+      await screen.findByText('Vino A', { selector: 'td' })
+      expect(await screen.findByLabelText('Ver kardex de…')).toBeInTheDocument()
+      expect(await screen.findByRole('option', { name: 'COD-7 · Gaseosa vieja' })).toBeInTheDocument()
+      const pedidos = llamadas(apiFetchMock, 'GET', '/catalogo/productos')
+      expect(pedidos.length).toBeGreaterThan(0)
+      expect(pedidos.every(({ url }) => !url.searchParams.has('activo'))).toBe(true)
+    })
+
+    it('"Buscar producto" filtra las opciones por texto en el servidor', async () => {
+      reglas([])
+      const usuario = userEvent.setup()
+      renderStock('SUP')
+
+      await usuario.type(await screen.findByLabelText('Buscar producto'), 'gaseosa')
+
+      await waitFor(() => {
+        expect(llamadas(apiFetchMock, 'GET', '/catalogo/productos').some(({ url }) => url.searchParams.get('texto') === 'gaseosa')).toBe(true)
+      })
+      await waitFor(() => {
+        expect(screen.queryByRole('option', { name: 'COD-1 · Vino A' })).not.toBeInTheDocument()
+      })
+    })
+
+    it('sin ningún permiso de lectura del catálogo no se ofrece ni se pide la lista', async () => {
+      reglas([CON_COSTO])
+      renderStock('VEN')
+
+      await screen.findByText('Vino A', { selector: 'td' })
+      expect(screen.queryByLabelText('Ver kardex de…')).not.toBeInTheDocument()
+      expect(llamadas(apiFetchMock, 'GET', '/catalogo/productos')).toHaveLength(0)
     })
   })
 })

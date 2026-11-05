@@ -235,13 +235,18 @@ class TestTransicionDeJornadaPorElLote:
             usuario_id=entorno.usuario_id,
             dispositivo_id=entorno.dispositivo_id,
             ubicacion_id=entorno.camioneta_id,
+            # Change 24: la rendición (v2) exige la entrega del día y lleva el conteo.
+            entregada_en=MOMENTO,
+            entrega_occurred_at=MOMENTO,
+            entrega_secuencia=1,
         )
         entorno.sesion.commit()
         item = entorno.item(
             "JORNADA_RENDIR",
-            {"jornada_id": str(jornada_id)},
+            {"jornada_id": str(jornada_id), "lineas": []},
             usuario_id=entorno.supervisora_id,
             dispositivo_id=entorno.dispositivo_supervisora_id,
+            version=2,
         )
 
         resultado = entorno.por_el_lote(item)
@@ -259,15 +264,16 @@ class TestTransicionDeJornadaPorElLote:
     ) -> None:
         item = entorno.item(
             "JORNADA_RENDIR",
-            {"jornada_id": str(uuid4())},
+            {"jornada_id": str(uuid4()), "lineas": []},
             usuario_id=entorno.supervisora_id,
             dispositivo_id=entorno.dispositivo_supervisora_id,
+            version=2,
         )
 
         resultado = entorno.por_el_lote(item)
 
         assert resultado.estado == "RECHAZADO"
-        assert resultado.error_codigo is not None
+        assert resultado.error_codigo == "RECURSO_NO_ENCONTRADO"
 
 
 class _EsquemaVacio(BaseModel):

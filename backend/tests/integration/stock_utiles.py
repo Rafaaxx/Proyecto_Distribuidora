@@ -288,3 +288,54 @@ def crear_jornada_sql(
     marcadores = ", ".join(f":{columna}" for columna in valores)
     sesion.execute(text(f"INSERT INTO jornada ({columnas}) VALUES ({marcadores})"), valores)
     return jornada_id
+
+
+def rendir_sin_diferencias_sql(
+    sesion: Session,
+    organizacion_id: UUID,
+    jornada_id: UUID,
+    *,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+    reloj: object,
+    occurred_at: datetime,
+) -> None:
+    """Rinde la jornada como lo hace `JORNADA_RENDIR` v2 (change 24) con un conteo EXACTO: marca
+    la entrega del día si falta y cuenta, de cada producto con movimientos en la ubicación, lo que
+    dice el libro (sin diferencias, sin movimientos nuevos). Sirve a las pruebas del change 15 que
+    solo necesitan la transición `ABIERTA -> EN_RENDICION` (RUT-05, RUT-06)."""
+    from app.modules.stock import service as stock_service  # noqa: PLC0415
+    from app.modules.stock.domain.rendicion import LineaContada  # noqa: PLC0415
+
+    sesion.execute(
+        text(
+            "UPDATE jornada SET entregada_en = :m, entrega_occurred_at = :m, "
+            "entrega_secuencia = 1 WHERE organizacion_id = :org AND id = :id "
+            "AND entregada_en IS NULL"
+        ),
+        {"m": occurred_at, "org": organizacion_id, "id": jornada_id},
+    )
+    filas = sesion.execute(
+        text(
+            "SELECT m.producto_id, COALESCE(SUM(m.cantidad_base), 0) FROM stock_movimiento m "
+            "JOIN jornada j ON j.organizacion_id = m.organizacion_id "
+            "AND j.ubicacion_id = m.ubicacion_id "
+            "WHERE j.organizacion_id = :org AND j.id = :id GROUP BY m.producto_id"
+        ),
+        {"org": organizacion_id, "id": jornada_id},
+    ).all()
+    stock_service.rendir_jornada(
+        organizacion_id,
+        sesion,
+        reloj,  # type: ignore[arg-type]
+        jornada_id=jornada_id,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        operation_id=uuid4(),
+        occurred_at=occurred_at,
+        lineas=[
+            LineaContada(producto=producto_id, contada=int(saldo), esperada=int(saldo))
+            for producto_id, saldo in filas
+        ],
+        observacion=None,
+    )

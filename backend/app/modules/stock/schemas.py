@@ -31,9 +31,11 @@ from app.modules.stock.queries import (
     DetalleDeAjuste,
     DetalleDeJornada,
     DetalleDeTransferencia,
+    DineroDeLaJornada,
     PaginaDeAjustes,
     PaginaDeJornadas,
     PaginaDeTransferencias,
+    ResumenDeJornada,
     TomaDeUbicacion,
 )
 from app.modules.stock.service import Kardex, LineaDeStock, StockDeUbicacion
@@ -706,6 +708,64 @@ class JornadaLiberarRequest(BaseModel):
     observacion: str | None = None
 
 
+class LineaDeDevolucionRequest(BaseModel):
+    """Una línea de la devolución del remanente: `cantidad_base` entera (que sea positiva la valida
+    el dominio con `CANTIDAD_INVALIDA`). `extra="forbid"`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    producto_id: UUID
+    cantidad_base: StrictInt
+
+
+class DevolucionRequest(BaseModel):
+    """El destino (un depósito activo y sin toma) y de 1 a 200 líneas. `extra="forbid"`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ubicacion_destino_id: UUID
+    lineas: list[LineaDeDevolucionRequest]
+
+
+class JornadaCerrarRequest(BaseModel):
+    """`JORNADA_CERRAR` v2 (change 24, D6): la devolución del remanente es opcional (con ella se
+    exige además `TRANSFERIR_STOCK`). El cuerpo entero es opcional. `extra="forbid"`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    devolucion: DevolucionRequest | None = None
+
+
+class LineaDeRendicionRequest(BaseModel):
+    """Una línea del conteo: lo contado (entero, en unidad base; que no sea negativo lo valida el
+    dominio con `CANTIDAD_INVALIDA`) y el esperado que vio quien contó. `extra="forbid"`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    producto_id: UUID
+    cantidad_contada: StrictInt
+    cantidad_esperada: StrictInt
+
+
+class JornadaRendirRequest(BaseModel):
+    """`JORNADA_RENDIR` v2 (change 24, D2): el conteo y una observación opcional de hasta 500
+    caracteres (la valida el dominio: `OBSERVACION_INVALIDA`). `extra="forbid"` (INV-21)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    lineas: list[LineaDeRendicionRequest]
+    observacion: str | None = None
+
+
+class LineaDeRendicionResponse(BaseModel):
+    """Una línea de la rendición sin costos (el valor de las diferencias es de `VER_COSTOS`)."""
+
+    producto_id: UUID
+    cantidad_esperada: int
+    cantidad_contada: int
+    diferencia: int
+
+
 class JornadaResponse(BaseModel):
     """La jornada: sus datos de apertura y, según su estado, los de la rendición, el cierre y
     la liberación (`01` §18, RUT-09). Los momentos y quién hizo cada transición son nulos
@@ -725,6 +785,21 @@ class JornadaResponse(BaseModel):
     liberada_por_id: UUID | None
     motivo_liberacion_id: UUID | None
     observacion_liberacion: str | None
+
+
+class RendicionResponse(JornadaResponse):
+    """La jornada rendida (`EN_RENDICION`) con su rendición y las líneas del conteo."""
+
+    rendicion_id: UUID
+    observacion: str | None
+    lineas: list[LineaDeRendicionResponse]
+
+
+class CierreResponse(JornadaResponse):
+    """La jornada `CERRADA`; `transferencia_id` es la transferencia de la devolución del
+    remanente (nulo si se cerró sin devolver)."""
+
+    transferencia_id: UUID | None
 
 
 class JornadaDelListadoResponse(BaseModel):
@@ -755,6 +830,7 @@ class DetalleDeJornadaResponse(BaseModel):
     dispositivo_id: UUID
     estado: str
     abierta_en: datetime
+    entregada_en: datetime | None
     rendida_en: datetime | None
     rendida_por_id: UUID | None
     rendida_por_nombre: str | None
@@ -783,6 +859,148 @@ def detalle_de_jornada_response(detalle: DetalleDeJornada) -> DetalleDeJornadaRe
     return DetalleDeJornadaResponse.model_validate(detalle, from_attributes=True)
 
 
+def rendicion_response(resultado: dict[str, object]) -> RendicionResponse:
+    """Desde el resultado guardado de `JORNADA_RENDIR` v2
+    (`rendicion_commands.resultado_de_rendicion`)."""
+    return RendicionResponse.model_validate({**resultado, "id": resultado["jornada_id"]})
+
+
+def cierre_response(resultado: dict[str, object]) -> CierreResponse:
+    """Desde el resultado guardado de `JORNADA_CERRAR` v2
+    (`rendicion_commands.manejar_jornada_cerrar_v2`)."""
+    return CierreResponse.model_validate({**resultado, "id": resultado["jornada_id"]})
+
+
 def jornada_response(resultado: dict[str, object]) -> JornadaResponse:
     """Desde el resultado guardado del comando (`jornadas_commands.resultado_de_jornada`)."""
     return JornadaResponse.model_validate({**resultado, "id": resultado["jornada_id"]})
+
+
+# --- El resumen de la jornada (change 24, RUT-07; `design.md` D4, D8) ---------------------
+
+
+class LineaDelResumenResponse(BaseModel):
+    """Un producto del resumen en unidad base (la pantalla lo muestra en cajas y unidades, CAT-08).
+    `contado` y `diferencia` son nulos si la jornada no tiene conteo; `valor_diferencia` (string)
+    solo existe con `VER_COSTOS`: sin el permiso la ruta no lo establece y la clave desaparece
+    (`response_model_exclude_unset`, ADR-036)."""
+
+    producto_id: UUID
+    al_abrir: int
+    ingresos: int
+    ventas: int
+    anulaciones: int
+    otros: int
+    esperado: int
+    contado: int | None
+    diferencia: int | None
+    valor_diferencia: Decimal | None = None
+
+    @field_serializer("valor_diferencia")
+    def _serializar_valor(self, valor: Decimal | None) -> str | None:
+        return None if valor is None else str(valor)
+
+
+class TotalDelResumenResponse(BaseModel):
+    cantidad: int
+    total: Decimal
+
+    @field_serializer("total")
+    def _serializar_total(self, valor: Decimal) -> str:
+        return str(valor)
+
+
+class TotalDeMedioResponse(BaseModel):
+    medio_pago_id: UUID
+    nombre: str | None
+    total: Decimal
+
+    @field_serializer("total")
+    def _serializar_total(self, valor: Decimal) -> str:
+        return str(valor)
+
+
+class CobranzasDelResumenResponse(BaseModel):
+    cantidad: int
+    total: Decimal
+    por_medio: list[TotalDeMedioResponse]
+
+    @field_serializer("total")
+    def _serializar_total(self, valor: Decimal) -> str:
+        return str(valor)
+
+
+class DineroDeLaJornadaResponse(BaseModel):
+    """Ventas vigentes, ventas anuladas, cobranzas confirmadas por medio de pago y cobranzas
+    anuladas (COB-05); importes como string (INV-03)."""
+
+    ventas: TotalDelResumenResponse
+    anuladas: TotalDelResumenResponse
+    cobranzas: CobranzasDelResumenResponse
+    cobranzas_anuladas: CobranzasDelResumenResponse
+
+
+class ResumenDeJornadaResponse(BaseModel):
+    """El resumen de la jornada. `despues_de_la_rendicion` es nulo mientras la jornada no se
+    rindió; `valor_de_diferencias` (string) solo existe con `VER_COSTOS` y conteo."""
+
+    jornada_id: UUID
+    estado: str
+    con_conteo: bool
+    rendida_en: datetime | None
+    lineas: list[LineaDelResumenResponse]
+    dinero: DineroDeLaJornadaResponse
+    despues_de_la_rendicion: DineroDeLaJornadaResponse | None
+    valor_de_diferencias: Decimal | None = None
+
+    @field_serializer("valor_de_diferencias")
+    def _serializar_valor(self, valor: Decimal | None) -> str | None:
+        return None if valor is None else str(valor)
+
+
+def resumen_de_jornada_response(
+    resumen: ResumenDeJornada, *, con_costos: bool
+) -> ResumenDeJornadaResponse:
+    """Sin `con_costos` los campos de valor no se establecen y la ruta los omite."""
+    lineas: list[LineaDelResumenResponse] = []
+    for linea in resumen.lineas:
+        datos = {
+            "producto_id": linea.producto_id,
+            "al_abrir": linea.al_abrir,
+            "ingresos": linea.ingresos,
+            "ventas": linea.ventas,
+            "anulaciones": linea.anulaciones,
+            "otros": linea.otros,
+            "esperado": linea.esperado,
+            "contado": linea.contado,
+            "diferencia": linea.diferencia,
+        }
+        if con_costos:
+            lineas.append(
+                LineaDelResumenResponse(**datos, valor_diferencia=linea.valor_diferencia)  # type: ignore[arg-type]
+            )
+        else:
+            lineas.append(LineaDelResumenResponse(**datos))  # type: ignore[arg-type]
+    datos_resumen = {
+        "jornada_id": resumen.jornada_id,
+        "estado": resumen.estado,
+        "con_conteo": resumen.con_conteo,
+        "rendida_en": resumen.rendida_en,
+        "lineas": lineas,
+        "dinero": _dinero_response(resumen.dinero),
+        "despues_de_la_rendicion": (
+            None
+            if resumen.despues_de_la_rendicion is None
+            else _dinero_response(resumen.despues_de_la_rendicion)
+        ),
+    }
+    if con_costos:
+        return ResumenDeJornadaResponse(
+            **datos_resumen,  # type: ignore[arg-type]
+            valor_de_diferencias=resumen.valor_de_diferencias,
+        )
+    return ResumenDeJornadaResponse(**datos_resumen)  # type: ignore[arg-type]
+
+
+def _dinero_response(dinero: DineroDeLaJornada) -> DineroDeLaJornadaResponse:
+    return DineroDeLaJornadaResponse.model_validate(dinero, from_attributes=True)

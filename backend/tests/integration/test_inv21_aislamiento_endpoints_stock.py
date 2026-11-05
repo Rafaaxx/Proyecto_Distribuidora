@@ -632,7 +632,12 @@ def test_inv21_rendir_cerrar_o_liberar_una_jornada_ajena_es_404_y_no_la_toca(
     motivo_b = crear_motivo_sql(sesion, entorno_b.org, ambito="LIBERACION_JORNADA")
     headers_b = entorno_b.confirmar_y_entrar(cliente)
     url = f"{URL_JORNADAS}/{jornada_a}/{accion}"
-    cuerpo = {"motivo_id": str(motivo_b)} if accion == "liberacion" else None
+    # Desde el change 24 la rendición lleva el conteo (aunque sea vacío).
+    cuerpo: dict[str, object] | None = (
+        {"motivo_id": str(motivo_b)} if accion == "liberacion" else None
+    )
+    if accion == "rendicion":
+        cuerpo = {"lineas": []}
 
     ajena = cliente.post(url, json=cuerpo, headers=_con_op(headers_b))
 

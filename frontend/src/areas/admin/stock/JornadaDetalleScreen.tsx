@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { Alert } from '../../../components/ui/Alert'
 import { Ayuda } from '../../../components/ui/Ayuda'
@@ -10,20 +10,26 @@ import { accionesDeJornada, PERMISOS_DE_LECTURA_DE_JORNADAS } from '../../../dom
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { usePermisos } from '../../../features/identidad/usePermisos'
 import { RecursoNoEncontradoStockError } from '../../../features/stock/errores'
-import { useCerrarJornada, useJornada, useLiberarJornada, useRendirJornada } from '../../../features/stock/hooks'
-import { formatearFechaHora } from '../../../lib/fecha'
-import { ConfirmarTransicionDialogo, InsigniaDeEstadoDeJornada, LiberarJornadaDialogo } from './piezasDeJornada'
+import { useCerrarJornada, useJornada, useLiberarJornada } from '../../../features/stock/hooks'
+import { formatearFechaHora, formatearHora } from '../../../lib/fecha'
+import { CierreDeJornadaDialogo, type DevolucionRealizada } from './CierreDeJornadaDialogo'
+import { InsigniaDeEstadoDeJornada, LiberarJornadaDialogo } from './piezasDeJornada'
+import { ResumenDeJornada } from './ResumenDeJornada'
 import { CLASE_ENLACE, PantallaSinPermiso } from './piezasDeOperacion'
 
 const TITULO = 'Jornada'
 
-type DialogoAbierto = 'rendir' | 'cerrar' | 'liberar' | null
+type DialogoAbierto = 'cerrar' | 'liberar' | null
 
 /**
  * Detalle de una jornada y sus acciones (change 15, tareas 14.1 y 14.2; RUT-09, `design.md` D13,
  * D15, D16). "Rendir", "Cerrar" y "Liberar" aparecen solo con su permiso y en el estado que las
  * admite (`accionesDeJornada`, del dominio); una jornada `CERRADA` o `LIBERADA` no ofrece ninguna.
  * "Cargar vehículo" lleva al alta de transferencia con la ubicación como destino (RUT-02).
+ *
+ * Change 24 (tarea 13.1; D4, D6, D8, D9): muestra la entrega del vendedor o su falta; "Rendir"
+ * lleva a la pantalla de conteo y queda deshabilitado sin la entrega (RUT-05); "Cerrar" abre el
+ * diálogo con la devolución del remanente; y el resumen de la jornada (RUT-07) va debajo.
  */
 export function JornadaDetalleScreen() {
   return (
@@ -39,11 +45,12 @@ export function JornadaDetalleScreen() {
 function Detalle() {
   const { jornadaId } = useParams<{ jornadaId: string }>()
   const jornada = useJornada(jornadaId)
-  const rendir = useRendirJornada()
+  const navigate = useNavigate()
   const cerrar = useCerrarJornada()
   const liberar = useLiberarJornada()
   const permisos = usePermisos()
   const [dialogo, setDialogo] = useState<DialogoAbierto>(null)
+  const [devuelto, setDevuelto] = useState<DevolucionRealizada | null>(null)
 
   if (jornada.isPending) return <p>Cargando…</p>
   if (jornada.isError) {
@@ -63,6 +70,7 @@ function Detalle() {
   const acciones = accionesDeJornada(datos.estado, permisos.tiene)
   const cerrarDialogo = () => setDialogo(null)
   const releer = () => void jornada.refetch()
+  const entregada = Boolean(datos.entregada_en)
 
   return (
     <main className="flex flex-col gap-4">
@@ -80,7 +88,11 @@ function Detalle() {
                 </Link>
               </SiTienePermiso>
             )}
-            {acciones.rendir && <Boton onClick={() => setDialogo('rendir')}>Rendir</Boton>}
+            {acciones.rendir && (
+              <Boton disabled={!entregada} onClick={() => navigate(`/admin/stock/jornadas/${datos.id}/rendicion`)}>
+                Rendir
+              </Boton>
+            )}
             {acciones.cerrar && <Boton onClick={() => setDialogo('cerrar')}>Cerrar</Boton>}
             {acciones.liberar && (
               <span className="inline-flex items-center gap-1">
@@ -105,6 +117,19 @@ function Detalle() {
         <p>
           Abierta el {formatearFechaHora(datos.abierta_en)} por {datos.usuario_nombre ?? ''}
         </p>
+        {datos.entregada_en ? (
+          <p className="flex items-center gap-1">
+            Entregada por el vendedor a las {formatearHora(datos.entregada_en)}.
+            <Ayuda clave="stock.entregaDelDia" />
+          </p>
+        ) : (
+          datos.estado === 'ABIERTA' && (
+            <p className="flex items-center gap-1">
+              El vendedor todavía no terminó el día en el teléfono.
+              <Ayuda clave="stock.entregaDelDia" />
+            </p>
+          )
+        )}
         {datos.rendida_en && (
           <p>
             Rendida el {formatearFechaHora(datos.rendida_en)} por {datos.rendida_por_nombre ?? ''}
@@ -128,24 +153,28 @@ function Detalle() {
         </Card>
       )}
 
-      <ConfirmarTransicionDialogo
-        abierto={dialogo === 'rendir'}
-        titulo="Rendir jornada"
-        texto={`Vas a pasar la jornada de ${datos.ubicacion_nombre} a rendición.`}
-        id={datos.id}
-        accion="rendir"
-        onCerrar={cerrarDialogo}
-        onConfirmar={(operationId) => rendir.mutateAsync({ id: datos.id, operationId })}
-        onEstadoInvalido={releer}
-      />
-      <ConfirmarTransicionDialogo
+      {devuelto && (
+        <Card className="flex flex-col gap-1 text-sm text-primary" data-testid="devolucion-del-remanente">
+          <p>{devuelto.texto}</p>
+          <Link to={`/admin/stock/transferencias/${devuelto.transferenciaId}`} className={CLASE_ENLACE}>
+            Ver transferencia
+          </Link>
+        </Card>
+      )}
+
+      <ResumenDeJornada jornadaId={datos.id} ubicacionId={datos.ubicacion_id} />
+
+      <CierreDeJornadaDialogo
         abierto={dialogo === 'cerrar'}
-        titulo="Cerrar jornada"
-        texto={`Vas a cerrar la jornada de ${datos.ubicacion_nombre}: la ubicación queda libre para una nueva jornada.`}
-        id={datos.id}
-        accion="cerrar"
+        jornadaId={datos.id}
+        ubicacionId={datos.ubicacion_id}
+        ubicacionNombre={datos.ubicacion_nombre}
+        puedeDevolver={permisos.tiene('TRANSFERIR_STOCK')}
         onCerrar={cerrarDialogo}
-        onConfirmar={(operationId) => cerrar.mutateAsync({ id: datos.id, operationId })}
+        onConfirmar={(devolucion, operationId) =>
+          cerrar.mutateAsync({ id: datos.id, ...(devolucion === null ? {} : { devolucion }), operationId })
+        }
+        onCerrada={setDevuelto}
         onEstadoInvalido={releer}
       />
       <LiberarJornadaDialogo

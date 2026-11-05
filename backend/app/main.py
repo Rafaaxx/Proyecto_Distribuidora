@@ -68,6 +68,7 @@ from app.modules.precios import models as precios_models  # noqa: F401
 from app.modules.stock import commands as stock_commands  # noqa: F401
 from app.modules.stock import jornadas_commands as stock_jornadas_commands  # noqa: F401
 from app.modules.stock import models as stock_models  # noqa: F401
+from app.modules.stock import rendicion_commands as stock_rendicion_commands  # noqa: F401
 
 # Registro de modelos, del verificador de uso de presentaciones de `ventas` (change 18a, D18:
 # importar `ventas.service` registra `venta_linea` en el puerto del catalogo, INV-18) y del

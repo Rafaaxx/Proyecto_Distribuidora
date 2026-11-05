@@ -42,6 +42,8 @@ export const clavesStock = {
   ajuste: (id: string) => ['stock', 'ajustes', 'detalle', id] as const,
   jornadas: (filtros: FiltrosJornadas = {}) => ['stock', 'jornadas', 'listado', filtros] as const,
   jornada: (id: string) => ['stock', 'jornadas', 'detalle', id] as const,
+  productosParaRendicion: () => ['stock', 'productos-para-rendicion'] as const,
+  resumenDeJornada: (id: string) => ['stock', 'jornadas', 'resumen', id] as const,
   jornadaActual: () => ['stock', 'jornadas', 'actual'] as const,
 }
 

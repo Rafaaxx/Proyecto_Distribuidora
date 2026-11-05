@@ -213,6 +213,22 @@ class JornadaEstadoInvalidoError(DomainError):
     status_http = 409
 
 
+class JornadaYaEntregadaError(DomainError):
+    """La jornada ya tiene su entrega del día (RUT-05, `design.md` D1): la entrega es única e
+    irrevocable en la etapa 1."""
+
+    codigo = "JORNADA_YA_ENTREGADA"
+    status_http = 409
+
+
+class JornadaSinEntregaError(DomainError):
+    """La jornada todavía no tiene la entrega del día del vendedor: no se puede rendir
+    (RUT-05, `design.md` D2)."""
+
+    codigo = "JORNADA_SIN_ENTREGA"
+    status_http = 409
+
+
 class UbicacionSinTomaError(DomainError):
     """Solo se abre una jornada sobre una ubicación que requiere toma (RUT-01, D3)."""
 
@@ -228,6 +244,14 @@ class UbicacionTomadaError(DomainError):
     status_http = 409
 
 
+class UbicacionConTomaError(DomainError):
+    """El destino de la devolución del remanente es una ubicación con toma (un vehículo): el
+    remanente vuelve a un depósito (RUT-08, STK-09, change 24 `design.md` D6)."""
+
+    codigo = "UBICACION_CON_TOMA"
+    status_http = 409
+
+
 class UsuarioConJornadaError(DomainError):
     """El usuario ya tiene una jornada no cerrada (RUT-04, D3)."""
 
@@ -239,4 +263,23 @@ class DispositivoConJornadaError(DomainError):
     """El dispositivo ya tiene una jornada no cerrada (ADR-005, D3)."""
 
     codigo = "DISPOSITIVO_CON_JORNADA"
+    status_http = 409
+
+
+# --- Rendición de la jornada (change 24, `design.md` D2) ----------------------------------
+
+
+class ConteoIncompletoError(DomainError):
+    """Falta contar algún producto del conjunto a contar de la jornada (RUT-06, D2). La
+    extensión trae `productos`, los que faltan."""
+
+    codigo = "CONTEO_INCOMPLETO"
+    status_http = 422
+
+
+class EsperadoDifiereError(DomainError):
+    """El esperado enviado no es el del servidor en la transacción: el stock cambió mientras
+    se contaba (RUT-06, STK-04, D2). La extensión trae `distintos` y los `esperados` actuales."""
+
+    codigo = "ESPERADO_DIFIERE"
     status_http = 409

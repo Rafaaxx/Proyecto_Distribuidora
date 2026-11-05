@@ -12,12 +12,32 @@ export class ErrorDeStock extends Error {
   readonly codigo: string
   /** Índice 0-based de la línea que causó el error, si el servidor lo informó (contrato P9). */
   readonly linea: number | undefined
+  /**
+   * Lo que el servidor suma a la respuesta de un error (Problem Details con extensión): los
+   * `productos` que faltan de `CONTEO_INCOMPLETO`, los `distintos` y los `esperados` de
+   * `ESPERADO_DIFIERE` (change 24, D2). Vacío si no trae nada.
+   */
+  readonly extension: Readonly<Record<string, unknown>>
 
-  constructor(codigo: string, mensaje: string, linea?: number) {
+  constructor(codigo: string, mensaje: string, linea?: number, extension: Readonly<Record<string, unknown>> = {}) {
     super(mensaje)
     this.name = 'ErrorDeStock'
     this.codigo = codigo
     this.linea = linea
+    this.extension = extension
+  }
+
+  /** Los ids que trae la extensión bajo `campo` (`productos`, `distintos`); vacío si no hay. */
+  idsDe(campo: string): string[] {
+    const valor = this.extension[campo]
+    return Array.isArray(valor) ? valor.filter((v): v is string => typeof v === 'string') : []
+  }
+
+  /** Los esperados actuales de `ESPERADO_DIFIERE`, por producto, en unidad base. */
+  esperadosActuales(): Record<string, number> {
+    const valor = this.extension['esperados']
+    if (typeof valor !== 'object' || valor === null || Array.isArray(valor)) return {}
+    return Object.fromEntries(Object.entries(valor).filter((par): par is [string, number] => typeof par[1] === 'number'))
   }
 }
 
@@ -43,7 +63,10 @@ interface ProblemDetails {
   title?: string
   codigo?: string
   linea?: number
+  [extension: string]: unknown
 }
+
+const CAMPOS_ESTANDAR = new Set(['type', 'title', 'status', 'codigo', 'instance', 'linea', 'detail'])
 
 const MENSAJE_GENERICO_DE_RESERVA = 'No se pudo completar la operación.'
 
@@ -61,7 +84,8 @@ export async function errorDesdeRespuesta(respuesta: Response): Promise<ErrorDeS
 
   if (respuesta.status === 403) return new PermisoRequeridoStockError(mensaje)
   if (respuesta.status === 404) return new RecursoNoEncontradoStockError(mensaje)
-  return new ErrorDeStock(codigo, mensaje, typeof problema.linea === 'number' ? problema.linea : undefined)
+  const extension = Object.fromEntries(Object.entries(problema).filter(([campo]) => !CAMPOS_ESTANDAR.has(campo)))
+  return new ErrorDeStock(codigo, mensaje, typeof problema.linea === 'number' ? problema.linea : undefined, extension)
 }
 
 /** Qué operación falló: cambia el texto de algunos códigos (`STOCK_INSUFICIENTE`, 403). */
@@ -84,6 +108,13 @@ const MENSAJES_POR_CODIGO: Record<string, string> = {
     'Hay una jornada abierta en este dispositivo. Cerrala o pedí que la liberen antes de abrir otra.',
   JORNADA_ESTADO_INVALIDO: 'La jornada ya cambió de estado. Actualizá la pantalla para ver cómo quedó.',
   OBSERVACION_INVALIDA: 'La observación admite hasta 500 caracteres.',
+  // Change 24 (D11, aprobados en 0.2): la rendición y el cierre con devolución.
+  JORNADA_SIN_ENTREGA: 'El vendedor todavía no terminó el día en el teléfono.',
+  ESPERADO_DIFIERE:
+    'El stock del vehículo cambió mientras contabas. Revisá los esperados marcados y volvé a confirmar.',
+  UBICACION_CON_TOMA: 'El destino es un vehículo con jornada; elegí un depósito.',
+  // Sin los nombres (la pantalla arma «Falta contar: {productos}.» con ellos): texto de reserva.
+  CONTEO_INCOMPLETO: 'Falta contar algún producto.',
 }
 
 const STOCK_INSUFICIENTE: Record<ContextoDeError, string> = {
@@ -91,7 +122,7 @@ const STOCK_INSUFICIENTE: Record<ContextoDeError, string> = {
   ajuste: 'Un ajuste no puede dejar stock negativo.',
   anulacion: 'No se puede anular: el stock actual no alcanza para revertir la operación.',
   apertura: 'No hay stock suficiente.',
-  jornada: 'No hay stock suficiente.',
+  jornada: 'No hay stock suficiente para devolver esa cantidad.',
   ubicacion: 'No hay stock suficiente.',
 }
 

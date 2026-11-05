@@ -6,11 +6,12 @@ import { Ayuda } from '../../../components/ui/Ayuda'
 import { Card } from '../../../components/ui/Card'
 import type { ClaveDeAyuda } from '../../../ayuda/textos'
 import { formatearDinero } from '../../../domain/ruta/lecturasLocales'
-import { resumenDeObservaciones } from '../../../domain/ruta/textosDeSincronizacion'
+import { NOMBRE_DE_LA_ENTREGA, resumenDeObservaciones } from '../../../domain/ruta/textosDeSincronizacion'
 import { useConectado } from '../../../lib/conexion'
 import {
   useAnulacionesConProblemas,
   useCobranzasConProblemas,
+  useEntregaDelDia,
   useResumenDeSincronizacion,
   useVentasConProblemas,
   type AnulacionConProblema,
@@ -143,6 +144,29 @@ function FilaDeCobranza({ item }: { item: CobranzaConProblema }) {
   )
 }
 
+/** Change 24 (D10, D11): la entrega del día con su estado; si fue rechazada, su texto, su código y el aviso. */
+function FilaDeEntrega() {
+  const entrega = useEntregaDelDia()
+  if (entrega === null) return null
+  const rechazada = entrega.estado === 'RECHAZADA'
+  return (
+    <ul className="flex flex-col gap-2">
+      <li className="flex min-w-0 flex-col gap-1 rounded-md border border-border bg-surface p-3">
+        <span className="text-sm font-semibold text-primary">{NOMBRE_DE_LA_ENTREGA}</span>
+        <span className="flex flex-wrap items-center gap-2">
+          <Badge variante={rechazada ? 'negativo' : 'neutral'}>{etiquetaDeEnvio(entrega.estado)}</Badge>
+        </span>
+        {entrega.explicacion?.tipo === 'rechazo' && (
+          <>
+            <span className="break-words text-sm text-primary">{entrega.explicacion.texto}</span>
+            <span className="break-words text-xs text-primary/70">{entrega.explicacion.aviso}</span>
+          </>
+        )}
+      </li>
+    </ul>
+  )
+}
+
 function Lista({
   titulo,
   clave,
@@ -209,6 +233,7 @@ export function SincronizacionScreen() {
         )}
         <BotonSincronizar />
       </Card>
+      <FilaDeEntrega />
       {problemas.length + problemasDeAnulacion.length + problemasDeCobranza.length > 0 && (
         <p className="flex items-center gap-1 text-sm text-primary">
           Observaciones y rechazos

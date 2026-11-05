@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 
 import { generarOperationId } from '../../lib/api/operationId'
 import { debeReintentar } from '../../lib/api/reintentoDeRed'
+import { listarProductos, type PaginaProductos } from '../catalogo/api'
 import { useMotivos } from '../compras/hooks'
 import {
   abrirJornada,
@@ -12,6 +13,7 @@ import {
   listarJornadas,
   obtenerJornada,
   obtenerJornadaActual,
+  obtenerResumenDeJornada,
   rendirJornada,
   anularTransferencia,
   crearUbicacion,
@@ -32,7 +34,12 @@ import {
   type AjusteDetalle,
   type AjusteResultado,
   type CostoPromedio,
+  type CierreResultado,
+  type DevolucionDatos,
   type Jornada,
+  type LineaDeConteoDatos,
+  type RendicionResultado,
+  type ResumenDeJornada,
   type JornadaDetalle,
   type LineaDeStock,
   type StockInicialDatos,
@@ -341,6 +348,15 @@ export function useJornada(id: string | undefined) {
   })
 }
 
+/** El resumen de la jornada (change 24, D4; RUT-07): stock por producto y dinero. */
+export function useResumenDeJornada(id: string | undefined) {
+  return useQuery<ResumenDeJornada, Error>({
+    queryKey: clavesStock.resumenDeJornada(id ?? ''),
+    queryFn: () => obtenerResumenDeJornada(id as string),
+    enabled: id !== undefined && id !== '',
+  })
+}
+
 /** La jornada no cerrada del token (`null` si no tiene). `habilitado` en falso (sin `ABRIR_JORNADA`) no consulta. */
 export function useJornadaActual(habilitado: boolean) {
   return useQuery<JornadaDetalle | null, Error>({
@@ -351,7 +367,8 @@ export function useJornadaActual(habilitado: boolean) {
 }
 
 type VariablesAbrirJornada = { ubicacion_id: string; operationId?: string }
-type VariablesTransicion = { id: string; operationId?: string }
+type VariablesRendir = { id: string; lineas: LineaDeConteoDatos[]; observacion?: string; operationId?: string }
+type VariablesCerrar = { id: string; devolucion?: DevolucionDatos; operationId?: string }
 type VariablesLiberar = { id: string; motivo_id: string; observacion?: string; operationId?: string }
 
 /** Una jornada que cambia mueve jornadas, marcas de ubicación tomada y saldos: todo cuelga de `['stock']`. */
@@ -372,16 +389,16 @@ export function useAbrirJornada() {
 
 export function useRendirJornada() {
   const invalidar = useInvalidarStock()
-  return useMutacionConOperationId<VariablesTransicion, Jornada>(
-    (variables, operationId) => rendirJornada(variables.id, operationId),
+  return useMutacionConOperationId<VariablesRendir, RendicionResultado>(
+    (variables, operationId) => rendirJornada(variables.id, variables.lineas, variables.observacion, operationId),
     invalidar,
   )
 }
 
 export function useCerrarJornada() {
   const invalidar = useInvalidarStock()
-  return useMutacionConOperationId<VariablesTransicion, Jornada>(
-    (variables, operationId) => cerrarJornada(variables.id, operationId),
+  return useMutacionConOperationId<VariablesCerrar, CierreResultado>(
+    (variables, operationId) => cerrarJornada(variables.id, variables.devolucion, operationId),
     invalidar,
   )
 }
@@ -392,4 +409,29 @@ export function useLiberarJornada() {
     (variables, operationId) => liberarJornada(variables.id, variables.motivo_id, variables.observacion, operationId),
     invalidar,
   )
+}
+
+/**
+ * Todos los productos del catálogo, activos o no, recorriendo las páginas (change 24, D9): la
+ * rendición muestra el nombre de cada producto del conteo (el resumen trae solo ids) y ofrece los
+ * activos para «Agregar producto». La lista se abre a `RENDIR_JORNADA` solo en lectura.
+ */
+export function useProductosParaRendicion() {
+  const consulta = useInfiniteQuery<PaginaProductos, Error, { pages: PaginaProductos[] }, readonly string[], string | undefined>({
+    queryKey: clavesStock.productosParaRendicion(),
+    queryFn: ({ pageParam }) => listarProductos({}, pageParam, 100),
+    initialPageParam: undefined,
+    getNextPageParam: (ultimaPagina) => ultimaPagina.cursor_siguiente ?? undefined,
+  })
+  const { hasNextPage, isFetching, fetchNextPage } = consulta
+  const paginasCargadas = consulta.data?.pages.length ?? 0
+  useEffect(() => {
+    if (hasNextPage && !isFetching) void fetchNextPage()
+  }, [hasNextPage, isFetching, fetchNextPage, paginasCargadas])
+
+  return {
+    productos: consulta.data?.pages.flatMap((pagina) => pagina.items) ?? [],
+    cargando: consulta.isPending || hasNextPage,
+    error: consulta.error,
+  }
 }

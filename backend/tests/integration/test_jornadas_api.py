@@ -13,13 +13,21 @@ Reglas citadas: RUT-01, RUT-03, INV-06, INV-16, INV-21, SEG-06, SEG-07, TR-07, T
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
 from cuentas_corrientes_utiles import crear_organizacion, crear_usuario_y_dispositivo
 from fastapi.testclient import TestClient
+from httpx import Response
+from sqlalchemy import text
 from sqlalchemy.orm import Session
-from stock_utiles import crear_jornada_sql, crear_motivo_sql, crear_ubicacion_sql
+from stock_utiles import (
+    crear_jornada_sql,
+    crear_motivo_sql,
+    crear_producto_sql,
+    crear_ubicacion_sql,
+)
 from test_stock_api import (  # noqa: F401  (fixtures reutilizadas)
     PASSWORD,
     Entorno,
@@ -299,10 +307,22 @@ def test_una_ubicacion_cuya_jornada_se_cerro_vuelve_a_abrirse(
 
 RENDIR = frozenset({"RENDIR_JORNADA"})
 
+MOMENTO = datetime(2026, 11, 4, 12, 0, tzinfo=UTC)
+
 
 def _jornada_en(
-    entorno: EntornoConCamionetas, estado: str, ubicacion_id: UUID | None = None
+    entorno: EntornoConCamionetas,
+    estado: str,
+    ubicacion_id: UUID | None = None,
+    *,
+    entregada: bool = True,
 ) -> UUID:
+    """La jornada entregada por defecto: desde el change 24 la rendición exige la entrega."""
+    entrega: dict[str, object] = (
+        {"entregada_en": MOMENTO, "entrega_occurred_at": MOMENTO, "entrega_secuencia": 1}
+        if entregada
+        else {}
+    )
     jornada_id = crear_jornada_sql(
         entorno.sesion,
         entorno.org,
@@ -310,8 +330,18 @@ def _jornada_en(
         dispositivo_id=entorno.dispositivo_id,
         ubicacion_id=ubicacion_id or entorno.camioneta_1,
         estado=estado,
+        **entrega,
     )
     return jornada_id
+
+
+def _transicion(
+    cliente: TestClient, jornada_id: UUID, accion: str, headers: dict[str, str]
+) -> Response:
+    """La rendición (v2) lleva el conteo; el cierre no lleva cuerpo."""
+    if accion == "rendicion":
+        return cliente.post(f"{URL}/{jornada_id}/rendicion", json={"lineas": []}, headers=headers)
+    return cliente.post(f"{URL}/{jornada_id}/{accion}", headers=headers)
 
 
 @pytest.mark.parametrize(
@@ -325,7 +355,7 @@ def test_la_transicion_responde_200_con_la_jornada_en_su_estado_nuevo(
     jornada_id = _jornada_en(entorno, desde)
     headers = entorno.confirmar_y_entrar(cliente)
 
-    respuesta = cliente.post(f"{URL}/{jornada_id}/{accion}", headers=_con_op(headers))
+    respuesta = _transicion(cliente, jornada_id, accion, _con_op(headers))
 
     assert respuesta.status_code == 200, respuesta.text
     cuerpo = respuesta.json()
@@ -342,7 +372,7 @@ def test_sin_operation_id_la_transicion_responde_400(
     jornada_id = _jornada_en(entorno, "ABIERTA")
     headers = entorno.confirmar_y_entrar(cliente)
 
-    respuesta = cliente.post(f"{URL}/{jornada_id}/{accion}", headers=headers)
+    respuesta = _transicion(cliente, jornada_id, accion, headers)
 
     assert respuesta.status_code == 400
     assert respuesta.json()["codigo"] == "OPERATION_ID_REQUERIDO"
@@ -364,7 +394,7 @@ def test_una_transicion_invalida_responde_409_y_no_cambia_la_jornada(
     jornada_id = _jornada_en(entorno, estado)
     headers = entorno.confirmar_y_entrar(cliente)
 
-    respuesta = cliente.post(f"{URL}/{jornada_id}/{accion}", headers=_con_op(headers))
+    respuesta = _transicion(cliente, jornada_id, accion, _con_op(headers))
 
     assert respuesta.status_code == 409
     assert respuesta.json()["codigo"] == "JORNADA_ESTADO_INVALIDO"
@@ -379,7 +409,7 @@ def test_sin_rendir_jornada_la_transicion_responde_403(
     jornada_id = _jornada_en(entorno, "ABIERTA")
     headers = entorno.confirmar_y_entrar(cliente)
 
-    respuesta = cliente.post(f"{URL}/{jornada_id}/{accion}", headers=_con_op(headers))
+    respuesta = _transicion(cliente, jornada_id, accion, _con_op(headers))
 
     assert respuesta.status_code == 403
     assert respuesta.json()["codigo"] == "PERMISO_REQUERIDO"
@@ -405,7 +435,7 @@ def test_inv21_una_jornada_ajena_o_inexistente_responde_404(
     headers = entorno.confirmar_y_entrar(cliente)
 
     for jornada_id in (ajena, uuid4()):
-        respuesta = cliente.post(f"{URL}/{jornada_id}/{accion}", headers=_con_op(headers))
+        respuesta = _transicion(cliente, jornada_id, accion, _con_op(headers))
         assert respuesta.status_code == 404, respuesta.text
 
 
@@ -416,11 +446,57 @@ def test_inv06_el_reenvio_de_la_rendicion_devuelve_la_misma_respuesta(
     jornada_id = _jornada_en(entorno, "ABIERTA")
     headers = _con_op(entorno.confirmar_y_entrar(cliente), uuid4())
 
-    primera = cliente.post(f"{URL}/{jornada_id}/rendicion", headers=headers)
-    segunda = cliente.post(f"{URL}/{jornada_id}/rendicion", headers=headers)
+    primera = _transicion(cliente, jornada_id, "rendicion", headers)
+    segunda = _transicion(cliente, jornada_id, "rendicion", headers)
 
     assert (primera.status_code, segunda.status_code) == (200, 200)
     assert primera.json() == segunda.json()
+
+
+def test_la_rendicion_responde_con_la_rendicion_y_sus_lineas(
+    cliente: TestClient, sesion: Session
+) -> None:
+    """Change 24, D2: 200 con la jornada `EN_RENDICION`, el id de la rendición y las líneas del
+    conteo (sin costos)."""
+    entorno = _preparar(sesion, permisos=RENDIR)
+    jornada_id = _jornada_en(entorno, "ABIERTA")
+    headers = entorno.confirmar_y_entrar(cliente)
+
+    respuesta = cliente.post(
+        f"{URL}/{jornada_id}/rendicion",
+        json={"lineas": [], "observacion": "Sin novedades"},
+        headers=_con_op(headers),
+    )
+
+    assert respuesta.status_code == 200, respuesta.text
+    cuerpo = respuesta.json()
+    assert (cuerpo["id"], cuerpo["estado"]) == (str(jornada_id), "EN_RENDICION")
+    assert (cuerpo["observacion"], cuerpo["lineas"]) == ("Sin novedades", [])
+    assert UUID(cuerpo["rendicion_id"])
+
+
+def test_la_rendicion_sin_la_entrega_responde_409(cliente: TestClient, sesion: Session) -> None:
+    entorno = _preparar(sesion, permisos=RENDIR)
+    jornada_id = _jornada_en(entorno, "ABIERTA", entregada=False)
+    headers = entorno.confirmar_y_entrar(cliente)
+
+    respuesta = _transicion(cliente, jornada_id, "rendicion", _con_op(headers))
+
+    assert respuesta.status_code == 409
+    assert respuesta.json()["codigo"] == "JORNADA_SIN_ENTREGA"
+
+
+def test_la_rendicion_sin_conteo_en_el_cuerpo_responde_422(
+    cliente: TestClient, sesion: Session
+) -> None:
+    """Nadie rinde sin contar: el cuerpo vacío ya no es una rendición."""
+    entorno = _preparar(sesion, permisos=RENDIR)
+    jornada_id = _jornada_en(entorno, "ABIERTA")
+    headers = entorno.confirmar_y_entrar(cliente)
+
+    respuesta = cliente.post(f"{URL}/{jornada_id}/rendicion", headers=_con_op(headers))
+
+    assert respuesta.status_code == 422
 
 
 # --- liberación (tarea 7.1) --------------------------------------------------------------------
@@ -541,3 +617,216 @@ def test_la_liberacion_rechaza_un_cuerpo_con_usuario_u_organizacion(
     )
 
     assert respuesta.status_code == 422
+
+
+# --- cierre con el remanente (change 24, tarea 9.1; RUT-08, D6) --------------------------------
+
+RENDIR_Y_TRANSFERIR = frozenset({"RENDIR_JORNADA", "TRANSFERIR_STOCK"})
+
+
+def _cuerpo_de_devolucion(destino: UUID, producto: UUID, cantidad: int) -> dict[str, object]:
+    return {
+        "devolucion": {
+            "ubicacion_destino_id": str(destino),
+            "lineas": [{"producto_id": str(producto), "cantidad_base": cantidad}],
+        }
+    }
+
+
+def test_el_cierre_sin_cuerpo_responde_200_sin_transferencia(
+    cliente: TestClient, sesion: Session
+) -> None:
+    """Spec "Cerrar sin devolver": el cuerpo es opcional y `transferencia_id` es nulo."""
+    entorno = _preparar(sesion, permisos=RENDIR)
+    jornada_id = _jornada_en(entorno, "EN_RENDICION")
+    headers = entorno.confirmar_y_entrar(cliente)
+
+    respuesta = cliente.post(f"{URL}/{jornada_id}/cierre", headers=_con_op(headers))
+
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["estado"] == "CERRADA"
+    assert respuesta.json()["transferencia_id"] is None
+
+
+def test_la_devolucion_sin_transferir_stock_responde_403(
+    cliente: TestClient, sesion: Session
+) -> None:
+    """Spec "Devolución sin permiso de transferir" (`01` §19)."""
+    entorno = _preparar(sesion, permisos=RENDIR)
+    deposito = crear_ubicacion_sql(sesion, entorno.org, nombre="Depósito de devolución")
+    producto = crear_producto_sql(sesion, entorno.org, nombre="Vino A")
+    jornada_id = _jornada_en(entorno, "EN_RENDICION")
+    headers = entorno.confirmar_y_entrar(cliente)
+
+    respuesta = cliente.post(
+        f"{URL}/{jornada_id}/cierre",
+        json=_cuerpo_de_devolucion(deposito, producto, 1),
+        headers=_con_op(headers),
+    )
+
+    assert respuesta.status_code == 403
+    assert respuesta.json()["codigo"] == "PERMISO_REQUERIDO"
+
+
+@pytest.mark.parametrize(
+    ("destino", "codigo", "estado_http"),
+    [
+        ("camioneta_2", "UBICACION_CON_TOMA", 409),
+        ("camioneta_1", "UBICACIONES_IGUALES", 422),
+        ("deposito", "STOCK_INSUFICIENTE", 409),
+    ],
+)
+def test_la_devolucion_rechazada_responde_con_su_codigo_y_no_cierra(
+    cliente: TestClient, sesion: Session, destino: str, codigo: str, estado_http: int
+) -> None:
+    entorno = _preparar(sesion, permisos=RENDIR_Y_TRANSFERIR)
+    entorno.deposito = crear_ubicacion_sql(sesion, entorno.org, nombre="Depósito de devolución")  # type: ignore[attr-defined]
+    producto = crear_producto_sql(sesion, entorno.org, nombre="Vino A")
+    jornada_id = _jornada_en(entorno, "EN_RENDICION")
+    headers = entorno.confirmar_y_entrar(cliente)
+
+    respuesta = cliente.post(
+        f"{URL}/{jornada_id}/cierre",
+        json=_cuerpo_de_devolucion(getattr(entorno, destino), producto, 5),
+        headers=_con_op(headers),
+    )
+
+    assert respuesta.status_code == estado_http, respuesta.text
+    assert respuesta.json()["codigo"] == codigo
+    detalle = cliente.get(f"{URL}/{jornada_id}", headers=headers)
+    assert detalle.json()["estado"] == "EN_RENDICION"
+
+
+# --- el detalle informa la entrega (change 24, tarea 13.1; RUT-05, D9) --------------------------
+
+
+@pytest.mark.parametrize("entregada", [True, False])
+def test_el_detalle_informa_el_momento_de_la_entrega_o_su_falta(
+    cliente: TestClient, sesion: Session, entregada: bool
+) -> None:
+    """RUT-05: el detalle de `/admin` muestra «Entregada ... a las {hora}» o que el vendedor
+    todavía no terminó el día; el momento es el del servidor (`entregada_en`)."""
+    entorno = _preparar(sesion, permisos=RENDIR)
+    jornada_id = _jornada_en(entorno, "ABIERTA", entregada=entregada)
+    headers = entorno.confirmar_y_entrar(cliente)
+
+    respuesta = cliente.get(f"{URL}/{jornada_id}", headers=headers)
+
+    assert respuesta.status_code == 200, respuesta.text
+    esperado = MOMENTO.isoformat().replace("+00:00", "Z") if entregada else None
+    assert respuesta.json()["entregada_en"] == esperado
+
+
+# --- el resumen de la jornada (change 24, tarea 10.1; RUT-07, D4) ------------------------------
+
+
+@pytest.mark.parametrize("permiso", ["ABRIR_JORNADA", "RENDIR_JORNADA", "LIBERAR_UBICACION"])
+def test_el_resumen_responde_200_con_cualquiera_de_los_tres_permisos(
+    cliente: TestClient, sesion: Session, permiso: str
+) -> None:
+    entorno = _preparar(sesion, permisos=frozenset({permiso}))
+    jornada_id = _jornada_en(entorno, "ABIERTA")
+    headers = entorno.confirmar_y_entrar(cliente)
+
+    respuesta = cliente.get(f"{URL}/{jornada_id}/resumen", headers=headers)
+
+    assert respuesta.status_code == 200, respuesta.text
+    cuerpo = respuesta.json()
+    assert cuerpo["jornada_id"] == str(jornada_id)
+    assert cuerpo["con_conteo"] is False
+    assert cuerpo["dinero"]["ventas"] == {"cantidad": 0, "total": "0.00"}
+    assert cuerpo["despues_de_la_rendicion"] is None
+    assert "valor_de_diferencias" not in cuerpo
+
+
+def test_el_resumen_sin_permisos_de_jornada_responde_403(
+    cliente: TestClient, sesion: Session
+) -> None:
+    entorno = _preparar(sesion, permisos=frozenset({"VER_COSTOS"}))
+    jornada_id = _jornada_en(entorno, "ABIERTA")
+    headers = entorno.confirmar_y_entrar(cliente)
+
+    respuesta = cliente.get(f"{URL}/{jornada_id}/resumen", headers=headers)
+
+    assert respuesta.status_code == 403
+    assert respuesta.json()["codigo"] == "PERMISO_REQUERIDO"
+
+
+def _rendicion_con_faltante(entorno: EntornoConCamionetas, jornada_id: UUID) -> UUID:
+    """Una rendición por SQL con 40 esperadas de Vino A, 37 contadas (-3) a $1.050."""
+    producto = crear_producto_sql(entorno.sesion, entorno.org, nombre="Vino A")
+    rendicion_id = uuid4()
+    entorno.sesion.execute(
+        text(
+            "INSERT INTO rendicion (id, organizacion_id, jornada_id, operation_id, usuario_id, "
+            "dispositivo_id, occurred_at, registered_at) VALUES (:id, :org, :j, :op, :u, :d, "
+            ":m, :m)"
+        ),
+        {
+            "id": rendicion_id,
+            "org": entorno.org,
+            "j": jornada_id,
+            "op": uuid4(),
+            "u": entorno.usuario_id,
+            "d": entorno.dispositivo_id,
+            "m": MOMENTO,
+        },
+    )
+    entorno.sesion.execute(
+        text(
+            "INSERT INTO rendicion_linea (id, organizacion_id, rendicion_id, producto_id, "
+            "stock_al_abrir, ingresos, ventas, anulaciones, otros, cantidad_esperada, "
+            "cantidad_contada, diferencia, costo_unitario) VALUES (:id, :org, :r, :p, 10, 36, "
+            "8, 2, 0, 40, 37, -3, 1050.000000)"
+        ),
+        {"id": uuid4(), "org": entorno.org, "r": rendicion_id, "p": producto},
+    )
+    return producto
+
+
+def test_el_valor_de_las_diferencias_viaja_como_string_solo_con_ver_costos(
+    cliente: TestClient, sesion: Session
+) -> None:
+    """`01` §19: con `VER_COSTOS` la clave existe (string, INV-03); sin él desaparece."""
+    con = _preparar(sesion, permisos=frozenset({"RENDIR_JORNADA", "VER_COSTOS"}))
+    jornada_con = _jornada_en(con, "EN_RENDICION")
+    _rendicion_con_faltante(con, jornada_con)
+    headers_con = con.confirmar_y_entrar(cliente)
+    sin = _preparar(sesion, permisos=RENDIR)
+    jornada_sin = _jornada_en(sin, "EN_RENDICION")
+    _rendicion_con_faltante(sin, jornada_sin)
+    headers_sin = sin.confirmar_y_entrar(cliente)
+
+    cuerpo_con = cliente.get(f"{URL}/{jornada_con}/resumen", headers=headers_con).json()
+    cuerpo_sin = cliente.get(f"{URL}/{jornada_sin}/resumen", headers=headers_sin).json()
+
+    assert cuerpo_con["con_conteo"] is True
+    assert cuerpo_con["valor_de_diferencias"] == "-3150.00"
+    (linea,) = cuerpo_con["lineas"]
+    assert (linea["esperado"], linea["contado"], linea["diferencia"]) == (40, 37, -3)
+    assert linea["valor_diferencia"] == "-3150.00"
+    assert "valor_de_diferencias" not in cuerpo_sin
+    assert "valor_diferencia" not in cuerpo_sin["lineas"][0]
+    assert cuerpo_sin["lineas"][0]["diferencia"] == -3
+
+
+def test_inv21_el_resumen_de_una_jornada_ajena_o_inexistente_responde_404(
+    cliente: TestClient, sesion: Session
+) -> None:
+    entorno = _preparar(sesion, permisos=RENDIR)
+    otra_org = crear_organizacion(sesion).id
+    otro_usuario, otro_dispositivo = crear_usuario_y_dispositivo(sesion, otra_org, permisos=ABRIR)
+    ajena = crear_jornada_sql(
+        sesion,
+        otra_org,
+        usuario_id=otro_usuario,
+        dispositivo_id=otro_dispositivo,
+        ubicacion_id=crear_ubicacion_sql(
+            sesion, otra_org, nombre="Ajena", tipo="VEHICULO", requiere_toma=True
+        ),
+    )
+    headers = entorno.confirmar_y_entrar(cliente)
+
+    for jornada_id in (ajena, uuid4()):
+        respuesta = cliente.get(f"{URL}/{jornada_id}/resumen", headers=headers)
+        assert respuesta.status_code == 404, respuesta.text

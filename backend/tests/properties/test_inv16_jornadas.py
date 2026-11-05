@@ -48,7 +48,11 @@ from tests.integration.cuentas_corrientes_utiles import (
     crear_organizacion,
     crear_usuario_y_dispositivo,
 )
-from tests.integration.stock_utiles import crear_motivo_sql, crear_ubicacion_sql
+from tests.integration.stock_utiles import (
+    crear_motivo_sql,
+    crear_ubicacion_sql,
+    rendir_sin_diferencias_sql,
+)
 
 MOMENTO = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
 RELOJ = FixedClock(MOMENTO)
@@ -184,11 +188,13 @@ class _Mundo(RuleBasedStateMachine):
         try:
             with self.sesion.begin_nested():
                 if destino == EN_RENDICION:
-                    stock_service.rendir_jornada(
-                        self.org,
+                    rendir_sin_diferencias_sql(  # JORNADA_RENDIR v2: entrega y conteo exacto
                         self.sesion,
-                        jornada_id=jornada["id"],
+                        self.org,
+                        jornada["id"],
                         usuario_id=self.usuarios[0],
+                        dispositivo_id=self.dispositivos[0],
+                        reloj=RELOJ,
                         occurred_at=MOMENTO,
                     )
                 elif destino == CERRADA:

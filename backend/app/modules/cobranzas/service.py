@@ -28,6 +28,7 @@ from app.modules.clientes import service as clientes_service
 from app.modules.cobranzas import repository
 from app.modules.cobranzas.domain.cobranza import (
     CODIGO_JORNADA_LIBERADA,
+    CODIGO_JORNADA_RENDIDA,
     ESTADO_ANULADA,
     ORIGEN_INDEPENDIENTE,
     ORIGEN_VENTA,
@@ -55,6 +56,7 @@ from app.modules.stock import service as stock_service
 __all__ = [
     "MedioACobrar",
     "ResultadoDeCobranza",
+    "cobranzas_de_jornada",
     "ResultadoDeAnulacion",
     "anular_cobranza",
     "anular_cobranza_de_venta",
@@ -67,6 +69,42 @@ _TIPO_MOVIMIENTO_COBRANZA = "COBRANZA"
 _ORIGEN_TIPO_COBRANZA = "COBRANZA"
 _TIPO_MOVIMIENTO_ANULACION = "ANULACION_COBRANZA"
 _AMBITO_ANULACION_COBRANZA = "ANULACION_COBRANZA"
+
+
+def cobranzas_de_jornada(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    jornada_id: UUID,
+    corte: datetime | None,
+) -> dict[tuple[str, bool], stock_service.CobranzasDeJornada]:
+    """Las cobranzas de la jornada sumadas en la base, por `(estado, tardía)`: `CONFIRMADA` y
+    `ANULADA` (COB-05; una anulada no suma en su medio), y aparte las registradas después de
+    `corte` (la rendición). Solo lectura, filtrada por organización (INV-21)."""
+    totales, medios = repository.totales_de_cobranzas_de_jornada(
+        organizacion_id, jornada_id, corte, sesion
+    )
+    resultado: dict[tuple[str, bool], stock_service.CobranzasDeJornada] = {}
+    for fila in totales:
+        por_medio: list[stock_service.TotalDeMedio] = []
+        for medio in medios:
+            if (medio.estado, medio.tardia) != (fila.estado, fila.tardia):
+                continue
+            definicion = configuracion_service.obtener_medio_pago(
+                organizacion_id, medio.medio_pago_id, sesion
+            )
+            por_medio.append(
+                stock_service.TotalDeMedio(
+                    medio_pago_id=medio.medio_pago_id,
+                    nombre=None if definicion is None else definicion.nombre,
+                    total=redondear_importe(medio.total),
+                )
+            )
+        por_medio.sort(key=lambda m: (m.nombre or "", str(m.medio_pago_id)))
+        resultado[(fila.estado, fila.tardia)] = stock_service.CobranzasDeJornada(
+            cantidad=fila.cantidad, total=redondear_importe(fila.total), por_medio=por_medio
+        )
+    return resultado
 
 
 @dataclass(frozen=True)
@@ -153,13 +191,18 @@ def _jornada_de_la_cobranza(
     return propia
 
 
+_ESTADOS_RENDIDOS = frozenset({"EN_RENDICION", "CERRADA"})
+"""Estados de una jornada ya rendida (change 24, D7): lo que llega con ellos se observa."""
+
+
 def _jornada_de_la_cobranza_offline(
     organizacion_id: UUID, sesion: Session, *, jornada_del_sobre: UUID | None
 ) -> tuple[UUID, ObservacionDeCobranza | None]:
     """D12: sin conexión la cobranza lleva la jornada del sobre en TODOS los casos aceptados. La
     jornada se lee `FOR SHARE` (nivel 5), así una liberación simultánea se ve o espera. Si está
     `LIBERADA`, la cobranza se acepta con `JORNADA_LIBERADA` (jornada y momento de la
-    liberación, RUT-09); `ABIERTA`, `EN_RENDICION` y `CERRADA` no observan. Que el sobre traiga la
+    liberación, RUT-09); si está `EN_RENDICION` o `CERRADA`, con `JORNADA_RENDIDA` (jornada y
+    momento de la rendición; change 24, D7, SYN-07); `ABIERTA` no observa. Que el sobre traiga la
     jornada y sea del usuario y del dispositivo lo valida el bus antes de reservar."""
     if jornada_del_sobre is None:
         raise JornadaAjenaError("Una cobranza sin conexión pertenece a una jornada del sobre.")
@@ -169,6 +212,14 @@ def _jornada_de_la_cobranza_offline(
     if estado is None:
         raise RecursoNoEncontradoError(
             f"La jornada {jornada_del_sobre} no existe en esta organización."
+        )
+    if estado.estado in _ESTADOS_RENDIDOS:
+        return estado.jornada_id, ObservacionDeCobranza(
+            CODIGO_JORNADA_RENDIDA,
+            {
+                "jornada_id": str(estado.jornada_id),
+                "rendida_en": None if estado.rendida_en is None else estado.rendida_en.isoformat(),
+            },
         )
     if estado.estado != "LIBERADA":
         return estado.jornada_id, None
@@ -546,3 +597,10 @@ def anular_cobranza_de_venta(
         operation_id=operation_id,
     )
     return ResultadoDeAnulacion(cobranza=cobranza, saldo=movimiento.saldo)
+
+
+stock_service.registrar_lector_de_cobranzas_de_jornada(
+    lambda organizacion_id, sesion, jornada_id, corte: cobranzas_de_jornada(
+        organizacion_id, sesion, jornada_id=jornada_id, corte=corte
+    )
+)

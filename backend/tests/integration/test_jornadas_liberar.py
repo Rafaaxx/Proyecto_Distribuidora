@@ -34,7 +34,10 @@ from app.commands.sobre import SobreComando
 from app.core.clock import FixedClock
 from app.core.errors import PermisoRequeridoError
 from app.modules.identidad.models import Auditoria
-from app.modules.stock import jornadas_commands
+from app.modules.stock import (
+    jornadas_commands,
+    rendicion_commands,  # noqa: F401  (registra JORNADA_RENDIR v2)
+)
 from app.modules.stock import service as stock_service
 from app.modules.stock.domain.errores import (
     JornadaEstadoInvalidoError,
@@ -119,11 +122,12 @@ class Entorno:
         contenido: dict[str, Any],
         *,
         operation_id: UUID | None = None,
+        version: int = 1,
     ) -> Comando:
         sobre = SobreComando(
             operation_id=operation_id or uuid4(),
             tipo=tipo,
-            version=1,
+            version=version,
             modo="ONLINE",
             organizacion_id=self.org,
             usuario_id=actor.usuario_id,
@@ -527,8 +531,29 @@ def test_aud02_apertura_rendicion_y_cierre_no_llevan_motivo(entorno: Entorno) ->
     )
     assert comando.resultado is not None
     jornada_id = comando.resultado["jornada_id"]
+    entorno.sesion.execute(  # la rendición (v2, change 24) exige la entrega del día
+        text(
+            "UPDATE jornada SET entregada_en = :m, entrega_occurred_at = :m, "
+            "entrega_secuencia = 1 WHERE id = :id"
+        ),
+        {"m": EN_LA_TARDE, "id": jornada_id},
+    )
+    entorno.sesion.commit()
     entorno.enviar(
-        "JORNADA_RENDIR", entorno.supervisora, {"jornada_id": jornada_id}, operation_id=op_rendir
+        "JORNADA_RENDIR",
+        entorno.supervisora,
+        {
+            "jornada_id": jornada_id,
+            "lineas": [
+                {
+                    "producto_id": str(entorno.vino_id),
+                    "cantidad_contada": 48,
+                    "cantidad_esperada": 48,
+                }
+            ],
+        },
+        operation_id=op_rendir,
+        version=2,
     )
     entorno.enviar(
         "JORNADA_CERRAR", entorno.supervisora, {"jornada_id": jornada_id}, operation_id=op_cerrar

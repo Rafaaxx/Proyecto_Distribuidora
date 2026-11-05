@@ -1,7 +1,9 @@
 """Modelos SQLAlchemy de `stock`: `Ubicacion`, `StockSaldo` y `StockMovimiento`
 (`docs/03-modelo-de-datos.md` §9; migración `a8b9c0d1e2f3`) y, del change 14,
 `Transferencia`, `TransferenciaLinea`, `AjusteStock` y `AjusteStockLinea` (migración
-`f3a4b5c6d7e8`) y, del change 15, `Jornada` (migración `a4b5c6d7e8f9`).
+`f3a4b5c6d7e8`) y, del change 15, `Jornada` (migración `a4b5c6d7e8f9`) y, del change 24,
+`Rendicion`, `RendicionLinea` y los datos de la entrega de `Jornada` (migración
+`d2f4a6c8e0b1`).
 
 Mapean exactamente lo que crea la migración: `test_modelos_coinciden_con_
 migracion.py` corre `alembic revision --autogenerate` y exige que no detecte
@@ -444,6 +446,11 @@ class Jornada(Base):
             "OR char_length(observacion_liberacion) BETWEEN 1 AND 500",
             name="ck_jornada__observacion_liberacion",
         ),
+        CheckConstraint(
+            "(entregada_en IS NULL) = (entrega_occurred_at IS NULL) "
+            "AND (entregada_en IS NULL) = (entrega_secuencia IS NULL)",
+            name="ck_jornada__entrega_coherente",
+        ),
         Index(
             "ux_jornada__ubicacion_abierta",
             "organizacion_id",
@@ -489,3 +496,88 @@ class Jornada(Base):
     liberada_por_id: Mapped[UUID | None]
     motivo_liberacion_id: Mapped[UUID | None]
     observacion_liberacion: Mapped[str | None] = mapped_column(Text)
+    # Change 24 (`design.md` D1, RUT-05): la entrega del día que hace el teléfono. Nulas
+    # juntas; la jornada sigue `ABIERTA` (la máquina de `01` §18 no cambia).
+    entregada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    entrega_occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    entrega_secuencia: Mapped[int | None] = mapped_column(Integer)
+
+
+class Rendicion(Base):
+    """La rendición de una jornada: el conteo físico del vehículo contra el esperado (RUT-06,
+    `design.md` D2, D4). Una por jornada (`ux_rendicion__jornada`); de solo inserción
+    (INV-05): `app_runtime` no tiene `UPDATE` ni `DELETE`. El momento y el usuario de la
+    rendición también quedan en la jornada (`rendida_en`, `rendida_por_id`)."""
+
+    __tablename__ = "rendicion"
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_rendicion"),
+        ForeignKeyConstraint(
+            ["organizacion_id"], ["organizacion.id"], name="fk_rendicion__organizacion"
+        ),
+        _fk("rendicion", "jornada", "jornada_id", "jornada"),
+        _fk("rendicion", "usuario", "usuario_id", "usuario"),
+        _fk("rendicion", "dispositivo", "dispositivo_id", "dispositivo"),
+        UniqueConstraint("organizacion_id", "id", name="ux_rendicion__org_id"),
+        UniqueConstraint("organizacion_id", "jornada_id", name="ux_rendicion__jornada"),
+        CheckConstraint(
+            "observacion IS NULL OR char_length(observacion) BETWEEN 1 AND 500",
+            name="ck_rendicion__observacion",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(default=nuevo_id)
+    organizacion_id: Mapped[UUID]
+    jornada_id: Mapped[UUID]
+    observacion: Mapped[str | None] = mapped_column(Text)
+    operation_id: Mapped[UUID]
+    usuario_id: Mapped[UUID]
+    dispositivo_id: Mapped[UUID]
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class RendicionLinea(Base):
+    """Una línea de la rendición: un producto contado, con el desglose del esperado congelado
+    al rendir (RUT-07, D4), lo contado, la diferencia con signo y el costo unitario con que se
+    valorizó la diferencia (`NUMERIC(18,6)`, nulo sin promedio, D5). De solo inserción."""
+
+    __tablename__ = "rendicion_linea"
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_rendicion_linea"),
+        ForeignKeyConstraint(
+            ["organizacion_id"], ["organizacion.id"], name="fk_rendicion_linea__organizacion"
+        ),
+        _fk("rendicion_linea", "rendicion", "rendicion_id", "rendicion"),
+        _fk("rendicion_linea", "producto", "producto_id", "producto"),
+        UniqueConstraint("organizacion_id", "id", name="ux_rendicion_linea__org_id"),
+        UniqueConstraint(
+            "organizacion_id",
+            "rendicion_id",
+            "producto_id",
+            name="ux_rendicion_linea__rendicion_producto",
+        ),
+        CheckConstraint("cantidad_contada >= 0", name="ck_rendicion_linea__contada"),
+        CheckConstraint(
+            "diferencia = cantidad_contada - cantidad_esperada",
+            name="ck_rendicion_linea__diferencia",
+        ),
+        CheckConstraint(
+            "cantidad_esperada = stock_al_abrir + ingresos - ventas + anulaciones + otros",
+            name="ck_rendicion_linea__esperada",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(default=nuevo_id)
+    organizacion_id: Mapped[UUID]
+    rendicion_id: Mapped[UUID]
+    producto_id: Mapped[UUID]
+    stock_al_abrir: Mapped[int] = mapped_column(Integer)
+    ingresos: Mapped[int] = mapped_column(Integer)
+    ventas: Mapped[int] = mapped_column(Integer)
+    anulaciones: Mapped[int] = mapped_column(Integer)
+    otros: Mapped[int] = mapped_column(Integer)
+    cantidad_esperada: Mapped[int] = mapped_column(Integer)
+    cantidad_contada: Mapped[int] = mapped_column(Integer)
+    diferencia: Mapped[int] = mapped_column(Integer)
+    costo_unitario: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))

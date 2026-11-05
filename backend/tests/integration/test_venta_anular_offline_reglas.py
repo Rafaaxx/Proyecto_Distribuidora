@@ -298,15 +298,15 @@ def test_stk09_la_propia_jornada_en_rendicion_se_acepta_con_ubicacion_tomada(
 ) -> None:
     # Escenario: "Camioneta tomada por otro vendedor al sincronizar" (la propia en rendición)
     """Triangulación: la jornada del vendedor pasó a `EN_RENDICION` antes de sincronizar y la
-    camioneta sigue tomada: se acepta solo con `UBICACION_TOMADA_AL_SINCRONIZAR` (nombra la propia
-    jornada), reingreso sin jornada."""
+    camioneta sigue tomada: se acepta con `JORNADA_RENDIDA` (change 24, D7) y
+    `UBICACION_TOMADA_AL_SINCRONIZAR` (nombra la propia jornada), reingreso sin jornada."""
     ruta = Ruta(entorno, estado_jornada="EN_RENDICION")
     venta_id = vender(ruta)
 
     item, resultado = anular(entorno, ruta, venta_id)
 
     assert resultado.estado == "ACEPTADO_CON_OBSERVACIONES"
-    assert _codigos(resultado) == ["UBICACION_TOMADA_AL_SINCRONIZAR"]
+    assert _codigos(resultado) == ["JORNADA_RENDIDA", "UBICACION_TOMADA_AL_SINCRONIZAR"]
     (reingreso,) = entorno.movimientos_de_stock("ANULACION_VENTA")
     assert reingreso.jornada_id is None
     (fila,) = entorno.auditoria_de(item.operation_id)

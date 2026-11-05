@@ -1,15 +1,25 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { Alert } from '../../components/ui/Alert'
 import { Ayuda } from '../../components/ui/Ayuda'
 import { Boton } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
+import { Dialogo } from '../../components/ui/Dialog'
 import { asegurarAlmacenamientoPersistente, type EstadoDeAlmacenamiento } from '../../lib/almacenamiento'
 import { useConectado } from '../../lib/conexion'
 import { formatearFechaHora } from '../../lib/fecha'
+import { generarOperationId } from '../../lib/api/operationId'
+import { obtenerOGenerarDispositivoId } from '../../lib/dispositivo/dispositivoId'
 import { actualizarDatos, type ResultadoActualizacion } from '../../sync/actualizarDatos'
-import { AVISO_LO_YA_VENDIDO, textoDeJornadaNoAbierta } from '../../domain/ruta/avisoDeJornada'
+import { APP_VERSION } from '../../sync/appVersion'
+import { dispararTrasVenta } from '../../sync/disparadores'
+import { terminarElDia } from '../../sync/terminarDia'
+import {
+  AVISO_FALTA_ENVIAR_ANTES_DE_LA_ENTREGA,
+  AVISO_LO_YA_VENDIDO,
+  textoDeJornadaNoAbierta,
+} from '../../domain/ruta/avisoDeJornada'
 import { AVISO_DE_VERSION_MINIMA } from '../../sync/versionMinima'
 import { useJornadaNoAbierta } from './datos/anulacion'
 import { useDatosDeInicio } from './datos/lecturas'
@@ -44,6 +54,9 @@ const MENSAJES_DE_FALLA: Record<Exclude<ResultadoActualizacion, 'actualizados'>,
 
 const MOTIVO_SIN_DATOS = 'Vender necesita los datos del día: abrí la jornada para descargarlos.'
 const MOTIVO_SIN_JORNADA = 'Vender requiere una jornada abierta.'
+// Change 24 (D10): «Terminar el día» del vendedor. Los textos aprobados en 0.2; el de la falla no.
+const TEXTO_DE_CONFIRMACION = 'Después no vas a poder vender, anular ventas ni cobrar en esta jornada.'
+const MENSAJE_DE_FALLA_AL_TERMINAR = 'No se pudo terminar el día. Probá de nuevo.'
 
 const CLASE_ENLACE =
   'inline-flex items-center justify-center rounded-md border border-border bg-surface-muted px-3 py-3 text-sm font-medium text-primary hover:bg-surface'
@@ -55,6 +68,11 @@ export function InicioScreen() {
   const [actualizando, setActualizando] = useState(false)
   const [falla, setFalla] = useState<string | null>(null)
   const [almacenamiento, setAlmacenamiento] = useState<EstadoDeAlmacenamiento | 'pendiente'>('pendiente')
+  const [confirmandoFin, setConfirmandoFin] = useState(false)
+  const [terminando, setTerminando] = useState(false)
+  const [fallaAlTerminar, setFallaAlTerminar] = useState<string | null>(null)
+  // UUIDv7 de la entrega: se reutiliza al reintentar (INV-06).
+  const operationIdDeLaEntrega = useRef(generarOperationId())
 
   const fechaBootstrap = datos.estado === 'listo' ? datos.fechaBootstrap : null
   const sinEnviar = useVentasSinEnviar(datos.estado === 'listo' ? datos.usuario.id : null)
@@ -83,6 +101,28 @@ export function InicioScreen() {
     if (resultado !== 'actualizados') setFalla(MENSAJES_DE_FALLA[resultado])
   }
 
+  const terminarDia = async () => {
+    if (datos.estado !== 'listo') return
+    setTerminando(true)
+    setFallaAlTerminar(null)
+    try {
+      await terminarElDia({
+        operationId: operationIdDeLaEntrega.current,
+        usuarioId: datos.usuario.id,
+        dispositivoId: await obtenerOGenerarDispositivoId(),
+        ahora: new Date(),
+        appVersion: APP_VERSION,
+      })
+      setConfirmandoFin(false)
+      // Con o sin señal va por la cola; con señal se envía enseguida, detrás de todo lo anterior.
+      dispararTrasVenta()
+    } catch {
+      setFallaAlTerminar(MENSAJE_DE_FALLA_AL_TERMINAR)
+    } finally {
+      setTerminando(false)
+    }
+  }
+
   if (datos.estado === 'cargando') {
     return (
       <p role="status" className="text-sm text-primary">
@@ -108,6 +148,8 @@ export function InicioScreen() {
           ? AVISO_DE_VERSION_MINIMA
           : null
   const cortada = sinJornada || jornadaCortada
+  const entregada = jornadaCortada && jornadaNoAbierta.estado === 'ENTREGADA'
+  const faltaEnviar = sinEnviar !== null && sinEnviar.ventas + sinEnviar.anulaciones + sinEnviar.cobranzas > 0
 
   return (
     <div className="flex flex-col gap-4">
@@ -128,9 +170,12 @@ export function InicioScreen() {
               <>
                 <p className="flex items-center gap-1 text-sm text-primary">
                   {textoDeJornadaNoAbierta(jornadaNoAbierta.estado)}
-                  <Ayuda clave="ruta.jornadaNoAbierta" />
+                  <Ayuda clave={entregada ? 'ruta.terminarDia' : 'ruta.jornadaNoAbierta'} />
                 </p>
                 <p className="text-sm text-primary">{AVISO_LO_YA_VENDIDO}</p>
+                {entregada && faltaEnviar && (
+                  <p className="text-sm text-primary">{AVISO_FALTA_ENVIAR_ANTES_DE_LA_ENTREGA}</p>
+                )}
               </>
             ) : (
               <p className="text-sm text-primary">
@@ -139,7 +184,7 @@ export function InicioScreen() {
                   : 'Todavía no hay datos descargados: abrí una jornada para descargarlos.'}
               </p>
             )}
-            {puedeAbrir || datos.estado === 'sin_datos' ? (
+            {entregada ? null : puedeAbrir || datos.estado === 'sin_datos' ? (
               conectado ? (
                 <Link to="/ruta/jornada/abrir" className={CLASE_ENLACE}>
                   Abrir jornada
@@ -156,10 +201,35 @@ export function InicioScreen() {
           </>
         ) : (
           datos.estado === 'listo' && (
-            <p className="text-sm text-primary">Jornada abierta en {datos.jornada.ubicacion_nombre ?? 'tu ubicación'}</p>
+            <>
+              <p className="text-sm text-primary">Jornada abierta en {datos.jornada.ubicacion_nombre ?? 'tu ubicación'}</p>
+              {puedeAbrir && (
+                <div className="flex items-center gap-1">
+                  <Boton variante="secundario" onClick={() => setConfirmandoFin(true)}>
+                    Terminar el día
+                  </Boton>
+                  <Ayuda clave="ruta.terminarDia" />
+                </div>
+              )}
+            </>
           )
         )}
       </Card>
+
+      <Dialogo abierto={confirmandoFin} titulo="¿Terminar el día?" onCerrar={() => setConfirmandoFin(false)}>
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-primary">{TEXTO_DE_CONFIRMACION}</p>
+          {fallaAlTerminar && <Alert>{fallaAlTerminar}</Alert>}
+          <div className="flex justify-end gap-2">
+            <Boton variante="secundario" disabled={terminando} onClick={() => setConfirmandoFin(false)}>
+              Cancelar
+            </Boton>
+            <Boton variante="peligro" disabled={terminando} onClick={() => void terminarDia()}>
+              Terminar el día
+            </Boton>
+          </div>
+        </div>
+      </Dialogo>
 
       {datos.estado === 'listo' && (
         <Card className="flex flex-col gap-2">

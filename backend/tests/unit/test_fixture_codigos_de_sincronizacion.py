@@ -19,13 +19,16 @@ from pathlib import Path
 import pytest
 
 from app.commands import errores as errores_del_bus
+from app.core import errors as errores_del_nucleo
 from app.core.errors import DomainError
 from app.modules.clientes.domain import errores as errores_de_credito
 from app.modules.cobranzas import service as servicio_de_cobranzas
 from app.modules.cobranzas.domain import cobranza as dominio_de_cobranza
 from app.modules.cobranzas.domain import errores as errores_de_cobranzas
 from app.modules.configuracion.domain import medios as dominio_de_medios
+from app.modules.stock import jornadas_casos, jornadas_commands
 from app.modules.stock.domain import errores as errores_de_stock
+from app.modules.stock.domain import jornadas as dominio_de_jornadas
 from app.modules.sync.models import CODIGOS_OBSERVACION
 from app.modules.sync.service import CODIGO_DISPOSITIVO_REVOCADO
 from app.modules.ventas import service as servicio_de_ventas
@@ -77,7 +80,7 @@ def test_syn07_las_observaciones_son_exactamente_el_catalogo_del_servidor() -> N
 
     assert len(observaciones) == len(set(observaciones))
     assert set(observaciones) == set(CODIGOS_OBSERVACION)
-    assert len(observaciones) == 16
+    assert len(observaciones) == 17  # change 24 suma `JORNADA_RENDIDA`
 
 
 def test_syn06_cada_rechazo_es_el_codigo_de_un_error_del_bus_o_de_ventas() -> None:
@@ -162,7 +165,12 @@ SOLO_CON_CONEXION_DE_LA_ANULACION = frozenset({"RECURSO_NO_ENCONTRADO"})
 # Lo que levanta `stock` al reingresar y no se ve leyendo el servicio de `ventas`.
 RECHAZOS_DEL_REINGRESO = frozenset({"UBICACION_INACTIVA"})
 OBSERVACIONES_DE_LA_ANULACION = frozenset(
-    {"PERMISO_REVOCADO", "JORNADA_LIBERADA", "UBICACION_TOMADA_AL_SINCRONIZAR"}
+    {
+        "PERMISO_REVOCADO",
+        "JORNADA_LIBERADA",
+        "JORNADA_RENDIDA",  # change 24, D7
+        "UBICACION_TOMADA_AL_SINCRONIZAR",
+    }
 )
 
 
@@ -239,7 +247,7 @@ def test_inv17_un_codigo_que_solo_rige_con_conexion_no_es_un_rechazo_de_la_anula
     assert codigo not in _cargar()["rechazos_de_anulacion"]
 
 
-def test_syn07_las_observaciones_de_la_anulacion_son_las_tres_de_la_spec_y_del_catalogo() -> None:
+def test_syn07_las_observaciones_de_la_anulacion_son_las_de_la_spec_y_del_catalogo() -> None:
     observaciones = _cargar()["observaciones_de_anulacion"]
 
     assert len(observaciones) == len(set(observaciones))
@@ -263,6 +271,7 @@ OBSERVACIONES_DE_LA_COBRANZA = frozenset(
         "REFERENCIA_FALTANTE",
         "PERMISO_REVOCADO",
         "JORNADA_LIBERADA",
+        "JORNADA_RENDIDA",  # change 24, D7
         "CLIENTE_NO_HABILITADO",
     }
 )
@@ -344,10 +353,76 @@ def test_inv17_un_codigo_que_solo_rige_con_conexion_no_es_un_rechazo_de_la_cobra
     assert codigo not in _cargar()["rechazos_de_cobranza"]
 
 
-def test_syn07_las_observaciones_de_la_cobranza_son_las_cinco_de_la_spec_y_del_catalogo() -> None:
+def test_syn07_las_observaciones_de_la_cobranza_son_las_de_la_spec_y_del_catalogo() -> None:
     observaciones = _cargar()["observaciones_de_cobranza"]
 
     assert len(observaciones) == len(set(observaciones))
     assert set(observaciones) == OBSERVACIONES_DE_LA_COBRANZA
     assert set(observaciones) <= set(CODIGOS_OBSERVACION)
     assert not set(observaciones) & set(_cargar()["rechazos_de_cobranza"])
+
+
+# --- Change 24, tarea 8.2 (D11; SYN-06, SYN-07): los códigos de la entrega del día y lo rendido --
+
+# `JORNADA_ENTREGAR` solo viaja por el lote sin conexión: se rechaza por lo que levanta el bus para
+# todo comando y por lo que levantan su handler y su caso de uso (D1, D11).
+
+
+def _levantados_leyendo_la_entrega() -> set[str]:
+    """Los códigos de los errores que nombran el handler de la entrega, su caso de uso y la regla
+    de dominio (leyendo el código fuente: un rechazo nuevo rompe la prueba)."""
+    fuentes = [
+        inspect.getsource(jornadas_commands.manejar_jornada_entregar),
+        inspect.getsource(jornadas_commands._exigir_permiso),
+        inspect.getsource(jornadas_casos.entregar_jornada),
+        inspect.getsource(dominio_de_jornadas.validar_entrega),
+    ]
+    clases = {
+        nombre: clase
+        for modulo in (errores_de_stock, errores_del_bus, errores_del_nucleo)
+        for nombre, clase in inspect.getmembers(modulo, inspect.isclass)
+        if issubclass(clase, DomainError) and "codigo" in vars(clase)
+    }
+    nombres = {
+        nombre
+        for fuente in fuentes
+        for nombre in re.findall(r"raise (\w+Error)\(", fuente)
+        if nombre in clases
+    }
+    return {str(vars(clases[nombre])["codigo"]) for nombre in nombres}
+
+
+def test_syn06_los_rechazos_de_la_entrega_son_el_bus_mas_lo_que_levanta_la_entrega() -> None:
+    """La lista se fija recorriendo el bus (lo que alcanza a todo comando sin conexión) y el
+    handler y el caso de uso de `JORNADA_ENTREGAR`; ni más ni menos."""
+    levantados = _levantados_leyendo_la_entrega()
+
+    assert {"PERMISO_REQUERIDO", "JORNADA_ESTADO_INVALIDO", "JORNADA_YA_ENTREGADA"} <= levantados
+    assert set(_cargar()["rechazos_de_entrega"]) == RECHAZOS_DEL_BUS_PARA_TODO_COMANDO | levantados
+
+
+def test_syn06_cada_rechazo_de_la_entrega_existe_en_el_bus_o_en_stock() -> None:
+    existentes = _codigos_de_errores(errores_del_bus, errores_de_stock, errores_del_nucleo) | {
+        CODIGO_DISPOSITIVO_REVOCADO
+    }
+
+    rechazos = _cargar()["rechazos_de_entrega"]
+
+    assert len(rechazos) == len(set(rechazos))
+    assert set(rechazos) <= existentes, sorted(set(rechazos) - existentes)
+
+
+def test_syn06_los_rechazos_de_la_entrega_no_se_mezclan_con_los_de_otras_operaciones() -> None:
+    datos = _cargar()
+
+    assert "JORNADA_YA_ENTREGADA" in datos["rechazos_de_entrega"]
+    for otra in ("rechazos", "rechazos_de_anulacion", "rechazos_de_cobranza"):
+        assert "JORNADA_YA_ENTREGADA" not in datos[otra]
+    assert "TOTALES_INCONSISTENTES" not in datos["rechazos_de_entrega"]
+    assert not set(datos["observaciones"]) & set(datos["rechazos_de_entrega"])
+
+
+@pytest.mark.parametrize("clave", ["observaciones_de_anulacion", "observaciones_de_cobranza"])
+def test_syn07_jornada_rendida_figura_en_las_observaciones_de_cada_operacion(clave: str) -> None:
+    assert "JORNADA_RENDIDA" in _cargar()[clave]
+    assert "JORNADA_RENDIDA" in _cargar()["observaciones"]

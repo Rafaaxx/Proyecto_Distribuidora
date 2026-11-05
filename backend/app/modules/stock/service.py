@@ -24,7 +24,7 @@ producto se valida por FK compuesta (404) y su estado por `catalogo/service.py`.
 
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from decimal import Decimal
@@ -39,7 +39,7 @@ from app.modules.catalogo import service as catalogo_service
 from app.modules.configuracion import service as configuracion_service
 from app.modules.costeo import service as costeo_service
 from app.modules.identidad import service as identidad_service
-from app.modules.stock import jornadas_casos, jornadas_repository, repository
+from app.modules.stock import jornadas_casos, jornadas_repository, rendicion_casos, repository
 from app.modules.stock.domain.anulaciones import (
     AMBITO_ANULACION_AJUSTE,
     AMBITO_ANULACION_TRANSFERENCIA,
@@ -106,6 +106,13 @@ from app.modules.stock.domain.operaciones import (
     validar_motivo_de_ajuste,
     validar_transferencia,
 )
+from app.modules.stock.domain.rendicion import LineaContada
+from app.modules.stock.domain.resumen import (
+    CobranzasDeJornada,
+    TotalDeMedio,
+    TotalDeVentas,
+    VentasDeJornada,
+)
 from app.modules.stock.domain.ubicaciones import (
     validar_desactivacion,
     validar_ubicacion,
@@ -121,6 +128,8 @@ from app.modules.stock.models import (
 )
 
 __all__ = [
+    "LineaContada",
+    "ResultadoDeRendicion",
     "DiferenciaDeStock",
     "Kardex",
     "LineaDeAjuste",
@@ -138,10 +147,16 @@ __all__ = [
     "StockDeUbicacion",
     "abrir_jornada",
     "cerrar_jornada",
+    "CobranzasDeJornada",
+    "TotalDeMedio",
+    "TotalDeVentas",
+    "VentasDeJornada",
     "ajustar",
     "anular_ajuste",
     "anular_transferencia",
     "buscar_ubicaciones_por_nombre",
+    "cerrar_jornada_con_devolucion",
+    "cobranzas_de_jornada",
     "crear_ubicacion",
     "existe_jornada",
     "liberar_jornada",
@@ -154,10 +169,13 @@ __all__ = [
     "obtener_ubicacion",
     "producto_tiene_stock",
     "registrar_movimientos",
+    "registrar_lector_de_cobranzas_de_jornada",
+    "registrar_lector_de_ventas_de_jornada",
     "registrar_stock_inicial",
     "stock_por_ubicacion",
     "tiene_jornada_no_cerrada",
     "transferir",
+    "ventas_de_jornada",
     "verificar_consistencia",
 ]
 
@@ -404,6 +422,7 @@ def _preparar(
     puede_operar_ubicacion_tomada: bool = False,
     venta_sin_conexion: bool = False,
     anulacion_sin_conexion: bool = False,
+    rendicion_de_jornada: UUID | None = None,
 ) -> tuple[list[LineaDeMovimiento], dict[UUID, UUID]]:
     """Valida las líneas contra la base y toma los bloqueos en el orden global.
 
@@ -484,6 +503,7 @@ def _preparar(
             venta_sin_conexion=venta_sin_conexion,
             anulacion_sin_conexion=anulacion_sin_conexion,
         ),
+        rendicion_de_jornada=rendicion_de_jornada,
     )
 
 
@@ -495,11 +515,17 @@ def _aplicar_regla_de_toma(
     usuario_id: UUID,
     dispositivo_id: UUID,
     puede_operar_ubicacion_tomada: bool,
+    rendicion_de_jornada: UUID | None = None,
 ) -> tuple[list[LineaDeMovimiento], dict[UUID, UUID]]:
     """STK-09 (D6, D7): decide cada ubicación de las líneas con su jornada no cerrada, leída
     `FOR SHARE` (nivel 5). `jornada_id` de cada línea lo fija la decisión, no el sobre: la
     jornada de la ubicación si el movimiento es de la jornada, y nada si la ubicación estaba
-    libre o se movió por excepción. Un rechazo de cualquier ubicación rechaza todo (INV-01)."""
+    libre o se movió por excepción. Un rechazo de cualquier ubicación rechaza todo (INV-01).
+
+    Change 24 (D3, D6): `rendicion_de_jornada` es la jornada que se rinde o se cierra; las
+    líneas sobre la ubicación que ESA jornada tomó pasan STK-09 como si fueran de la jornada
+    (quedan con su `jornada_id`) aunque quien llama no sea su usuario. No alcanza a ninguna
+    otra ubicación y falla cerrado: por defecto es `None`."""
     ubicaciones = sorted({linea.ubicacion_id for linea in lineas})
     jornadas = jornadas_repository.bloquear_jornadas_no_cerradas(
         organizacion_id, sesion, ubicaciones=ubicaciones
@@ -508,6 +534,13 @@ def _aplicar_regla_de_toma(
     resultado: list[LineaDeMovimiento] = []
     for linea in lineas:
         jornada = jornadas.get(linea.ubicacion_id)
+        if (
+            rendicion_de_jornada is not None
+            and jornada is not None
+            and jornada.id == rendicion_de_jornada
+        ):
+            resultado.append(replace(linea, jornada_id=jornada.id))
+            continue
         try:
             decision = decidir_toma(
                 None
@@ -730,6 +763,7 @@ def registrar_movimientos(
     puede_operar_ubicacion_tomada: bool = False,
     venta_sin_conexion: bool = False,
     anulacion_sin_conexion: bool = False,
+    rendicion_de_jornada: UUID | None = None,
 ) -> list[ResultadoDeMovimiento]:
     """Registra movimientos de stock con todas las filas bloqueadas en el orden
     global (`02` §7.3), todo en la transacción de quien llama (INV-01, INV-12).
@@ -766,7 +800,13 @@ def registrar_movimientos(
     su `jornada_id`) o, con `puede_operar_ubicacion_tomada` (el permiso `LIBERAR_UBICACION`
     de quien llama), por excepción: sin `jornada_id` y con la jornada en
     `ResultadoDeMovimiento.jornada_tomada_id`. Se decide por ubicación y falla cerrado
-    (`UBICACION_TOMADA`, 409) sin escribir nada."""
+    (`UBICACION_TOMADA`, 409) sin escribir nada.
+
+    Change 24 (D3, D5, D6): `DIFERENCIA_RENDICION` (con signo, solo con origen `RENDICION`) se
+    valoriza al promedio vigente sin recalcularlo (CST-12, CST-13; sin promedio, costo nulo) y
+    nunca deja el saldo negativo, con o sin permiso. `rendicion_de_jornada` (la jornada que se
+    rinde o se cierra) hace que las líneas de la ubicación que esa jornada tomó pasen STK-09 y
+    queden con su `jornada_id`; falla cerrado y no alcanza a otras ubicaciones."""
     validadas = validar_lineas_de_movimiento(lineas)
     preparadas, jornadas_tomadas = _preparar(
         organizacion_id,
@@ -778,6 +818,7 @@ def registrar_movimientos(
         puede_operar_ubicacion_tomada=puede_operar_ubicacion_tomada,
         venta_sin_conexion=venta_sin_conexion,
         anulacion_sin_conexion=anulacion_sin_conexion,
+        rendicion_de_jornada=rendicion_de_jornada,
     )
     return _aplicar(
         organizacion_id,
@@ -932,6 +973,7 @@ def transferir(
     occurred_at: datetime,
     permitir_negativo: bool = False,
     puede_operar_ubicacion_tomada: bool = False,
+    rendicion_de_jornada: UUID | None = None,
 ) -> ResultadoDeTransferencia:
     """`STOCK_TRANSFERIR` (STK-07, `design.md` D1, D6, D9): valida el contenido, llama UNA
     sola vez a `registrar_movimientos` con `[salida_1, entrada_1, salida_2, ...]` (los
@@ -942,7 +984,11 @@ def transferir(
     Una ubicación o un producto ajeno o inexistente es 404 (INV-21); inactivos, rechazo
     (`UBICACION_INACTIVA`, `PRODUCTO_INACTIVO`). Sin `permitir_negativo`, una salida que
     no alcanza es `STOCK_INSUFICIENTE`; con él se aplica y el resultado informa cada saldo
-    que quedó bajo cero. El stock total y el promedio no cambian (INV-15, CST-12)."""
+    que quedó bajo cero. El stock total y el promedio no cambian (INV-15, CST-12).
+
+    Change 24 (D6): `rendicion_de_jornada` es la jornada que se cierra devolviendo el remanente;
+    la salida del vehículo que esa jornada tomó pasa STK-09 y queda con su `jornada_id`. Falla
+    cerrado y solo lo usa `cerrar_jornada_con_devolucion`."""
     validada = validar_transferencia(
         ubicacion_origen_id=ubicacion_origen_id,
         ubicacion_destino_id=ubicacion_destino_id,
@@ -962,6 +1008,7 @@ def transferir(
             occurred_at=occurred_at,
             permitir_negativo=permitir_negativo,
             puede_operar_ubicacion_tomada=puede_operar_ubicacion_tomada,
+            rendicion_de_jornada=rendicion_de_jornada,
         )
     except DomainError as error:
         _indicar_la_linea(error, validada.lineas)
@@ -1700,22 +1747,76 @@ def jornada_abierta_con_ubicacion_de(
     )
 
 
+def entregar_jornada(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    jornada_id: UUID,
+    occurred_at: datetime,
+    secuencia: int,
+) -> Jornada:
+    """Registra la entrega del día de una jornada `ABIERTA` (RUT-05, change 24 D1). Ver
+    `jornadas_casos.entregar_jornada`."""
+    return jornadas_casos.entregar_jornada(
+        organizacion_id,
+        sesion,
+        reloj,
+        jornada_id=jornada_id,
+        occurred_at=occurred_at,
+        secuencia=secuencia,
+    )
+
+
+ResultadoDeRendicion = rendicion_casos.ResultadoDeRendicion
+
+
 def rendir_jornada(
     organizacion_id: UUID,
     sesion: Session,
+    reloj: Clock,
     *,
     jornada_id: UUID,
     usuario_id: UUID,
+    dispositivo_id: UUID,
+    operation_id: UUID,
     occurred_at: datetime,
-) -> Jornada:
-    """Pasa una jornada `ABIERTA` a `EN_RENDICION` (sin conteo hasta el change 24). Ver
-    `jornadas_casos.rendir_jornada`."""
-    return jornadas_casos.rendir_jornada(
+    lineas: Sequence[LineaContada[UUID]],
+    observacion: str | None,
+) -> ResultadoDeRendicion:
+    """Rinde una jornada `ABIERTA` y entregada con el conteo físico del vehículo (RUT-05,
+    RUT-06; change 24, D2, D3, D5): escribe la rendición, sus líneas y un `DIFERENCIA_RENDICION`
+    por producto con diferencia, UNA llamada a la puerta del libro con `rendicion_de_jornada`, y
+    deja la jornada `EN_RENDICION`. Ver `rendicion_casos.rendir_jornada`."""
+
+    def _puerta(
+        lineas_del_libro: Sequence[LineaDeMovimiento], jornada_que_rinde: UUID
+    ) -> list[StockMovimiento]:
+        resultados = registrar_movimientos(
+            organizacion_id,
+            sesion,
+            reloj,
+            lineas=lineas_del_libro,
+            usuario_id=usuario_id,
+            dispositivo_id=dispositivo_id,
+            operation_id=operation_id,
+            occurred_at=occurred_at,
+            rendicion_de_jornada=jornada_que_rinde,
+        )
+        return [resultado.movimiento for resultado in resultados]
+
+    return rendicion_casos.rendir_jornada(
         organizacion_id,
         sesion,
+        reloj,
+        puerta=_puerta,
         jornada_id=jornada_id,
         usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        operation_id=operation_id,
         occurred_at=occurred_at,
+        lineas=lineas,
+        observacion=observacion,
     )
 
 
@@ -1735,6 +1836,55 @@ def cerrar_jornada(
         jornada_id=jornada_id,
         usuario_id=usuario_id,
         occurred_at=occurred_at,
+    )
+
+
+ResultadoDeCierre = rendicion_casos.ResultadoDeCierre[ResultadoDeTransferencia]
+
+
+def cerrar_jornada_con_devolucion(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    jornada_id: UUID,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+    operation_id: UUID,
+    occurred_at: datetime,
+    destino_id: UUID | None,
+    lineas: Sequence[LineaDeTransferencia],
+) -> ResultadoDeCierre:
+    """`JORNADA_CERRAR` v2 (RUT-08; change 24, D3, D6): cierra la jornada `EN_RENDICION` y, con
+    `destino_id`, devuelve el remanente en la misma transacción con una transferencia común
+    (`transferir`, anulable) cuya salida pasa STK-09 por la rendición. Sin permiso de stock
+    negativo ni excepción de toma: la devolución es física. Ver `rendicion_casos.cerrar_jornada`."""
+
+    def _devolver(ubicacion_origen_id: UUID) -> ResultadoDeTransferencia:
+        assert destino_id is not None
+        return transferir(
+            organizacion_id,
+            sesion,
+            reloj,
+            ubicacion_origen_id=ubicacion_origen_id,
+            ubicacion_destino_id=destino_id,
+            lineas=lineas,
+            observacion=None,
+            usuario_id=usuario_id,
+            dispositivo_id=dispositivo_id,
+            operation_id=operation_id,
+            occurred_at=occurred_at,
+            rendicion_de_jornada=jornada_id,
+        )
+
+    return rendicion_casos.cerrar_jornada(
+        organizacion_id,
+        sesion,
+        jornada_id=jornada_id,
+        usuario_id=usuario_id,
+        occurred_at=occurred_at,
+        destino_id=destino_id,
+        devolver=None if destino_id is None else _devolver,
     )
 
 
@@ -1759,6 +1909,55 @@ def liberar_jornada(
         observacion=observacion,
         occurred_at=occurred_at,
     )
+
+
+# --- Puertos del resumen de la jornada (RUT-07, change 24, D4) ---------------------------
+
+LectorDeVentasDeJornada = Callable[[UUID, Session, UUID, datetime | None], VentasDeJornada]
+"""`funcion(organizacion_id, sesion, jornada_id, corte) -> VentasDeJornada`: lo registra `ventas`
+al importar su `service.py`."""
+
+LectorDeCobranzasDeJornada = Callable[
+    [UUID, Session, UUID, datetime | None], dict[tuple[str, bool], CobranzasDeJornada]
+]
+"""`funcion(organizacion_id, sesion, jornada_id, corte) -> {(estado, tardía): cobranzas}`: lo
+registra `cobranzas` al importar su `service.py`."""
+
+_LECTOR_DE_VENTAS: LectorDeVentasDeJornada | None = None
+_LECTOR_DE_COBRANZAS: LectorDeCobranzasDeJornada | None = None
+
+
+def registrar_lector_de_ventas_de_jornada(funcion: LectorDeVentasDeJornada) -> None:
+    """`ventas` lo registra al importar su `service.py`. Sin ciclo: `stock` nunca importa
+    `ventas` (contrato de import-linter)."""
+    global _LECTOR_DE_VENTAS
+    _LECTOR_DE_VENTAS = funcion
+
+
+def registrar_lector_de_cobranzas_de_jornada(funcion: LectorDeCobranzasDeJornada) -> None:
+    """`cobranzas` lo registra al importar su `service.py` (ver `registrar_lector_de_ventas`)."""
+    global _LECTOR_DE_COBRANZAS
+    _LECTOR_DE_COBRANZAS = funcion
+
+
+def ventas_de_jornada(
+    organizacion_id: UUID, sesion: Session, *, jornada_id: UUID, corte: datetime | None
+) -> VentasDeJornada:
+    """Las ventas de la jornada para su resumen, por el puerto de `ventas`. Falla cerrado: sin
+    lector registrado es un error de programación, no un resumen sin ventas."""
+    if _LECTOR_DE_VENTAS is None:
+        raise RuntimeError("`ventas` no registró su lector de ventas de jornada.")
+    return _LECTOR_DE_VENTAS(organizacion_id, sesion, jornada_id, corte)
+
+
+def cobranzas_de_jornada(
+    organizacion_id: UUID, sesion: Session, *, jornada_id: UUID, corte: datetime | None
+) -> dict[tuple[str, bool], CobranzasDeJornada]:
+    """Las cobranzas de la jornada para su resumen, por el puerto de `cobranzas`. Falla cerrado
+    como `ventas_de_jornada`."""
+    if _LECTOR_DE_COBRANZAS is None:
+        raise RuntimeError("`cobranzas` no registró su lector de cobranzas de jornada.")
+    return _LECTOR_DE_COBRANZAS(organizacion_id, sesion, jornada_id, corte)
 
 
 identidad_service.registrar_consulta_jornada_no_cerrada(tiene_jornada_no_cerrada)

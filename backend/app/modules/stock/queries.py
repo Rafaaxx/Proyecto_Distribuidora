@@ -20,7 +20,8 @@ from sqlalchemy.orm import Session
 from app.modules.catalogo import service as catalogo_service
 from app.modules.configuracion import service as configuracion_service
 from app.modules.identidad import service as identidad_service
-from app.modules.stock import jornadas_repository, repository
+from app.modules.stock import jornadas_repository, rendicion_repository, repository
+from app.modules.stock import service as stock_service
 from app.modules.stock.domain.errores import RecursoNoEncontradoError
 from app.modules.stock.domain.kardex import limite_efectivo, rango_de_instantes
 from app.modules.stock.models import Jornada
@@ -69,6 +70,7 @@ class DetalleDeJornada:
     dispositivo_id: UUID
     estado: str
     abierta_en: datetime
+    entregada_en: datetime | None
     rendida_en: datetime | None
     rendida_por_id: UUID | None
     rendida_por_nombre: str | None
@@ -565,6 +567,7 @@ def _detalle_de(
         dispositivo_id=jornada.dispositivo_id,
         estado=jornada.estado,
         abierta_en=jornada.abierta_en,
+        entregada_en=jornada.entregada_en,
         rendida_en=jornada.rendida_en,
         rendida_por_id=jornada.rendida_por_id,
         rendida_por_nombre=_nombre(jornada.rendida_por_id),
@@ -608,3 +611,179 @@ def obtener_jornada_actual(
             "El usuario no tiene una jornada no cerrada en este dispositivo."
         )
     return _detalle_de(organizacion_id, sesion, *fila)
+
+
+# --- El resumen de la jornada (RUT-07, change 24; `design.md` D4, D8) ---------------------
+
+
+@dataclass(frozen=True)
+class LineaDelResumen:
+    """Un producto del resumen, en unidad base (la pantalla lo muestra en cajas y unidades,
+    CAT-08). `esperado = al_abrir + ingresos - ventas + anulaciones + otros` (RUT-07, STK-04).
+    `contado` y `diferencia` son nulos si la jornada no tiene conteo (D8); `valor_diferencia`,
+    solo con `VER_COSTOS` (nulo también si el producto no tenía promedio, CST-12)."""
+
+    producto_id: UUID
+    al_abrir: int
+    ingresos: int
+    ventas: int
+    anulaciones: int
+    otros: int
+    esperado: int
+    contado: int | None
+    diferencia: int | None
+    valor_diferencia: Decimal | None
+
+
+@dataclass(frozen=True)
+class TotalDelResumen:
+    cantidad: int
+    total: Decimal
+
+
+@dataclass(frozen=True)
+class CobranzasDelResumen:
+    """Las cobranzas de un estado: cuántas, su importe y lo cobrado por medio de pago."""
+
+    cantidad: int
+    total: Decimal
+    por_medio: list[stock_service.TotalDeMedio]
+
+
+@dataclass(frozen=True)
+class DineroDeLaJornada:
+    """Ventas vigentes, ventas anuladas, cobranzas confirmadas y cobranzas anuladas (COB-05)."""
+
+    ventas: TotalDelResumen
+    anuladas: TotalDelResumen
+    cobranzas: CobranzasDelResumen
+    cobranzas_anuladas: CobranzasDelResumen
+
+
+@dataclass(frozen=True)
+class ResumenDeJornada:
+    """El resumen de una jornada: stock por producto, dinero y, si ya se rindió, lo registrado
+    después de la rendición aparte (D4). `valor_de_diferencias` es nulo sin `VER_COSTOS` o sin
+    conteo."""
+
+    jornada_id: UUID
+    estado: str
+    con_conteo: bool
+    rendida_en: datetime | None
+    lineas: list[LineaDelResumen]
+    dinero: DineroDeLaJornada
+    despues_de_la_rendicion: DineroDeLaJornada | None
+    valor_de_diferencias: Decimal | None
+
+
+_CERO = Decimal("0.00")
+_SIN_COBRANZAS = stock_service.CobranzasDeJornada(cantidad=0, total=_CERO, por_medio=[])
+
+
+def _dinero(
+    ventas: tuple[stock_service.TotalDeVentas, stock_service.TotalDeVentas],
+    cobranzas: dict[tuple[str, bool], stock_service.CobranzasDeJornada],
+    *,
+    tardia: bool,
+) -> DineroDeLaJornada:
+    confirmadas = cobranzas.get(("CONFIRMADA", tardia), _SIN_COBRANZAS)
+    anuladas = cobranzas.get(("ANULADA", tardia), _SIN_COBRANZAS)
+    return DineroDeLaJornada(
+        ventas=TotalDelResumen(ventas[0].cantidad, ventas[0].total),
+        anuladas=TotalDelResumen(ventas[1].cantidad, ventas[1].total),
+        cobranzas=CobranzasDelResumen(
+            confirmadas.cantidad, confirmadas.total, list(confirmadas.por_medio)
+        ),
+        cobranzas_anuladas=CobranzasDelResumen(
+            anuladas.cantidad, anuladas.total, list(anuladas.por_medio)
+        ),
+    )
+
+
+def obtener_resumen_de_jornada(
+    organizacion_id: UUID, sesion: Session, *, jornada_id: UUID, con_costos: bool
+) -> ResumenDeJornada:
+    """El resumen de la jornada (RUT-07, D4, D8), calculado en la base y sin bloquear.
+
+    Con rendición, el stock sale de las líneas congeladas (no cambia después de rendir) y lo
+    registrado después de ella (ventas, anulaciones y cobranzas) se informa aparte. Sin
+    rendición (una `ABIERTA`, una anterior al change o una `LIBERADA`), el stock se calcula con
+    la misma ventana hasta la rendición, el cierre o la liberación (o hasta ahora si está
+    abierta), sin contado ni diferencias. Las ventas y las cobranzas se leen por el `service.py`
+    de su módulo. El valor de las diferencias solo se informa con `con_costos` (`VER_COSTOS`).
+    Una jornada ajena o inexistente es `RecursoNoEncontradoError` (404, INV-21)."""
+    fila = jornadas_repository.obtener_jornada(organizacion_id, sesion, jornada_id=jornada_id)
+    if fila is None:
+        raise RecursoNoEncontradoError(f"La jornada {jornada_id} no existe en esta organización.")
+    jornada = fila[0]
+    rendicion = rendicion_repository.leer_rendicion(organizacion_id, sesion, jornada_id=jornada_id)
+    corte = None if rendicion is None else rendicion.registered_at
+
+    lineas: list[LineaDelResumen]
+    valor_total: Decimal | None = None
+    if rendicion is not None:
+        lineas = [
+            LineaDelResumen(
+                producto_id=linea.producto_id,
+                al_abrir=linea.al_abrir,
+                ingresos=linea.ingresos,
+                ventas=linea.ventas,
+                anulaciones=linea.anulaciones,
+                otros=linea.otros,
+                esperado=linea.esperado,
+                contado=linea.contado,
+                diferencia=linea.diferencia,
+                valor_diferencia=linea.valor if con_costos else None,
+            )
+            for linea in rendicion_repository.lineas_de_rendicion(
+                organizacion_id, sesion, rendicion_id=rendicion.id
+            )
+        ]
+        if con_costos:
+            valor_total = rendicion_repository.valor_de_las_diferencias(
+                organizacion_id, sesion, rendicion_id=rendicion.id
+            )
+    else:
+        desgloses = rendicion_repository.desglose_por_producto(
+            organizacion_id,
+            sesion,
+            ubicacion_id=jornada.ubicacion_id,
+            abierta_en=jornada.abierta_en,
+            hasta=jornada.rendida_en or jornada.liberada_en,
+        )
+        lineas = [
+            LineaDelResumen(
+                producto_id=producto_id,
+                al_abrir=d.al_abrir,
+                ingresos=d.ingresos,
+                ventas=d.ventas,
+                anulaciones=d.anulaciones,
+                otros=d.otros,
+                esperado=d.esperado,
+                contado=None,
+                diferencia=None,
+                valor_diferencia=None,
+            )
+            for producto_id, d in sorted(desgloses.items(), key=lambda item: str(item[0]))
+        ]
+
+    ventas = stock_service.ventas_de_jornada(
+        organizacion_id, sesion, jornada_id=jornada_id, corte=corte
+    )
+    cobranzas = stock_service.cobranzas_de_jornada(
+        organizacion_id, sesion, jornada_id=jornada_id, corte=corte
+    )
+    return ResumenDeJornada(
+        jornada_id=jornada.id,
+        estado=jornada.estado,
+        con_conteo=rendicion is not None,
+        rendida_en=jornada.rendida_en,
+        lineas=lineas,
+        dinero=_dinero((ventas.vigentes, ventas.anuladas), cobranzas, tardia=False),
+        despues_de_la_rendicion=(
+            None
+            if rendicion is None
+            else _dinero((ventas.vigentes_tardias, ventas.anuladas_tardias), cobranzas, tardia=True)
+        ),
+        valor_de_diferencias=valor_total,
+    )

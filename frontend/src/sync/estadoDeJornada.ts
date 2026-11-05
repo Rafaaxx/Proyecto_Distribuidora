@@ -16,7 +16,12 @@ import { baseLocal } from '../lib/dispositivo/db'
  */
 export const CLAVE_JORNADA_NO_ABIERTA = 'jornada_no_abierta'
 
-export type EstadoDeJornadaNoAbierta = 'LIBERADA' | 'EN_RENDICION' | 'CERRADA' | 'DESCONOCIDO'
+/**
+ * `ENTREGADA` (change 24, D10; RUT-05) es un estado LOCAL: el vendedor tocó «Terminar el día» y la
+ * entrega espera su turno en la cola. Nunca lo informa el servidor; el estado que sí informa (por
+ * ejemplo `EN_RENDICION`) lo reemplaza.
+ */
+export type EstadoDeJornadaNoAbierta = 'LIBERADA' | 'EN_RENDICION' | 'CERRADA' | 'ENTREGADA' | 'DESCONOCIDO'
 
 export interface JornadaNoAbierta {
   jornada_id: string
@@ -25,14 +30,17 @@ export interface JornadaNoAbierta {
   en: string
 }
 
+/** Los estados que informa el servidor. */
 const ESTADOS_CONOCIDOS: ReadonlySet<string> = new Set(['LIBERADA', 'EN_RENDICION', 'CERRADA'])
+/** Lo que se acepta leer de `meta`: los del servidor y el local `ENTREGADA`. */
+const ESTADOS_GUARDABLES: ReadonlySet<string> = new Set([...ESTADOS_CONOCIDOS, 'ENTREGADA'])
 
 function interpretar(valor: string | undefined): JornadaNoAbierta | null {
   if (valor === undefined) return null
   try {
     const dato = JSON.parse(valor) as Partial<JornadaNoAbierta>
     if (typeof dato.jornada_id !== 'string' || typeof dato.en !== 'string') return null
-    if (dato.estado !== 'DESCONOCIDO' && !ESTADOS_CONOCIDOS.has(dato.estado ?? '')) return null
+    if (dato.estado !== 'DESCONOCIDO' && !ESTADOS_GUARDABLES.has(dato.estado ?? '')) return null
     return { jornada_id: dato.jornada_id, estado: dato.estado as EstadoDeJornadaNoAbierta, en: dato.en }
   } catch {
     return null

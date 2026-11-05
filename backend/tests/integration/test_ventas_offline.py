@@ -526,16 +526,18 @@ def test_rut09_una_jornada_liberada_se_acepta_con_jornada_liberada_una_sola_vez(
     assert entorno.saldo() == Decimal("161250.00")
 
 
-def test_syn05_una_jornada_cerrada_se_acepta_sin_observacion_y_la_venta_la_lleva(
+def test_syn05_una_jornada_cerrada_se_acepta_con_jornada_rendida_y_la_venta_la_lleva(
     entorno: EntornoVenta,
 ) -> None:
-    """Triangulación: `CERRADA` no observa (como la cobranza del change 17); la ubicación quedó
-    libre y la venta lleva la jornada del sobre."""
+    """Triangulación: `CERRADA` solo observa `JORNADA_RENDIDA` (change 24, D7); la ubicación quedó
+    libre, así que no hay `UBICACION_TOMADA_AL_SINCRONIZAR`, y la venta lleva la jornada del
+    sobre."""
     ruta = Ruta(entorno, estado_jornada="CERRADA")
 
     _, resultado = ruta.enviar()
 
-    assert resultado.estado == "ACEPTADO"
+    assert resultado.estado == "ACEPTADO_CON_OBSERVACIONES"
+    assert _codigos(entorno) == ["JORNADA_RENDIDA"]
     (venta,) = entorno.ventas()
     assert (venta.jornada_id, venta.ubicacion_id) == (ruta.jornada_id, ruta.camioneta_id)
     (movimiento,) = entorno.movimientos_de_stock()
@@ -898,7 +900,9 @@ def test_syn05_la_propia_jornada_en_rendicion_se_acepta_con_ubicacion_tomada_al_
     assert resultado.estado == "ACEPTADO_CON_OBSERVACIONES"
     (venta,) = entorno.ventas()
     assert (venta.ubicacion_id, venta.jornada_id) == (ruta.camioneta_id, ruta.jornada_id)
-    (observacion,) = _observaciones(entorno)
+    # Change 24 (D7): la jornada ya rendida también se anota (`JORNADA_RENDIDA`).
+    rendida, observacion = _observaciones(entorno)
+    assert rendida.codigo == "JORNADA_RENDIDA"
     assert observacion.codigo == "UBICACION_TOMADA_AL_SINCRONIZAR"
     assert (observacion.operacion_tipo, observacion.operacion_id) == ("VENTA", venta.id)
     assert observacion.detalle == {
@@ -958,6 +962,7 @@ def test_aud02_la_ubicacion_tomada_al_sincronizar_se_une_al_texto_de_la_lista(
 
     assert resultado.estado == "ACEPTADO_CON_OBSERVACIONES"
     assert [o.codigo for o in _observaciones(entorno)] == [
+        "JORNADA_RENDIDA",  # change 24, D7: la propia jornada ya está en rendición
         "LISTA_NO_VIGENTE",
         "UBICACION_TOMADA_AL_SINCRONIZAR",
     ]

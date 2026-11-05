@@ -52,7 +52,7 @@ from app.core.autenticacion import (
 from app.core.clock import SystemClock
 from app.modules.identidad import service as identidad_service
 from app.modules.stock import commands as stock_commands
-from app.modules.stock import jornadas_commands
+from app.modules.stock import jornadas_commands, rendicion_commands
 from app.modules.stock import queries as stock_queries
 from app.modules.stock import service as stock_service
 from app.modules.stock.domain.errores import CostoInvalidoError, RecursoNoEncontradoError
@@ -61,17 +61,22 @@ from app.modules.stock.schemas import (
     AjusteAnularRequest,
     AjusteCrearRequest,
     AjusteResponse,
+    CierreResponse,
     DetalleDeAjusteResponse,
     DetalleDeJornadaResponse,
     DetalleDeTransferenciaResponse,
     JornadaAbrirRequest,
+    JornadaCerrarRequest,
     JornadaLiberarRequest,
+    JornadaRendirRequest,
     JornadaResponse,
     KardexResponse,
     PaginaDeAjustesResponse,
     PaginaDeJornadasResponse,
     PaginaDeTransferenciasResponse,
     PaginaUbicaciones,
+    RendicionResponse,
+    ResumenDeJornadaResponse,
     StockDeUbicacionResponse,
     StockInicialRegistrarRequest,
     StockInicialResponse,
@@ -84,6 +89,7 @@ from app.modules.stock.schemas import (
     UbicacionResponse,
     ajuste_anulado_response,
     ajuste_response,
+    cierre_response,
     detalle_de_ajuste_response,
     detalle_de_jornada_response,
     detalle_de_transferencia_response,
@@ -92,6 +98,8 @@ from app.modules.stock.schemas import (
     pagina_de_ajustes_response,
     pagina_de_jornadas_response,
     pagina_de_transferencias_response,
+    rendicion_response,
+    resumen_de_jornada_response,
     stock_de_ubicacion_response,
     toma_response,
 )
@@ -421,6 +429,34 @@ def obtener_jornada(
     return detalle_de_jornada_response(detalle)
 
 
+@router.get(
+    "/jornadas/{jornada_id}/resumen",
+    response_model=ResumenDeJornadaResponse,
+    response_model_exclude_unset=True,
+)
+def obtener_resumen_de_jornada(
+    jornada_id: UUID,
+    contexto: Annotated[
+        ContextoAutenticado,
+        Depends(
+            requiere_algun_permiso(
+                PERMISO_ABRIR_JORNADA, PERMISO_RENDIR_JORNADA, PERMISO_LIBERAR_UBICACION
+            )
+        ),
+    ],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> ResumenDeJornadaResponse:
+    """Resumen de la jornada (change 24, RUT-07): stock por producto (al abrir, ingresos, ventas,
+    anulaciones, otros, esperado, contado y diferencia, congelado al rendir), ventas, anuladas y
+    cobranzas por medio de pago, y lo registrado después de la rendición aparte. El valor de las
+    diferencias (string) solo con `VER_COSTOS`. 404 si la jornada es ajena o no existe."""
+    con_costos = _tiene_ver_costos(contexto, sesion)
+    resumen = stock_queries.obtener_resumen_de_jornada(
+        contexto.organizacion_id, sesion, jornada_id=jornada_id, con_costos=con_costos
+    )
+    return resumen_de_jornada_response(resumen, con_costos=con_costos)
+
+
 @router.post("/jornadas", response_model=JornadaResponse, status_code=201)
 def abrir_jornada(
     datos: JornadaAbrirRequest,
@@ -473,6 +509,8 @@ def _sobre_de_jornada(
     contenido: dict[str, ContenidoComando],
     entrada: EntradaComandoOnline,
     reloj: SystemClock,
+    *,
+    version: int = 1,
 ) -> tuple[SobreComando, str, BaseModel]:
     """Arma el sobre `ONLINE` de un comando de jornada con la sesión del token (change 15) y
     valida su contenido contra el handler registrado. Cada ruta llama ella misma a
@@ -480,7 +518,7 @@ def _sobre_de_jornada(
     sobre = construir_sobre_online(
         operation_id=entrada.operation_id,
         tipo=tipo,
-        version=1,
+        version=version,
         modo="ONLINE",
         organizacion_id=entrada.contexto.organizacion_id,
         usuario_id=entrada.contexto.usuario_id,
@@ -495,26 +533,42 @@ def _sobre_de_jornada(
     return sobre, huella, registro.validar_contenido(handler_registrado, sobre.contenido)
 
 
-@router.post("/jornadas/{jornada_id}/rendicion", response_model=JornadaResponse)
+@router.post("/jornadas/{jornada_id}/rendicion", response_model=RendicionResponse)
 def rendir_jornada(
     jornada_id: UUID,
+    datos: JornadaRendirRequest,
     entrada: Annotated[
         EntradaComandoOnline, Depends(requiere_comando_online(PERMISO_RENDIR_JORNADA))
     ],
     sesion: Annotated[Session, Depends(get_session)],
-) -> JornadaResponse:
-    """`JORNADA_RENDIR` (change 15, `01` §18): `ABIERTA → EN_RENDICION`, sin conteo hasta el
-    change 24. 200 con la jornada; `JORNADA_ESTADO_INVALIDO` responde 409, una jornada ajena
-    404."""
+) -> RendicionResponse:
+    """`JORNADA_RENDIR` v2 (change 24, RUT-05, RUT-06): rinde una jornada `ABIERTA` y entregada con
+    el conteo físico y deja `EN_RENDICION`. 200 con la jornada, la rendición y sus líneas;
+    `JORNADA_ESTADO_INVALIDO`, `JORNADA_SIN_ENTREGA` y `ESPERADO_DIFIERE` responden 409,
+    `CONTEO_INCOMPLETO`, `CANTIDAD_INVALIDA`, `PRODUCTO_REPETIDO` y `OBSERVACION_INVALIDA` 422,
+    una jornada o un producto ajenos 404."""
+    contenido: dict[str, ContenidoComando] = {
+        "jornada_id": str(jornada_id),
+        "lineas": [
+            {
+                "producto_id": str(linea.producto_id),
+                "cantidad_contada": linea.cantidad_contada,
+                "cantidad_esperada": linea.cantidad_esperada,
+            }
+            for linea in datos.lineas
+        ],
+    }
+    if datos.observacion is not None:
+        contenido["observacion"] = datos.observacion
     reloj = SystemClock()
     sobre, huella, contenido_validado = _sobre_de_jornada(
-        "JORNADA_RENDIR", {"jornada_id": str(jornada_id)}, entrada, reloj
+        "JORNADA_RENDIR", contenido, entrada, reloj, version=2
     )
 
     def _ejecutar_handler(
         sesion_protegida: registro.SesionDeHandler,
     ) -> sync_service.ResultadoHandler:
-        return jornadas_commands.manejar_jornada_rendir(
+        return rendicion_commands.manejar_jornada_rendir(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
             sesion=sesion_protegida,
@@ -524,28 +578,42 @@ def rendir_jornada(
     comando = sync_service.procesar_comando(
         sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
     )
-    return jornada_response(_resultado_de(comando))
+    return rendicion_response(_resultado_de(comando))
 
 
-@router.post("/jornadas/{jornada_id}/cierre", response_model=JornadaResponse)
+@router.post("/jornadas/{jornada_id}/cierre", response_model=CierreResponse)
 def cerrar_jornada(
     jornada_id: UUID,
     entrada: Annotated[
         EntradaComandoOnline, Depends(requiere_comando_online(PERMISO_RENDIR_JORNADA))
     ],
     sesion: Annotated[Session, Depends(get_session)],
-) -> JornadaResponse:
-    """`JORNADA_CERRAR` (change 15, RUT-08): `EN_RENDICION → CERRADA`; la ubicación queda libre.
-    200 con la jornada; `JORNADA_ESTADO_INVALIDO` responde 409, una jornada ajena 404."""
+    datos: JornadaCerrarRequest | None = None,
+) -> CierreResponse:
+    """`JORNADA_CERRAR` v2 (change 24, RUT-08): `EN_RENDICION → CERRADA`; la ubicación queda libre.
+    El cuerpo es opcional: con `devolucion` (destino y líneas) devuelve el remanente en la misma
+    transacción con una transferencia común y exige además `TRANSFERIR_STOCK`. 200 con la jornada
+    y la `transferencia_id`; `JORNADA_ESTADO_INVALIDO`, `STOCK_INSUFICIENTE`, `UBICACION_CON_TOMA`
+    responden 409, `UBICACIONES_IGUALES`, `LINEAS_INVALIDAS` y `CANTIDAD_INVALIDA` 422, una
+    jornada o una ubicación ajenas 404."""
+    contenido: dict[str, ContenidoComando] = {"jornada_id": str(jornada_id)}
+    if datos is not None and datos.devolucion is not None:
+        contenido["devolucion"] = {
+            "ubicacion_destino_id": str(datos.devolucion.ubicacion_destino_id),
+            "lineas": [
+                {"producto_id": str(linea.producto_id), "cantidad_base": linea.cantidad_base}
+                for linea in datos.devolucion.lineas
+            ],
+        }
     reloj = SystemClock()
     sobre, huella, contenido_validado = _sobre_de_jornada(
-        "JORNADA_CERRAR", {"jornada_id": str(jornada_id)}, entrada, reloj
+        "JORNADA_CERRAR", contenido, entrada, reloj, version=2
     )
 
     def _ejecutar_handler(
         sesion_protegida: registro.SesionDeHandler,
     ) -> sync_service.ResultadoHandler:
-        return jornadas_commands.manejar_jornada_cerrar(
+        return rendicion_commands.manejar_jornada_cerrar_v2(
             sobre,
             contenido_validado,  # type: ignore[arg-type]
             sesion=sesion_protegida,
@@ -555,7 +623,7 @@ def cerrar_jornada(
     comando = sync_service.procesar_comando(
         sesion, reloj, sobre=sobre, huella=huella, ejecutar_handler=_ejecutar_handler
     )
-    return jornada_response(_resultado_de(comando))
+    return cierre_response(_resultado_de(comando))
 
 
 @router.post("/jornadas/{jornada_id}/liberacion", response_model=JornadaResponse)

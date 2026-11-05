@@ -1,9 +1,14 @@
-"""Change 15, tarea 6.1: `JORNADA_RENDIR` v1 y `JORNADA_CERRAR` v1 por el bus contra PostgreSQL
+"""Change 15, tarea 6.1: `JORNADA_RENDIR` y `JORNADA_CERRAR` v1 por el bus contra PostgreSQL
 real (spec `stock/jornadas`, requisito "La jornada se rinde y se cierra siguiendo su máquina de
 estados"; `design.md` D2, D9; `01` §18, §19).
 
 Se procesa por `sync_service.procesar_comando` (mismo criterio que `test_jornadas_abrir.py`). La
 cobertura por HTTP es de `test_jornadas_api.py`.
+
+Change 24 (tarea 7.3): la rendición es `JORNADA_RENDIR` v2 (entrega y conteo, `design.md` D2).
+Estas pruebas la siguen verificando como transición de la máquina de estados: `rendir` entrega la
+jornada y la rinde con el conteo vacío (la camioneta de estas pruebas no tiene stock); lo que
+verifica cada una no cambia. El conteo está en `test_jornada_rendir_v2.py`.
 
 Reglas citadas: RUT-05, RUT-08, INV-01, INV-06, INV-16, INV-21, SEG-06, AUD-02, SYN-02, TR-06.
 """
@@ -16,7 +21,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from cuentas_corrientes_utiles import crear_organizacion, crear_usuario_y_dispositivo
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 from stock_utiles import crear_jornada_sql, crear_ubicacion_sql
 
@@ -28,7 +33,10 @@ from app.commands.sobre import SobreComando
 from app.core.clock import FixedClock
 from app.core.errors import PermisoRequeridoError
 from app.modules.identidad.models import Auditoria
-from app.modules.stock import jornadas_commands  # noqa: F401  (registra los handlers)
+from app.modules.stock import (
+    jornadas_commands,  # noqa: F401  (registra los handlers)
+    rendicion_commands,  # noqa: F401  (registra JORNADA_RENDIR v2)
+)
 from app.modules.stock.domain.errores import (
     JornadaEstadoInvalidoError,
     RecursoNoEncontradoError,
@@ -50,6 +58,19 @@ CERRAR = "JORNADA_CERRAR"
 
 VENDEDOR = frozenset({"ABRIR_JORNADA"})
 SUPERVISORA = frozenset({"RENDIR_JORNADA", "LIBERAR_UBICACION"})
+
+
+def version_de(tipo: str) -> int:
+    """`JORNADA_RENDIR` es v2 desde el change 24; los demás comandos de jornada siguen en v1."""
+    return 2 if tipo == RENDIR else 1
+
+
+def contenido_de(tipo: str, jornada_id: UUID) -> dict[str, Any]:
+    """El contenido mínimo válido de la transición: la rendición lleva el conteo (vacío)."""
+    contenido: dict[str, Any] = {"jornada_id": str(jornada_id)}
+    if tipo == RENDIR:
+        contenido["lineas"] = []
+    return contenido
 
 
 class Actor:
@@ -90,7 +111,7 @@ class Entorno:
         sobre = SobreComando(
             operation_id=operation_id or uuid4(),
             tipo=tipo,
-            version=1,
+            version=version_de(tipo),
             modo="ONLINE",
             organizacion_id=self.org,
             usuario_id=actor.usuario_id,
@@ -121,11 +142,23 @@ class Entorno:
         assert comando.resultado is not None
         return UUID(str(comando.resultado["jornada_id"]))
 
+    def entregar(self, jornada_id: UUID) -> None:
+        """La entrega del día que exige la rendición (change 24, RUT-05), si todavía no la tiene."""
+        self.sesion.execute(
+            text(
+                "UPDATE jornada SET entregada_en = :m, entrega_occurred_at = :m, "
+                "entrega_secuencia = 1 WHERE id = :id AND entregada_en IS NULL"
+            ),
+            {"m": MOMENTO, "id": jornada_id},
+        )
+        self.sesion.commit()
+
     def rendir(self, jornada_id: UUID, **opciones: Any) -> Comando:
+        self.entregar(jornada_id)
         return self.enviar(
             RENDIR,
             self.supervisora,
-            {"jornada_id": str(jornada_id)},
+            contenido_de(RENDIR, jornada_id),
             ocurrio_en=EN_LA_TARDE,
             **opciones,
         )
@@ -188,13 +221,13 @@ def entorno(db_session: Session) -> Entorno:
 
 
 @pytest.mark.parametrize("tipo", [RENDIR, CERRAR])
-def test_los_tipos_estan_declarados_online_y_sin_offline_con_handler_v1(tipo: str) -> None:
-    """`02` §6.5: rendir y cerrar son solo `ONLINE`."""
+def test_los_tipos_estan_declarados_online_y_sin_offline_con_su_handler(tipo: str) -> None:
+    """`02` §6.5: rendir (v2) y cerrar (v1) son solo `ONLINE`."""
     declarado = catalogo_bus.tipo_declarado(tipo)
 
     assert declarado is not None
     assert (declarado.admite_online, declarado.admite_offline) == (True, False)
-    assert registro.resolver_handler(tipo, 1).tipo == tipo
+    assert registro.resolver_handler(tipo, version_de(tipo)).tipo == tipo
 
 
 # --- rendir ------------------------------------------------------------------------------
@@ -299,7 +332,7 @@ def test_el_vendedor_no_rinde_ni_cierra_su_propia_jornada(entorno: Entorno, tipo
 
     with pytest.raises(PermisoRequeridoError) as error:
         entorno.enviar(
-            tipo, entorno.juan, {"jornada_id": str(jornada_id)}, operation_id=operation_id
+            tipo, entorno.juan, contenido_de(tipo, jornada_id), operation_id=operation_id
         )
 
     assert error.value.status_http == 403
@@ -341,7 +374,7 @@ def test_el_contenido_solo_acepta_la_jornada(entorno: Entorno, tipo: str) -> Non
 
     for extra in ({"usuario_id": str(uuid4())}, {"organizacion_id": str(uuid4())}):
         with pytest.raises(ContenidoDeComandoInvalidoError):
-            entorno.enviar(tipo, entorno.supervisora, {"jornada_id": str(jornada_id), **extra})
+            entorno.enviar(tipo, entorno.supervisora, {**contenido_de(tipo, jornada_id), **extra})
     assert entorno.jornada(jornada_id).estado == "ABIERTA"
 
 
@@ -355,14 +388,14 @@ def test_el_lote_rechaza_la_transicion_enviada_sin_conexion(entorno: Entorno, ti
     item = ItemLote(
         operation_id=operation_id,
         tipo=tipo,
-        version=1,
+        version=version_de(tipo),
         modo="OFFLINE",
         usuario_id=entorno.supervisora.usuario_id,
         dispositivo_id=entorno.supervisora.dispositivo_id,
         occurred_at=MOMENTO,
         secuencia=1,
         app_version="1.0.0",
-        contenido={"jornada_id": str(jornada_id)},
+        contenido=contenido_de(tipo, jornada_id),
     )
 
     (resultado,) = sync_service.procesar_lote(

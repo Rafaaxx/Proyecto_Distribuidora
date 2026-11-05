@@ -2354,6 +2354,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/stock/jornadas/{jornada_id}/resumen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Resumen De Jornada
+         * @description Resumen de la jornada (change 24, RUT-07): stock por producto (al abrir, ingresos, ventas,
+         *     anulaciones, otros, esperado, contado y diferencia, congelado al rendir), ventas, anuladas y
+         *     cobranzas por medio de pago, y lo registrado después de la rendición aparte. El valor de las
+         *     diferencias (string) solo con `VER_COSTOS`. 404 si la jornada es ajena o no existe.
+         */
+        get: operations["obtener_resumen_de_jornada_api_v1_stock_jornadas__jornada_id__resumen_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/stock/jornadas/{jornada_id}/rendicion": {
         parameters: {
             query?: never;
@@ -2365,9 +2388,11 @@ export interface paths {
         put?: never;
         /**
          * Rendir Jornada
-         * @description `JORNADA_RENDIR` (change 15, `01` §18): `ABIERTA → EN_RENDICION`, sin conteo hasta el
-         *     change 24. 200 con la jornada; `JORNADA_ESTADO_INVALIDO` responde 409, una jornada ajena
-         *     404.
+         * @description `JORNADA_RENDIR` v2 (change 24, RUT-05, RUT-06): rinde una jornada `ABIERTA` y entregada con
+         *     el conteo físico y deja `EN_RENDICION`. 200 con la jornada, la rendición y sus líneas;
+         *     `JORNADA_ESTADO_INVALIDO`, `JORNADA_SIN_ENTREGA` y `ESPERADO_DIFIERE` responden 409,
+         *     `CONTEO_INCOMPLETO`, `CANTIDAD_INVALIDA`, `PRODUCTO_REPETIDO` y `OBSERVACION_INVALIDA` 422,
+         *     una jornada o un producto ajenos 404.
          */
         post: operations["rendir_jornada_api_v1_stock_jornadas__jornada_id__rendicion_post"];
         delete?: never;
@@ -2387,8 +2412,12 @@ export interface paths {
         put?: never;
         /**
          * Cerrar Jornada
-         * @description `JORNADA_CERRAR` (change 15, RUT-08): `EN_RENDICION → CERRADA`; la ubicación queda libre.
-         *     200 con la jornada; `JORNADA_ESTADO_INVALIDO` responde 409, una jornada ajena 404.
+         * @description `JORNADA_CERRAR` v2 (change 24, RUT-08): `EN_RENDICION → CERRADA`; la ubicación queda libre.
+         *     El cuerpo es opcional: con `devolucion` (destino y líneas) devuelve el remanente en la misma
+         *     transacción con una transferencia común y exige además `TRANSFERIR_STOCK`. 200 con la jornada
+         *     y la `transferencia_id`; `JORNADA_ESTADO_INVALIDO`, `STOCK_INSUFICIENTE`, `UBICACION_CON_TOMA`
+         *     responden 409, `UBICACIONES_IGUALES`, `LINEAS_INVALIDAS` y `CANTIDAD_INVALIDA` 422, una
+         *     jornada o una ubicación ajenas 404.
          */
         post: operations["cerrar_jornada_api_v1_stock_jornadas__jornada_id__cierre_post"];
         delete?: never;
@@ -3277,6 +3306,58 @@ export interface components {
              */
             actualizado_en: string;
         };
+        /**
+         * CierreResponse
+         * @description La jornada `CERRADA`; `transferencia_id` es la transferencia de la devolución del
+         *     remanente (nulo si se cerró sin devolver).
+         */
+        CierreResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Ubicacion Id
+             * Format: uuid
+             */
+            ubicacion_id: string;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /**
+             * Dispositivo Id
+             * Format: uuid
+             */
+            dispositivo_id: string;
+            /** Estado */
+            estado: string;
+            /**
+             * Abierta En
+             * Format: date-time
+             */
+            abierta_en: string;
+            /** Rendida En */
+            rendida_en: string | null;
+            /** Rendida Por Id */
+            rendida_por_id: string | null;
+            /** Cerrada En */
+            cerrada_en: string | null;
+            /** Cerrada Por Id */
+            cerrada_por_id: string | null;
+            /** Liberada En */
+            liberada_en: string | null;
+            /** Liberada Por Id */
+            liberada_por_id: string | null;
+            /** Motivo Liberacion Id */
+            motivo_liberacion_id: string | null;
+            /** Observacion Liberacion */
+            observacion_liberacion: string | null;
+            /** Transferencia Id */
+            transferencia_id: string | null;
+        };
         /** ClienteBootstrap */
         ClienteBootstrap: {
             /**
@@ -3764,6 +3845,15 @@ export interface components {
             usuario_nombre: string | null;
             /** Jornada Id */
             jornada_id: string | null;
+        };
+        /** CobranzasDelResumenResponse */
+        CobranzasDelResumenResponse: {
+            /** Cantidad */
+            cantidad: number;
+            /** Total */
+            total: string;
+            /** Por Medio */
+            por_medio: components["schemas"]["TotalDeMedioResponse"][];
         };
         /** ComposicionRolRequest */
         ComposicionRolRequest: {
@@ -4692,6 +4782,8 @@ export interface components {
              * Format: date-time
              */
             abierta_en: string;
+            /** Entregada En */
+            entregada_en: string | null;
             /** Rendida En */
             rendida_en: string | null;
             /** Rendida Por Id */
@@ -4764,6 +4856,19 @@ export interface components {
             anulacion: components["schemas"]["DetalleDeAnulacionDeTransferenciaResponse"] | null;
         };
         /**
+         * DevolucionRequest
+         * @description El destino (un depósito activo y sin toma) y de 1 a 200 líneas. `extra="forbid"`.
+         */
+        DevolucionRequest: {
+            /**
+             * Ubicacion Destino Id
+             * Format: uuid
+             */
+            ubicacion_destino_id: string;
+            /** Lineas */
+            lineas: components["schemas"]["LineaDeDevolucionRequest"][];
+        };
+        /**
          * DiferenciaDeCostoResponse
          * @description CMP-04, D7: una línea cuyo costo base difiere del costo informado vigente (o no
          *     tiene vigente, `costo_base_vigente: null`). Informativa: la compra nunca registra un
@@ -4781,6 +4886,17 @@ export interface components {
             costo_base_compra: string;
             /** Costo Base Vigente */
             costo_base_vigente: string | null;
+        };
+        /**
+         * DineroDeLaJornadaResponse
+         * @description Ventas vigentes, ventas anuladas, cobranzas confirmadas por medio de pago y cobranzas
+         *     anuladas (COB-05); importes como string (INV-03).
+         */
+        DineroDeLaJornadaResponse: {
+            ventas: components["schemas"]["TotalDelResumenResponse"];
+            anuladas: components["schemas"]["TotalDelResumenResponse"];
+            cobranzas: components["schemas"]["CobranzasDelResumenResponse"];
+            cobranzas_anuladas: components["schemas"]["CobranzasDelResumenResponse"];
         };
         /** DispositivoResponse */
         DispositivoResponse: {
@@ -4979,6 +5095,14 @@ export interface components {
              */
             abierta_en: string;
         };
+        /**
+         * JornadaCerrarRequest
+         * @description `JORNADA_CERRAR` v2 (change 24, D6): la devolución del remanente es opcional (con ella se
+         *     exige además `TRANSFERIR_STOCK`). El cuerpo entero es opcional. `extra="forbid"`.
+         */
+        JornadaCerrarRequest: {
+            devolucion?: components["schemas"]["DevolucionRequest"] | null;
+        };
         /** JornadaDelListadoResponse */
         JornadaDelListadoResponse: {
             /**
@@ -5024,6 +5148,17 @@ export interface components {
              * Format: uuid
              */
             motivo_id: string;
+            /** Observacion */
+            observacion?: string | null;
+        };
+        /**
+         * JornadaRendirRequest
+         * @description `JORNADA_RENDIR` v2 (change 24, D2): el conteo y una observación opcional de hasta 500
+         *     caracteres (la valida el dominio: `OBSERVACION_INVALIDA`). `extra="forbid"` (INV-21).
+         */
+        JornadaRendirRequest: {
+            /** Lineas */
+            lineas: components["schemas"]["LineaDeRendicionRequest"][];
             /** Observacion */
             observacion?: string | null;
         };
@@ -5131,6 +5266,20 @@ export interface components {
             /** Costo Unitario */
             costo_unitario?: string | null;
         };
+        /**
+         * LineaDeDevolucionRequest
+         * @description Una línea de la devolución del remanente: `cantidad_base` entera (que sea positiva la valida
+         *     el dominio con `CANTIDAD_INVALIDA`). `extra="forbid"`.
+         */
+        LineaDeDevolucionRequest: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Cantidad Base */
+            cantidad_base: number;
+        };
         /** LineaDeKardexResponse */
         LineaDeKardexResponse: {
             /**
@@ -5177,6 +5326,39 @@ export interface components {
             estado_origen?: string | null;
             /** Costo Unitario */
             costo_unitario?: string | null;
+        };
+        /**
+         * LineaDeRendicionRequest
+         * @description Una línea del conteo: lo contado (entero, en unidad base; que no sea negativo lo valida el
+         *     dominio con `CANTIDAD_INVALIDA`) y el esperado que vio quien contó. `extra="forbid"`.
+         */
+        LineaDeRendicionRequest: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Cantidad Contada */
+            cantidad_contada: number;
+            /** Cantidad Esperada */
+            cantidad_esperada: number;
+        };
+        /**
+         * LineaDeRendicionResponse
+         * @description Una línea de la rendición sin costos (el valor de las diferencias es de `VER_COSTOS`).
+         */
+        LineaDeRendicionResponse: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Cantidad Esperada */
+            cantidad_esperada: number;
+            /** Cantidad Contada */
+            cantidad_contada: number;
+            /** Diferencia */
+            diferencia: number;
         };
         /** LineaDeStockResponse */
         LineaDeStockResponse: {
@@ -5246,6 +5428,38 @@ export interface components {
             unidades_referencia: number | null;
             /** Nombre Referencia */
             nombre_referencia: string | null;
+        };
+        /**
+         * LineaDelResumenResponse
+         * @description Un producto del resumen en unidad base (la pantalla lo muestra en cajas y unidades, CAT-08).
+         *     `contado` y `diferencia` son nulos si la jornada no tiene conteo; `valor_diferencia` (string)
+         *     solo existe con `VER_COSTOS`: sin el permiso la ruta no lo establece y la clave desaparece
+         *     (`response_model_exclude_unset`, ADR-036).
+         */
+        LineaDelResumenResponse: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Al Abrir */
+            al_abrir: number;
+            /** Ingresos */
+            ingresos: number;
+            /** Ventas */
+            ventas: number;
+            /** Anulaciones */
+            anulaciones: number;
+            /** Otros */
+            otros: number;
+            /** Esperado */
+            esperado: number;
+            /** Contado */
+            contado: number | null;
+            /** Diferencia */
+            diferencia: number | null;
+            /** Valor Diferencia */
+            valor_diferencia?: string | null;
         };
         /** LineaStockInicialRequest */
         LineaStockInicialRequest: {
@@ -7342,6 +7556,64 @@ export interface components {
             /** Items */
             items: components["schemas"]["ReglaResponse"][];
         };
+        /**
+         * RendicionResponse
+         * @description La jornada rendida (`EN_RENDICION`) con su rendición y las líneas del conteo.
+         */
+        RendicionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Ubicacion Id
+             * Format: uuid
+             */
+            ubicacion_id: string;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /**
+             * Dispositivo Id
+             * Format: uuid
+             */
+            dispositivo_id: string;
+            /** Estado */
+            estado: string;
+            /**
+             * Abierta En
+             * Format: date-time
+             */
+            abierta_en: string;
+            /** Rendida En */
+            rendida_en: string | null;
+            /** Rendida Por Id */
+            rendida_por_id: string | null;
+            /** Cerrada En */
+            cerrada_en: string | null;
+            /** Cerrada Por Id */
+            cerrada_por_id: string | null;
+            /** Liberada En */
+            liberada_en: string | null;
+            /** Liberada Por Id */
+            liberada_por_id: string | null;
+            /** Motivo Liberacion Id */
+            motivo_liberacion_id: string | null;
+            /** Observacion Liberacion */
+            observacion_liberacion: string | null;
+            /**
+             * Rendicion Id
+             * Format: uuid
+             */
+            rendicion_id: string;
+            /** Observacion */
+            observacion: string | null;
+            /** Lineas */
+            lineas: components["schemas"]["LineaDeRendicionResponse"][];
+        };
         /** ResultadoItemLoteResponse */
         ResultadoItemLoteResponse: {
             /**
@@ -7359,6 +7631,30 @@ export interface components {
             error_codigo: string | null;
             /** Observaciones */
             observaciones?: components["schemas"]["ObservacionResponse"][];
+        };
+        /**
+         * ResumenDeJornadaResponse
+         * @description El resumen de la jornada. `despues_de_la_rendicion` es nulo mientras la jornada no se
+         *     rindió; `valor_de_diferencias` (string) solo existe con `VER_COSTOS` y conteo.
+         */
+        ResumenDeJornadaResponse: {
+            /**
+             * Jornada Id
+             * Format: uuid
+             */
+            jornada_id: string;
+            /** Estado */
+            estado: string;
+            /** Con Conteo */
+            con_conteo: boolean;
+            /** Rendida En */
+            rendida_en: string | null;
+            /** Lineas */
+            lineas: components["schemas"]["LineaDelResumenResponse"][];
+            dinero: components["schemas"]["DineroDeLaJornadaResponse"];
+            despues_de_la_rendicion: components["schemas"]["DineroDeLaJornadaResponse"] | null;
+            /** Valor De Diferencias */
+            valor_de_diferencias?: string | null;
         };
         /**
          * ResumenReglaIvaResponse
@@ -7661,6 +7957,25 @@ export interface components {
         TopeDescuentoRolRequest: {
             /** Tope Descuento */
             tope_descuento: string;
+        };
+        /** TotalDeMedioResponse */
+        TotalDeMedioResponse: {
+            /**
+             * Medio Pago Id
+             * Format: uuid
+             */
+            medio_pago_id: string;
+            /** Nombre */
+            nombre: string | null;
+            /** Total */
+            total: string;
+        };
+        /** TotalDelResumenResponse */
+        TotalDelResumenResponse: {
+            /** Cantidad */
+            cantidad: number;
+            /** Total */
+            total: string;
         };
         /**
          * TransferenciaAnuladaResponse
@@ -13605,11 +13920,10 @@ export interface operations {
             };
         };
     };
-    rendir_jornada_api_v1_stock_jornadas__jornada_id__rendicion_post: {
+    obtener_resumen_de_jornada_api_v1_stock_jornadas__jornada_id__resumen_get: {
         parameters: {
             query?: never;
             header?: {
-                "Operation-Id"?: string | null;
                 authorization?: string | null;
             };
             path: {
@@ -13625,7 +13939,45 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JornadaResponse"];
+                    "application/json": components["schemas"]["ResumenDeJornadaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rendir_jornada_api_v1_stock_jornadas__jornada_id__rendicion_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                jornada_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JornadaRendirRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RendicionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -13651,7 +14003,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["JornadaCerrarRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -13659,7 +14015,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JornadaResponse"];
+                    "application/json": components["schemas"]["CierreResponse"];
                 };
             };
             /** @description Validation Error */

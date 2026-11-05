@@ -10889,13 +10889,73 @@
         }
       }
     },
+    "/api/v1/stock/jornadas/{jornada_id}/resumen": {
+      "get": {
+        "tags": [
+          "stock"
+        ],
+        "summary": "Obtener Resumen De Jornada",
+        "description": "Resumen de la jornada (change 24, RUT-07): stock por producto (al abrir, ingresos, ventas,\nanulaciones, otros, esperado, contado y diferencia, congelado al rendir), ventas, anuladas y\ncobranzas por medio de pago, y lo registrado después de la rendición aparte. El valor de las\ndiferencias (string) solo con `VER_COSTOS`. 404 si la jornada es ajena o no existe.",
+        "operationId": "obtener_resumen_de_jornada_api_v1_stock_jornadas__jornada_id__resumen_get",
+        "parameters": [
+          {
+            "name": "jornada_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Jornada Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumenDeJornadaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/stock/jornadas/{jornada_id}/rendicion": {
       "post": {
         "tags": [
           "stock"
         ],
         "summary": "Rendir Jornada",
-        "description": "`JORNADA_RENDIR` (change 15, `01` §18): `ABIERTA → EN_RENDICION`, sin conteo hasta el\nchange 24. 200 con la jornada; `JORNADA_ESTADO_INVALIDO` responde 409, una jornada ajena\n404.",
+        "description": "`JORNADA_RENDIR` v2 (change 24, RUT-05, RUT-06): rinde una jornada `ABIERTA` y entregada con\nel conteo físico y deja `EN_RENDICION`. 200 con la jornada, la rendición y sus líneas;\n`JORNADA_ESTADO_INVALIDO`, `JORNADA_SIN_ENTREGA` y `ESPERADO_DIFIERE` responden 409,\n`CONTEO_INCOMPLETO`, `CANTIDAD_INVALIDA`, `PRODUCTO_REPETIDO` y `OBSERVACION_INVALIDA` 422,\nuna jornada o un producto ajenos 404.",
         "operationId": "rendir_jornada_api_v1_stock_jornadas__jornada_id__rendicion_post",
         "parameters": [
           {
@@ -10941,13 +11001,23 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JornadaRendirRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JornadaResponse"
+                  "$ref": "#/components/schemas/RendicionResponse"
                 }
               }
             }
@@ -10971,7 +11041,7 @@
           "stock"
         ],
         "summary": "Cerrar Jornada",
-        "description": "`JORNADA_CERRAR` (change 15, RUT-08): `EN_RENDICION → CERRADA`; la ubicación queda libre.\n200 con la jornada; `JORNADA_ESTADO_INVALIDO` responde 409, una jornada ajena 404.",
+        "description": "`JORNADA_CERRAR` v2 (change 24, RUT-08): `EN_RENDICION → CERRADA`; la ubicación queda libre.\nEl cuerpo es opcional: con `devolucion` (destino y líneas) devuelve el remanente en la misma\ntransacción con una transferencia común y exige además `TRANSFERIR_STOCK`. 200 con la jornada\ny la `transferencia_id`; `JORNADA_ESTADO_INVALIDO`, `STOCK_INSUFICIENTE`, `UBICACION_CON_TOMA`\nresponden 409, `UBICACIONES_IGUALES`, `LINEAS_INVALIDAS` y `CANTIDAD_INVALIDA` 422, una\njornada o una ubicación ajenas 404.",
         "operationId": "cerrar_jornada_api_v1_stock_jornadas__jornada_id__cierre_post",
         "parameters": [
           {
@@ -11017,13 +11087,30 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/JornadaCerrarRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Datos"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JornadaResponse"
+                  "$ref": "#/components/schemas/CierreResponse"
                 }
               }
             }
@@ -13736,6 +13823,166 @@
         ],
         "title": "CategoriaResponse"
       },
+      "CierreResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "ubicacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Id"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "dispositivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Dispositivo Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "abierta_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Abierta En"
+          },
+          "rendida_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rendida En"
+          },
+          "rendida_por_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rendida Por Id"
+          },
+          "cerrada_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cerrada En"
+          },
+          "cerrada_por_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cerrada Por Id"
+          },
+          "liberada_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liberada En"
+          },
+          "liberada_por_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liberada Por Id"
+          },
+          "motivo_liberacion_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Liberacion Id"
+          },
+          "observacion_liberacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion Liberacion"
+          },
+          "transferencia_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transferencia Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "ubicacion_id",
+          "usuario_id",
+          "dispositivo_id",
+          "estado",
+          "abierta_en",
+          "rendida_en",
+          "rendida_por_id",
+          "cerrada_en",
+          "cerrada_por_id",
+          "liberada_en",
+          "liberada_por_id",
+          "motivo_liberacion_id",
+          "observacion_liberacion",
+          "transferencia_id"
+        ],
+        "title": "CierreResponse",
+        "description": "La jornada `CERRADA`; `transferencia_id` es la transferencia de la devolución del\nremanente (nulo si se cerró sin devolver)."
+      },
       "ClienteBootstrap": {
         "properties": {
           "id": {
@@ -15057,6 +15304,32 @@
         ],
         "title": "CobranzaResumenResponse",
         "description": "Una fila del listado (D14). Los importes viajan como string (INV-03)."
+      },
+      "CobranzasDelResumenResponse": {
+        "properties": {
+          "cantidad": {
+            "type": "integer",
+            "title": "Cantidad"
+          },
+          "total": {
+            "type": "string",
+            "title": "Total"
+          },
+          "por_medio": {
+            "items": {
+              "$ref": "#/components/schemas/TotalDeMedioResponse"
+            },
+            "type": "array",
+            "title": "Por Medio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cantidad",
+          "total",
+          "por_medio"
+        ],
+        "title": "CobranzasDelResumenResponse"
       },
       "ComposicionRolRequest": {
         "properties": {
@@ -17152,6 +17425,18 @@
             "format": "date-time",
             "title": "Abierta En"
           },
+          "entregada_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entregada En"
+          },
           "rendida_en": {
             "anyOf": [
               {
@@ -17302,6 +17587,7 @@
           "dispositivo_id",
           "estado",
           "abierta_en",
+          "entregada_en",
           "rendida_en",
           "rendida_por_id",
           "rendida_por_nombre",
@@ -17420,6 +17706,30 @@
         ],
         "title": "DetalleDeTransferenciaResponse"
       },
+      "DevolucionRequest": {
+        "properties": {
+          "ubicacion_destino_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Destino Id"
+          },
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/LineaDeDevolucionRequest"
+            },
+            "type": "array",
+            "title": "Lineas"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ubicacion_destino_id",
+          "lineas"
+        ],
+        "title": "DevolucionRequest",
+        "description": "El destino (un depósito activo y sin toma) y de 1 a 200 líneas. `extra=\"forbid\"`."
+      },
       "DiferenciaDeCostoResponse": {
         "properties": {
           "linea": {
@@ -17456,6 +17766,31 @@
         ],
         "title": "DiferenciaDeCostoResponse",
         "description": "CMP-04, D7: una línea cuyo costo base difiere del costo informado vigente (o no\ntiene vigente, `costo_base_vigente: null`). Informativa: la compra nunca registra un\ncosto informado."
+      },
+      "DineroDeLaJornadaResponse": {
+        "properties": {
+          "ventas": {
+            "$ref": "#/components/schemas/TotalDelResumenResponse"
+          },
+          "anuladas": {
+            "$ref": "#/components/schemas/TotalDelResumenResponse"
+          },
+          "cobranzas": {
+            "$ref": "#/components/schemas/CobranzasDelResumenResponse"
+          },
+          "cobranzas_anuladas": {
+            "$ref": "#/components/schemas/CobranzasDelResumenResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ventas",
+          "anuladas",
+          "cobranzas",
+          "cobranzas_anuladas"
+        ],
+        "title": "DineroDeLaJornadaResponse",
+        "description": "Ventas vigentes, ventas anuladas, cobranzas confirmadas por medio de pago y cobranzas\nanuladas (COB-05); importes como string (INV-03)."
       },
       "DispositivoResponse": {
         "properties": {
@@ -17836,6 +18171,24 @@
         ],
         "title": "JornadaBootstrap"
       },
+      "JornadaCerrarRequest": {
+        "properties": {
+          "devolucion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DevolucionRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "JornadaCerrarRequest",
+        "description": "`JORNADA_CERRAR` v2 (change 24, D6): la devolución del remanente es opcional (con ella se\nexige además `TRANSFERIR_STOCK`). El cuerpo entero es opcional. `extra=\"forbid\"`."
+      },
       "JornadaDelListadoResponse": {
         "properties": {
           "id": {
@@ -17922,6 +18275,35 @@
         ],
         "title": "JornadaLiberarRequest",
         "description": "`motivo_id` (activo, del ámbito `LIBERACION_JORNADA`) y una observación opcional de hasta\n500 caracteres (la valida el dominio: `OBSERVACION_INVALIDA`). `extra=\"forbid\"` (INV-21)."
+      },
+      "JornadaRendirRequest": {
+        "properties": {
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/LineaDeRendicionRequest"
+            },
+            "type": "array",
+            "title": "Lineas"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "lineas"
+        ],
+        "title": "JornadaRendirRequest",
+        "description": "`JORNADA_RENDIR` v2 (change 24, D2): el conteo y una observación opcional de hasta 500\ncaracteres (la valida el dominio: `OBSERVACION_INVALIDA`). `extra=\"forbid\"` (INV-21)."
       },
       "JornadaResponse": {
         "properties": {
@@ -18204,6 +18586,27 @@
         "title": "LineaAjusteResponse",
         "description": "`costo_unitario` solo existe con `VER_COSTOS`: sin el permiso la ruta no lo establece\ny la clave desaparece de la respuesta (`response_model_exclude_unset`, ADR-036)."
       },
+      "LineaDeDevolucionRequest": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "cantidad_base": {
+            "type": "integer",
+            "title": "Cantidad Base"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "producto_id",
+          "cantidad_base"
+        ],
+        "title": "LineaDeDevolucionRequest",
+        "description": "Una línea de la devolución del remanente: `cantidad_base` entera (que sea positiva la valida\nel dominio con `CANTIDAD_INVALIDA`). `extra=\"forbid\"`."
+      },
       "LineaDeKardexResponse": {
         "properties": {
           "id": {
@@ -18300,6 +18703,62 @@
           "saldo_acumulado"
         ],
         "title": "LineaDeKardexResponse"
+      },
+      "LineaDeRendicionRequest": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "cantidad_contada": {
+            "type": "integer",
+            "title": "Cantidad Contada"
+          },
+          "cantidad_esperada": {
+            "type": "integer",
+            "title": "Cantidad Esperada"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "producto_id",
+          "cantidad_contada",
+          "cantidad_esperada"
+        ],
+        "title": "LineaDeRendicionRequest",
+        "description": "Una línea del conteo: lo contado (entero, en unidad base; que no sea negativo lo valida el\ndominio con `CANTIDAD_INVALIDA`) y el esperado que vio quien contó. `extra=\"forbid\"`."
+      },
+      "LineaDeRendicionResponse": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "cantidad_esperada": {
+            "type": "integer",
+            "title": "Cantidad Esperada"
+          },
+          "cantidad_contada": {
+            "type": "integer",
+            "title": "Cantidad Contada"
+          },
+          "diferencia": {
+            "type": "integer",
+            "title": "Diferencia"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto_id",
+          "cantidad_esperada",
+          "cantidad_contada",
+          "diferencia"
+        ],
+        "title": "LineaDeRendicionResponse",
+        "description": "Una línea de la rendición sin costos (el valor de las diferencias es de `VER_COSTOS`)."
       },
       "LineaDeStockResponse": {
         "properties": {
@@ -18521,6 +18980,86 @@
         ],
         "title": "LineaDelDetalleDeTransferenciaResponse",
         "description": "Sin costo: una transferencia no lo muestra a nadie (ADR-036)."
+      },
+      "LineaDelResumenResponse": {
+        "properties": {
+          "producto_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Producto Id"
+          },
+          "al_abrir": {
+            "type": "integer",
+            "title": "Al Abrir"
+          },
+          "ingresos": {
+            "type": "integer",
+            "title": "Ingresos"
+          },
+          "ventas": {
+            "type": "integer",
+            "title": "Ventas"
+          },
+          "anulaciones": {
+            "type": "integer",
+            "title": "Anulaciones"
+          },
+          "otros": {
+            "type": "integer",
+            "title": "Otros"
+          },
+          "esperado": {
+            "type": "integer",
+            "title": "Esperado"
+          },
+          "contado": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contado"
+          },
+          "diferencia": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diferencia"
+          },
+          "valor_diferencia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valor Diferencia"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto_id",
+          "al_abrir",
+          "ingresos",
+          "ventas",
+          "anulaciones",
+          "otros",
+          "esperado",
+          "contado",
+          "diferencia"
+        ],
+        "title": "LineaDelResumenResponse",
+        "description": "Un producto del resumen en unidad base (la pantalla lo muestra en cajas y unidades, CAT-08).\n`contado` y `diferencia` son nulos si la jornada no tiene conteo; `valor_diferencia` (string)\nsolo existe con `VER_COSTOS`: sin el permiso la ruta no lo establece y la clave desaparece\n(`response_model_exclude_unset`, ADR-036)."
       },
       "LineaStockInicialRequest": {
         "properties": {
@@ -23513,6 +24052,179 @@
         ],
         "title": "ReglasResponse"
       },
+      "RendicionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "ubicacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Ubicacion Id"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "dispositivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Dispositivo Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "abierta_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Abierta En"
+          },
+          "rendida_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rendida En"
+          },
+          "rendida_por_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rendida Por Id"
+          },
+          "cerrada_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cerrada En"
+          },
+          "cerrada_por_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cerrada Por Id"
+          },
+          "liberada_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liberada En"
+          },
+          "liberada_por_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liberada Por Id"
+          },
+          "motivo_liberacion_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Liberacion Id"
+          },
+          "observacion_liberacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion Liberacion"
+          },
+          "rendicion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Rendicion Id"
+          },
+          "observacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacion"
+          },
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/LineaDeRendicionResponse"
+            },
+            "type": "array",
+            "title": "Lineas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "ubicacion_id",
+          "usuario_id",
+          "dispositivo_id",
+          "estado",
+          "abierta_en",
+          "rendida_en",
+          "rendida_por_id",
+          "cerrada_en",
+          "cerrada_por_id",
+          "liberada_en",
+          "liberada_por_id",
+          "motivo_liberacion_id",
+          "observacion_liberacion",
+          "rendicion_id",
+          "observacion",
+          "lineas"
+        ],
+        "title": "RendicionResponse",
+        "description": "La jornada rendida (`EN_RENDICION`) con su rendición y las líneas del conteo."
+      },
       "ResultadoItemLoteResponse": {
         "properties": {
           "operation_id": {
@@ -23563,6 +24275,78 @@
           "error_codigo"
         ],
         "title": "ResultadoItemLoteResponse"
+      },
+      "ResumenDeJornadaResponse": {
+        "properties": {
+          "jornada_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Jornada Id"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "con_conteo": {
+            "type": "boolean",
+            "title": "Con Conteo"
+          },
+          "rendida_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rendida En"
+          },
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/LineaDelResumenResponse"
+            },
+            "type": "array",
+            "title": "Lineas"
+          },
+          "dinero": {
+            "$ref": "#/components/schemas/DineroDeLaJornadaResponse"
+          },
+          "despues_de_la_rendicion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DineroDeLaJornadaResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "valor_de_diferencias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valor De Diferencias"
+          }
+        },
+        "type": "object",
+        "required": [
+          "jornada_id",
+          "estado",
+          "con_conteo",
+          "rendida_en",
+          "lineas",
+          "dinero",
+          "despues_de_la_rendicion"
+        ],
+        "title": "ResumenDeJornadaResponse",
+        "description": "El resumen de la jornada. `despues_de_la_rendicion` es nulo mientras la jornada no se\nrindió; `valor_de_diferencias` (string) solo existe con `VER_COSTOS` y conteo."
       },
       "ResumenReglaIvaResponse": {
         "properties": {
@@ -24198,6 +24982,55 @@
         ],
         "title": "TopeDescuentoRolRequest",
         "description": "Solo el tope, como cadena con hasta 6 decimales: un número JSON responde 422 (INV-03).\nSin `organizacion_id`: sale del token (INV-21)."
+      },
+      "TotalDeMedioResponse": {
+        "properties": {
+          "medio_pago_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Medio Pago Id"
+          },
+          "nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nombre"
+          },
+          "total": {
+            "type": "string",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "medio_pago_id",
+          "nombre",
+          "total"
+        ],
+        "title": "TotalDeMedioResponse"
+      },
+      "TotalDelResumenResponse": {
+        "properties": {
+          "cantidad": {
+            "type": "integer",
+            "title": "Cantidad"
+          },
+          "total": {
+            "type": "string",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cantidad",
+          "total"
+        ],
+        "title": "TotalDelResumenResponse"
       },
       "TransferenciaAnuladaResponse": {
         "properties": {

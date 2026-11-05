@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.commands.auditoria import DatosDeAuditoria
 from app.commands.catalogo import declarar_tipo
+from app.commands.errores import JornadaRequeridaError
 from app.commands.observaciones import ObservacionProducida
 from app.commands.registro import SesionDeHandler, registrar_handler
 from app.commands.sobre import SobreComando
@@ -122,30 +123,13 @@ declarar_tipo(
 
 
 class JornadaTransicionContenidoV1(BaseModel):
-    """Solo `jornada_id`. `extra="forbid"`: la organización y el usuario salen de la sesión
+    """Solo `jornada_id` (hoy, solo `JORNADA_CERRAR` v1; la rendición con conteo es `JORNADA_RENDIR`
+    v2, `rendicion_commands.py`). `extra="forbid"`: la organización y el usuario salen de la sesión
     (INV-21)."""
 
     model_config = ConfigDict(extra="forbid")
 
     jornada_id: UUID
-
-
-def manejar_jornada_rendir(
-    sobre: SobreComando,
-    contenido: JornadaTransicionContenidoV1,
-    *,
-    sesion: SesionDeHandler,
-    reloj: Clock,
-) -> ResultadoHandler:
-    _exigir_permiso(sobre, sesion, PERMISO_RENDIR_JORNADA)
-    jornada = stock_service.rendir_jornada(
-        sobre.organizacion_id,
-        sesion,
-        jornada_id=contenido.jornada_id,
-        usuario_id=sobre.usuario_id,
-        occurred_at=sobre.occurred_at,
-    )
-    return "ACEPTADO", resultado_de_jornada(jornada), None
 
 
 def manejar_jornada_cerrar(
@@ -166,10 +150,6 @@ def manejar_jornada_cerrar(
     return "ACEPTADO", resultado_de_jornada(jornada), None
 
 
-registrar_handler("JORNADA_RENDIR", 1, JornadaTransicionContenidoV1)(manejar_jornada_rendir)
-declarar_tipo(
-    "JORNADA_RENDIR", admite_online=True, admite_offline=False, permisos=("RENDIR_JORNADA",)
-)
 registrar_handler("JORNADA_CERRAR", 1, JornadaTransicionContenidoV1)(manejar_jornada_cerrar)
 declarar_tipo(
     "JORNADA_CERRAR", admite_online=True, admite_offline=False, permisos=("RENDIR_JORNADA",)
@@ -218,4 +198,46 @@ def manejar_jornada_liberar(
 registrar_handler("JORNADA_LIBERAR", 1, JornadaLiberarContenidoV1)(manejar_jornada_liberar)
 declarar_tipo(
     "JORNADA_LIBERAR", admite_online=True, admite_offline=False, permisos=("LIBERAR_UBICACION",)
+)
+
+
+class JornadaEntregarContenidoV1(BaseModel):
+    """Contenido vacío (`extra="forbid"`): la jornada es la del sobre y el usuario y el
+    dispositivo salen de la sesión (INV-21)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+def manejar_jornada_entregar(
+    sobre: SobreComando,
+    contenido: JornadaEntregarContenidoV1,
+    *,
+    sesion: SesionDeHandler,
+    reloj: Clock,
+) -> ResultadoHandler:
+    """La entrega del día (RUT-05, change 24 D1): el teléfono la encola detrás de todo lo suyo, así
+    que cuando llega acá todo lo anterior del dispositivo ya tiene resultado. El permiso se
+    exige acá: una entrega sin `ABRIR_JORNADA` se rechaza (`PERMISO_REQUERIDO`) y no deja nada."""
+    _exigir_permiso(sobre, sesion, PERMISO_ABRIR_JORNADA)
+    if sobre.jornada_id is None:  # el lote ya lo rechaza; defensa para otros caminos
+        raise JornadaRequeridaError("La entrega del día se aplica a la jornada de su sobre.")
+    jornada = stock_service.entregar_jornada(
+        sobre.organizacion_id,
+        sesion,
+        reloj,
+        jornada_id=sobre.jornada_id,
+        occurred_at=sobre.occurred_at,
+        secuencia=sobre.secuencia,
+    )
+    resultado = resultado_de_jornada(jornada)
+    resultado["entregada_en"] = (
+        None if jornada.entregada_en is None else jornada.entregada_en.isoformat()
+    )
+    resultado["entrega_secuencia"] = jornada.entrega_secuencia
+    return "ACEPTADO", resultado, None
+
+
+registrar_handler("JORNADA_ENTREGAR", 1, JornadaEntregarContenidoV1)(manejar_jornada_entregar)
+declarar_tipo(
+    "JORNADA_ENTREGAR", admite_online=False, admite_offline=True, permisos=("ABRIR_JORNADA",)
 )

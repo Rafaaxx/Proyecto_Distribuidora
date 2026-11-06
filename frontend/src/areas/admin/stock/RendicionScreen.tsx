@@ -13,6 +13,7 @@ import {
   armarConteo,
   calcularDiferencia,
   contadoEnBase,
+  hayRechazosPendientes,
   textoDeConfirmacionDeRendicion,
   textoDeConteoIncompleto,
   type FilaDeConteo,
@@ -30,6 +31,7 @@ import {
   useResumenDeJornada,
   useSaldosCompletos,
 } from '../../../features/stock/hooks'
+import { AvisoDeRechazosPendientes } from './AvisoDeRechazosPendientes'
 import { AVISO_REQUIERE_CONEXION, CLASE_CONTROL, CLASE_ENLACE, PantallaSinPermiso } from './piezasDeOperacion'
 import { CampoDeCantidad, type ValorDeCantidad } from './piezasDeRendicion'
 
@@ -101,6 +103,8 @@ function Conteo() {
   }
 
   const datos = jornada.data
+  // Change 25 (D9 = B): con rechazos sin resolver la jornada no se rinde.
+  const conRechazos = hayRechazosPendientes(datos.rechazos_pendientes)
   const volver = (
     <Link to={`/admin/stock/jornadas/${datos.id}`} className={CLASE_ENLACE}>
       Volver a la jornada
@@ -192,6 +196,12 @@ function Conteo() {
         setConfirmando(null)
         setAviso(mensajeDeErrorDeStock(falla, 'jornada'))
         void resumen.refetch()
+      } else if (falla instanceof ErrorDeStock && falla.codigo === 'RECHAZOS_PENDIENTES') {
+        // Se cruzó con una operación rechazada nueva: se muestra su texto, se recarga la cantidad y el conteo
+        // cargado no se pierde.
+        setConfirmando(null)
+        setAviso(mensajeDeErrorDeStock(falla, 'jornada'))
+        void jornada.refetch()
       } else if (falla instanceof ErrorDeStock && falla.codigo === 'CONTEO_INCOMPLETO') {
         setConfirmando(null)
         setAviso(textoDeConteoIncompleto(falla.idsDe('productos').map(nombreDe)))
@@ -265,6 +275,7 @@ function Conteo() {
         }
       />
 
+      {conRechazos && <AvisoDeRechazosPendientes cantidad={datos.rechazos_pendientes} jornadaId={datos.id} />}
       {aviso && <Alert>{aviso}</Alert>}
 
       <Card className="flex flex-col gap-3">
@@ -312,7 +323,9 @@ function Conteo() {
       </div>
 
       <div>
-        <Boton onClick={registrar}>Registrar rendición</Boton>
+        <Boton disabled={conRechazos} onClick={registrar}>
+          Registrar rendición
+        </Boton>
       </div>
 
       <Dialogo

@@ -76,6 +76,7 @@ from app.modules.proveedores.schemas import (
     CompraDetalleResponse,
     CompraLineaResponse,
     CompraMedioResponse,
+    CompraObservacionResponse,
     CompraPagoResponse,
     CompraResumenResponse,
     CostoDelResultadoResponse,
@@ -1034,6 +1035,9 @@ def obtener_compra(
     detalle = proveedores_queries.obtener_detalle_de_compra(
         contexto.organizacion_id, compra_id, sesion
     )
+    observaciones = sync_service.listar_observaciones_con_resolucion(
+        contexto.organizacion_id, sesion, operacion_tipo="COMPRA", operacion_id=compra_id
+    )
     resumen = _resumen_de(detalle.compra, detalle.proveedor_nombre)
     return CompraDetalleResponse(
         **resumen.model_dump(),
@@ -1092,6 +1096,17 @@ def obtener_compra(
                 anulada_por_id=detalle.anulacion.anulada_por_id,
             )
         ),
+        observaciones=[
+            CompraObservacionResponse(
+                codigo=o.codigo,
+                estado=o.estado,
+                detalle=o.detalle,
+                resuelto_por_nombre=o.resuelto_por_nombre,
+                resuelto_en=o.resuelto_en,
+                comentario=o.comentario,
+            )
+            for o in observaciones
+        ],
     )
 
 

@@ -6,6 +6,7 @@
 
 import { formatearPorcentaje, parsearImporteDesdeApi } from '../../lib/money'
 import { formatearMonto } from '../cuentas-corrientes/presentacion'
+import { detalleDeObservacion, etiquetaDeObservacion } from '../revision/detalleDeObservacion'
 import type { AmbitoDeMotivo } from '../configuracion/catalogos'
 import { formatearCantidad } from '../stock/cantidades'
 
@@ -67,28 +68,14 @@ export interface ObservacionDeVenta {
   codigo: string
   estado: string
   detalle: { [clave: string]: unknown } | null
-}
-
-const ETIQUETAS_DE_OBSERVACION: Record<string, string> = {
-  STOCK_NEGATIVO: 'Stock negativo',
-  VENTA_SIN_COSTO: 'Venta sin costo',
-  JORNADA_LIBERADA: 'Jornada liberada',
-  LISTA_NO_VIGENTE: 'Lista no vigente',
-  PERMISO_REVOCADO: 'Permiso revocado',
-  CLIENTE_NO_HABILITADO: 'Cliente no habilitado',
-  CONSUMIDOR_FINAL_CON_DEUDA: 'Consumidor final con deuda',
-  MEDIO_INACTIVO: 'Medio de pago inactivo',
-  REFERENCIA_FALTANTE: 'Falta la referencia',
-  // Change 18b (D9): los mismos títulos del tema de ayuda "avisos de las ventas".
-  DESCUENTO_DIFIERE: 'Descuentos distintos',
-  AUTORIZACION_OFFLINE: 'Autorización sin señal',
-  EXCESO_CREDITO_ADVERTIDO: 'Exceso de crédito advertido',
-  EXCESO_CREDITO_AUTORIZADO_OFFLINE: 'Exceso dentro de la tolerancia',
-  EXCESO_CREDITO_DETECTADO_SYNC: 'Exceso de crédito detectado al sincronizar',
+  // Change 25 (D11, SYN-08): la resolución, solo lectura.
+  resuelto_por_nombre?: string | null
+  resuelto_en?: string | null
+  comentario?: string | null
 }
 
 export function etiquetaDeObservacionDeVenta(codigo: string): string {
-  return ETIQUETAS_DE_OBSERVACION[codigo] ?? codigo
+  return etiquetaDeObservacion(codigo)
 }
 
 function lineaDe(observacion: ObservacionDeVenta): string | null {
@@ -109,23 +96,13 @@ export function observacionesGeneralesDeVenta(observaciones: readonly Observacio
   return observaciones.filter((observacion) => lineaDe(observacion) === null)
 }
 
-function textoONulo(valor: unknown): string | null {
-  return typeof valor === 'string' ? valor : null
-}
-
-/** Texto de apoyo: el saldo resultante del stock negativo, o el total y lo cobrado del consumidor final. */
+/**
+ * Texto de apoyo de una observación en una sola línea (las líneas de `detalleDeObservacion`, unidas con « · »);
+ * `null` si el código no tiene detalle que mostrar.
+ */
 export function detalleDeObservacionDeVenta(observacion: ObservacionDeVenta): string | null {
-  const detalle = observacion.detalle
-  if (detalle === null) return null
-  if (observacion.codigo === 'STOCK_NEGATIVO' && typeof detalle.saldo_resultante === 'number') {
-    return `Saldo resultante: ${formatearCantidad(detalle.saldo_resultante, null)}`
-  }
-  if (observacion.codigo === 'CONSUMIDOR_FINAL_CON_DEUDA') {
-    const total = textoONulo(detalle.total)
-    const cobranza = textoONulo(detalle.cobranza)
-    if (total !== null && cobranza !== null) return `Total ${formatearMonto(total)} · cobrado ${formatearMonto(cobranza)}`
-  }
-  return null
+  const lineas = detalleDeObservacion(observacion.codigo, observacion.detalle)
+  return lineas.length === 0 ? null : lineas.join(' · ')
 }
 
 // --- Descuentos y crédito congelados (change 18b, D20; DSC-08, CRE-10) -----------------------

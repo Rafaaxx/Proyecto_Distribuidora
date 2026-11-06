@@ -174,14 +174,16 @@ def listar_ventas(
     desde: date | None = None,
     hasta: date | None = None,
     estado: str | None = None,
+    numero: str | None = None,
     cursor: str | None = None,
     limite: int | None = None,
 ) -> PaginaDeVentas:
     """Ventas de la organización, de la más reciente a la más vieja, paginadas por cursor.
 
     Filtrable por cliente, usuario, jornada, ubicación, estado (change 19, D14: `CONFIRMADA` o
-    `ANULADA`, lo valida la API) y rango de fechas (de negocio, en la zona
-    de la organización, `hasta` inclusivo: TR-04). `desde` posterior a `hasta` es
+    `ANULADA`, lo valida la API), número (parcial, sin distinguir mayúsculas) y
+    rango de fechas (de negocio, en la zona de la organización, `hasta` inclusivo:
+    TR-04). `desde` posterior a `hasta` es
     `RANGO_DE_FECHAS_INVALIDO` y un cursor ilegible es `CURSOR_INVALIDO`. `limite` va de 1 a 200
     (la API responde 422 fuera de rango; acá solo se acota por seguridad)."""
     organizacion = identidad_service.obtener_organizacion(organizacion_id, sesion)
@@ -200,6 +202,7 @@ def listar_ventas(
         desde=inicio,
         hasta=fin,
         estado=estado,
+        numero=numero,
     )
     return PaginaDeVentas(
         items=_con_nombres(organizacion_id, sesion, filas), cursor_siguiente=cursor_siguiente

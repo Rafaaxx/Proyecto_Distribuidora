@@ -10,7 +10,8 @@ por el usuario el 2026-10-20), contra PostgreSQL real y por `procesar_lote`.
   igual), `CLIENTE_NO_HABILITADO`, `CONSUMIDOR_FINAL_CON_DEUDA`, `LISTA_NO_VIGENTE` (una por venta),
   `VENTA_SIN_COSTO` por línea, `PERMISO_REVOCADO` y `JORNADA_LIBERADA`; `MEDIO_INACTIVO` y
   `REFERENCIA_FALTANTE` sobre su cobranza (como el change 17).
-- Un producto o una presentación desactivados después del bootstrap se aceptan sin observación.
+- Un producto o una presentación desactivados después del bootstrap se aceptan con
+  `PRODUCTO_DESACTIVADO` por línea (change 25, D10: `test_venta_offline_producto_desactivado.py`).
 - Se congelan la versión, el precio y las unidades que envió el dispositivo.
 - Con conexión nada cambia: ni por REST ni por el lote en `ONLINE`.
 
@@ -731,28 +732,6 @@ def test_syn07_un_medio_inactivo_y_una_referencia_faltante_se_aceptan_con_observ
 
 
 # --- producto o presentación desactivados (D1 punto 5) ------------------------------------------
-
-
-@pytest.mark.parametrize("tabla", ["producto", "presentacion"])
-def test_d1_un_producto_o_presentacion_desactivado_despues_del_bootstrap_se_acepta_sin_observacion(
-    entorno: EntornoVenta, tabla: str
-) -> None:
-    """La mercadería ya se entregó: se acepta sin observación nueva (queda para la bandeja del
-    change 25) y el stock se descuenta."""
-    ruta = Ruta(entorno)
-    id_ = entorno.vino_id if tabla == "producto" else entorno.botella_id
-    entorno.sesion.execute(
-        text(f"UPDATE {tabla} SET activo = false WHERE organizacion_id = :o AND id = :i"),
-        {"o": entorno.org, "i": id_},
-    )
-    entorno.sesion.commit()
-
-    _, resultado = ruta.enviar()
-
-    assert resultado.estado == "ACEPTADO"
-    assert _observaciones(entorno) == []
-    assert entorno.stock(ubicacion_id=ruta.camioneta_id) == 33
-    assert len(entorno.ventas()) == 1
 
 
 # --- lo malformado, lo inexistente y lo inconsistente (SYN-06) -----------------------------------

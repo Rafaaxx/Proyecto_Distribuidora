@@ -369,3 +369,67 @@ describe('detalle de la jornada: «Cerrar» con devolución del remanente (tarea
     await waitFor(() => expect(llamadas(apiFetchMock, 'GET', `/stock/jornadas/${JORNADA}`).length).toBeGreaterThan(antes))
   })
 })
+
+/**
+ * Change 25, tarea 15.3 (spec `stock/rendicion-de-jornada`, escenarios de pantalla; D9 = B, D12; RUT-05, SEG-06):
+ * el detalle de la jornada avisa de los rechazos pendientes y deshabilita «Rendir».
+ */
+describe('detalle de la jornada: rechazos pendientes (tarea 15.3; D9 = B)', () => {
+  const AVISO = (n: string) => `Esta jornada tiene ${n} sin resolver. Hay que resolverlas antes de rendir.`
+
+  function reglasConRechazos(cantidad: number | undefined): ReglaDeApi[] {
+    return [
+      {
+        ruta: `/stock/jornadas/${JORNADA}`,
+        responder: () => ({ status: 200, cuerpo: { ...detalle('ABIERTA', true), rechazos_pendientes: cantidad } }),
+      },
+      ...reglas('ABIERTA', true),
+    ]
+  }
+
+  it('con rechazos pendientes avisa cuántos, deshabilita «Rendir» y ofrece «Ver rechazadas» filtrada por la jornada', async () => {
+    enrutar(apiFetchMock, reglasConRechazos(2))
+    renderEn('SUP')
+
+    expect(await screen.findByText(AVISO('2 operaciones rechazadas'))).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Rendir' })).toBeDisabled()
+    expect(screen.getByRole('link', { name: 'Ver rechazadas' })).toHaveAttribute(
+      'href',
+      `/admin/revision/rechazadas?jornada=${JORNADA}`,
+    )
+  })
+
+  it('con una sola dice «1 operación rechazada»', async () => {
+    enrutar(apiFetchMock, reglasConRechazos(1))
+    renderEn('SUP')
+
+    expect(await screen.findByText(AVISO('1 operación rechazada'))).toBeInTheDocument()
+  })
+
+  it('sin REVISAR_OBSERVACIONES dice quién las resuelve y no ofrece el acceso ni pide la lista (SEG-06)', async () => {
+    enrutar(apiFetchMock, reglasConRechazos(2))
+    renderEn('SUP', ['TRANSFERIR_STOCK', 'RENDIR_JORNADA', 'ABRIR_JORNADA', 'LIBERAR_UBICACION'])
+
+    expect(await screen.findByText(AVISO('2 operaciones rechazadas'))).toBeInTheDocument()
+    expect(screen.getByText('Las resuelve quien revisa las observaciones.')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Ver rechazadas' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Rendir' })).toBeDisabled()
+    expect(llamadas(apiFetchMock, 'GET', '/observaciones/rechazos')).toHaveLength(0)
+  })
+
+  it('sin rechazos pendientes no hay aviso y «Rendir» queda habilitado', async () => {
+    enrutar(apiFetchMock, reglasConRechazos(0))
+    renderEn('SUP')
+
+    expect(await screen.findByRole('button', { name: 'Rendir' })).toBeEnabled()
+    expect(screen.queryByText(/operaciones? rechazadas? sin resolver/)).not.toBeInTheDocument()
+  })
+
+  it('un dato que no llegó cuenta como ninguno', async () => {
+    enrutar(apiFetchMock, reglasConRechazos(undefined))
+    renderEn('SUP')
+
+    expect(await screen.findByRole('button', { name: 'Rendir' })).toBeEnabled()
+    expect(screen.queryByText(/rechazadas? sin resolver/)).not.toBeInTheDocument()
+  })
+})

@@ -85,6 +85,7 @@ def listar_ventas_paginado(
     desde: datetime | None,
     hasta: datetime | None,
     estado: str | None = None,
+    numero: str | None = None,
 ) -> tuple[list[Venta], str | None]:
     """Ventas de la organización de la más reciente a la más vieja, por cursor
     `(occurred_at, id)` descendente (índices `ix_venta__occurred_at`, `ix_venta__cliente` e
@@ -101,6 +102,9 @@ def listar_ventas_paginado(
         consulta = consulta.where(Venta.ubicacion_id == ubicacion_id)
     if estado is not None:
         consulta = consulta.where(Venta.estado == estado)
+    if numero is not None and numero != "":
+        # Coincidencia parcial sin distinguir mayúsculas, en la base; `%` y `_` valen como texto.
+        consulta = consulta.where(Venta.numero.icontains(numero, autoescape=True))
     if desde is not None:
         consulta = consulta.where(Venta.occurred_at >= desde)
     if hasta is not None:
@@ -253,3 +257,31 @@ def totales_de_ventas_de_jornada(
         (int(vigentes[2]), Decimal(vigentes[3])),
         (int(anuladas[2]), Decimal(anuladas[3])),
     )
+
+
+def ordenes_de_lineas(
+    organizacion_id: UUID, linea_ids: Sequence[UUID], sesion: Session
+) -> dict[UUID, int]:
+    """`{linea_id: orden}` (desde 0) de las líneas de venta de la organización entre `linea_ids`,
+    en una consulta (las de otra organización no aparecen; INV-21)."""
+    if not linea_ids:
+        return {}
+    consulta = select(VentaLinea.id, VentaLinea.orden).where(
+        VentaLinea.organizacion_id == organizacion_id, VentaLinea.id.in_(list(linea_ids))
+    )
+    return {f.id: f.orden for f in sesion.execute(consulta)}
+
+
+def resumir_ventas(
+    organizacion_id: UUID, ids: Sequence[UUID], sesion: Session
+) -> list[tuple[UUID, str, UUID, Decimal, datetime]]:
+    """`(id, número, cliente, total, momento)` de las ventas de la organización entre `ids`, en una
+    consulta (las de otra organización no aparecen; INV-21). Para el resumen de la bandeja."""
+    if not ids:
+        return []
+    consulta = select(
+        Venta.id, Venta.numero, Venta.cliente_id, Venta.total, Venta.occurred_at
+    ).where(Venta.organizacion_id == organizacion_id, Venta.id.in_(list(ids)))
+    return [
+        (f.id, f.numero, f.cliente_id, f.total, f.occurred_at) for f in sesion.execute(consulta)
+    ]

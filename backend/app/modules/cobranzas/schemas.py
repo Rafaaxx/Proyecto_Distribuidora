@@ -117,6 +117,10 @@ class CobranzaObservacionResponse(BaseModel):
     codigo: str
     estado: str
     detalle: dict[str, object] | None
+    # Change 25 (D11, SYN-08): la resolución, solo lectura; nulas mientras está pendiente.
+    resuelto_por_nombre: str | None = None
+    resuelto_en: datetime | None = None
+    comentario: str | None = None
 
 
 class CobranzaDetalleResponse(CobranzaResumenResponse):

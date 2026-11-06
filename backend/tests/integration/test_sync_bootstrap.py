@@ -174,6 +174,7 @@ def test_rut03_con_la_jornada_abierta_responde_200_con_la_jornada_y_su_ubicacion
         "reglas_descuento",
         "stock",
         "autorizadores",
+        "rechazos_resueltos",
     }
 
 

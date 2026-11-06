@@ -81,6 +81,8 @@ const FIJOS_DE_OBSERVACION: Readonly<Record<string, string>> = {
   PERMISO_REVOCADO: 'Cuando llegó la operación, tu usuario ya no tenía el permiso.',
   JORNADA_LIBERADA: 'La jornada había sido liberada cuando llegó la venta.',
   JORNADA_RENDIDA: 'Llegó cuando la jornada ya estaba rendida; no entra en el conteo.',
+  // Change 25 (D10, D12; SYN-07): se vendió algo que la oficina desactivó después del bootstrap.
+  PRODUCTO_DESACTIVADO: 'Se vendió un producto o una presentación que en la oficina se desactivó.',
   ANULACION_COMPRA_SIN_RECALCULO: 'La anulación de la compra no recalculó el costo.',
   CONSUMIDOR_FINAL_CON_DEUDA: 'La venta al consumidor final quedó con deuda.',
   UBICACION_TOMADA_AL_SINCRONIZAR:

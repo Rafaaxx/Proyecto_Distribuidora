@@ -501,3 +501,34 @@ describe('detalle y anulación de un ajuste (tarea 13.2 y 13.3; TR-06, D5)', () 
     expect(screen.getByText('Confirmada')).toBeInTheDocument()
   })
 })
+
+describe('detalle de un ajuste: observaciones y su resolución (tarea 15.2; SYN-07, SYN-08, D11)', () => {
+  it('muestra los avisos y la resolución de los resueltos', async () => {
+    enrutar(apiFetchMock, [
+      {
+        ruta: `/stock/ajustes/${AJUSTE}`,
+        responder: () => ({
+          status: 200,
+          cuerpo: {
+            ...detalle('CONFIRMADA'),
+            observaciones: [
+              {
+  codigo: 'STOCK_NEGATIVO',
+  estado: 'RESUELTA',
+  detalle: { saldo: -1 },
+  resuelto_por_nombre: 'Marta',
+  resuelto_en: '2026-11-05T12:00:00Z',
+  comentario: 'Se corrigió con un ajuste',
+},
+            ],
+          },
+        }),
+      },
+    ])
+    renderEn(`/admin/stock/ajustes/${AJUSTE}`, 'ADM')
+
+    const seccion = await screen.findByTestId('observaciones-de-la-operacion')
+    expect(within(seccion).getByText('Stock negativo')).toBeInTheDocument()
+    expect(within(seccion).getByText(/^Resuelta por Marta el \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}: Se corrigió con un ajuste$/)).toBeInTheDocument()
+  })
+})

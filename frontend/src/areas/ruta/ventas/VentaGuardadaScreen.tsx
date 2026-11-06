@@ -9,6 +9,7 @@ import { motivoDeNoAnularDeDatos, useDatosParaAnular } from '../datos/anulacion'
 import { useVentaLocal } from '../datos/ventas'
 import { useExplicacionDeEnvio, useExplicacionDeOperacion } from '../datos/sincronizacion'
 import type { AnulacionLocal, VentaLocal } from '../../../lib/dispositivo/db'
+import { MarcaDeRechazoResuelto } from '../sincronizacion/MarcaDeRechazoResuelto'
 import { NotaSinSenal } from './NotaSinSenal'
 import {
   claveDeAyudaDeEnvio,
@@ -79,6 +80,7 @@ function SeccionDeAnulacion({ anulacion }: { anulacion: AnulacionLocal }) {
         </Badge>
         {claveDeEstado !== null && <Ayuda clave={claveDeEstado} />}
       </span>
+      <MarcaDeRechazoResuelto operationId={anulacion.operation_id} estado={anulacion.estado_envio} conAyuda />
       <p className="text-xs text-primary/70">{formatearFechaHora(anulacion.occurred_at).trim()}</p>
       <p className="break-words font-medium">{anulacion.motivo_nombre}</p>
       {anulacion.observacion !== null && <p className="break-words">{anulacion.observacion}</p>}
@@ -156,6 +158,7 @@ function DetalleDeVenta({ venta }: { venta: VentaLocal }) {
           <Badge>{etiquetaDeEnvio(venta.estado_envio)}</Badge>
           {claveDeEstado !== null && <Ayuda clave={claveDeEstado} />}
         </span>
+        <MarcaDeRechazoResuelto operationId={venta.operation_id} estado={venta.estado_envio} conAyuda />
         {anulada && <Badge variante="negativo">{ETIQUETA_ANULADA}</Badge>}
       </div>
       <Card className="flex flex-col gap-1 text-sm text-primary">

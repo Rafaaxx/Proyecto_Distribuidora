@@ -229,6 +229,14 @@ class JornadaSinEntregaError(DomainError):
     status_http = 409
 
 
+class RechazosPendientesError(DomainError):
+    """La jornada todavía tiene operaciones rechazadas sin resolver: no se rinde hasta que
+    administración las resuelva (RUT-05, change 25 D9 = B). La extensión lleva la cantidad."""
+
+    codigo = "RECHAZOS_PENDIENTES"
+    status_http = 409
+
+
 class UbicacionSinTomaError(DomainError):
     """Solo se abre una jornada sobre una ubicación que requiere toma (RUT-01, D3)."""
 

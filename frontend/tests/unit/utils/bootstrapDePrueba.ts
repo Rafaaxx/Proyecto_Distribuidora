@@ -24,7 +24,7 @@ export function clienteDePrueba(n: number, nombre: string): Bootstrap['clientes'
   }
 }
 
-export function bootstrapDePrueba(opciones: { clientes?: Bootstrap['clientes']; generado?: string; secuenciaProcesada?: number | null } = {}): Bootstrap {
+export function bootstrapDePrueba(opciones: { clientes?: Bootstrap['clientes']; generado?: string; secuenciaProcesada?: number | null; rechazosResueltos?: string[] } = {}): Bootstrap {
   return {
     generado_en: opciones.generado ?? '2026-10-30T10:00:00Z',
     sesion: {
@@ -58,6 +58,7 @@ export function bootstrapDePrueba(opciones: { clientes?: Bootstrap['clientes']; 
       nota: { domicilio: null, telefono: null, muestra_saldo: true },
     },
     contexto_venta: null,
+    rechazos_resueltos: opciones.rechazosResueltos ?? [],
     catalogos: {
       medios_pago: [{ id: ID(20), nombre: 'Efectivo', requiere_referencia: false }],
       motivos: [{ id: ID(21), ambito: 'DESCUENTO', nombre: 'Promo' }],

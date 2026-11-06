@@ -3,7 +3,10 @@ import { Link } from 'react-router-dom'
 import { Ayuda } from '../../../components/ui/Ayuda'
 import { Badge } from '../../../components/ui/Badge'
 import { formatearDinero } from '../../../domain/ruta/lecturasLocales'
+import { useRechazosResueltos } from '../datos/rechazosResueltos'
 import { useVentasDeHoy } from '../datos/ventas'
+import { MarcaDeRechazoResuelto } from '../sincronizacion/MarcaDeRechazoResuelto'
+import { hayRechazoResuelto } from '../sincronizacion/presentacion'
 import { ayudasDeProblemasEnLista, ETIQUETA_ANULADA, etiquetaDeEnvio } from './presentacionDeVentas'
 
 /**
@@ -13,6 +16,7 @@ import { ayudasDeProblemasEnLista, ETIQUETA_ANULADA, etiquetaDeEnvio } from './p
  */
 export function VentasDeHoyScreen() {
   const datos = useVentasDeHoy()
+  const resueltos = useRechazosResueltos()
 
   if (datos.estado === 'cargando') return <p className="text-sm text-primary">Cargando…</p>
   if (datos.estado === 'sin_datos') {
@@ -38,6 +42,7 @@ export function VentasDeHoyScreen() {
                 <span className="break-words text-sm text-primary">{venta.nota?.cliente.nombre ?? '—'}</span>
                 <span className="flex flex-wrap items-center gap-2">
                   <Badge>{etiquetaDeEnvio(venta.estado_envio)}</Badge>
+                  <MarcaDeRechazoResuelto operationId={venta.operation_id} estado={venta.estado_envio} />
                   {datos.anuladas.has(venta.venta_id) && <Badge variante="negativo">{ETIQUETA_ANULADA}</Badge>}
                 </span>
               </Link>
@@ -50,6 +55,9 @@ export function VentasDeHoyScreen() {
         {claves.map((clave) => (
           <Ayuda key={clave} clave={clave} />
         ))}
+        {hayRechazoResuelto(resueltos, datos.ventas.map((v) => ({ operationId: v.operation_id, estado: v.estado_envio }))) && (
+          <Ayuda clave="ruta.rechazoResuelto" />
+        )}
       </p>
     </div>
   )

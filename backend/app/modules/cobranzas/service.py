@@ -24,6 +24,19 @@ from sqlalchemy.orm import Session
 
 from app.core.clock import Clock
 from app.core.money import redondear_importe
+from app.core.resumen import (
+    MedioResumido,
+    ResumenDeContenido,
+    ResumenDeOperacion,
+    como_importe,
+    como_lista,
+    como_mapa,
+    como_uuid,
+    nombre_o_sin_referencia,
+    registrar_lector_de_vinculo,
+    registrar_resumidor_de_contenido,
+    registrar_resumidor_de_operacion,
+)
 from app.modules.clientes import service as clientes_service
 from app.modules.cobranzas import repository
 from app.modules.cobranzas.domain.cobranza import (
@@ -604,3 +617,84 @@ stock_service.registrar_lector_de_cobranzas_de_jornada(
         organizacion_id, sesion, jornada_id=jornada_id, corte=corte
     )
 )
+
+
+def resumir_cobranzas(
+    organizacion_id: UUID, sesion: Session, ids: Sequence[UUID]
+) -> dict[UUID, ResumenDeOperacion]:
+    """Resumen de varias cobranzas para la bandeja de revisión (change 25, D4): cliente, importe
+    y momento, con una consulta de cobranzas y una de nombres de clientes. Una cobranza de otra
+    organización no aparece (INV-21)."""
+    filas = repository.resumir_cobranzas(organizacion_id, ids, sesion)
+    clientes = clientes_service.nombres_de_clientes(
+        organizacion_id, {cliente_id for _, cliente_id, _, _ in filas}, sesion
+    )
+    return {
+        id_: ResumenDeOperacion(
+            titulo="Cobranza",
+            tercero=clientes.get(cliente_id),
+            total=str(importe),
+            momento=momento,
+        )
+        for id_, cliente_id, importe, momento in filas
+    }
+
+
+registrar_resumidor_de_operacion("COBRANZA", resumir_cobranzas)
+
+
+def leer_cobranza_para_vinculo(organizacion_id: UUID, sesion: Session, cobranza_id: UUID) -> bool:
+    """Si la cobranza existe en la organización (change 25, D7): el vínculo de una cobranza
+    rechazada. Una cobranza de otra organización no existe."""
+    return repository.existe_cobranza(organizacion_id, sesion, cobranza_id=cobranza_id)
+
+
+registrar_lector_de_vinculo("COBRANZA", leer_cobranza_para_vinculo)
+
+
+def resumir_medios_enviados(
+    organizacion_id: UUID, sesion: Session, medios: Sequence[object]
+) -> tuple[MedioResumido, ...]:
+    """Los medios que envió el teléfono (`[{medio_pago_id, importe}]`) con el nombre de cada
+    medio, sin fallar con una lista o un medio mal formado (change 25, D4). Lo usa también
+    `ventas` para la cobranza en el acto de una venta."""
+    if not medios:
+        return ()
+    nombres = {
+        medio.id: medio.nombre
+        for medio in configuracion_service.listar_medios_pago_todos(organizacion_id, sesion)
+    }
+    resumidos = []
+    for medio in medios:
+        mapa = como_mapa(medio)
+        resumidos.append(
+            MedioResumido(
+                medio=nombre_o_sin_referencia(nombres, mapa.get("medio_pago_id")),
+                importe=como_importe(mapa.get("importe")),
+            )
+        )
+    return tuple(resumidos)
+
+
+def resumir_contenidos_de_cobranza(
+    organizacion_id: UUID, sesion: Session, contenidos: Sequence[object]
+) -> list[ResumenDeContenido]:
+    """Lo que envió el teléfono en `COBRANZA_REGISTRAR`: cliente, importe y medios, con una
+    consulta de nombres de clientes y una de medios para toda la lista (change 25, D4). Un
+    contenido mal formado o un cliente que ya no existe no hacen fallar la lectura."""
+    mapas = [como_mapa(c) for c in contenidos]
+    clientes = clientes_service.nombres_de_clientes(
+        organizacion_id, {id_ for m in mapas if (id_ := como_uuid(m.get("cliente_id")))}, sesion
+    )
+    return [
+        ResumenDeContenido(
+            titulo="Cobranza",
+            cliente=nombre_o_sin_referencia(clientes, m.get("cliente_id")),
+            total=como_importe(m.get("importe")),
+            medios=resumir_medios_enviados(organizacion_id, sesion, como_lista(m.get("medios"))),
+        )
+        for m in mapas
+    ]
+
+
+registrar_resumidor_de_contenido("COBRANZA_REGISTRAR", resumir_contenidos_de_cobranza)

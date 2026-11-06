@@ -554,3 +554,36 @@ describe('detalle y anulación de una transferencia (tarea 13.1 y 13.3; TR-06, D
     expect(new Set(ids).size).toBe(1)
   })
 })
+
+describe('detalle de una transferencia: observaciones y su resolución (tarea 15.2; SYN-07, SYN-08, D11)', () => {
+  it('muestra los avisos y la resolución de los resueltos', async () => {
+    enrutar(apiFetchMock, [
+      {
+        ruta: `/stock/transferencias/${TRANSFERENCIA}`,
+        responder: () => ({
+          status: 200,
+          cuerpo: {
+            ...detalle('CONFIRMADA'),
+            observaciones: [
+              { codigo: 'STOCK_NEGATIVO', estado: 'PENDIENTE', detalle: { saldo: -3 } },
+              {
+  codigo: 'STOCK_NEGATIVO',
+  estado: 'RESUELTA',
+  detalle: { saldo: -7 },
+  resuelto_por_nombre: 'Marta',
+  resuelto_en: '2026-11-05T12:00:00Z',
+  comentario: 'Se corrigió con un ajuste',
+},
+            ],
+          },
+        }),
+      },
+    ])
+    renderEn(`/admin/stock/transferencias/${TRANSFERENCIA}`, 'VEN')
+
+    const seccion = await screen.findByTestId('observaciones-de-la-operacion')
+    expect(within(seccion).getAllByText('Stock negativo')).toHaveLength(2)
+    expect(within(seccion).getByText('Saldo resultante: -3 unidades')).toBeInTheDocument()
+    expect(within(seccion).getByText(/^Resuelta por Marta el \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}: Se corrigió con un ajuste$/)).toBeInTheDocument()
+  })
+})

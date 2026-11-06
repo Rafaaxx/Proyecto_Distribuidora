@@ -144,9 +144,9 @@ describe('textos de ayuda de la sincronización (change 22b, tarea 12.1)', () =>
     const { titulo, texto, reglas } = AYUDAS['ruta.ventaRechazada']
     expect(titulo).toBe('Rechazada')
     expect(texto).toBe(
-      'El sistema no aceptó la venta por un problema de datos, no por stock ni por crédito. En el detalle ves el motivo. Sigue guardada, no se vuelve a enviar sola y el teléfono la sigue descontando del stock y de la cuenta del cliente: avisá a administración.',
+      'El sistema no aceptó la venta por un problema de datos, no por stock ni por crédito. En el detalle ves el motivo. Sigue guardada y no se vuelve a enviar sola. El teléfono la sigue descontando del stock y de la cuenta del cliente hasta que administración la resuelva o termine la jornada: avisá a administración.',
     )
-    expect(reglas).toEqual(expect.arrayContaining(['SYN-06', 'SYN-09', 'ADR-065']))
+    expect(reglas).toEqual(expect.arrayContaining(['SYN-06', 'SYN-09', 'ADR-065', 'ADR-069']))
   })
 
   it('ruta.versionMinima: ya no confirma ventas nuevas, las guardadas se siguen enviando', () => {

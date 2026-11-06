@@ -1077,3 +1077,31 @@ def nombres_de_proveedores(
         Proveedor.organizacion_id == organizacion_id, Proveedor.id.in_(proveedor_ids)
     )
     return {fila.id: fila.nombre for fila in sesion.execute(consulta)}
+
+
+def resumir_compras(
+    organizacion_id: UUID, ids: Collection[UUID], sesion: Session
+) -> list[tuple[UUID, str | None, str, Decimal, datetime]]:
+    """`(id, comprobante, proveedor, total de la factura, momento)` de las compras de la
+    organización entre `ids`, en una consulta (las de otra organización no aparecen; INV-21)."""
+    if not ids:
+        return []
+    consulta = (
+        select(
+            Compra.id,
+            Compra.numero_comprobante,
+            Proveedor.nombre,
+            Compra.total_factura,
+            Compra.occurred_at,
+        )
+        .join(
+            Proveedor,
+            (Proveedor.organizacion_id == Compra.organizacion_id)
+            & (Proveedor.id == Compra.proveedor_id),
+        )
+        .where(Compra.organizacion_id == organizacion_id, Compra.id.in_(list(ids)))
+    )
+    return [
+        (f.id, f.numero_comprobante, f.nombre, f.total_factura, f.occurred_at)
+        for f in sesion.execute(consulta)
+    ]

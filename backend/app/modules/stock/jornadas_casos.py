@@ -7,6 +7,7 @@ ciclo. Sin `commit`: la transacción la gestiona el bus (`CLAUDE.md` §4).
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -108,6 +109,14 @@ def ubicacion_de_jornada(
     D3, D17), o `None` si no existe en la organización (INV-21). La ubicación de una jornada no
     cambia (INV-05)."""
     return repository.leer_ubicacion_de_jornada(organizacion_id, sesion, jornada_id=jornada_id)
+
+
+def usuarios_de_jornadas(
+    organizacion_id: UUID, sesion: Session, jornada_ids: Collection[UUID]
+) -> dict[UUID, UUID]:
+    """`{jornada_id: usuario_id}` (el vendedor) de las jornadas de la organización, en una
+    consulta (change 25, lote extra: la bandeja nombra quién tenía la ubicación)."""
+    return repository.leer_usuarios_de_jornadas(organizacion_id, sesion, jornada_ids)
 
 
 def jornada_es_de(

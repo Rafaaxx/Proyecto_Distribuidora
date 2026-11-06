@@ -235,3 +235,55 @@ describe('VentaDetalleScreen (tarea 12.3)', () => {
     expect(await screen.findByTestId('observaciones-generales')).toHaveTextContent('Exceso de crédito advertido')
   })
 })
+
+/**
+ * Change 25, tarea 15.2 (D11, D12; SYN-07, SYN-08): cada observación resuelta muestra quién, cuándo y con qué
+ * comentario (solo lectura); las etiquetas y los detalles nuevos.
+ */
+describe('VentaDetalleScreen: resolución de las observaciones (tarea 15.2)', () => {
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+  })
+
+  it('una observación resuelta dice «Resuelta por {usuario} el {fecha}: {comentario}»; una pendiente, no', async () => {
+    montarApi(apiFetchMock, [
+      detalle({
+        observaciones: [
+          { codigo: 'STOCK_NEGATIVO', estado: 'PENDIENTE', detalle: { linea_id: 'l1', saldo_resultante: -4 } },
+          {
+  codigo: 'CONSUMIDOR_FINAL_CON_DEUDA',
+  estado: 'RESUELTA',
+  detalle: { total: '4300.00', cobranza: '4000.00' },
+  resuelto_por_nombre: 'Marta',
+  resuelto_en: '2026-11-05T12:00:00Z',
+  comentario: 'Se corrigió con un ajuste',
+},
+        ],
+      }),
+    ])
+    renderPantalla('SUP')
+
+    const generales = await screen.findByTestId('observaciones-generales')
+    expect(within(generales).getByText(/^Resuelta por Marta el \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}: Se corrigió con un ajuste$/)).toBeInTheDocument()
+    expect(within(await screen.findByTestId('linea-l1')).queryByText(/^Resuelta/)).not.toBeInTheDocument()
+  })
+
+  it('muestra las etiquetas y los detalles que faltaban (D12)', async () => {
+    montarApi(apiFetchMock, [
+      detalle({
+        observaciones: [
+          { codigo: 'JORNADA_RENDIDA', estado: 'PENDIENTE', detalle: { jornada_id: 'j1', rendida_en: '2026-11-04T20:00:00Z' } },
+          { codigo: 'PRODUCTO_DESACTIVADO', estado: 'PENDIENTE', detalle: { linea_id: 'l2', inactivo: 'PRODUCTO' } },
+          { codigo: 'DESCUENTO_DIFIERE', estado: 'PENDIENTE', detalle: { causas: [{ causa: 'MOTIVO' }] } },
+        ],
+      }),
+    ])
+    renderPantalla('SUP')
+
+    const generales = await screen.findByTestId('observaciones-generales')
+    expect(within(generales).getByText('Llegó después de la rendición')).toBeInTheDocument()
+    expect(within(generales).getByText(/^Rendida el \d{2}\/\d{2}\/\d{4}/)).toBeInTheDocument()
+    expect(within(generales).getByText('Causa: faltó el motivo')).toBeInTheDocument()
+    expect(screen.getByTestId('linea-l2')).toHaveTextContent('Producto desactivado')
+  })
+})

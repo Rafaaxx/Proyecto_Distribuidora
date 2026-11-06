@@ -69,6 +69,7 @@ describe('textoDeObservacion (D5, SYN-07)', () => {
     ['LISTA_NO_VIGENTE', null, 'Los precios no eran los de la versión vigente de la lista en ese momento.'],
     ['JORNADA_LIBERADA', null, 'La jornada había sido liberada cuando llegó la venta.'],
     ['JORNADA_RENDIDA', null, 'Llegó cuando la jornada ya estaba rendida; no entra en el conteo.'],
+    ['PRODUCTO_DESACTIVADO', { inactivo: 'PRODUCTO' }, 'Se vendió un producto o una presentación que en la oficina se desactivó.'],
   ])('%s arma el texto con los nombres locales', (codigo, detalle, esperado) => {
     expect(textoDeObservacion(observacion(codigo, detalle), NOMBRES)).toBe(esperado)
   })

@@ -257,6 +257,7 @@ def listar_ventas(
     desde: date | None = None,
     hasta: date | None = None,
     estado: Literal["CONFIRMADA", "ANULADA"] | None = None,
+    numero: Annotated[str | None, Query(max_length=50)] = None,
     cursor: str | None = None,
     limite: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> PaginaVentas:
@@ -265,7 +266,8 @@ def listar_ventas(
     `desde` y `hasta` son fechas de negocio inclusivas en la zona de la organización (TR-04); un
     `limite` fuera de 1 a 200 es 422, y un rango invertido o un cursor ilegible también, con su
     código. `estado` (change 19, D14, REP-02) filtra por `CONFIRMADA` o `ANULADA`; otro valor es
-    422."""
+    422. `numero` (change 25, lote extra) busca el número de venta por coincidencia parcial, sin
+    distinguir mayúsculas, en la base (hasta 50 caracteres)."""
     pagina = ventas_queries.listar_ventas(
         contexto.organizacion_id,
         sesion,
@@ -276,6 +278,7 @@ def listar_ventas(
         desde=desde,
         hasta=hasta,
         estado=estado,
+        numero=numero,
         cursor=cursor,
         limite=limite,
     )
@@ -601,7 +604,7 @@ def obtener_venta(
     detalle = ventas_queries.obtener_detalle_de_venta(
         contexto.organizacion_id, venta_id, sesion, con_costos=PERMISO_VER_COSTOS in permisos
     )
-    observaciones = sync_service.listar_observaciones_de_operacion(
+    observaciones = sync_service.listar_observaciones_con_resolucion(
         contexto.organizacion_id, sesion, operacion_tipo=_OPERACION_TIPO, operacion_id=venta_id
     )
     venta = detalle.resumen.venta
@@ -677,6 +680,9 @@ def obtener_venta(
                 codigo=o.codigo,
                 estado=o.estado,
                 detalle={} if o.detalle is None else dict(o.detalle),
+                resuelto_por_nombre=o.resuelto_por_nombre,
+                resuelto_en=o.resuelto_en,
+                comentario=o.comentario,
             )
             for o in observaciones
         ],

@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
+from revision_utiles import resolver_por_sql, sembrar_observaciones
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from stock_utiles import crear_motivo_sql, crear_ubicacion_sql, desactivar_producto_sql
@@ -655,3 +656,61 @@ def test_un_producto_o_una_ubicacion_inactivos_son_409_sin_efectos(
         "UBICACION_INACTIVA",
     )
     assert _saldo(sesion, entorno, entorno.producto_id, entorno.camioneta_id) == 60
+
+
+def test_syn08_el_detalle_de_la_transferencia_muestra_sus_avisos_y_su_resolucion(
+    cliente: TestClient, sesion: Session
+) -> None:
+    """SYN-07, SYN-08, change 25 D11: los avisos de la transferencia y, si se resolvieron, quién,
+    cuándo y con qué comentario."""
+    entorno = _preparar(sesion)
+    headers = entorno.confirmar_y_entrar(cliente)
+    transferencia_id = _transferir(cliente, headers, entorno)
+    sembrar_observaciones(
+        sesion,
+        entorno.org,
+        usuario_id=entorno.usuario_id,
+        dispositivo_id=entorno.dispositivo_id,
+        codigos=("STOCK_NEGATIVO",),
+        detalles=({"producto_id": str(entorno.producto_id), "saldo": -3},),
+        operacion_tipo="TRANSFERENCIA",
+        operacion_id=UUID(transferencia_id),
+        tipo_de_comando="TRANSFERENCIA_CREAR",
+        modo="ONLINE",
+    )
+    sesion.commit()
+    url = f"{URL}/{transferencia_id}"
+    (pendiente,) = cliente.get(url, headers=headers).json()["observaciones"]
+    assert pendiente["codigo"] == "STOCK_NEGATIVO"
+    assert pendiente["estado"] == "PENDIENTE"
+    assert pendiente["detalle"]["saldo"] == -3
+    assert pendiente["resuelto_por_nombre"] is None
+
+    resolver_por_sql(sesion, entorno.org, UUID(transferencia_id), entorno.usuario_id, "Ajustado")
+
+    (resuelta,) = cliente.get(url, headers=headers).json()["observaciones"]
+    assert resuelta["estado"] == "RESUELTA"
+    assert resuelta["resuelto_por_nombre"] == "Persona de prueba"
+    assert resuelta["comentario"] == "Ajustado"
+    assert resuelta["resuelto_en"] is not None
+
+
+def test_inv21_el_detalle_de_la_transferencia_no_muestra_avisos_de_otra_organizacion(
+    cliente: TestClient, sesion: Session
+) -> None:
+    """INV-21: los avisos con el mismo id de operación de otra organización no aparecen."""
+    entorno = _preparar(sesion)
+    ajena = _preparar(sesion)
+    headers = entorno.confirmar_y_entrar(cliente)
+    transferencia_id = _transferir(cliente, headers, entorno)
+    sembrar_observaciones(
+        sesion,
+        ajena.org,
+        usuario_id=ajena.usuario_id,
+        dispositivo_id=ajena.dispositivo_id,
+        operacion_tipo="TRANSFERENCIA",
+        operacion_id=UUID(transferencia_id),
+    )
+    sesion.commit()
+
+    assert cliente.get(f"{URL}/{transferencia_id}", headers=headers).json()["observaciones"] == []

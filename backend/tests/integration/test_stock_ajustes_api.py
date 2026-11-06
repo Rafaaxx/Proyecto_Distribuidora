@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
+from revision_utiles import resolver_por_sql, sembrar_observaciones
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from stock_utiles import crear_motivo_sql, crear_producto_sql, desactivar_producto_sql
@@ -621,3 +622,46 @@ def test_un_producto_o_una_ubicacion_inactivos_son_409_sin_efectos(
         "UBICACION_INACTIVA",
     )
     assert _saldo(sesion, entorno, entorno.producto_id) == 114
+
+
+def test_syn08_el_detalle_del_ajuste_muestra_sus_avisos_y_su_resolucion(
+    cliente: TestClient, sesion: Session
+) -> None:
+    """SYN-07, SYN-08, change 25 D11: los avisos del ajuste y su resolución."""
+    entorno = _preparar(sesion)
+    headers = entorno.confirmar_y_entrar(cliente)
+    ajuste_id = _ajustar(cliente, headers, entorno)
+    sembrar_observaciones(
+        sesion,
+        entorno.org,
+        usuario_id=entorno.usuario_id,
+        dispositivo_id=entorno.dispositivo_id,
+        codigos=("STOCK_NEGATIVO",),
+        detalles=({"producto_id": str(entorno.producto_id), "saldo": -2},),
+        operacion_tipo="AJUSTE_STOCK",
+        operacion_id=UUID(ajuste_id),
+        tipo_de_comando="AJUSTE_STOCK_CREAR",
+        modo="ONLINE",
+    )
+    sesion.commit()
+    url = f"{URL}/{ajuste_id}"
+    (pendiente,) = cliente.get(url, headers=headers).json()["observaciones"]
+    assert (pendiente["codigo"], pendiente["estado"]) == ("STOCK_NEGATIVO", "PENDIENTE")
+    assert pendiente["comentario"] is None
+
+    resolver_por_sql(sesion, entorno.org, UUID(ajuste_id), entorno.usuario_id, "Conteo hecho")
+
+    (resuelta,) = cliente.get(url, headers=headers).json()["observaciones"]
+    assert resuelta["estado"] == "RESUELTA"
+    assert resuelta["resuelto_por_nombre"] == "Persona de prueba"
+    assert resuelta["comentario"] == "Conteo hecho"
+
+
+def test_el_detalle_de_un_ajuste_sin_avisos_trae_la_lista_vacia(
+    cliente: TestClient, sesion: Session
+) -> None:
+    entorno = _preparar(sesion)
+    headers = entorno.confirmar_y_entrar(cliente)
+    ajuste_id = _ajustar(cliente, headers, entorno)
+
+    assert cliente.get(f"{URL}/{ajuste_id}", headers=headers).json()["observaciones"] == []

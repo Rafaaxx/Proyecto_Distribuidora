@@ -85,16 +85,16 @@ describe('ruteo de áreas (docs/02 §13.1: /ruta y /admin cargadas de forma dife
    * Catálogo. Esta prueba verifica el ruteo real de `AdminScreen`, no el
    * criterio de elección (que está en `AdminLayout.test.tsx`).
    */
-  it('navegar a /admin/inicio lleva a la primera sección permitida, sin quedarse en el índice', async () => {
+  it('navegar a /admin/inicio no se queda en el índice: el Administrador, que revisa observaciones, aterriza en «Para revisar»', async () => {
     render(
       <MemoryRouter initialEntries={['/admin/inicio']}>
         <AppRoutes />
       </MemoryRouter>,
     )
 
-    // Catálogo es la primera sección del menú para este usuario, así que
-    // `/admin/inicio` no debe quedar en la pantalla "Cargando…" del índice.
-    expect(await screen.findByRole('heading', { name: /productos/i })).toBeInTheDocument()
+    // Change 25 (D5): quien tiene `REVISAR_OBSERVACIONES` aterriza en la tarjeta del inicio en vez de saltar a
+    // Catálogo; el salto a la primera sección sigue para el resto (`AdminLayout.test.tsx`).
+    expect(await screen.findByRole('heading', { name: 'Para revisar' })).toBeInTheDocument()
   })
 
   it('redirige la raíz a /ruta', async () => {

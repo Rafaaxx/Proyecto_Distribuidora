@@ -269,3 +269,46 @@ describe('CobranzaDetalleScreen (tareas 14.1 y 14.3)', () => {
     expect(await screen.findByText(/no se pudo obtener la cobranza/i)).toBeInTheDocument()
   })
 })
+
+/**
+ * Change 25, tarea 15.2 (D11, D12; SYN-07, SYN-08): la resolución de cada observación y las etiquetas nuevas.
+ */
+describe('CobranzaDetalleScreen: resolución de las observaciones (tarea 15.2)', () => {
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+  })
+
+  it('una observación resuelta dice «Resuelta por {usuario} el {fecha}: {comentario}», junto a su medio o aparte', async () => {
+    montarApi(apiFetchMock, [
+      detalle({
+        medios: [{ medio_pago_id: EFECTIVO_ID, medio_nombre: 'Billetera', importe: '10000.00', referencia: null }],
+        observaciones: [
+          {
+  codigo: 'MEDIO_INACTIVO',
+  estado: 'RESUELTA',
+  detalle: { medio: 0, medio_pago_id: EFECTIVO_ID, nombre: 'Billetera', importe: '10000.00' },
+  resuelto_por_nombre: 'Marta',
+  resuelto_en: '2026-11-05T12:00:00Z',
+  comentario: 'Se corrigió con un ajuste',
+},
+          {
+  codigo: 'JORNADA_RENDIDA',
+  estado: 'RESUELTA',
+  detalle: { jornada_id: 'j1', rendida_en: '2026-11-04T20:00:00Z' },
+  resuelto_por_nombre: 'Marta',
+  resuelto_en: '2026-11-05T12:00:00Z',
+  comentario: 'Se corrigió con un ajuste',
+},
+        ],
+      }),
+    ])
+    renderPantalla()
+
+    const [linea] = await screen.findAllByTestId('medio-de-la-cobranza')
+    expect(within(linea as HTMLElement).getByText(/^Resuelta por Marta el \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}: Se corrigió con un ajuste$/)).toBeInTheDocument()
+    const generales = screen.getByTestId('observaciones-de-sincronizacion')
+    expect(within(generales).getByText('Llegó después de la rendición')).toBeInTheDocument()
+    expect(within(generales).getByText(/^Resuelta por Marta el \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}: Se corrigió con un ajuste$/)).toBeInTheDocument()
+    expect(within(generales).getByText(/^Rendida el \d{2}\/\d{2}\/\d{4}/)).toBeInTheDocument()
+  })
+})

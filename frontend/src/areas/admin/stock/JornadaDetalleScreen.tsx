@@ -7,11 +7,13 @@ import { Boton } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { PageHeader } from '../../../components/ui/PageHeader'
 import { accionesDeJornada, PERMISOS_DE_LECTURA_DE_JORNADAS } from '../../../domain/stock/jornadas'
+import { hayRechazosPendientes } from '../../../domain/stock/rendicion'
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { usePermisos } from '../../../features/identidad/usePermisos'
 import { RecursoNoEncontradoStockError } from '../../../features/stock/errores'
 import { useCerrarJornada, useJornada, useLiberarJornada } from '../../../features/stock/hooks'
 import { formatearFechaHora, formatearHora } from '../../../lib/fecha'
+import { AvisoDeRechazosPendientes } from './AvisoDeRechazosPendientes'
 import { CierreDeJornadaDialogo, type DevolucionRealizada } from './CierreDeJornadaDialogo'
 import { InsigniaDeEstadoDeJornada, LiberarJornadaDialogo } from './piezasDeJornada'
 import { ResumenDeJornada } from './ResumenDeJornada'
@@ -71,6 +73,8 @@ function Detalle() {
   const cerrarDialogo = () => setDialogo(null)
   const releer = () => void jornada.refetch()
   const entregada = Boolean(datos.entregada_en)
+  // Change 25 (D9 = B): con rechazos sin resolver la jornada no se rinde.
+  const conRechazos = datos.estado === 'ABIERTA' && hayRechazosPendientes(datos.rechazos_pendientes)
 
   return (
     <main className="flex flex-col gap-4">
@@ -89,7 +93,7 @@ function Detalle() {
               </SiTienePermiso>
             )}
             {acciones.rendir && (
-              <Boton disabled={!entregada} onClick={() => navigate(`/admin/stock/jornadas/${datos.id}/rendicion`)}>
+              <Boton disabled={!entregada || conRechazos} onClick={() => navigate(`/admin/stock/jornadas/${datos.id}/rendicion`)}>
                 Rendir
               </Boton>
             )}
@@ -108,6 +112,8 @@ function Detalle() {
           </>
         }
       />
+
+      {conRechazos && <AvisoDeRechazosPendientes cantidad={datos.rechazos_pendientes} jornadaId={datos.id} />}
 
       <Card className="flex flex-col gap-1 text-sm text-primary">
         <p className="flex items-center gap-2">

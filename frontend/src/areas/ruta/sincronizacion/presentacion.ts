@@ -62,3 +62,11 @@ export function leerUltimoError(valor: string | undefined): ErrorDeSincronizacio
     return null
   }
 }
+
+/** Si alguna operación rechazada de una lista está «Resuelta por administración» (change 25, D8): muestra la ayuda al pie. */
+export function hayRechazoResuelto(
+  resueltos: ReadonlySet<string>,
+  operaciones: readonly { operationId: string; estado: 'PENDIENTE' | 'ACEPTADA' | 'CON_OBSERVACIONES' | 'RECHAZADA' }[],
+): boolean {
+  return operaciones.some((o) => o.estado === 'RECHAZADA' && resueltos.has(o.operationId))
+}

@@ -28,6 +28,7 @@ import { useOperationIdPorContenido } from '../../../features/compras/useOperati
 import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { formatearFechaHora } from '../../../lib/fecha'
 import { formatearImporte, parsearImporteDesdeApi } from '../../../lib/money'
+import { ResolucionDeAviso } from '../revision/ResolucionDeAviso'
 import { CobranzasSinPermiso } from './CobranzasSinPermiso'
 
 const CLASE_CONTROL = 'rounded-md border border-border px-2 py-1 text-sm'
@@ -165,6 +166,7 @@ function AvisoDeObservacion({ observacion }: { observacion: ObservacionDeCobranz
     <p className="flex flex-wrap items-center gap-2">
       <Badge variante="negativo">{etiquetaDeObservacion(observacion.codigo)}</Badge>
       {detalle && <span className="text-primary/70">{detalle}</span>}
+      <ResolucionDeAviso observacion={observacion} />
     </p>
   )
 }

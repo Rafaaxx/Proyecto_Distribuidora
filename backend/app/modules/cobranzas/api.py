@@ -254,7 +254,7 @@ def obtener_cobranza(
     detalle = cobranzas_queries.obtener_detalle_de_cobranza(
         contexto.organizacion_id, cobranza_id, sesion
     )
-    observaciones = sync_service.listar_observaciones_de_operacion(
+    observaciones = sync_service.listar_observaciones_con_resolucion(
         contexto.organizacion_id,
         sesion,
         operacion_tipo=_OPERACION_TIPO,
@@ -291,6 +291,9 @@ def obtener_cobranza(
                 codigo=observacion.codigo,
                 estado=observacion.estado,
                 detalle=observacion.detalle,
+                resuelto_por_nombre=observacion.resuelto_por_nombre,
+                resuelto_en=observacion.resuelto_en,
+                comentario=observacion.comentario,
             )
             for observacion in observaciones
         ],

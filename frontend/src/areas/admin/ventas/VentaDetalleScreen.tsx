@@ -8,9 +8,9 @@ import { Boton } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { PageHeader } from '../../../components/ui/PageHeader'
 import { formatearMonto, textoDeSaldo } from '../../../domain/cuentas-corrientes/presentacion'
+import { detalleDeObservacion } from '../../../domain/revision/detalleDeObservacion'
 import { puedeAnularVenta } from '../../../domain/ventas/anulacion'
 import {
-  detalleDeObservacionDeVenta,
   etiquetaDeEstadoDeFacturacion,
   etiquetaDeEstadoDeVenta,
   etiquetaDeModoDeConfirmacion,
@@ -30,6 +30,7 @@ import { ErrorDeVentas, PermisoRequeridoVentasError } from '../../../features/ve
 import { useVenta } from '../../../features/ventas/hooks'
 import { formatearFechaHora } from '../../../lib/fecha'
 import { formatearCosto, parsearImporteDesdeApi } from '../../../lib/money'
+import { ResolucionDeAviso } from '../revision/ResolucionDeAviso'
 import { DialogoDeAnulacion } from './DialogoDeAnulacion'
 import { NotaDeVentaAcciones } from './NotaDeVentaAcciones'
 import { VentasSinPermiso } from './VentasSinPermiso'
@@ -271,11 +272,14 @@ function VentaCompleta({ datos, refrescar }: { datos: VentaDetalle; refrescar: (
 }
 
 function AvisoDeObservacion({ observacion }: { observacion: ObservacionDeVenta }) {
-  const detalle = detalleDeObservacionDeVenta(observacion)
+  const lineas = detalleDeObservacion(observacion.codigo, observacion.detalle)
   return (
     <p className="flex flex-wrap items-center gap-2 text-primary">
       <Badge variante="negativo">{etiquetaDeObservacionDeVenta(observacion.codigo)}</Badge>
-      {detalle && <span>{detalle}</span>}
+      {lineas.map((linea) => (
+        <span key={linea}>{linea}</span>
+      ))}
+      <ResolucionDeAviso observacion={observacion} />
     </p>
   )
 }

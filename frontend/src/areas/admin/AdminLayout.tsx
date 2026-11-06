@@ -4,6 +4,8 @@ import { Alert } from '../../components/ui/Alert'
 import { Boton } from '../../components/ui/Button'
 import type { Yo } from '../../features/identidad/api'
 import { ofreceMiPin } from '../../domain/identidad/pin'
+import { contadorDelMenu } from '../../domain/revision/aviso'
+import { useResumenDePendientes } from '../../features/revision/hooks'
 import { seccionesPermitidas } from '../../features/identidad/secciones'
 import { usePermisos } from '../../features/identidad/usePermisos'
 
@@ -12,6 +14,7 @@ const CLASE_ENLACE = 'text-primary/70 hover:text-primary'
 const RUTA_AYUDA = '/admin/ayuda'
 const RUTA_MI_PIN = '/admin/mi-pin'
 const RUTA_MI_CONTRASENA = '/admin/mi-contrasena'
+const RUTA_REVISION = '/admin/revision'
 const MENSAJE_SIN_PERMISOS = 'No se pudieron obtener tus permisos.'
 const MENSAJE_SESION_TERMINADA = 'Tu sesión terminó. Iniciá sesión de nuevo.'
 
@@ -67,6 +70,9 @@ export function AdminLayout() {
   const secciones = seccionesPermitidas(permisos.tiene)
   const sesionTerminada = permisos.error?.status === 401
   const identificacion = identificacionDeSesion(permisos.yo)
+  // Change 25 (D5, CRE-09): el total pendiente junto a «Revisión»; sin el permiso no se pide nada (SEG-06).
+  const resumen = useResumenDePendientes(permisos.tiene('REVISAR_OBSERVACIONES'))
+  const pendientes = contadorDelMenu(resumen.data)
 
   return (
     <div className="min-h-dvh bg-surface-muted">
@@ -80,6 +86,14 @@ export function AdminLayout() {
                 className={({ isActive }) => (isActive ? CLASE_ENLACE_ACTIVO : CLASE_ENLACE)}
               >
                 {seccion.etiqueta}
+                {seccion.ruta === RUTA_REVISION && pendientes !== null && (
+                  <>
+                    {' '}
+                    <span className="rounded-full bg-danger px-2 py-0.5 text-xs font-semibold text-danger-foreground">
+                      {pendientes}
+                    </span>
+                  </>
+                )}
               </NavLink>
             ))}
             {/* Ayuda (change 16b, D6 = A): sin datos ni permisos, la ve todo usuario con sesión

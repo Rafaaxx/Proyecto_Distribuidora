@@ -8,6 +8,7 @@ import type { CobranzaLocal } from '../../../lib/dispositivo/db'
 import { formatearFechaHora } from '../../../lib/fecha'
 import { useCobranzaLocal } from '../datos/cobranzas'
 import { useExplicacionDeOperacion } from '../datos/sincronizacion'
+import { MarcaDeRechazoResuelto } from '../sincronizacion/MarcaDeRechazoResuelto'
 import { claveDeAyudaDeEnvioDeCobranza, etiquetaDeEnvio } from '../ventas/presentacionDeVentas'
 
 /**
@@ -55,6 +56,7 @@ function DetalleDeCobranza({ cobranza }: { cobranza: CobranzaLocal }) {
           <Badge variante={estado === 'RECHAZADA' ? 'negativo' : 'neutral'}>{etiquetaDeEnvio(estado)}</Badge>
           {claveDeEstado !== null && <Ayuda clave={claveDeEstado} />}
         </span>
+        <MarcaDeRechazoResuelto operationId={cobranza.operation_id} estado={estado} conAyuda />
       </div>
       <Card className="flex flex-col gap-1 text-sm text-primary">
         <p className="break-words">{cobranza.cliente_nombre ?? '—'}</p>

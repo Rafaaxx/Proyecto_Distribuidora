@@ -19,8 +19,11 @@ import {
   type VentaConProblema,
 } from '../datos/sincronizacion'
 import { etiquetaDeEnvio } from '../ventas/presentacionDeVentas'
+import { useRechazosResueltos } from '../datos/rechazosResueltos'
 import { BotonSincronizar } from './BotonSincronizar'
+import { MarcaDeRechazoResuelto } from './MarcaDeRechazoResuelto'
 import {
+  hayRechazoResuelto,
   textoDePendientes,
   textoDeUltimaSincronizacion,
   textoDelUltimoError,
@@ -49,6 +52,7 @@ function FilaDeVenta({ item }: { item: VentaConProblema }) {
         <span className="break-words text-sm text-primary">{venta.nota?.cliente.nombre ?? '—'}</span>
         <span className="flex flex-wrap items-center gap-2">
           <Badge variante={rechazada ? 'negativo' : 'neutral'}>{etiquetaDeEnvio(venta.estado_envio)}</Badge>
+          <MarcaDeRechazoResuelto operationId={venta.operation_id} estado={venta.estado_envio} />
           {rechazada && codigo !== null && <span className="text-xs font-medium text-danger">{codigo}</span>}
         </span>
         {explicacion?.tipo === 'rechazo' && (
@@ -82,6 +86,7 @@ function FilaDeAnulacion({ item }: { item: AnulacionConProblema }) {
         <span className="break-words text-sm text-primary">{venta?.nota?.cliente.nombre ?? '—'}</span>
         <span className="flex flex-wrap items-center gap-2">
           <Badge variante={rechazada ? 'negativo' : 'neutral'}>{etiquetaDeEnvio(anulacion.estado_envio)}</Badge>
+          <MarcaDeRechazoResuelto operationId={anulacion.operation_id} estado={anulacion.estado_envio} />
           {rechazada && codigo !== null && <span className="text-xs font-medium text-danger">{codigo}</span>}
         </span>
         {explicacion?.tipo === 'rechazo' && (
@@ -117,6 +122,7 @@ function FilaDeCobranza({ item }: { item: CobranzaConProblema }) {
         </span>
         <span className="flex flex-wrap items-center gap-2">
           <Badge variante={rechazada ? 'negativo' : 'neutral'}>{etiquetaDeEnvio(cobranza.estado_envio ?? 'PENDIENTE')}</Badge>
+          <MarcaDeRechazoResuelto operationId={cobranza.operation_id} estado={cobranza.estado_envio ?? 'PENDIENTE'} />
           {rechazada && codigo !== null && <span className="text-xs font-medium text-danger">{codigo}</span>}
         </span>
         {explicacion?.tipo === 'rechazo' && (
@@ -155,6 +161,7 @@ function FilaDeEntrega() {
         <span className="text-sm font-semibold text-primary">{NOMBRE_DE_LA_ENTREGA}</span>
         <span className="flex flex-wrap items-center gap-2">
           <Badge variante={rechazada ? 'negativo' : 'neutral'}>{etiquetaDeEnvio(entrega.estado)}</Badge>
+          <MarcaDeRechazoResuelto operationId={entrega.operationId} estado={entrega.estado} />
         </span>
         {entrega.explicacion?.tipo === 'rechazo' && (
           <>
@@ -173,9 +180,12 @@ function Lista({
   items,
   anulaciones,
   cobranzas,
+  conRechazoResuelto = false,
 }: {
   titulo: string
   clave: ClaveDeAyuda
+  /** Alguna de las filas está «Resuelta por administración»: se suma su ayuda al título. */
+  conRechazoResuelto?: boolean
   items: VentaConProblema[]
   anulaciones: AnulacionConProblema[]
   cobranzas: CobranzaConProblema[]
@@ -186,6 +196,7 @@ function Lista({
       <h2 className="flex items-center gap-1 text-sm font-semibold text-primary">
         {titulo}
         <Ayuda clave={clave} />
+        {conRechazoResuelto && <Ayuda clave="ruta.rechazoResuelto" />}
       </h2>
       <ul className="flex flex-col gap-2">
         {items.map((item) => (
@@ -208,6 +219,8 @@ export function SincronizacionScreen() {
   const problemas = useVentasConProblemas()
   const problemasDeAnulacion = useAnulacionesConProblemas()
   const problemasDeCobranza = useCobranzasConProblemas()
+  const resueltos = useRechazosResueltos()
+  const entrega = useEntregaDelDia()
   const error = resumen.ultimoError === null ? null : textoDelUltimoError(resumen.ultimoError)
 
   return (
@@ -253,6 +266,12 @@ export function SincronizacionScreen() {
         items={problemas.filter((p) => p.venta.estado_envio === 'RECHAZADA')}
         anulaciones={problemasDeAnulacion.filter((p) => p.anulacion.estado_envio === 'RECHAZADA')}
         cobranzas={problemasDeCobranza.filter((p) => p.cobranza.estado_envio === 'RECHAZADA')}
+        conRechazoResuelto={hayRechazoResuelto(resueltos, [
+          ...problemas.map((p) => ({ operationId: p.venta.operation_id, estado: p.venta.estado_envio })),
+          ...problemasDeAnulacion.map((p) => ({ operationId: p.anulacion.operation_id, estado: p.anulacion.estado_envio })),
+          ...problemasDeCobranza.map((p) => ({ operationId: p.cobranza.operation_id, estado: p.cobranza.estado_envio ?? 'PENDIENTE' })),
+          ...(entrega === null ? [] : [{ operationId: entrega.operationId, estado: entrega.estado }]),
+        ])}
       />
     </div>
   )

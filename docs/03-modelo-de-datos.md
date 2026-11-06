@@ -109,7 +109,7 @@ descuentos       regla_descuento · regla_descuento_alcance
 ventas           venta · venta_linea · venta_linea_descuento · venta_anulacion
 cobranzas        cobranza · cobranza_medio · cobranza_anulacion
 ctas. corrientes cuenta_movimiento · saldo_cuenta
-sync             comando · comando_cuarentena · observacion
+sync             comando · comando_cuarentena · comando_rechazado · observacion
 auditoria        auditoria
 importacion      importacion
 facturacion      factura · factura_venta · factura_alicuota · ajuste_iva_absorbido
@@ -592,11 +592,15 @@ El índice único es el mecanismo de idempotencia (`02` §6.3). El contenido com
 
 ### `comando_cuarentena`
 
-`id`, `organizacion_id`, `dispositivo_id`, `usuario_id`, `operation_id`, `tipo`, `contenido` `jsonb`, `motivo`, `recibido_en`, `revisado_en`, `revisado_por_id` (SYN-06).
+`id`, `organizacion_id`, `dispositivo_id`, `usuario_id`, `operation_id`, `tipo`, `contenido` `jsonb`, `motivo`, `recibido_en`, `revisado_en`, `revisado_por_id`, **`comentario` (de 1 a 500), `vinculo_tipo`, `vinculo_id`** (SYN-06). **El usuario de aplicación solo actualiza las columnas de la revisión; `CHECK` de coherencia (revisada con las tres primeras no nulas). Migración del change 25 (ADR-069).**
+
+### `comando_rechazado`
+
+`id`, `organizacion_id`, `operation_id` (`UNIQUE (organizacion_id, operation_id)`), `tipo`, `version`, `modo`, `usuario_id`, `dispositivo_id`, `jornada_id` (nulable; nula si la jornada del sobre no existía), `secuencia`, `occurred_at`, `app_version`, `contenido` `jsonb`, `error_codigo`, `recibido_en`, `estado` (`PENDIENTE`, `RESUELTO`), `resuelto_por_id`, `resuelto_en`, `comentario` (de 1 a 500), `vinculo_tipo`, `vinculo_id` (SYN-06). FK compuestas a `usuario`, `dispositivo` y `jornada`. El lote la escribe en transacción aparte por cada comando sin conexión rechazado; el usuario de aplicación tiene `SELECT`, `INSERT` y `UPDATE` solo de las columnas de la resolución, nunca `DELETE` (INV-05). Índice parcial `(organizacion_id, jornada_id) WHERE estado = 'PENDIENTE'` (ADR-069).
 
 ### `observacion`
 
-`id`, `organizacion_id`, `comando_id`, `operacion_tipo`, `operacion_id`, `codigo` (SYN-07; `CHECK` `ck_observacion__codigo` con el catálogo, que el change 17 amplía con `MEDIO_INACTIVO` y `REFERENCIA_FALTANTE`, el change 18a con `VENTA_SIN_COSTO`, `CONSUMIDOR_FINAL_CON_DEUDA` y `UBICACION_TOMADA_AL_SINCRONIZAR` el change 18b con `AUTORIZACION_OFFLINE` y el change 24 con `JORNADA_RENDIDA`), `detalle` `jsonb`, `estado` (`PENDIENTE`, `RESUELTA`), `resuelto_por_id`, `resuelto_en`, `comentario`. En las observaciones de un medio de cobranza, `detalle` lleva `medio` (posición de la línea), `medio_pago_id`, `nombre` e `importe` (ADR-052).
+`id`, `organizacion_id`, `comando_id`, `operacion_tipo`, `operacion_id`, `codigo` (SYN-07; `CHECK` `ck_observacion__codigo` con el catálogo, que el change 17 amplía con `MEDIO_INACTIVO` y `REFERENCIA_FALTANTE`, el change 18a con `VENTA_SIN_COSTO`, `CONSUMIDOR_FINAL_CON_DEUDA` y `UBICACION_TOMADA_AL_SINCRONIZAR` el change 18b con `AUTORIZACION_OFFLINE`, el change 24 con `JORNADA_RENDIDA` **y el change 25 con `PRODUCTO_DESACTIVADO`**), `detalle` `jsonb`, `estado` (`PENDIENTE`, `RESUELTA`), `resuelto_por_id`, `resuelto_en`, `comentario`. **El usuario de aplicación solo actualiza `estado`, `resuelto_por_id`, `resuelto_en` y `comentario`; `CHECK` `ck_observacion__resolucion_coherente` (pendiente con las tres nulas, resuelta con las tres no nulas) y `ck_observacion__comentario` (de 1 a 500) (ADR-069).** En las observaciones de un medio de cobranza, `detalle` lleva `medio` (posición de la línea), `medio_pago_id`, `nombre` e `importe` (ADR-052).
 
 Índice parcial `(organizacion_id, codigo) WHERE estado = 'PENDIENTE'`.
 

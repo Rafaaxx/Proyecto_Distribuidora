@@ -54,6 +54,7 @@ def rendir_jornada(
     reloj: Clock,
     *,
     puerta: PuertaDelLibro,
+    rechazos_pendientes: Callable[[], int],
     jornada_id: UUID,
     usuario_id: UUID,
     dispositivo_id: UUID,
@@ -69,6 +70,10 @@ def rendir_jornada(
     estado y entrega, se leen los esperados por SQL (estables:
     ningún movimiento sobre esa ubicación puede estar en curso ni empezar) y recién entonces se
     llama UNA vez a la puerta con las diferencias. No toma `saldo_cuenta`.
+
+    Change 25 (D9 = B): `rechazos_pendientes` (el puerto de `sync`, recibido como parámetro para no
+    importar `sync`) se consulta con la jornada tomada y antes del conteo; con rechazos sin
+    resolver se rechaza con `RECHAZOS_PENDIENTES` sin escribir nada.
 
     Escribe la rendición, una línea por producto del conteo (con el desglose del esperado
     congelado y el costo de la diferencia) y deja la jornada `EN_RENDICION`. Un producto
@@ -90,6 +95,9 @@ def rendir_jornada(
     nuevo_estado = dominio_jornadas.validar_para_rendir(
         jornada.estado, entregada=jornada.entregada_en is not None
     )
+    # Change 25, D9 = B: con la jornada ya tomada y antes del conteo, en una consulta aparte, no
+    # se rinde mientras queden rechazos sin resolver (RUT-05, SYN-06). Solo lee: no toma filas.
+    dominio.validar_sin_rechazos_pendientes(rechazos_pendientes())
     observacion_normalizada = dominio.normalizar_observacion(observacion)
 
     desgloses = _desglose_de(organizacion_id, sesion, jornada)

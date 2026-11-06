@@ -5,6 +5,7 @@ import {
   type Conciliacion,
 } from '../../../domain/ruta/disponiblesLocales'
 import { baseLocal } from '../../../lib/dispositivo/db'
+import { leerRechazosResueltos } from '../../../sync/rechazosResueltos'
 
 /**
  * Lectura de Dexie de los disponibles locales (change 22a, D5; change 22c, D1 y D2; change 22d, D7; change 23, D6; CRE-08,
@@ -13,17 +14,22 @@ import { baseLocal } from '../../../lib/dispositivo/db'
  */
 export async function leerConciliacion(): Promise<Conciliacion> {
   const sesion = await baseLocal.sesion.get('actual')
-  const [cola, anulaciones, ventas, cobranzas] = await Promise.all([
+  const [cola, anulaciones, ventas, cobranzas, resueltos] = await Promise.all([
     baseLocal.cola.toArray(),
     baseLocal.anulaciones.toArray(),
     baseLocal.ventas.toArray(),
     baseLocal.cobranzas.toArray(),
+    leerRechazosResueltos(),
   ])
   // Change 23 (D6): solo la cobranza independiente rechazada deja de contar; el cobro de una venta
   // (con `venta_id`) sigue la regla de su venta.
   const cobranzasIndependientes = new Set(cobranzas.filter((c) => c.venta_id === null).map((c) => c.operation_id))
+  // Change 25 (D8): lo que administración resolvió deja de contar; una venta resuelta ya no cuenta
+  // como rechazada para la anulación (las dos dejan de contar).
   // Change 22d (D7): una anulación rechazada solo cuenta si su venta también está rechazada.
-  const ventasRechazadas = new Set(ventas.filter((v) => v.estado_envio === 'RECHAZADA').map((v) => v.venta_id))
+  const ventasRechazadas = new Set(
+    ventas.filter((v) => v.estado_envio === 'RECHAZADA' && !resueltos.has(v.operation_id)).map((v) => v.venta_id),
+  )
   const ventaDeLaAnulacion = new Map(anulaciones.map((a) => [a.operation_id, a.venta_id]))
   return {
     secuenciaProcesada: sesion?.secuencia_procesada ?? null,
@@ -35,6 +41,7 @@ export async function leerConciliacion(): Promise<Conciliacion> {
           {
             secuencia: c.secuencia,
             rechazada: c.estado === 'RECHAZADO',
+            ...(c.estado === 'RECHAZADO' && resueltos.has(c.operation_id) ? { resuelta: true } : {}),
             ...(ventaId === undefined ? {} : { anulacion: { ventaRechazada: ventasRechazadas.has(ventaId) } }),
             ...(cobranzasIndependientes.has(c.operation_id) ? { cobranzaIndependiente: true } : {}),
           },

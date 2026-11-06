@@ -6,6 +6,10 @@
 
 import { parsearImporteDesdeApi, redondearImporte } from '../../lib/money'
 import { formatearMonto, textoDeSaldo } from '../cuentas-corrientes/presentacion'
+import {
+  detalleDeObservacion as detalleDeObservacionDeRevision,
+  etiquetaDeObservacion as etiquetaDeObservacionDeRevision,
+} from '../revision/detalleDeObservacion'
 
 export const ETIQUETA_DE_ESTADO_DE_COBRANZA: Record<string, string> = { CONFIRMADA: 'Confirmada', ANULADA: 'Anulada' }
 
@@ -42,14 +46,10 @@ export interface ObservacionDeCobranza {
   codigo: string
   estado: string
   detalle: { [clave: string]: unknown } | null
-}
-
-const ETIQUETAS_DE_OBSERVACION: Record<string, string> = {
-  MEDIO_INACTIVO: 'Medio de pago inactivo',
-  REFERENCIA_FALTANTE: 'Falta la referencia',
-  PERMISO_REVOCADO: 'Permiso revocado',
-  JORNADA_LIBERADA: 'Jornada liberada',
-  CLIENTE_NO_HABILITADO: 'Cliente no habilitado',
+  // Change 25 (D11, SYN-08): la resolución, solo lectura.
+  resuelto_por_nombre?: string | null
+  resuelto_en?: string | null
+  comentario?: string | null
 }
 
 const CODIGOS_DE_LINEA: readonly string[] = ['MEDIO_INACTIVO', 'REFERENCIA_FALTANTE']
@@ -60,8 +60,9 @@ const MOTIVOS_DE_PERMISO_REVOCADO: Record<string, string> = {
   ROL_INACTIVO: 'El rol estaba dado de baja',
 }
 
+/** La etiqueta es la de la bandeja de revisión (change 25, D12): una sola lista de títulos. */
 export function etiquetaDeObservacion(codigo: string): string {
-  return ETIQUETAS_DE_OBSERVACION[codigo] ?? codigo
+  return etiquetaDeObservacionDeRevision(codigo)
 }
 
 /** Posición (desde 0) de la línea que causó una observación de medio, o `null` si no la trae. */
@@ -96,5 +97,7 @@ export function detalleDeObservacion(observacion: ObservacionDeCobranza): string
   if (observacion.codigo === 'PERMISO_REVOCADO' && typeof detalle.motivo === 'string') {
     return MOTIVOS_DE_PERMISO_REVOCADO[detalle.motivo] ?? null
   }
-  return null
+  // Change 25 (D12): los demás códigos (p. ej. `JORNADA_RENDIDA`) con su detalle legible.
+  const lineas = detalleDeObservacionDeRevision(observacion.codigo, detalle)
+  return lineas.length === 0 ? null : lineas.join(' · ')
 }

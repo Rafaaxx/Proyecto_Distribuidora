@@ -35,6 +35,12 @@ from sqlalchemy.orm import Session
 from app.core.clock import Clock
 from app.core.errors import DomainError, PermisoRequeridoError
 from app.core.ids import nuevo_id
+from app.core.resumen import (
+    ResumenDeContenido,
+    ResumenDeOperacion,
+    registrar_resumidor_de_contenido,
+    registrar_resumidor_de_operacion,
+)
 from app.modules.catalogo import service as catalogo_service
 from app.modules.configuracion import service as configuracion_service
 from app.modules.costeo import service as costeo_service
@@ -1677,6 +1683,15 @@ def ubicacion_de_jornada(
     return jornadas_casos.ubicacion_de_jornada(organizacion_id, sesion, jornada_id=jornada_id)
 
 
+def usuarios_de_jornadas(
+    organizacion_id: UUID, sesion: Session, jornada_ids: Collection[UUID]
+) -> dict[UUID, UUID]:
+    """`{jornada_id: usuario_id}` de las jornadas de la organización, en una consulta; una de otra
+    organización o inexistente no aparece (INV-21). Solo lectura. Ver
+    `jornadas_casos.usuarios_de_jornadas`."""
+    return jornadas_casos.usuarios_de_jornadas(organizacion_id, sesion, jornada_ids)
+
+
 EstadoDeJornada = jornadas_casos.EstadoDeJornada
 """Lo que un comando sin conexión necesita saber de la jornada de su sobre (change 17, D12)."""
 
@@ -1810,6 +1825,9 @@ def rendir_jornada(
         sesion,
         reloj,
         puerta=_puerta,
+        rechazos_pendientes=lambda: rechazos_pendientes_de_jornada(
+            organizacion_id, sesion, jornada_id=jornada_id
+        ),
         jornada_id=jornada_id,
         usuario_id=usuario_id,
         dispositivo_id=dispositivo_id,
@@ -1960,4 +1978,82 @@ def cobranzas_de_jornada(
     return _LECTOR_DE_COBRANZAS(organizacion_id, sesion, jornada_id, corte)
 
 
+# --- Puerto de los rechazos pendientes de la jornada (change 25, D9 = B) ---------------------
+
+ContadorDeRechazosPendientes = Callable[[UUID, Session, UUID], int]
+"""`funcion(organizacion_id, sesion, jornada_id) -> cantidad`: cuántos rechazos sin conexión
+`PENDIENTE` tiene la jornada. Lo registra `sync` al importar su `service.py` (`sync` ya importa
+`stock.service`; los casos de uso de `stock` no importan `sync`)."""
+
+_CONTADOR_DE_RECHAZOS: ContadorDeRechazosPendientes | None = None
+
+
+def registrar_contador_de_rechazos_pendientes(funcion: ContadorDeRechazosPendientes) -> None:
+    """`sync` lo registra al importar su `service.py`. Sin ciclo: `stock` nunca importa `sync`."""
+    global _CONTADOR_DE_RECHAZOS
+    _CONTADOR_DE_RECHAZOS = funcion
+
+
+def hay_contador_de_rechazos_pendientes() -> bool:
+    return _CONTADOR_DE_RECHAZOS is not None
+
+
+def rechazos_pendientes_de_jornada(
+    organizacion_id: UUID, sesion: Session, *, jornada_id: UUID
+) -> int:
+    """Los rechazos sin conexión sin resolver de la jornada, por el puerto de `sync`. Falla
+    cerrado: sin contador registrado es un error de configuración, no un «no hay» (no se rinde
+    sin comprobar)."""
+    if _CONTADOR_DE_RECHAZOS is None:
+        raise RuntimeError("`sync` no registró el contador de rechazos pendientes de la jornada.")
+    return _CONTADOR_DE_RECHAZOS(organizacion_id, sesion, jornada_id)
+
+
+# --- Resumen de transferencias y ajustes para la bandeja de revisión (change 25, D4) ----------
+
+
+def resumir_transferencias(
+    organizacion_id: UUID, sesion: Session, ids: Sequence[UUID]
+) -> dict[UUID, ResumenDeOperacion]:
+    """Resumen de varias transferencias: origen y destino y momento, en una consulta. Una de otra
+    organización no aparece (INV-21)."""
+    return {
+        id_: ResumenDeOperacion(
+            titulo=f"Transferencia de {origen} a {destino}",
+            tercero=None,
+            total=None,
+            momento=momento,
+        )
+        for id_, origen, destino, momento in repository.resumir_transferencias(
+            organizacion_id, ids, sesion
+        )
+    }
+
+
+def resumir_ajustes(
+    organizacion_id: UUID, sesion: Session, ids: Sequence[UUID]
+) -> dict[UUID, ResumenDeOperacion]:
+    """Resumen de varios ajustes de stock: ubicación y momento, en una consulta. Uno de otra
+    organización no aparece (INV-21)."""
+    return {
+        id_: ResumenDeOperacion(
+            titulo=f"Ajuste de stock en {ubicacion}", tercero=None, total=None, momento=momento
+        )
+        for id_, ubicacion, momento in repository.resumir_ajustes(organizacion_id, ids, sesion)
+    }
+
+
+registrar_resumidor_de_operacion("TRANSFERENCIA", resumir_transferencias)
+registrar_resumidor_de_operacion("AJUSTE_STOCK", resumir_ajustes)
+
+
+def resumir_contenidos_de_entrega(
+    organizacion_id: UUID, sesion: Session, contenidos: Sequence[object]
+) -> list[ResumenDeContenido]:
+    """`JORNADA_ENTREGAR` no trae contenido (la jornada es la del sobre): su resumen es el título
+    (change 25, D4)."""
+    return [ResumenDeContenido(titulo="Entrega del día") for _ in contenidos]
+
+
+registrar_resumidor_de_contenido("JORNADA_ENTREGAR", resumir_contenidos_de_entrega)
 identidad_service.registrar_consulta_jornada_no_cerrada(tiene_jornada_no_cerrada)

@@ -349,12 +349,26 @@ class CompraAnulacionResponse(BaseModel):
     anulada_por_id: UUID
 
 
+class CompraObservacionResponse(BaseModel):
+    """Una observación de sincronización de la compra con su resolución (change 25, D11, SYN-08).
+    `detalle` es el JSON tal cual se guardó; la resolución, solo lectura, es nula mientras la
+    observación está pendiente."""
+
+    codigo: str
+    estado: str
+    detalle: dict[str, object] | None
+    resuelto_por_nombre: str | None = None
+    resuelto_en: datetime | None = None
+    comentario: str | None = None
+
+
 class CompraDetalleResponse(CompraResumenResponse):
     ubicacion_id: UUID
     observacion: str | None
     lineas: list[CompraLineaResponse]
     pago: CompraPagoResponse | None
     anulacion: CompraAnulacionResponse | None
+    observaciones: list[CompraObservacionResponse] = []
 
 
 # --- pagos a proveedor (change 12: PAG-01, PAG-02; `design.md` D2 a D6, D14) --------------

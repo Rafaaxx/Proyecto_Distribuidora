@@ -49,6 +49,7 @@ function paramsVentas(cursor: string | undefined, limite: number, filtros: Filtr
   if (filtros.jornadaId) params.set('jornada_id', filtros.jornadaId)
   if (filtros.ubicacionId) params.set('ubicacion_id', filtros.ubicacionId)
   if (filtros.estado) params.set('estado', filtros.estado)
+  if (filtros.numero) params.set('numero', filtros.numero)
   if (filtros.desde) params.set('desde', filtros.desde)
   if (filtros.hasta) params.set('hasta', filtros.hasta)
   return params.toString()

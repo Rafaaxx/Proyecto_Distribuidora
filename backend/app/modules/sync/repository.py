@@ -21,7 +21,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app.modules.sync.models import Comando, ComandoCuarentena, Observacion
+from app.modules.sync.models import Comando, ComandoCuarentena, ComandoRechazado, Observacion
 
 
 @dataclass(frozen=True)
@@ -188,6 +188,75 @@ def crear_cuarentena(
     return ResultadoCuarentena(registro=existente, creado=False)
 
 
+def crear_rechazo(
+    sesion: Session,
+    *,
+    rechazo_id: UUID,
+    organizacion_id: UUID,
+    operation_id: UUID,
+    tipo: str,
+    version: int,
+    modo: str,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+    jornada_id: UUID | None,
+    secuencia: int,
+    occurred_at: datetime,
+    app_version: str,
+    contenido: Mapping[str, object],
+    error_codigo: str,
+    recibido_en: datetime,
+) -> bool:
+    """Registra lo que el teléfono envió en un comando `OFFLINE` rechazado (change 25, D6; SYN-06):
+    `INSERT ... ON CONFLICT (organizacion_id, operation_id) DO NOTHING`, como la cuarentena, para
+    que el reenvío no lo duplique ni pise una resolución. Devuelve `True` si insertó. Sin
+    `commit`: lo decide `sync/service.py::registrar_rechazo`."""
+    sentencia = (
+        insert(ComandoRechazado)
+        .values(
+            id=rechazo_id,
+            organizacion_id=organizacion_id,
+            operation_id=operation_id,
+            tipo=tipo,
+            version=version,
+            modo=modo,
+            usuario_id=usuario_id,
+            dispositivo_id=dispositivo_id,
+            jornada_id=jornada_id,
+            secuencia=secuencia,
+            occurred_at=occurred_at,
+            app_version=app_version,
+            contenido=contenido,
+            error_codigo=error_codigo,
+            recibido_en=recibido_en,
+            estado="PENDIENTE",
+        )
+        .on_conflict_do_nothing(index_elements=["organizacion_id", "operation_id"])
+        .returning(ComandoRechazado.id)
+    )
+    insertada = sesion.execute(sentencia).first() is not None
+    sesion.flush()
+    return insertada
+
+
+def contar_rechazos_pendientes_de_jornada(
+    sesion: Session, organizacion_id: UUID, jornada_id: UUID
+) -> int:
+    """Los rechazos `PENDIENTE` de la jornada de la organización, en una consulta sobre el índice
+    parcial `(organizacion_id, jornada_id) WHERE estado = 'PENDIENTE'` (change 25, D9 = B).
+    Solo lee: no toma ninguna fila ni la jornada (el orden de bloqueos de la precisión 5)."""
+    consulta = (
+        select(func.count())
+        .select_from(ComandoRechazado)
+        .where(
+            ComandoRechazado.organizacion_id == organizacion_id,
+            ComandoRechazado.jornada_id == jornada_id,
+            ComandoRechazado.estado == "PENDIENTE",
+        )
+    )
+    return int(sesion.scalar(consulta) or 0)
+
+
 def obtener_cuarentena_por_operation_id(
     sesion: Session, organizacion_id: UUID, operation_id: UUID
 ) -> ComandoCuarentena | None:
@@ -285,6 +354,31 @@ def secuencia_procesada_de_jornada(
         Comando.jornada_id == jornada_id,
     )
     return sesion.execute(consulta).scalar_one_or_none()
+
+
+def rechazos_resueltos_de_jornada(
+    sesion: Session,
+    organizacion_id: UUID,
+    *,
+    jornada_id: UUID,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+) -> list[UUID]:
+    """Los `operation_id` de los rechazos `RESUELTO` de la jornada, del usuario y del dispositivo
+    (SYN-11, change 25 D8), ordenados para que dos pedidos iguales den la misma lista. Solo el
+    identificador: ni el comentario ni el vinculo viajan al telefono."""
+    consulta = (
+        select(ComandoRechazado.operation_id)
+        .where(
+            ComandoRechazado.organizacion_id == organizacion_id,
+            ComandoRechazado.jornada_id == jornada_id,
+            ComandoRechazado.usuario_id == usuario_id,
+            ComandoRechazado.dispositivo_id == dispositivo_id,
+            ComandoRechazado.estado == "RESUELTO",
+        )
+        .order_by(ComandoRechazado.operation_id)
+    )
+    return list(sesion.scalars(consulta).all())
 
 
 def listar_observaciones_de_comando(

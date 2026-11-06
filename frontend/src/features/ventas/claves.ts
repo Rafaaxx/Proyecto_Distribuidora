@@ -10,6 +10,8 @@ export interface FiltrosVentas {
   ubicacionId?: string
   /** `CONFIRMADA` o `ANULADA` (change 19, D14); sin valor, todas. */
   estado?: 'CONFIRMADA' | 'ANULADA'
+  /** Número de venta, coincidencia parcial sin distinguir mayúsculas (la busca el servidor). */
+  numero?: string
   /** Fecha de negocio `aaaa-mm-dd` (TR-04), inclusive. */
   desde?: string
   hasta?: string

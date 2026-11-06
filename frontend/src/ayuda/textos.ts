@@ -136,7 +136,7 @@ export const TEMAS = {
   },
   'cobranzas-observaciones': {
     titulo: 'Avisos de los pagos cargados sin señal',
-    reglas: ['SYN-05', 'SYN-07', 'SYN-10', 'RUT-09'],
+    reglas: ['SYN-05', 'SYN-07', 'SYN-08', 'SYN-10', 'RUT-09'],
     secciones: [
       {
         titulo: 'Por qué el pago se toma igual',
@@ -170,9 +170,13 @@ export const TEMAS = {
         ejemplo: 'Ej.: $5.000 cobrados a «Consumidor final».',
       },
       {
+        titulo: 'Llegó después de la rendición',
+        parrafos: ['Llegó cuando la jornada ya estaba rendida; no entra en el conteo.'],
+      },
+      {
         titulo: 'Qué hacer con los avisos',
         parrafos: [
-          'Por ahora los avisos se ven en el detalle de cada cobranza, junto a la línea afectada. La bandeja para darlos por revisados llega más adelante.',
+          'Los avisos se ven en el detalle de cada cobranza, junto a la línea afectada. Se dan por revisados en «Revisión», con un comentario.',
         ],
       },
     ],
@@ -226,7 +230,7 @@ export const TEMAS = {
   },
   'ventas-observaciones': {
     titulo: 'Avisos de las ventas cargadas sin señal',
-    reglas: ['SYN-05', 'SYN-07', 'STK-06', 'CRE-09', 'DSC-09', 'ADR-054', 'ADR-055'],
+    reglas: ['SYN-05', 'SYN-07', 'SYN-08', 'STK-06', 'CRE-09', 'DSC-09', 'ADR-054', 'ADR-055'],
     secciones: [
       {
         titulo: 'Por qué la venta se toma igual',
@@ -291,6 +295,20 @@ export const TEMAS = {
       {
         titulo: 'Exceso de crédito detectado al sincronizar',
         parrafos: ['Con lo que el cliente debía de verdad, la venta lo dejó pasado de su límite, aunque el teléfono no lo había visto.'],
+      },
+      {
+        titulo: 'Llegó después de la rendición',
+        parrafos: ['Llegó cuando la jornada ya estaba rendida; no entra en el conteo.'],
+      },
+      {
+        titulo: 'Producto desactivado',
+        parrafos: ['Se vendió un producto o una presentación que en la oficina se desactivó.'],
+      },
+      {
+        titulo: 'Qué hacer con los avisos',
+        parrafos: [
+          'Se dan por revisados en «Revisión», con un comentario. Revisarlos no cambia la venta; si hay que corregir algo, se hace con una operación nueva.',
+        ],
       },
     ],
   },
@@ -575,8 +593,8 @@ export const AYUDAS = {
   'cobranzas.observaciones': {
     titulo: 'Avisos de una cobranza sin señal',
     texto:
-      'Avisos para revisar en un pago que el vendedor cargó sin señal. El pago se tomó igual, porque la plata ya se cobró. Cada aviso dice qué pasó y en qué medio; tocá «Ver más» para ver qué significa cada uno.',
-    reglas: ['SYN-05', 'SYN-07', 'SYN-10', 'RUT-09'],
+      'Avisos para revisar en un pago que el vendedor cargó sin señal. El pago se tomó igual, porque la plata ya se cobró. Administración los revisa en «Revisión». Cada aviso dice qué pasó y en qué medio; tocá «Ver más» para ver qué significa cada uno.',
+    reglas: ['SYN-05', 'SYN-07', 'SYN-08', 'SYN-10', 'RUT-09'],
     verMas: 'cobranzas-observaciones',
   },
   // --- Medios de pago y roles (change 17b, textos aprobados el 2026-10-17) ---
@@ -712,8 +730,8 @@ export const AYUDAS = {
   'ventas.observaciones': {
     titulo: 'Avisos de una venta',
     texto:
-      'Avisos para revisar en una venta. La venta se tomó igual porque la mercadería ya se entregó. Tocá «Ver más» para ver qué significa cada aviso.',
-    reglas: ['SYN-05', 'SYN-07', 'STK-06', 'ADR-054'],
+      'Avisos para revisar en una venta. La venta se tomó igual porque la mercadería ya se entregó. Administración los revisa en «Revisión». Tocá «Ver más» para ver qué significa cada aviso.',
+    reglas: ['SYN-05', 'SYN-07', 'SYN-08', 'STK-06', 'ADR-054'],
     verMas: 'ventas-observaciones',
   },
   // --- Venta con descuentos, crédito y autorización (change 18b, D22; textos corregidos por el
@@ -982,8 +1000,8 @@ export const AYUDAS = {
   'ruta.ventaRechazada': {
     titulo: 'Rechazada',
     texto:
-      'El sistema no aceptó la venta por un problema de datos, no por stock ni por crédito. En el detalle ves el motivo. Sigue guardada, no se vuelve a enviar sola y el teléfono la sigue descontando del stock y de la cuenta del cliente: avisá a administración.',
-    reglas: ['SYN-06', 'SYN-09', 'ADR-065'],
+      'El sistema no aceptó la venta por un problema de datos, no por stock ni por crédito. En el detalle ves el motivo. Sigue guardada y no se vuelve a enviar sola. El teléfono la sigue descontando del stock y de la cuenta del cliente hasta que administración la resuelva o termine la jornada: avisá a administración.',
+    reglas: ['SYN-06', 'SYN-09', 'ADR-065', 'ADR-069'],
   },
   // --- Conciliación y observaciones de ruta (change 22c, ADR-065; textos aprobados el 2026-11-02, sin ejemplos) ---
   'ruta.observacionesYRechazos': {
@@ -1040,6 +1058,49 @@ export const AYUDAS = {
     titulo: 'Saldo después del cobro',
     texto: 'Lo que el cliente va a deber después de este pago, según el teléfono. Si paga de más, le queda a favor.',
     reglas: ['COB-01', 'COB-03', 'CC-04', 'CRE-08'],
+  },
+  // --- Revisión de observaciones y rechazos (change 25, ADR-069; textos aprobados el 2026-11-05, sin ejemplos) ---
+  'revision.bandeja': {
+    titulo: 'Observaciones',
+    texto:
+      'Avisos que dejó el sistema sobre ventas, cobranzas y otras operaciones para que alguien los revise. La operación ya vale y revisarla no la cambia. Si hay que corregir algo, se hace con una operación nueva.',
+    reglas: ['SYN-07', 'SYN-08'],
+  },
+  'revision.resolver': {
+    titulo: 'Resolver',
+    texto:
+      'Da por revisados los avisos elegidos, con un comentario que explica qué se hizo. Queda quién y cuándo. No cambia la operación y no se puede deshacer.',
+    reglas: ['SYN-08'],
+  },
+  'revision.rechazadas': {
+    titulo: 'Rechazadas',
+    texto:
+      'Ventas, anulaciones, cobranzas y entregas del día que el teléfono envió y el sistema no aceptó por un problema de datos. No se registraron y no se vuelven a enviar. Si ocurrieron, cargalas con conexión y, salvo las anulaciones, vinculalas al resolver.',
+    reglas: ['SYN-06', 'SYN-09', 'ADR-069'],
+  },
+  'revision.cuarentena': {
+    titulo: 'Teléfono dado de baja',
+    texto:
+      'Operaciones que llegaron de un teléfono dado de baja. No se registran ni se pueden volver a enviar. Si eran reales, cargalas con conexión y vinculalas al resolver.',
+    reglas: ['SYN-06', 'ADR-069'],
+  },
+  'revision.vinculo': {
+    titulo: 'Vincular con',
+    texto:
+      'La venta o la cobranza que cargaste con conexión en lugar de la rechazada. Es opcional: si la operación no ocurrió, resolvé sin vincular.',
+    reglas: ['SYN-08', 'ADR-069'],
+  },
+  'stock.rechazadasDeLaJornada': {
+    titulo: 'Rechazadas de la jornada',
+    texto:
+      'Operaciones de esta jornada que el teléfono envió y el sistema no aceptó. La jornada no se puede rendir hasta resolverlas todas. Si la operación ocurrió, cargala con conexión y vinculala al resolver: así la mercadería se descuenta una sola vez. Si no ocurrió, resolvela sin vincular.',
+    reglas: ['RUT-05', 'RUT-06', 'SYN-06', 'SYN-08', 'ADR-069'],
+  },
+  'ruta.rechazoResuelto': {
+    titulo: 'Resuelta por administración',
+    texto:
+      'Administración ya revisó esta operación rechazada. Si cargó la venta en la oficina, el teléfono deja de descontarla.',
+    reglas: ['SYN-09', 'CRE-08', 'ADR-069'],
   },
 } as const satisfies Record<string, EntradaDeAyuda>
 

@@ -25,7 +25,7 @@ inutilizable y el bus pueda revertir la transacción entera.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Sequence
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -1177,3 +1177,48 @@ FUNCIONES_SIN_ORGANIZACION_ID: frozenset[str] = frozenset()
 """Sin excepción (mismo criterio que `cuentas_corrientes.repository`): `stock` no
 tiene ningún catálogo global propio -- toda función pública recibe
 `organizacion_id` primero."""
+
+
+def resumir_transferencias(
+    organizacion_id: UUID, ids: Sequence[UUID], sesion: Session
+) -> list[tuple[UUID, str, str, datetime]]:
+    """`(id, origen, destino, momento)` de las transferencias de la organización entre `ids`, en
+    una consulta (las de otra organización no aparecen; INV-21). Para la bandeja de revisión."""
+    if not ids:
+        return []
+    origen = aliased(Ubicacion)
+    destino = aliased(Ubicacion)
+    consulta = (
+        select(Transferencia.id, origen.nombre, destino.nombre, Transferencia.occurred_at)
+        .join(
+            origen,
+            (origen.organizacion_id == Transferencia.organizacion_id)
+            & (origen.id == Transferencia.ubicacion_origen_id),
+        )
+        .join(
+            destino,
+            (destino.organizacion_id == Transferencia.organizacion_id)
+            & (destino.id == Transferencia.ubicacion_destino_id),
+        )
+        .where(Transferencia.organizacion_id == organizacion_id, Transferencia.id.in_(list(ids)))
+    )
+    return [(f[0], f[1], f[2], f[3]) for f in sesion.execute(consulta)]
+
+
+def resumir_ajustes(
+    organizacion_id: UUID, ids: Sequence[UUID], sesion: Session
+) -> list[tuple[UUID, str, datetime]]:
+    """`(id, ubicación, momento)` de los ajustes de la organización entre `ids`, en una consulta
+    (los de otra organización no aparecen; INV-21). Para la bandeja de revisión."""
+    if not ids:
+        return []
+    consulta = (
+        select(AjusteStock.id, Ubicacion.nombre, AjusteStock.occurred_at)
+        .join(
+            Ubicacion,
+            (Ubicacion.organizacion_id == AjusteStock.organizacion_id)
+            & (Ubicacion.id == AjusteStock.ubicacion_id),
+        )
+        .where(AjusteStock.organizacion_id == organizacion_id, AjusteStock.id.in_(list(ids)))
+    )
+    return [(f[0], f[1], f[2]) for f in sesion.execute(consulta)]

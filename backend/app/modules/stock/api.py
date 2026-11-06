@@ -71,6 +71,7 @@ from app.modules.stock.schemas import (
     JornadaRendirRequest,
     JornadaResponse,
     KardexResponse,
+    ObservacionDeStockResponse,
     PaginaDeAjustesResponse,
     PaginaDeJornadasResponse,
     PaginaDeTransferenciasResponse,
@@ -544,7 +545,8 @@ def rendir_jornada(
 ) -> RendicionResponse:
     """`JORNADA_RENDIR` v2 (change 24, RUT-05, RUT-06): rinde una jornada `ABIERTA` y entregada con
     el conteo físico y deja `EN_RENDICION`. 200 con la jornada, la rendición y sus líneas;
-    `JORNADA_ESTADO_INVALIDO`, `JORNADA_SIN_ENTREGA` y `ESPERADO_DIFIERE` responden 409,
+    `JORNADA_ESTADO_INVALIDO`, `JORNADA_SIN_ENTREGA`, `ESPERADO_DIFIERE` y `RECHAZOS_PENDIENTES`
+    (hay rechazos sin conexion de la jornada sin resolver, D9 del change 25) responden 409,
     `CONTEO_INCOMPLETO`, `CANTIDAD_INVALIDA`, `PRODUCTO_REPETIDO` y `OBSERVACION_INVALIDA` 422,
     una jornada o un producto ajenos 404."""
     contenido: dict[str, ContenidoComando] = {
@@ -950,6 +952,25 @@ def listar_transferencias(
     return pagina_de_transferencias_response(pagina)
 
 
+def _observaciones_de(
+    organizacion_id: UUID, sesion: Session, operacion_tipo: str, operacion_id: UUID
+) -> list[ObservacionDeStockResponse]:
+    """Las observaciones de la operación con su resolución (change 25, D11, SYN-08)."""
+    return [
+        ObservacionDeStockResponse(
+            codigo=o.codigo,
+            estado=o.estado,
+            detalle=o.detalle,
+            resuelto_por_nombre=o.resuelto_por_nombre,
+            resuelto_en=o.resuelto_en,
+            comentario=o.comentario,
+        )
+        for o in sync_service.listar_observaciones_con_resolucion(
+            organizacion_id, sesion, operacion_tipo=operacion_tipo, operacion_id=operacion_id
+        )
+    ]
+
+
 @router.get("/transferencias/{transferencia_id}", response_model=DetalleDeTransferenciaResponse)
 def obtener_transferencia(
     transferencia_id: UUID,
@@ -959,10 +980,12 @@ def obtener_transferencia(
     """Detalle de una transferencia con sus líneas (código, nombre y unidades de referencia) y,
     si está anulada, el motivo, el usuario y el momento de la anulación. 404 si es de otra
     organización o no existe."""
+    detalle = stock_queries.obtener_detalle_de_transferencia(
+        contexto.organizacion_id, sesion, transferencia_id
+    )
     return detalle_de_transferencia_response(
-        stock_queries.obtener_detalle_de_transferencia(
-            contexto.organizacion_id, sesion, transferencia_id
-        )
+        detalle,
+        _observaciones_de(contexto.organizacion_id, sesion, "TRANSFERENCIA", transferencia_id),
     )
 
 
@@ -1008,6 +1031,9 @@ def obtener_ajuste(
     return detalle_de_ajuste_response(
         stock_queries.obtener_detalle_de_ajuste(contexto.organizacion_id, sesion, ajuste_id),
         con_costos=_tiene_ver_costos(contexto, sesion),
+        observaciones=_observaciones_de(
+            contexto.organizacion_id, sesion, "AJUSTE_STOCK", ajuste_id
+        ),
     )
 
 

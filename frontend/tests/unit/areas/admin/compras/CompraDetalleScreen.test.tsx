@@ -322,3 +322,47 @@ describe('CompraDetalleScreen (tarea 12.3)', () => {
     expect(await screen.findByText(/no se encontr[oó] la compra/i)).toBeInTheDocument()
   })
 })
+
+/**
+ * Change 25, tarea 15.2 (D11, D12; SYN-07, SYN-08): los avisos de la compra y su resolución, solo lectura.
+ */
+describe('CompraDetalleScreen: observaciones y su resolución (tarea 15.2)', () => {
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+  })
+
+  it('muestra los avisos con su etiqueta y la resolución de los resueltos', async () => {
+    enrutar(
+      apiFetchMock,
+      reglas(
+        detalle({
+          observaciones: [
+            { codigo: 'STOCK_NEGATIVO', estado: 'PENDIENTE', detalle: { saldo_resultante: -2 } },
+            {
+  codigo: 'STOCK_NEGATIVO',
+  estado: 'RESUELTA',
+  detalle: { saldo_resultante: -5 },
+  resuelto_por_nombre: 'Marta',
+  resuelto_en: '2026-11-05T12:00:00Z',
+  comentario: 'Se corrigió con un ajuste',
+},
+          ],
+        }),
+      ),
+    )
+    renderDetalle()
+
+    const seccion = await screen.findByTestId('observaciones-de-la-operacion')
+    expect(within(seccion).getAllByText('Stock negativo')).toHaveLength(2)
+    expect(within(seccion).getByText('Saldo resultante: -2 unidades')).toBeInTheDocument()
+    expect(within(seccion).getByText(/^Resuelta por Marta el \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}: Se corrigió con un ajuste$/)).toBeInTheDocument()
+  })
+
+  it('una compra sin avisos no muestra la sección', async () => {
+    enrutar(apiFetchMock, reglas(detalle({ observaciones: [] })))
+    renderDetalle()
+
+    await screen.findByText('Vino A')
+    expect(screen.queryByTestId('observaciones-de-la-operacion')).not.toBeInTheDocument()
+  })
+})

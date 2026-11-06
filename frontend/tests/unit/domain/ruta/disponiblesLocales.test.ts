@@ -449,3 +449,22 @@ describe('la cobranza local cuenta en el saldo local (D6)', () => {
     expect(movimientosQueCuentan([cobranza('50000.00'), debito('10.00')], JORNADA, c)).toHaveLength(1)
   })
 })
+
+describe('el rechazo resuelto por administración deja de contar (change 25, D8; CRE-08, SYN-09, RUT-04)', () => {
+  const resuelta = (secuencia: number): Conciliacion => ({
+    secuenciaProcesada: 9,
+    operaciones: new Map([['op-1', { secuencia, rechazada: true, resuelta: true }]]),
+  })
+
+  it('stock, débito y cobro en el momento de una venta rechazada resuelta no cuentan', () => {
+    const c = resuelta(3)
+    expect(stockDisponible(48, [venta(15)], VINO, JORNADA, c)).toBe(48)
+    expect(saldoConsiderado('1000.00', [debito('500.00'), credito('100.00')], CLIENTE, JORNADA, c)).toBe('1000.00')
+  })
+
+  it('la misma venta rechazada sin resolver sigue contando completa', () => {
+    const c = conciliacion(9, { 'op-1': { secuencia: 3, rechazada: true } })
+    expect(stockDisponible(48, [venta(15)], VINO, JORNADA, c)).toBe(33)
+    expect(saldoConsiderado('1000.00', [debito('500.00'), credito('100.00')], CLIENTE, JORNADA, c)).toBe('1400.00')
+  })
+})

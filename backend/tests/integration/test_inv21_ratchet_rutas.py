@@ -509,6 +509,23 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         # `test_ventas_descuentos_aplicables.py::test_inv21_las_reglas_de_otra_organizacion_no_
         # figuran`.
         ("get", "/api/v1/ventas/descuentos-aplicables"),
+        # Change 25 (revisión de observaciones), login real y dos organizaciones: la resolución con
+        # una observación ajena responde 404 (`test_observacion_resolver.py::test_una_observacion_
+        # de_otra_organizacion_responde_404_y_no_se_resuelve_ninguna`); la bandeja y el resumen
+        # solo ven la organización del token (`test_bandeja_de_observaciones.py::test_otra_
+        # organizacion_no_aparece`, `test_resumen_de_pendientes.py::test_solo_cuenta_la_
+        # organizacion_del_token`).
+        ("post", "/api/v1/observaciones/resolucion"),
+        ("get", "/api/v1/observaciones"),
+        ("get", "/api/v1/observaciones/resumen"),
+        # Rechazos y cuarentenas (Lote 3), login real y dos organizaciones: la lista solo ve la
+        # organización del token y el detalle y la resolución de uno ajeno responden 404
+        # (`test_lista_de_rechazos.py::test_inv21_otra_organizacion_no_ve_los_rechazos_y_su_
+        # pedido_responde_404`, `test_rechazo_resolver.py::test_inv21_un_rechazo_de_otra_
+        # organizacion_o_inexistente_responde_404`).
+        ("get", "/api/v1/observaciones/rechazos"),
+        ("get", "/api/v1/observaciones/rechazos/{rechazo_id}"),
+        ("post", "/api/v1/observaciones/rechazos/{rechazo_id}/resolucion"),
         ("get", "/api/v1/yo/pin-autorizacion"),
     }
 )

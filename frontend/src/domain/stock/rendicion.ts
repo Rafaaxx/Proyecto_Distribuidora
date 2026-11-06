@@ -184,3 +184,22 @@ export function textoDeDevolucion(productos: number, destino: string): string {
 export function textoDeConteoIncompleto(nombres: readonly string[]): string {
   return nombres.length === 0 ? 'Falta contar algún producto.' : `Falta contar: ${nombres.join(', ')}.`
 }
+
+// --- Rechazos pendientes de la jornada (change 25, D9 = B; RUT-05) -----------------------------
+
+/** D12 (aprobado en 0.2): lo que ve quien no puede resolver los rechazos. */
+export const TEXTO_SIN_PERMISO_DE_REVISION = 'Las resuelve quien revisa las observaciones.'
+
+/** `true` con una cantidad positiva; un dato que no llegó cuenta como ninguno. */
+export function hayRechazosPendientes(cantidad: number | undefined): boolean {
+  return cantidad !== undefined && cantidad > 0
+}
+
+/**
+ * D12 (aprobado en 0.2): «Esta jornada tiene {N} operaciones rechazadas sin resolver. Hay que resolverlas antes de
+ * rendir.»; con una sola, «1 operación rechazada».
+ */
+export function textoDeRechazosPendientes(cantidad: number): string {
+  const rechazadas = cantidad === 1 ? '1 operación rechazada' : `${String(cantidad)} operaciones rechazadas`
+  return `Esta jornada tiene ${rechazadas} sin resolver. Hay que resolverlas antes de rendir.`
+}

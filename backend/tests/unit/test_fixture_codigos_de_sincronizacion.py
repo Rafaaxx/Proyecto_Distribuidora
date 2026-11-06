@@ -80,7 +80,9 @@ def test_syn07_las_observaciones_son_exactamente_el_catalogo_del_servidor() -> N
 
     assert len(observaciones) == len(set(observaciones))
     assert set(observaciones) == set(CODIGOS_OBSERVACION)
-    assert len(observaciones) == 17  # change 24 suma `JORNADA_RENDIDA`
+    assert (
+        len(observaciones) == 18
+    )  # change 25 suma `PRODUCTO_DESACTIVADO` (el 24, `JORNADA_RENDIDA`)
 
 
 def test_syn06_cada_rechazo_es_el_codigo_de_un_error_del_bus_o_de_ventas() -> None:
@@ -426,3 +428,13 @@ def test_syn06_los_rechazos_de_la_entrega_no_se_mezclan_con_los_de_otras_operaci
 def test_syn07_jornada_rendida_figura_en_las_observaciones_de_cada_operacion(clave: str) -> None:
     assert "JORNADA_RENDIDA" in _cargar()[clave]
     assert "JORNADA_RENDIDA" in _cargar()["observaciones"]
+
+
+def test_syn07_producto_desactivado_es_una_observacion_y_no_un_rechazo() -> None:
+    """Change 25, D10 (SYN-07, INV-17): la venta sin conexión de un producto desactivado se
+    acepta con observación; nunca se rechaza."""
+    datos = _cargar()
+
+    assert "PRODUCTO_DESACTIVADO" in datos["observaciones"]
+    assert "PRODUCTO_DESACTIVADO" in CODIGOS_OBSERVACION
+    assert "PRODUCTO_DESACTIVADO" not in datos["rechazos"]

@@ -37,6 +37,7 @@ from test_jornadas_migracion import (
 
 REVISION = "d2f4a6c8e0b1"
 REVISION_ANTERIOR = "b7d3f1a9c2e4"  # `descripcion_permitir_stock_negativo`, la previa al change 24.
+REVISION_HEAD = "e3a5c7d9f1b2"  # la cabeza desde el change 25: un downgrade abortado la deja ahi.
 MOMENTO = datetime(2026, 11, 4, 12, 0, tzinfo=UTC)
 OTRO_MOMENTO = datetime(2026, 11, 4, 18, 0, tzinfo=UTC)
 CODIGO_NUEVO = "JORNADA_RENDIDA"
@@ -606,7 +607,7 @@ def test_el_downgrade_aborta_con_mensaje_claro_si_hay_rendiciones(
         abortada = _alembic(database_url, "downgrade", REVISION_ANTERIOR)
         assert abortada.returncode != 0
         assert "rendicion" in abortada.stderr
-        assert _revision_actual(_engine_de_sesion) == REVISION
+        assert _revision_actual(_engine_de_sesion) == REVISION_HEAD
         assert "rendicion" in _tablas_existentes(_engine_de_sesion)
     finally:
         _dejar_en_head(database_url, _engine_de_sesion)
@@ -633,7 +634,7 @@ def test_el_downgrade_aborta_con_mensaje_claro_si_hay_entregas(
         abortada = _alembic(database_url, "downgrade", REVISION_ANTERIOR)
         assert abortada.returncode != 0
         assert "entrega" in abortada.stderr
-        assert _revision_actual(_engine_de_sesion) == REVISION
+        assert _revision_actual(_engine_de_sesion) == REVISION_HEAD
     finally:
         _dejar_en_head(database_url, _engine_de_sesion)
 
@@ -649,7 +650,7 @@ def test_el_downgrade_aborta_si_hay_observaciones_jornada_rendida(
         abortada = _alembic(database_url, "downgrade", REVISION_ANTERIOR)
         assert abortada.returncode != 0
         assert CODIGO_NUEVO in abortada.stderr
-        assert _revision_actual(_engine_de_sesion) == REVISION
+        assert _revision_actual(_engine_de_sesion) == REVISION_HEAD
 
         with _engine_de_sesion.begin() as conexion:
             conexion.execute(text("DELETE FROM observacion WHERE codigo = :c"), {"c": CODIGO_NUEVO})

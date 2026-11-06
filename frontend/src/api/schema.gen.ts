@@ -2390,7 +2390,8 @@ export interface paths {
          * Rendir Jornada
          * @description `JORNADA_RENDIR` v2 (change 24, RUT-05, RUT-06): rinde una jornada `ABIERTA` y entregada con
          *     el conteo físico y deja `EN_RENDICION`. 200 con la jornada, la rendición y sus líneas;
-         *     `JORNADA_ESTADO_INVALIDO`, `JORNADA_SIN_ENTREGA` y `ESPERADO_DIFIERE` responden 409,
+         *     `JORNADA_ESTADO_INVALIDO`, `JORNADA_SIN_ENTREGA`, `ESPERADO_DIFIERE` y `RECHAZOS_PENDIENTES`
+         *     (hay rechazos sin conexion de la jornada sin resolver, D9 del change 25) responden 409,
          *     `CONTEO_INCOMPLETO`, `CANTIDAD_INVALIDA`, `PRODUCTO_REPETIDO` y `OBSERVACION_INVALIDA` 422,
          *     una jornada o un producto ajenos 404.
          */
@@ -2670,6 +2671,143 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/observaciones/resolucion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolver Observaciones
+         * @description `OBSERVACION_RESOLVER` (SYN-08): da por revisadas de 1 a 100 observaciones, con un
+         *     comentario de 1 a 500 caracteres. 200 con las resueltas; `OBSERVACIONES_INVALIDAS` y
+         *     `COMENTARIO_INVALIDO` responden 422, una ya resuelta `OBSERVACION_YA_RESUELTA` 409 y una
+         *     inexistente o de otra organización 404. Todo o nada (INV-01).
+         */
+        post: operations["resolver_observaciones_api_v1_observaciones_resolucion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/observaciones/rechazos/{rechazo_id}/resolucion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolver Rechazo
+         * @description `RECHAZO_RESOLVER` (SYN-06, SYN-08): da por resuelto un rechazo sin conexión o una cuarentena
+         *     con un comentario de 1 a 500 caracteres y, si la operación ocurrió, el vínculo a la que la
+         *     corrige. NO reenvía ni crea nada. 200 con el registro; `COMENTARIO_INVALIDO` y
+         *     `VINCULO_INVALIDO` responden 422, `RECHAZO_YA_RESUELTO` 409 y un registro o un vínculo
+         *     inexistentes o de otra organización 404.
+         */
+        post: operations["resolver_rechazo_api_v1_observaciones_rechazos__rechazo_id__resolucion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/observaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Observaciones
+         * @description La bandeja de observaciones por operación (D3, SYN-07, SYN-08), de la llegada más reciente
+         *     a la más antigua. `estado` `PENDIENTE` (por defecto) trae las operaciones con al menos un
+         *     aviso pendiente, `RESUELTA` las que los tienen todos resueltos y `TODAS` las dos. `codigo` y
+         *     `tipo` admiten varios valores; `desde` incluye y `hasta` excluye, sobre el momento de llegada.
+         *     Un cursor ilegible es `CURSOR_INVALIDO`; `limite` va de 1 a 200 (422 fuera de rango).
+         */
+        get: operations["listar_observaciones_api_v1_observaciones_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/observaciones/resumen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resumen De Pendientes
+         * @description Lo pendiente de la organización para el aviso de `/admin` (D5, CRE-09): observaciones por
+         *     código, rechazos y cuarentenas pendientes y el total.
+         */
+        get: operations["resumen_de_pendientes_api_v1_observaciones_resumen_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/observaciones/rechazos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Rechazos
+         * @description Los rechazos sin conexión y los comandos en cuarentena de la organización (SYN-06, SYN-09),
+         *     del más reciente al más antiguo, con el resumen legible de lo que envió el teléfono, si el
+         *     mismo `operation_id` se aceptó después y la resolución. `estado` `PENDIENTE` (por defecto),
+         *     `RESUELTO` o `TODOS`; `origen`, `tipo` (varios), `usuario_id` y `jornada_id` filtran (la
+         *     cuarentena no tiene jornada). Un cursor ilegible es `CURSOR_INVALIDO`.
+         */
+        get: operations["listar_rechazos_api_v1_observaciones_rechazos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/observaciones/rechazos/{rechazo_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obtener Rechazo
+         * @description Un rechazo o una cuarentena con lo crudo que envió el teléfono (`contenido`). 404 si no
+         *     existe en la organización o es de otra (INV-21).
+         */
+        get: operations["obtener_rechazo_api_v1_observaciones_rechazos__rechazo_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ventas": {
         parameters: {
             query?: never;
@@ -2684,7 +2822,8 @@ export interface paths {
          *     `desde` y `hasta` son fechas de negocio inclusivas en la zona de la organización (TR-04); un
          *     `limite` fuera de 1 a 200 es 422, y un rango invertido o un cursor ilegible también, con su
          *     código. `estado` (change 19, D14, REP-02) filtra por `CONFIRMADA` o `ANULADA`; otro valor es
-         *     422.
+         *     422. `numero` (change 25, lote extra) busca el número de venta por coincidencia parcial, sin
+         *     distinguir mayúsculas, en la base (hasta 50 caracteres).
          */
         get: operations["listar_ventas_api_v1_ventas_get"];
         put?: never;
@@ -3249,6 +3388,8 @@ export interface components {
             stock: components["schemas"]["StockBootstrap"][];
             /** Autorizadores */
             autorizadores: components["schemas"]["AutorizadorBootstrap"][];
+            /** Rechazos Resueltos */
+            rechazos_resueltos: string[];
         };
         /**
          * BorradorResponse
@@ -3754,6 +3895,12 @@ export interface components {
             detalle: {
                 [key: string]: unknown;
             } | null;
+            /** Resuelto Por Nombre */
+            resuelto_por_nombre?: string | null;
+            /** Resuelto En */
+            resuelto_en?: string | null;
+            /** Comentario */
+            comentario?: string | null;
         };
         /**
          * CobranzaRegistrarRequest
@@ -4010,6 +4157,11 @@ export interface components {
             lineas: components["schemas"]["CompraLineaResponse"][];
             pago: components["schemas"]["CompraPagoResponse"] | null;
             anulacion: components["schemas"]["CompraAnulacionResponse"] | null;
+            /**
+             * Observaciones
+             * @default []
+             */
+            observaciones: components["schemas"]["CompraObservacionResponse"][];
         };
         /**
          * CompraLineaRequest
@@ -4114,6 +4266,28 @@ export interface components {
             importe: string;
             /** Referencia */
             referencia: string | null;
+        };
+        /**
+         * CompraObservacionResponse
+         * @description Una observación de sincronización de la compra con su resolución (change 25, D11, SYN-08).
+         *     `detalle` es el JSON tal cual se guardó; la resolución, solo lectura, es nula mientras la
+         *     observación está pendiente.
+         */
+        CompraObservacionResponse: {
+            /** Codigo */
+            codigo: string;
+            /** Estado */
+            estado: string;
+            /** Detalle */
+            detalle: {
+                [key: string]: unknown;
+            } | null;
+            /** Resuelto Por Nombre */
+            resuelto_por_nombre?: string | null;
+            /** Resuelto En */
+            resuelto_en?: string | null;
+            /** Comentario */
+            comentario?: string | null;
         };
         /** CompraPagoResponse */
         CompraPagoResponse: {
@@ -4700,6 +4874,11 @@ export interface components {
             /** Lineas */
             lineas: components["schemas"]["LineaDelDetalleDeAjusteResponse"][];
             anulacion: components["schemas"]["DetalleDeAnulacionDeAjusteResponse"] | null;
+            /**
+             * Observaciones
+             * @default []
+             */
+            observaciones: components["schemas"]["ObservacionDeStockResponse"][];
         };
         /** DetalleDeAnulacionDeAjusteResponse */
         DetalleDeAnulacionDeAjusteResponse: {
@@ -4808,6 +4987,8 @@ export interface components {
             motivo_liberacion_nombre: string | null;
             /** Observacion Liberacion */
             observacion_liberacion: string | null;
+            /** Rechazos Pendientes */
+            rechazos_pendientes: number;
         };
         /** DetalleDeTransferenciaResponse */
         DetalleDeTransferenciaResponse: {
@@ -4854,6 +5035,11 @@ export interface components {
             /** Lineas */
             lineas: components["schemas"]["LineaDelDetalleDeTransferenciaResponse"][];
             anulacion: components["schemas"]["DetalleDeAnulacionDeTransferenciaResponse"] | null;
+            /**
+             * Observaciones
+             * @default []
+             */
+            observaciones: components["schemas"]["ObservacionDeStockResponse"][];
         };
         /**
          * DevolucionRequest
@@ -5461,6 +5647,15 @@ export interface components {
             /** Valor Diferencia */
             valor_diferencia?: string | null;
         };
+        /** LineaResumidaResponse */
+        LineaResumidaResponse: {
+            /** Producto */
+            producto: string | null;
+            /** Cantidad */
+            cantidad: number | null;
+            /** Importe */
+            importe: string | null;
+        };
         /** LineaStockInicialRequest */
         LineaStockInicialRequest: {
             /**
@@ -5837,6 +6032,13 @@ export interface components {
             /** Requiere Referencia */
             requiere_referencia: boolean;
         };
+        /** MedioResumidoResponse */
+        MedioResumidoResponse: {
+            /** Medio */
+            medio: string | null;
+            /** Importe */
+            importe: string | null;
+        };
         /**
          * MiContrasenaRequest
          * @description `POST /yo/contrasena`. `extra="forbid"`: el usuario sale del token, nunca del cuerpo (un
@@ -6004,6 +6206,21 @@ export interface components {
             operation_id: string;
             /** Saldo Acumulado */
             saldo_acumulado: string;
+        };
+        /**
+         * NombresDeObservacionResponse
+         * @description Nombres que el detalle solo nombra por id (change 25, lote extra); «(no existe)» si el id ya
+         *     no existe en la organización; `None` lo que el detalle no trae.
+         */
+        NombresDeObservacionResponse: {
+            /** Autorizador */
+            autorizador: string | null;
+            /** Producto */
+            producto: string | null;
+            /** Linea */
+            linea: number | null;
+            /** Vendedor De Jornada */
+            vendedor_de_jornada: string | null;
         };
         /** NotaAnulacionResponse */
         NotaAnulacionResponse: {
@@ -6179,6 +6396,56 @@ export interface components {
             /** Siguiente Numero */
             siguiente_numero: string;
         };
+        /** ObservacionDeBandejaResponse */
+        ObservacionDeBandejaResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Codigo */
+            codigo: string;
+            /** Detalle */
+            detalle: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "PENDIENTE" | "RESUELTA";
+            /** Resuelto Por Id */
+            resuelto_por_id: string | null;
+            /** Resuelto Por Nombre */
+            resuelto_por_nombre: string | null;
+            /** Resuelto En */
+            resuelto_en: string | null;
+            /** Comentario */
+            comentario: string | null;
+            nombres?: components["schemas"]["NombresDeObservacionResponse"] | null;
+        };
+        /**
+         * ObservacionDeStockResponse
+         * @description Una observación de sincronización de una transferencia o un ajuste con su resolución
+         *     (change 25, D11, SYN-08). `detalle` es el JSON tal cual se guardó; la resolución, solo
+         *     lectura, es nula mientras está pendiente.
+         */
+        ObservacionDeStockResponse: {
+            /** Codigo */
+            codigo: string;
+            /** Estado */
+            estado: string;
+            /** Detalle */
+            detalle: {
+                [key: string]: unknown;
+            } | null;
+            /** Resuelto Por Nombre */
+            resuelto_por_nombre?: string | null;
+            /** Resuelto En */
+            resuelto_en?: string | null;
+            /** Comentario */
+            comentario?: string | null;
+        };
         /**
          * ObservacionResponse
          * @description Una observación del comando (change 22c, D3, SYN-07).
@@ -6197,6 +6464,53 @@ export interface components {
             detalle: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** OperacionObservadaResponse */
+        OperacionObservadaResponse: {
+            /** Operacion Tipo */
+            operacion_tipo: string;
+            /**
+             * Operacion Id
+             * Format: uuid
+             */
+            operacion_id: string;
+            /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "PENDIENTE" | "RESUELTA";
+            resumen: components["schemas"]["ResumenDeOperacionResponse"] | null;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /** Usuario Nombre */
+            usuario_nombre: string | null;
+            /**
+             * Dispositivo Id
+             * Format: uuid
+             */
+            dispositivo_id: string;
+            /** Jornada Id */
+            jornada_id: string | null;
+            /**
+             * Modo
+             * @enum {string}
+             */
+            modo: "ONLINE" | "OFFLINE";
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * Registered At
+             * Format: date-time
+             */
+            registered_at: string;
+            /** Observaciones */
+            observaciones: components["schemas"]["ObservacionDeBandejaResponse"][];
         };
         /**
          * OrganizacionDatosConfigurarRequest
@@ -6285,6 +6599,20 @@ export interface components {
         PaginaDeJornadasResponse: {
             /** Items */
             items: components["schemas"]["JornadaDelListadoResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
+        /** PaginaDeObservacionesResponse */
+        PaginaDeObservacionesResponse: {
+            /** Items */
+            items: components["schemas"]["OperacionObservadaResponse"][];
+            /** Cursor Siguiente */
+            cursor_siguiente: string | null;
+        };
+        /** PaginaDeRechazosResponse */
+        PaginaDeRechazosResponse: {
+            /** Items */
+            items: components["schemas"]["RechazoResponse"][];
             /** Cursor Siguiente */
             cursor_siguiente: string | null;
         };
@@ -7196,6 +7524,75 @@ export interface components {
             vigencia_hasta?: string | null;
         };
         /**
+         * RechazoResponse
+         * @description Un rechazo sin conexión o una cuarentena (`origen`). `contenido` es lo crudo que envió el
+         *     teléfono y solo viene en el detalle.
+         */
+        RechazoResponse: {
+            /**
+             * Origen
+             * @enum {string}
+             */
+            origen: "RECHAZO" | "CUARENTENA";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /** Tipo */
+            tipo: string;
+            /**
+             * Estado
+             * @enum {string}
+             */
+            estado: "PENDIENTE" | "RESUELTO";
+            /** Codigo */
+            codigo: string;
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /** Usuario Nombre */
+            usuario_nombre: string | null;
+            /**
+             * Dispositivo Id
+             * Format: uuid
+             */
+            dispositivo_id: string;
+            /** Jornada Id */
+            jornada_id: string | null;
+            /**
+             * Recibido En
+             * Format: date-time
+             */
+            recibido_en: string;
+            /** Occurred At */
+            occurred_at: string | null;
+            /** Aceptada Despues */
+            aceptada_despues: boolean;
+            resumen: components["schemas"]["ResumenDeContenidoResponse"] | null;
+            /** Resuelto Por Id */
+            resuelto_por_id: string | null;
+            /** Resuelto Por Nombre */
+            resuelto_por_nombre: string | null;
+            /** Resuelto En */
+            resuelto_en: string | null;
+            /** Comentario */
+            comentario: string | null;
+            /** Vinculo Tipo */
+            vinculo_tipo: ("VENTA" | "COBRANZA") | null;
+            /** Vinculo Id */
+            vinculo_id: string | null;
+            /** Contenido */
+            contenido?: unknown | null;
+        };
+        /**
          * RedondeoCategoriaDefinirRequest
          * @description Cuerpo de `PUT /precios/listas/{lista_id}/redondeos-categoria/{categoria_id}`.
          */
@@ -7614,6 +8011,73 @@ export interface components {
             /** Lineas */
             lineas: components["schemas"]["LineaDeRendicionResponse"][];
         };
+        /** ResolucionDeRechazoResponse */
+        ResolucionDeRechazoResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Origen
+             * @enum {string}
+             */
+            origen: "RECHAZO" | "CUARENTENA";
+            /**
+             * Estado
+             * @constant
+             */
+            estado: "RESUELTO";
+            /**
+             * Resuelto En
+             * Format: date-time
+             */
+            resuelto_en: string;
+            /** Comentario */
+            comentario: string;
+            /** Vinculo Tipo */
+            vinculo_tipo: ("VENTA" | "COBRANZA") | null;
+            /** Vinculo Id */
+            vinculo_id: string | null;
+        };
+        /** ResolucionResponse */
+        ResolucionResponse: {
+            /** Observaciones */
+            observaciones: string[];
+            /**
+             * Resuelto En
+             * Format: date-time
+             */
+            resuelto_en: string;
+            /** Comentario */
+            comentario: string;
+        };
+        /**
+         * ResolverObservacionesRequest
+         * @description `POST /api/v1/observaciones/resolucion`. Sin límites de Pydantic: el largo de la lista y
+         *     del comentario los valida el dominio y responden con su código estable (D1).
+         */
+        ResolverObservacionesRequest: {
+            /** Observaciones */
+            observaciones: string[];
+            /** Comentario */
+            comentario: string;
+        };
+        /**
+         * ResolverRechazoRequest
+         * @description `POST /api/v1/observaciones/rechazos/{id}/resolucion`. El largo del comentario lo valida el
+         *     dominio (`COMENTARIO_INVALIDO`).
+         */
+        ResolverRechazoRequest: {
+            /**
+             * Origen
+             * @enum {string}
+             */
+            origen: "RECHAZO" | "CUARENTENA";
+            /** Comentario */
+            comentario: string;
+            vinculo?: components["schemas"]["VinculoRequest"] | null;
+        };
         /** ResultadoItemLoteResponse */
         ResultadoItemLoteResponse: {
             /**
@@ -7631,6 +8095,24 @@ export interface components {
             error_codigo: string | null;
             /** Observaciones */
             observaciones?: components["schemas"]["ObservacionResponse"][];
+        };
+        /**
+         * ResumenDeContenidoResponse
+         * @description Lo que envió el teléfono, legible; los campos que no se pudieron leer vienen nulos.
+         */
+        ResumenDeContenidoResponse: {
+            /** Titulo */
+            titulo: string;
+            /** Cliente */
+            cliente: string | null;
+            /** Numero */
+            numero: string | null;
+            /** Total */
+            total: string | null;
+            /** Lineas */
+            lineas: components["schemas"]["LineaResumidaResponse"][];
+            /** Medios */
+            medios: components["schemas"]["MedioResumidoResponse"][];
         };
         /**
          * ResumenDeJornadaResponse
@@ -7655,6 +8137,35 @@ export interface components {
             despues_de_la_rendicion: components["schemas"]["DineroDeLaJornadaResponse"] | null;
             /** Valor De Diferencias */
             valor_de_diferencias?: string | null;
+        };
+        /** ResumenDeOperacionResponse */
+        ResumenDeOperacionResponse: {
+            /** Titulo */
+            titulo: string;
+            /** Tercero */
+            tercero: string | null;
+            /** Total */
+            total: string | null;
+            /**
+             * Momento
+             * Format: date-time
+             */
+            momento: string;
+        };
+        /** ResumenDePendientesResponse */
+        ResumenDePendientesResponse: {
+            /** Observaciones Por Codigo */
+            observaciones_por_codigo: {
+                [key: string]: number;
+            };
+            /** Observaciones Pendientes */
+            observaciones_pendientes: number;
+            /** Rechazos Pendientes */
+            rechazos_pendientes: number;
+            /** Cuarentenas Pendientes */
+            cuarentenas_pendientes: number;
+            /** Total Pendiente */
+            total_pendiente: number;
         };
         /**
          * ResumenReglaIvaResponse
@@ -8792,6 +9303,12 @@ export interface components {
             detalle: {
                 [key: string]: unknown;
             };
+            /** Resuelto Por Nombre */
+            resuelto_por_nombre?: string | null;
+            /** Resuelto En */
+            resuelto_en?: string | null;
+            /** Comentario */
+            comentario?: string | null;
         };
         /**
          * VentaResumenResponse
@@ -8957,6 +9474,19 @@ export interface components {
         VersionesResponse: {
             /** Items */
             items: components["schemas"]["VersionResponse"][];
+        };
+        /** VinculoRequest */
+        VinculoRequest: {
+            /**
+             * Tipo
+             * @enum {string}
+             */
+            tipo: "VENTA" | "COBRANZA";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
         };
         /**
          * YoResponse
@@ -14425,6 +14955,224 @@ export interface operations {
             };
         };
     };
+    resolver_observaciones_api_v1_observaciones_resolucion_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolverObservacionesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolucionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolver_rechazo_api_v1_observaciones_rechazos__rechazo_id__resolucion_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Operation-Id"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                rechazo_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolverRechazoRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolucionDeRechazoResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_observaciones_api_v1_observaciones_get: {
+        parameters: {
+            query?: {
+                estado?: "PENDIENTE" | "RESUELTA" | "TODAS";
+                codigo?: string[] | null;
+                tipo?: string[] | null;
+                usuario_id?: string | null;
+                jornada_id?: string | null;
+                desde?: string | null;
+                hasta?: string | null;
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaDeObservacionesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resumen_de_pendientes_api_v1_observaciones_resumen_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumenDePendientesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_rechazos_api_v1_observaciones_rechazos_get: {
+        parameters: {
+            query?: {
+                estado?: "PENDIENTE" | "RESUELTO" | "TODOS";
+                origen?: ("RECHAZO" | "CUARENTENA") | null;
+                tipo?: string[] | null;
+                usuario_id?: string | null;
+                jornada_id?: string | null;
+                cursor?: string | null;
+                limite?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaDeRechazosResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_rechazo_api_v1_observaciones_rechazos__rechazo_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                rechazo_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RechazoResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     listar_ventas_api_v1_ventas_get: {
         parameters: {
             query?: {
@@ -14435,6 +15183,7 @@ export interface operations {
                 desde?: string | null;
                 hasta?: string | null;
                 estado?: ("CONFIRMADA" | "ANULADA") | null;
+                numero?: string | null;
                 cursor?: string | null;
                 limite?: number;
             };

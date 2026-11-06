@@ -372,6 +372,19 @@ class DetalleDeAnulacionDeTransferenciaResponse(BaseModel):
     anulada_por_nombre: str | None
 
 
+class ObservacionDeStockResponse(BaseModel):
+    """Una observación de sincronización de una transferencia o un ajuste con su resolución
+    (change 25, D11, SYN-08). `detalle` es el JSON tal cual se guardó; la resolución, solo
+    lectura, es nula mientras está pendiente."""
+
+    codigo: str
+    estado: str
+    detalle: dict[str, object] | None
+    resuelto_por_nombre: str | None = None
+    resuelto_en: datetime | None = None
+    comentario: str | None = None
+
+
 class DetalleDeTransferenciaResponse(BaseModel):
     id: UUID
     estado: str
@@ -386,6 +399,7 @@ class DetalleDeTransferenciaResponse(BaseModel):
     registered_at: datetime
     lineas: list[LineaDelDetalleDeTransferenciaResponse]
     anulacion: DetalleDeAnulacionDeTransferenciaResponse | None
+    observaciones: list[ObservacionDeStockResponse] = []
 
 
 def pagina_de_transferencias_response(
@@ -402,6 +416,7 @@ def pagina_de_transferencias_response(
 
 def detalle_de_transferencia_response(
     detalle: DetalleDeTransferencia,
+    observaciones: list[ObservacionDeStockResponse] | None = None,
 ) -> DetalleDeTransferenciaResponse:
     anulacion = detalle.anulacion
     return DetalleDeTransferenciaResponse(
@@ -437,6 +452,7 @@ def detalle_de_transferencia_response(
             anulada_por_id=anulacion.usuario_id,
             anulada_por_nombre=anulacion.usuario_nombre,
         ),
+        observaciones=observaciones or [],
     )
 
 
@@ -499,6 +515,7 @@ class DetalleDeAjusteResponse(BaseModel):
     registered_at: datetime
     lineas: list[LineaDelDetalleDeAjusteResponse]
     anulacion: DetalleDeAnulacionDeAjusteResponse | None
+    observaciones: list[ObservacionDeStockResponse] = []
 
 
 def pagina_de_ajustes_response(pagina: PaginaDeAjustes) -> PaginaDeAjustesResponse:
@@ -509,7 +526,10 @@ def pagina_de_ajustes_response(pagina: PaginaDeAjustes) -> PaginaDeAjustesRespon
 
 
 def detalle_de_ajuste_response(
-    detalle: DetalleDeAjuste, *, con_costos: bool
+    detalle: DetalleDeAjuste,
+    *,
+    con_costos: bool,
+    observaciones: list[ObservacionDeStockResponse] | None = None,
 ) -> DetalleDeAjusteResponse:
     """Sin `con_costos` el campo de costo de cada línea no se establece y la ruta lo omite."""
     anulacion = detalle.anulacion
@@ -552,6 +572,7 @@ def detalle_de_ajuste_response(
             anulado_por_id=anulacion.usuario_id,
             anulado_por_nombre=anulacion.usuario_nombre,
         ),
+        observaciones=observaciones or [],
     )
 
 
@@ -843,6 +864,7 @@ class DetalleDeJornadaResponse(BaseModel):
     motivo_liberacion_id: UUID | None
     motivo_liberacion_nombre: str | None
     observacion_liberacion: str | None
+    rechazos_pendientes: int
 
 
 def pagina_de_jornadas_response(pagina: PaginaDeJornadas) -> PaginaDeJornadasResponse:

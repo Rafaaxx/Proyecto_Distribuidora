@@ -117,6 +117,19 @@ def leer_ubicacion_de_jornada(
     )
 
 
+def leer_usuarios_de_jornadas(
+    organizacion_id: UUID, sesion: Session, jornada_ids: Collection[UUID]
+) -> dict[UUID, UUID]:
+    """`{jornada_id: usuario_id}` de las jornadas de la organización entre `jornada_ids`, en una
+    consulta (las de otra organización o inexistentes no aparecen; INV-21). Solo lectura."""
+    if not jornada_ids:
+        return {}
+    consulta = select(Jornada.id, Jornada.usuario_id).where(
+        Jornada.organizacion_id == organizacion_id, Jornada.id.in_(list(jornada_ids))
+    )
+    return {fila.id: fila.usuario_id for fila in sesion.execute(consulta)}
+
+
 def jornada_es_de(
     organizacion_id: UUID,
     sesion: Session,

@@ -45,7 +45,9 @@ describe('etiquetas', () => {
     ['PERMISO_REVOCADO', 'Permiso revocado'],
     ['JORNADA_LIBERADA', 'Jornada liberada'],
     ['CLIENTE_NO_HABILITADO', 'Cliente no habilitado'],
-    ['STOCK_NEGATIVO', 'STOCK_NEGATIVO'],
+    ['CODIGO_NUEVO', 'CODIGO_NUEVO'],
+    // Change 25 (D12): los títulos son los de la bandeja de revisión, una sola lista.
+    ['JORNADA_RENDIDA', 'Llegó después de la rendición'],
   ])('la observación %s se llama "%s" (SYN-07)', (codigo, esperado) => {
     expect(etiquetaDeObservacion(codigo)).toBe(esperado)
   })

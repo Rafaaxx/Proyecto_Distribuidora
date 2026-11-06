@@ -16,6 +16,7 @@ import { RecursoNoEncontradoStockError } from '../../../features/stock/errores'
 import { useAjuste, useAnularAjuste } from '../../../features/stock/hooks'
 import { formatearFechaHora } from '../../../lib/fecha'
 import { AnularOperacionDialogo, CLASE_ENLACE, InsigniaDeEstado, PantallaSinPermiso } from './piezasDeOperacion'
+import { ObservacionesDeLaOperacion } from '../revision/ObservacionesDeLaOperacion'
 
 const TITULO = 'Ajuste de stock'
 
@@ -113,6 +114,8 @@ function Detalle() {
       <Card>
         <Tabla filas={datos.lineas} columnas={columnas} obtenerClave={(l) => l.producto_id} />
       </Card>
+
+      <ObservacionesDeLaOperacion observaciones={datos.observaciones ?? []} />
 
       {datos.anulacion && (
         <Card className="flex flex-col gap-1 text-sm text-primary" data-testid="anulacion">

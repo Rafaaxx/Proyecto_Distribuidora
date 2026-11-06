@@ -5,6 +5,9 @@ import { Badge } from '../../../components/ui/Badge'
 import { formatearDinero } from '../../../domain/ruta/lecturasLocales'
 import { formatearFechaHora } from '../../../lib/fecha'
 import { useCobranzasDeHoy } from '../datos/cobranzas'
+import { useRechazosResueltos } from '../datos/rechazosResueltos'
+import { MarcaDeRechazoResuelto } from '../sincronizacion/MarcaDeRechazoResuelto'
+import { hayRechazoResuelto } from '../sincronizacion/presentacion'
 import { ayudasDeProblemasEnListaDeCobranzas, etiquetaDeEnvio } from '../ventas/presentacionDeVentas'
 
 /**
@@ -14,6 +17,7 @@ import { ayudasDeProblemasEnListaDeCobranzas, etiquetaDeEnvio } from '../ventas/
  */
 export function CobranzasDeHoyScreen() {
   const datos = useCobranzasDeHoy()
+  const resueltos = useRechazosResueltos()
 
   if (datos.estado === 'cargando') return <p className="text-sm text-primary">Cargando…</p>
   if (datos.estado === 'sin_datos') {
@@ -43,6 +47,7 @@ export function CobranzasDeHoyScreen() {
                   <Badge variante={cobranza.estado_envio === 'RECHAZADA' ? 'negativo' : 'neutral'}>
                     {etiquetaDeEnvio(cobranza.estado_envio ?? 'PENDIENTE')}
                   </Badge>
+                  <MarcaDeRechazoResuelto operationId={cobranza.operation_id} estado={cobranza.estado_envio ?? 'PENDIENTE'} />
                 </span>
               </Link>
             </li>
@@ -53,6 +58,10 @@ export function CobranzasDeHoyScreen() {
         {claves.map((clave) => (
           <Ayuda key={clave} clave={clave} />
         ))}
+        {hayRechazoResuelto(
+          resueltos,
+          datos.cobranzas.map((c) => ({ operationId: c.operation_id, estado: c.estado_envio ?? 'PENDIENTE' })),
+        ) && <Ayuda clave="ruta.rechazoResuelto" />}
       </p>
     </div>
   )

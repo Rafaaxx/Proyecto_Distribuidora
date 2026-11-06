@@ -214,6 +214,8 @@ export function useCobranzasConProblemas(): CobranzaConProblema[] {
 }
 
 export interface EntregaDelDia {
+  /** Para saber si administración resolvió su rechazo (change 25, D8). */
+  operationId: string
   estado: EstadoDeEnvio
   codigo: string | null
   explicacion: ExplicacionDeEnvio | null
@@ -240,7 +242,7 @@ export function useEntregaDelDia(): EntregaDelDia | null {
     if (comando === undefined) return null
     const estado = ESTADO_DE_ENVIO_DE_LA_ENTREGA[comando.estado]
     const explicacion = explicarEnvio(estado, comando, await leerNombresLocales(), TIPO_DE_ENTREGA)
-    return { estado, codigo: explicacion?.tipo === 'rechazo' ? explicacion.codigo : null, explicacion }
+    return { operationId: comando.operation_id, estado, codigo: explicacion?.tipo === 'rechazo' ? explicacion.codigo : null, explicacion }
   }, null as EntregaDelDia | null)
 }
 

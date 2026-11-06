@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.core.clock import Clock
 from app.core.ids import nuevo_id
+from app.core.resumen import ResumenDeOperacion, registrar_resumidor_de_operacion
 from app.modules.catalogo import service as catalogo_service
 from app.modules.configuracion import service as configuracion_service
 from app.modules.cuentas_corrientes import service as cuentas_corrientes_service
@@ -1346,3 +1347,25 @@ def anular_compra(
             (r.jornada_tomada_id for r in resultados if r.jornada_tomada_id is not None), None
         ),
     )
+
+
+def resumir_compras(
+    organizacion_id: UUID, sesion: Session, ids: Sequence[UUID]
+) -> dict[UUID, ResumenDeOperacion]:
+    """Resumen de varias compras para la bandeja de revisión (change 25, D4): comprobante,
+    proveedor, total de la factura y momento, en una consulta. Una compra de otra organización no
+    aparece (INV-21)."""
+    return {
+        id_: ResumenDeOperacion(
+            titulo="Compra" if comprobante is None else f"Compra {comprobante}",
+            tercero=proveedor,
+            total=str(total),
+            momento=momento,
+        )
+        for id_, comprobante, proveedor, total, momento in repository.resumir_compras(
+            organizacion_id, ids, sesion
+        )
+    }
+
+
+registrar_resumidor_de_operacion("COMPRA", resumir_compras)

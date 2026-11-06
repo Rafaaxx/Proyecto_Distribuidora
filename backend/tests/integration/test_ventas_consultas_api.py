@@ -15,8 +15,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 from fastapi.testclient import TestClient
+from revision_utiles import MOMENTO, resolver_por_sql
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from test_ventas_api import (  # noqa: F401
@@ -355,6 +357,39 @@ def test_syn07_el_detalle_trae_las_observaciones_de_la_venta(
     assert observacion["detalle"]["saldo_resultante"] == -12
 
 
+def test_syn08_el_detalle_muestra_quien_resolvio_el_aviso_cuando_y_con_que_comentario(
+    cliente_http: TestClient, sesion: Session
+) -> None:
+    """SYN-08, change 25 D11: una observación resuelta trae su resolución; una pendiente, nada."""
+    s = Sesion(sesion, permisos=PERMISOS_DE_SUPERVISOR)
+    headers = s.entrar(cliente_http)
+    linea = s.entorno.linea(cantidad=60)
+    venta_id = _vender(cliente_http, s, headers, lineas=[linea], total=linea["importe_bruto"])
+    pendiente = cliente_http.get(f"{URL_VENTAS}/{venta_id}", headers=headers).json()
+    (aviso,) = pendiente["observaciones"]
+    assert aviso["estado"] == "PENDIENTE"
+    assert (aviso["resuelto_por_nombre"], aviso["resuelto_en"], aviso["comentario"]) == (
+        None,
+        None,
+        None,
+    )
+    nombre = sesion.execute(
+        text("SELECT nombre FROM usuario WHERE organizacion_id = :o AND id = :u"),
+        {"o": s.entorno.org, "u": s.entorno.usuario_id},
+    ).scalar_one()
+
+    resolver_por_sql(sesion, s.entorno.org, UUID(venta_id), s.entorno.usuario_id)
+
+    (resuelta,) = cliente_http.get(f"{URL_VENTAS}/{venta_id}", headers=headers).json()[
+        "observaciones"
+    ]
+    assert resuelta["estado"] == "RESUELTA"
+    assert resuelta["resuelto_por_nombre"] == nombre
+    assert datetime.fromisoformat(resuelta["resuelto_en"]) == MOMENTO
+    assert resuelta["comentario"] == "Se corrigió con un ajuste"
+    assert resuelta["detalle"]["saldo_resultante"] == -12
+
+
 def test_la_ubicacion_de_una_venta_historica_se_muestra_aunque_hoy_este_inactiva(
     cliente_http: TestClient, sesion: Session
 ) -> None:
@@ -374,3 +409,37 @@ def test_la_ubicacion_de_una_venta_historica_se_muestra_aunque_hoy_este_inactiva
     assert lista["items"][0]["ubicacion_id"] == str(venta.ubicacion_id)
     assert detalle["ubicacion_id"] == str(venta.ubicacion_id)
     assert detalle["ubicacion_nombre"]
+
+
+# --- filtro por número (change 25, lote extra 2026-11-06: el buscador de «Rechazadas») ----------
+
+
+def test_el_filtro_numero_busca_parcial_sin_distinguir_mayusculas_y_en_cualquier_estado(
+    cliente_http: TestClient, sesion: Session
+) -> None:
+    """Coincidencia parcial e insensible a mayúsculas en SQL; trae también las anuladas."""
+    s = Sesion(sesion)
+    a = sembrar(sesion, s, numero="V01-000123")
+    b = sembrar(sesion, s, numero="V01-000124", estado="ANULADA")
+    c = sembrar(sesion, s, numero="V02-000999")
+    headers = s.entrar(cliente_http)
+
+    assert _ids(cliente_http, headers, numero="v01-0001") == {str(a.venta_id), str(b.venta_id)}
+    assert _ids(cliente_http, headers, numero="999") == {str(c.venta_id)}
+    assert _ids(cliente_http, headers, numero="V01-000124") == {str(b.venta_id)}
+    assert _ids(cliente_http, headers, numero="inexistente") == set()
+
+
+def test_el_filtro_numero_trata_los_comodines_como_texto_y_respeta_la_organizacion(
+    cliente_http: TestClient, sesion: Session
+) -> None:
+    """INV-21: el número de otra organización no se encuentra; `%` y `_` son literales."""
+    s = Sesion(sesion)
+    propia = sembrar(sesion, s, numero="V01-000500")
+    otra = Sesion(sesion)
+    sembrar(sesion, otra, numero="V01-000501")
+    headers = s.entrar(cliente_http)
+
+    assert _ids(cliente_http, headers, numero="V01-00050") == {str(propia.venta_id)}
+    assert _ids(cliente_http, headers, numero="%") == set()
+    assert _ids(cliente_http, headers, numero="V01_000500") == set()

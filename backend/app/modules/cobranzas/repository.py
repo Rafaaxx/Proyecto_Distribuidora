@@ -7,7 +7,7 @@ función recibe `organizacion_id` como primer parámetro y filtra por él (INV-2
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -400,3 +400,16 @@ def totales_de_cobranzas_de_jornada(
             for fila in por_medio
         ],
     )
+
+
+def resumir_cobranzas(
+    organizacion_id: UUID, ids: Sequence[UUID], sesion: Session
+) -> list[tuple[UUID, UUID, Decimal, datetime]]:
+    """`(id, cliente, importe, momento)` de las cobranzas de la organización entre `ids`, en una
+    consulta (las de otra organización no aparecen; INV-21). Para el resumen de la bandeja."""
+    if not ids:
+        return []
+    consulta = select(
+        Cobranza.id, Cobranza.cliente_id, Cobranza.importe, Cobranza.occurred_at
+    ).where(Cobranza.organizacion_id == organizacion_id, Cobranza.id.in_(list(ids)))
+    return [(f.id, f.cliente_id, f.importe, f.occurred_at) for f in sesion.execute(consulta)]

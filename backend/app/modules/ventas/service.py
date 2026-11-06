@@ -80,6 +80,23 @@ from app.core.clock import Clock
 from app.core.errors import DomainError, PermisoRequeridoError
 from app.core.ids import nuevo_id
 from app.core.money import redondear_importe
+from app.core.resumen import (
+    SIN_REFERENCIA,
+    LineaResumida,
+    ResumenDeContenido,
+    ResumenDeOperacion,
+    como_entero,
+    como_importe,
+    como_lista,
+    como_mapa,
+    como_texto,
+    como_uuid,
+    nombre_o_sin_referencia,
+    registrar_lector_de_vinculo,
+    registrar_numeradora_de_lineas,
+    registrar_resumidor_de_contenido,
+    registrar_resumidor_de_operacion,
+)
 from app.modules.catalogo import service as catalogo_service
 from app.modules.clientes import service as clientes_service
 from app.modules.cobranzas import service as cobranzas_service
@@ -223,6 +240,7 @@ _PERMISO_USAR_LISTA_ANTERIOR = "USAR_LISTA_ANTERIOR"
 _VERSION_VIGENTE = "VIGENTE"
 CODIGO_STOCK_NEGATIVO = "STOCK_NEGATIVO"
 CODIGO_VENTA_SIN_COSTO = "VENTA_SIN_COSTO"
+CODIGO_PRODUCTO_DESACTIVADO = "PRODUCTO_DESACTIVADO"
 CODIGO_JORNADA_LIBERADA = "JORNADA_LIBERADA"
 CODIGO_JORNADA_RENDIDA = "JORNADA_RENDIDA"
 _ESTADO_JORNADA_LIBERADA = "LIBERADA"
@@ -1226,6 +1244,7 @@ def confirmar_venta(
         )
     lineas_de_calculo: list[LineaCalculo] = []
     unidades: dict[UUID, int] = {}
+    desactivados: list[ObservacionDeVenta] = []
     for linea in datos.lineas:
         producto = productos[linea.producto_id]
         presentacion = next(
@@ -1238,12 +1257,27 @@ def confirmar_venta(
         )
         if presentacion is None:
             raise RecursoNoEncontradoError(f"La presentación {linea.presentacion_id} no existe.")
-        if not sin_conexion:  # D1 punto 5: sin conexion un desactivado se acepta sin observar
+        if not sin_conexion:  # sin conexion un desactivado se acepta y se observa (D10, abajo)
             validar_producto_y_presentacion(
                 producto_activo=producto.activo,
                 presentacion_activa=presentacion.activo,
                 presentacion_usar_en_venta=presentacion.usar_en_venta,
             )
+        else:
+            # SYN-05, SYN-07, INV-17, change 25 D10: la mercaderia ya se entrego; se acepta y se
+            # observa una vez por linea, diciendo cual de los dos esta inactivo.
+            if not producto.activo or not presentacion.activo:
+                desactivados.append(
+                    ObservacionDeVenta(
+                        CODIGO_PRODUCTO_DESACTIVADO,
+                        {
+                            "linea_id": str(linea.linea_id),
+                            "producto_id": str(linea.producto_id),
+                            "presentacion_id": str(linea.presentacion_id),
+                            "inactivo": "PRODUCTO" if not producto.activo else "PRESENTACION",
+                        },
+                    )
+                )
         unidades[linea.linea_id] = presentacion.unidades_base
         alicuota = configuracion_service.obtener_alicuota_por_id(
             organizacion_id, producto.alicuota_id, sesion
@@ -1721,6 +1755,7 @@ def confirmar_venta(
             for guardada in lineas_guardadas
             if guardada.costo_unitario is None
         )
+        observaciones_de_venta.extend(desactivados)
         # SYN-05, INV-17, STK-09: la ubicacion estaba tomada al sincronizar (propia en rendicion o
         # de otra jornada); la venta se acepta y la bandeja del 25 la ve. La constancia de la
         # auditoria sale de `jornadas_tomadas` (el handler).
@@ -2056,3 +2091,137 @@ stock_service.registrar_lector_de_ventas_de_jornada(
         organizacion_id, sesion, jornada_id=jornada_id, corte=corte
     )
 )
+
+
+def resumir_ventas(
+    organizacion_id: UUID, sesion: Session, ids: Sequence[UUID]
+) -> dict[UUID, ResumenDeOperacion]:
+    """Resumen de varias ventas para la bandeja de revisión (change 25, D4): título, cliente,
+    total y momento, con una consulta de ventas y una de nombres de clientes. Una venta de otra
+    organización no aparece (INV-21)."""
+    filas = repository.resumir_ventas(organizacion_id, ids, sesion)
+    clientes = clientes_service.nombres_de_clientes(
+        organizacion_id, {cliente_id for _, _, cliente_id, _, _ in filas}, sesion
+    )
+    return {
+        id_: ResumenDeOperacion(
+            titulo=f"Venta {numero}",
+            tercero=clientes.get(cliente_id),
+            total=str(total),
+            momento=momento,
+        )
+        for id_, numero, cliente_id, total, momento in filas
+    }
+
+
+registrar_resumidor_de_operacion("VENTA", resumir_ventas)
+
+
+def numerar_lineas_de_venta(
+    organizacion_id: UUID, sesion: Session, linea_ids: Sequence[UUID]
+) -> dict[UUID, int]:
+    """`{linea_id: número}` (desde 1) de las líneas de venta, en una consulta, para que la bandeja
+    de revisión diga «Línea {n}» (change 25, lote extra). Una línea de otra organización no
+    aparece (INV-21)."""
+    return {
+        id_: orden + 1
+        for id_, orden in repository.ordenes_de_lineas(organizacion_id, linea_ids, sesion).items()
+    }
+
+
+registrar_numeradora_de_lineas("VENTA", numerar_lineas_de_venta)
+
+
+def leer_venta_para_vinculo(organizacion_id: UUID, sesion: Session, venta_id: UUID) -> bool:
+    """Si la venta existe en la organización: lo que `RECHAZO_RESOLVER` necesita para vincular una
+    resolución (change 25, D7). Una venta de otra organización no existe."""
+    return repository.obtener_venta(organizacion_id, venta_id, sesion) is not None
+
+
+registrar_lector_de_vinculo("VENTA", leer_venta_para_vinculo)
+
+
+def resumir_contenidos_de_venta(
+    organizacion_id: UUID, sesion: Session, contenidos: Sequence[object]
+) -> list[ResumenDeContenido]:
+    """Lo que envió el teléfono en `VENTA_CONFIRMAR`: cliente, número, total, líneas y medios de
+    la cobranza en el acto, con una consulta de clientes, una de productos y una de medios para
+    toda la lista (change 25, D4). Un contenido mal formado o un cliente o producto que ya no
+    existe no hacen fallar la lectura."""
+    mapas = [como_mapa(c) for c in contenidos]
+    lineas_de = [[como_mapa(linea) for linea in como_lista(m.get("lineas"))] for m in mapas]
+    clientes = clientes_service.nombres_de_clientes(
+        organizacion_id, {id_ for m in mapas if (id_ := como_uuid(m.get("cliente_id")))}, sesion
+    )
+    productos = catalogo_service.nombres_de_productos(
+        organizacion_id,
+        {
+            id_
+            for lineas in lineas_de
+            for linea in lineas
+            if (id_ := como_uuid(linea.get("producto_id")))
+        },
+        sesion,
+    )
+    resumenes = []
+    for mapa, lineas in zip(mapas, lineas_de, strict=True):
+        numero = como_texto(mapa.get("numero"))
+        cobranza = como_mapa(mapa.get("cobranza"))
+        resumenes.append(
+            ResumenDeContenido(
+                titulo=f"Venta {numero}" if numero else "Venta",
+                cliente=nombre_o_sin_referencia(clientes, mapa.get("cliente_id")),
+                numero=numero,
+                total=como_importe(mapa.get("total")),
+                lineas=tuple(
+                    LineaResumida(
+                        producto=nombre_o_sin_referencia(productos, linea.get("producto_id")),
+                        cantidad=como_entero(linea.get("cantidad")),
+                        importe=como_importe(linea.get("importe_bruto")),
+                    )
+                    for linea in lineas
+                ),
+                medios=cobranzas_service.resumir_medios_enviados(
+                    organizacion_id, sesion, como_lista(cobranza.get("medios"))
+                ),
+            )
+        )
+    return resumenes
+
+
+def resumir_contenidos_de_anulacion(
+    organizacion_id: UUID, sesion: Session, contenidos: Sequence[object]
+) -> list[ResumenDeContenido]:
+    """Lo que envió el teléfono en `VENTA_ANULAR`: la venta que nombra (número, cliente y total),
+    o que no existe, con una consulta de ventas para toda la lista (change 25, D4)."""
+    mapas = [como_mapa(c) for c in contenidos]
+    ids = [id_ for m in mapas if (id_ := como_uuid(m.get("venta_id")))]
+    filas = {fila[0]: fila for fila in repository.resumir_ventas(organizacion_id, ids, sesion)}
+    clientes = clientes_service.nombres_de_clientes(
+        organizacion_id, {fila[2] for fila in filas.values()}, sesion
+    )
+    resumenes = []
+    for mapa in mapas:
+        venta_id = como_uuid(mapa.get("venta_id"))
+        fila = None if venta_id is None else filas.get(venta_id)
+        if fila is None:
+            resumenes.append(
+                ResumenDeContenido(
+                    titulo="Anulación de venta",
+                    numero=None if venta_id is None else SIN_REFERENCIA,
+                )
+            )
+            continue
+        resumenes.append(
+            ResumenDeContenido(
+                titulo="Anulación de venta",
+                cliente=clientes.get(fila[2], SIN_REFERENCIA),
+                numero=fila[1],
+                total=str(fila[3]),
+            )
+        )
+    return resumenes
+
+
+registrar_resumidor_de_contenido("VENTA_CONFIRMAR", resumir_contenidos_de_venta)
+registrar_resumidor_de_contenido("VENTA_ANULAR", resumir_contenidos_de_anulacion)

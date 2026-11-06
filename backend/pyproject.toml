@@ -69,6 +69,14 @@ ignore_imports = [
     "app.modules.sync.api -> sqlalchemy",
     "app.modules.sync.api -> app.api_v1.dependencias",
     "app.modules.sync.api -> app.core.autenticacion",
+    # Change 25 (revisión de observaciones): los archivos propios del área `revision_*`.
+    "app.modules.sync.revision_repository -> sqlalchemy",
+    "app.modules.sync.revision_casos -> sqlalchemy",
+    "app.modules.sync.revision_queries -> sqlalchemy",
+    "app.modules.sync.revision_api -> fastapi",
+    "app.modules.sync.revision_api -> sqlalchemy",
+    "app.modules.sync.revision_api -> app.api_v1.dependencias",
+    "app.modules.sync.revision_api -> app.core.autenticacion",
     "app.modules.catalogo.models -> app.core.db",
     "app.modules.catalogo.models -> sqlalchemy",
     "app.modules.catalogo.repository -> sqlalchemy",
@@ -288,6 +296,7 @@ source_modules = [
     "app.modules.descuentos.domain",
     "app.modules.cobranzas.domain",
     "app.modules.ventas.domain",
+    "app.modules.sync.domain",
 ]
 forbidden_modules = ["app.commands"]
 

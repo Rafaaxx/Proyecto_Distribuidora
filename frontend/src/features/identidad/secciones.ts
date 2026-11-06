@@ -73,6 +73,8 @@ export const SECCIONES: readonly SeccionAdmin[] = [
   },
   { ruta: '/admin/descuentos', etiqueta: 'Descuentos', permiso: 'GESTIONAR_DESCUENTOS' },
   { ruta: '/admin/stock', etiqueta: 'Stock', permiso: 'TRANSFERIR_STOCK' },
+  // Change 25 (D5, D11): bandeja de observaciones y rechazadas; el menú le suma el total pendiente.
+  { ruta: '/admin/revision', etiqueta: 'Revisión', permiso: 'REVISAR_OBSERVACIONES' },
   { ruta: '/admin/importacion', etiqueta: 'Importación', permiso: 'IMPORTAR_DATOS' },
   {
     ruta: '/admin/configuracion',

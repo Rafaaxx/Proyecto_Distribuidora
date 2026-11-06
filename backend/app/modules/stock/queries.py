@@ -83,6 +83,8 @@ class DetalleDeJornada:
     motivo_liberacion_id: UUID | None
     motivo_liberacion_nombre: str | None
     observacion_liberacion: str | None
+    # Change 25 (D9 = B): rechazos sin conexión sin resolver de la jornada (solo la cantidad).
+    rechazos_pendientes: int
 
 
 @dataclass(frozen=True)
@@ -584,6 +586,9 @@ def _detalle_de(
             else motivos.get(jornada.motivo_liberacion_id)
         ),
         observacion_liberacion=jornada.observacion_liberacion,
+        rechazos_pendientes=stock_service.rechazos_pendientes_de_jornada(
+            organizacion_id, sesion, jornada_id=jornada.id
+        ),
     )
 
 

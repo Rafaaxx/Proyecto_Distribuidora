@@ -43,7 +43,7 @@ from __future__ import annotations
 import logging
 import random
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import cast
@@ -70,6 +70,11 @@ from app.core.clock import Clock
 from app.core.errors import DomainError, PermisoRequeridoError
 from app.core.ids import nuevo_id
 from app.core.logging import comando_contexto_var
+from app.core.resumen import ResumenDeContenido as ResumenDeContenido
+from app.core.resumen import ResumenDeOperacion as ResumenDeOperacion
+from app.core.resumen import numerar_lineas as _numerar_lineas_registradas
+from app.core.resumen import resumir_contenidos as _resumir_contenidos_registrados
+from app.core.resumen import resumir_operaciones as _resumir_operaciones_registradas
 from app.modules.identidad import service as identidad_service
 from app.modules.stock import service as stock_service
 from app.modules.sync import repository
@@ -775,6 +780,98 @@ def _rechazo_por_credenciales(operation_id: UUID) -> ResultadoItemLote:
     )
 
 
+def _se_registra_como_rechazo(item: ItemLote) -> bool:
+    """Qué ítems rechazados quedan en el registro de rechazos (change 25, D6; SYN-06): solo los
+    `OFFLINE` (con conexión lo ve quien lo envía) y nunca los que traen un secreto (ADR-056): ni
+    credenciales dentro del contenido ni un tipo que siempre recibe un secreto aparte."""
+    if item.modo != "OFFLINE" or _trae_credenciales(item.contenido):
+        return False
+    declarado = catalogo.tipo_declarado(item.tipo)
+    return declarado is None or not declarado.exige_credenciales_efimeras
+
+
+def registrar_rechazo(
+    sesion: Session,
+    reloj: Clock,
+    *,
+    sobre: SobreComando,
+    error_codigo: str,
+    config: ConfiguracionReintentos | None = None,
+    dormir: Callable[[float], None] = time.sleep,
+) -> None:
+    """Guarda en el registro de rechazos lo que envió el teléfono y CONFIRMA de inmediato:
+    transacción aparte, como la cuarentena (`poner_en_cuarentena`; `02` §6.3), porque el rechazo
+    ya revirtió la del comando. La jornada se guarda solo si existe en la organización (nula si
+    no: `JORNADA_INEXISTENTE`). `ON CONFLICT DO NOTHING`: el reenvío no lo duplica. Reintenta ante
+    un error transitorio y, agotados los intentos, lanza `ErrorTransitorioAgotadoError`: el lote
+    informa el ítem como `ERROR_TRANSITORIO` y se corta; el teléfono reintenta (SYN-09)."""
+    configuracion = config or ConfiguracionReintentos()
+    for intento in range(configuracion.intentos_maximos):
+        try:
+            jornada_id = sobre.jornada_id
+            if jornada_id is not None and not stock_service.existe_jornada(
+                sobre.organizacion_id, sesion, jornada_id
+            ):
+                jornada_id = None
+            repository.crear_rechazo(
+                sesion,
+                rechazo_id=nuevo_id(),
+                organizacion_id=sobre.organizacion_id,
+                operation_id=sobre.operation_id,
+                tipo=sobre.tipo,
+                version=sobre.version,
+                modo=sobre.modo,
+                usuario_id=sobre.usuario_id,
+                dispositivo_id=sobre.dispositivo_id,
+                jornada_id=jornada_id,
+                secuencia=sobre.secuencia,
+                occurred_at=sobre.occurred_at,
+                app_version=sobre.app_version,
+                contenido=sobre.contenido,
+                error_codigo=error_codigo,
+                recibido_en=reloj.now(),
+            )
+            sesion.commit()
+            return
+        except Exception as error:
+            sesion.rollback()
+            if not es_error_transitorio(error):
+                raise
+            if intento == configuracion.intentos_maximos - 1:
+                raise ErrorTransitorioAgotadoError(
+                    f"Se agotaron los {configuracion.intentos_maximos} intentos por "
+                    "errores transitorios de PostgreSQL al guardar el rechazo.",
+                    intentos=configuracion.intentos_maximos,
+                ) from error
+            dormir(_espera_para_intento(intento, configuracion))
+
+
+def _registrar_o_cortar(
+    sesion: Session,
+    reloj: Clock,
+    sobre: SobreComando,
+    error_codigo: str,
+    config: ConfiguracionReintentos | None,
+    dormir: Callable[[float], None],
+    resultados: list[ResultadoItemLote],
+) -> bool:
+    """Registra el rechazo del ultimo item de `resultados`. Si no puede por un error transitorio,
+    reemplaza su resultado por `ERROR_TRANSITORIO` y devuelve `False` (hay que cortar el lote)."""
+    try:
+        registrar_rechazo(
+            sesion, reloj, sobre=sobre, error_codigo=error_codigo, config=config, dormir=dormir
+        )
+    except ErrorTransitorioAgotadoError as error:
+        resultados[-1] = ResultadoItemLote(
+            operation_id=sobre.operation_id,
+            estado="ERROR_TRANSITORIO",
+            resultado=None,
+            error_codigo=error.codigo,
+        )
+        return False
+    return True
+
+
 def _procesar_item_de_lote(
     sesion: Session,
     reloj: Clock,
@@ -1015,6 +1112,10 @@ def _procesar_lote(
                     error_codigo=error.codigo,
                 )
             )
+            if _se_registra_como_rechazo(item) and not _registrar_o_cortar(
+                sesion, reloj, sobre, error.codigo, config, dormir, resultados
+            ):
+                break  # change 25, D6: no se pudo guardar; el teléfono reintenta.
             continue  # tarea 8.3: un rechazo no detiene el lote.
         else:
             resultados.append(
@@ -1036,6 +1137,14 @@ def _procesar_lote(
                     ),
                 )
             )
+            if (
+                comando.estado == "RECHAZADO"
+                and _se_registra_como_rechazo(item)
+                and not _registrar_o_cortar(
+                    sesion, reloj, sobre, comando.error_codigo or "", config, dormir, resultados
+                )
+            ):
+                break  # change 25, D6: el rechazo con fila de comando también se registra.
     return resultados
 
 
@@ -1047,3 +1156,109 @@ def listar_observaciones_de_operacion(
     return repository.listar_observaciones_de_operacion(
         sesion, organizacion_id, operacion_tipo, operacion_id
     )
+
+
+@dataclass(frozen=True)
+class ObservacionDeOperacion:
+    """Una observación de una operación con su resolución, para mostrarla en el detalle de la
+    operación (change 25, D11, SYN-08): quién la resolvió (su nombre), cuándo y con qué
+    comentario. Una `PENDIENTE` trae la resolución en `None`."""
+
+    codigo: str
+    estado: str
+    detalle: dict[str, object] | None
+    resuelto_por_nombre: str | None
+    resuelto_en: datetime | None
+    comentario: str | None
+
+
+def listar_observaciones_con_resolucion(
+    organizacion_id: UUID, sesion: Session, *, operacion_tipo: str, operacion_id: UUID
+) -> list[ObservacionDeOperacion]:
+    """Las observaciones (pendientes o resueltas) de una operación con el nombre de quien las
+    resolvió, en el orden en que se registraron. Los nombres salen de un solo pedido a
+    `identidad` (sin N+1). Nunca devuelve las de otra organización (INV-21)."""
+    observaciones = repository.listar_observaciones_de_operacion(
+        sesion, organizacion_id, operacion_tipo, operacion_id
+    )
+    resolutores = {o.resuelto_por_id for o in observaciones if o.resuelto_por_id is not None}
+    nombres = (
+        identidad_service.obtener_nombres_de_usuarios(organizacion_id, resolutores, sesion)
+        if resolutores
+        else {}
+    )
+    return [
+        ObservacionDeOperacion(
+            codigo=o.codigo,
+            estado=o.estado,
+            detalle=o.detalle,
+            resuelto_por_nombre=(
+                None if o.resuelto_por_id is None else nombres.get(o.resuelto_por_id)
+            ),
+            resuelto_en=o.resuelto_en,
+            comentario=o.comentario,
+        )
+        for o in observaciones
+    ]
+
+
+def nombres_de_jornadas(
+    organizacion_id: UUID, sesion: Session, jornada_ids: set[UUID]
+) -> dict[UUID, str]:
+    """`{jornada_id: nombre del vendedor}` de las jornadas de la organización: una consulta de
+    jornadas y una de usuarios. Una jornada que no existe en la organización no aparece."""
+    vendedores = stock_service.usuarios_de_jornadas(organizacion_id, sesion, jornada_ids)
+    nombres = identidad_service.obtener_nombres_de_usuarios(
+        organizacion_id, set(vendedores.values()), sesion
+    )
+    return {
+        jornada: nombres[usuario] for jornada, usuario in vendedores.items() if usuario in nombres
+    }
+
+
+def resumir_operaciones(
+    organizacion_id: UUID, sesion: Session, operacion_tipo: str, ids: Sequence[UUID]
+) -> dict[UUID, ResumenDeOperacion]:
+    """Resumen de varias operaciones del mismo tipo para la bandeja de revisión (change 25, D4),
+    por los resumidores que registran los módulos dueños en `app.core.resumen`. `{}` si el tipo
+    no tiene resumidor, no hay ids o ninguna existe en la organización (INV-21)."""
+    return _resumir_operaciones_registradas(organizacion_id, sesion, operacion_tipo, ids)
+
+
+def numerar_lineas(
+    organizacion_id: UUID, sesion: Session, operacion_tipo: str, linea_ids: Sequence[UUID]
+) -> dict[UUID, int]:
+    """Número (desde 1) de cada línea de las operaciones del tipo, por la numeradora que registra
+    el módulo dueño en `app.core.resumen` (change 25, lote extra). `{}` si el tipo no tiene
+    numeradora o las líneas no existen en la organización (INV-21)."""
+    return _numerar_lineas_registradas(organizacion_id, sesion, operacion_tipo, linea_ids)
+
+
+def resumir_contenidos(
+    organizacion_id: UUID,
+    sesion: Session,
+    tipo_comando: str,
+    contenidos: Sequence[object],
+) -> list[ResumenDeContenido | None]:
+    """Resumen legible de lo que envió el teléfono en comandos rechazados del mismo tipo, por los
+    resumidores que registran los módulos dueños en `app.core.resumen` (change 25, D4). Un
+    resumen por contenido, o `None` si el tipo no tiene resumidor. No falla con contenido mal
+    formado."""
+    return _resumir_contenidos_registrados(
+        organizacion_id,
+        sesion,
+        tipo_comando,
+        contenidos,  # type: ignore[arg-type]
+    )
+
+
+def contar_rechazos_pendientes_de_jornada(
+    organizacion_id: UUID, sesion: Session, jornada_id: UUID
+) -> int:
+    """Cuántos rechazos sin conexión `PENDIENTE` tiene la jornada de la organización (change 25,
+    D9 = B; RUT-05, SYN-06): el puerto que `stock` consulta antes de rendir y al leer la jornada.
+    Los rechazos sin jornada y las cuarentenas no cuentan."""
+    return repository.contar_rechazos_pendientes_de_jornada(sesion, organizacion_id, jornada_id)
+
+
+stock_service.registrar_contador_de_rechazos_pendientes(contar_rechazos_pendientes_de_jornada)

@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from cuentas_corrientes_utiles import crear_organizacion, crear_proveedor
 from fastapi.testclient import TestClient
+from revision_utiles import resolver_por_sql
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from stock_utiles import crear_presentacion_sql, crear_producto_sql, crear_ubicacion_sql
@@ -1045,6 +1046,50 @@ def test_el_detalle_devuelve_lineas_pago_y_sin_anulacion(
     assert [(m["medio_nombre"], m["importe"], m["referencia"]) for m in pago["medios"]] == [
         ("Efectivo", "72600.00", "recibo 9")
     ]
+
+
+def test_syn08_el_detalle_de_la_compra_muestra_sus_avisos_y_su_resolucion(
+    cliente: TestClient, sesion: Session
+) -> None:
+    """SYN-07, SYN-08, change 25 D11: los avisos de la compra y su resolución."""
+    entorno = Entorno(sesion)
+    headers = entorno.entrar(cliente)
+    compra_id = _publicar(cliente, entorno, headers, _principal(entorno))
+    sin_avisos = cliente.get(f"{URL_COMPRAS}/{compra_id}", headers=headers).json()
+    assert sin_avisos["observaciones"] == []
+    comando_id = sesion.execute(
+        text("SELECT id FROM comando WHERE organizacion_id = :o"), {"o": entorno.org}
+    ).scalar_one()
+    usuario_id = sesion.execute(
+        text("SELECT id FROM usuario WHERE organizacion_id = :o"), {"o": entorno.org}
+    ).scalar_one()
+    sesion.execute(
+        text(
+            "INSERT INTO observacion (id, organizacion_id, comando_id, operacion_tipo, "
+            "operacion_id, codigo, detalle, estado) VALUES (:id, :o, :c, 'COMPRA', :op, "
+            "'STOCK_NEGATIVO', CAST(:d AS jsonb), 'PENDIENTE')"
+        ),
+        {
+            "id": uuid4(),
+            "o": entorno.org,
+            "c": comando_id,
+            "op": compra_id,
+            "d": '{"productos": []}',
+        },
+    )
+    sesion.commit()
+    (pendiente,) = cliente.get(f"{URL_COMPRAS}/{compra_id}", headers=headers).json()[
+        "observaciones"
+    ]
+    assert (pendiente["codigo"], pendiente["estado"]) == ("STOCK_NEGATIVO", "PENDIENTE")
+    assert pendiente["resuelto_por_nombre"] is None
+
+    resolver_por_sql(sesion, entorno.org, UUID(compra_id), usuario_id, "Se anuló la compra")
+
+    (resuelta,) = cliente.get(f"{URL_COMPRAS}/{compra_id}", headers=headers).json()["observaciones"]
+    assert resuelta["estado"] == "RESUELTA"
+    assert resuelta["resuelto_por_nombre"] == "Persona de prueba"
+    assert resuelta["comentario"] == "Se anuló la compra"
 
 
 def test_el_detalle_de_una_compra_a_credito_no_tiene_pago(

@@ -237,6 +237,15 @@ def generar_bootstrap(
             else []
         )
 
+        pausa("rechazos_resueltos")
+        rechazos_resueltos = sync_repository.rechazos_resueltos_de_jornada(
+            sesion,
+            organizacion_id,
+            jornada_id=jornada.jornada_id,
+            usuario_id=usuario_id,
+            dispositivo_id=dispositivo_id,
+        )
+
         respuesta = BootstrapResponse(
             generado_en=ahora,
             sesion=SesionBootstrap(
@@ -264,6 +273,7 @@ def generar_bootstrap(
             reglas_descuento=reglas,
             stock=stock,
             autorizadores=autorizadores,
+            rechazos_resueltos=rechazos_resueltos,
         )
     finally:
         # Termina la transacción de solo lectura: no hay nada que confirmar.

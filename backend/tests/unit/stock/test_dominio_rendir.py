@@ -13,6 +13,7 @@ from app.modules.stock.domain.errores import (
     JornadaEstadoInvalidoError,
     JornadaSinEntregaError,
     ObservacionInvalidaError,
+    RechazosPendientesError,
 )
 
 
@@ -49,3 +50,28 @@ def test_la_observacion_admite_hasta_quinientos_caracteres() -> None:
     assert rendicion.normalizar_observacion("a" * 500) == "a" * 500
     with pytest.raises(ObservacionInvalidaError):
         rendicion.normalizar_observacion("a" * 501)
+
+
+# --- La rendición espera a los rechazos de la jornada (change 25, D9 = B; RUT-05, SYN-06) --------
+
+
+def test_sin_rechazos_pendientes_se_puede_rendir() -> None:
+    rendicion.validar_sin_rechazos_pendientes(0)
+
+
+@pytest.mark.parametrize("cantidad", [1, 2, 37])
+def test_con_rechazos_pendientes_no_se_rinde_y_el_detalle_lleva_la_cantidad(
+    cantidad: int,
+) -> None:
+    with pytest.raises(RechazosPendientesError) as error:
+        rendicion.validar_sin_rechazos_pendientes(cantidad)
+
+    assert (error.value.codigo, error.value.status_http) == ("RECHAZOS_PENDIENTES", 409)
+    assert error.value.extension == {"rechazos_pendientes": cantidad}
+    assert str(cantidad) in str(error.value)
+
+
+def test_la_cantidad_de_rechazos_pendientes_nunca_es_negativa() -> None:
+    """Una cantidad negativa es un error de programación del puerto, no un «no hay»."""
+    with pytest.raises(ValueError, match="negativa"):
+        rendicion.validar_sin_rechazos_pendientes(-1)

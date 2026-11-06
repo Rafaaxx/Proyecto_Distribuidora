@@ -11,10 +11,13 @@ Reglas citadas: COB-01, COB-02, COB-05, INV-03, INV-21, SEG-06, SEG-07, SYN-07, 
 
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
+from revision_utiles import MOMENTO as MOMENTO_RESOLUCION
+from revision_utiles import resolver_por_sql
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from test_cobranzas_api import (  # noqa: F401
@@ -192,6 +195,58 @@ def test_el_detalle_muestra_las_observaciones_de_sincronizacion(
     assert observacion["codigo"] == "MEDIO_INACTIVO"
     assert observacion["estado"] == "PENDIENTE"
     assert observacion["detalle"] == {"linea": 1, "importe": "20000.00"}
+
+
+def test_syn08_el_detalle_muestra_la_resolucion_de_la_observacion(
+    cliente_http: TestClient, sesion: Session
+) -> None:
+    """SYN-08, change 25 D11: quién resolvió, cuándo y con qué comentario; solo lectura."""
+    entorno = Entorno(sesion, permisos=ANULADOR)
+    headers = entorno.entrar(cliente_http)
+    cobranza_id = _registrar(cliente_http, entorno, headers)
+    comando_id = sesion.execute(
+        text("SELECT id FROM comando WHERE organizacion_id = :o"), {"o": entorno.org}
+    ).scalar_one()
+    sesion.execute(
+        text(
+            "INSERT INTO observacion (id, organizacion_id, comando_id, operacion_tipo, "
+            "operacion_id, codigo, detalle, estado) VALUES (:id, :o, :c, 'COBRANZA', :op, "
+            "'MEDIO_INACTIVO', CAST(:d AS jsonb), 'PENDIENTE')"
+        ),
+        {
+            "id": uuid4(),
+            "o": entorno.org,
+            "c": comando_id,
+            "op": cobranza_id,
+            "d": '{"importe": "1.00"}',
+        },
+    )
+    sesion.commit()
+    (pendiente,) = cliente_http.get(f"{URL_COBRANZAS}/{cobranza_id}", headers=headers).json()[
+        "observaciones"
+    ]
+    assert (
+        pendiente["resuelto_por_nombre"],
+        pendiente["resuelto_en"],
+        pendiente["comentario"],
+    ) == (
+        None,
+        None,
+        None,
+    )
+
+    usuario_id = sesion.execute(
+        text("SELECT usuario_id FROM comando WHERE organizacion_id = :o"), {"o": entorno.org}
+    ).scalar_one()
+    resolver_por_sql(sesion, entorno.org, UUID(cobranza_id), usuario_id, "Cobrado en mano")
+
+    (resuelta,) = cliente_http.get(f"{URL_COBRANZAS}/{cobranza_id}", headers=headers).json()[
+        "observaciones"
+    ]
+    assert resuelta["estado"] == "RESUELTA"
+    assert resuelta["resuelto_por_nombre"] == "Persona de prueba"
+    assert datetime.fromisoformat(resuelta["resuelto_en"]) == MOMENTO_RESOLUCION
+    assert resuelta["comentario"] == "Cobrado en mano"
 
 
 def test_inv21_el_detalle_y_el_listado_no_cruzan_organizaciones(

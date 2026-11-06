@@ -101,7 +101,7 @@ describe('ProductosScreen (tarea 14.2)', () => {
     const malbec = (await screen.findByText('Malbec 750')).closest('li') as HTMLElement
     expect(within(malbec).getByText('$ 48.000,00')).toBeInTheDocument() // caja de 6
     expect(within(malbec).getByText('$ 8.000,00')).toBeInTheDocument() // unidad
-    expect(within(malbec).getByText('3 cajas y 2 unidades')).toBeInTheDocument()
+    expect(await within(malbec).findByText('3 cajas y 2 unidades')).toBeInTheDocument()
     const agua = screen.getByText('Agua 500').closest('li') as HTMLElement
     expect(within(agua).getByText('$ 9.000,00')).toBeInTheDocument()
     expect(within(agua).getByText('$ 1.500,00')).toBeInTheDocument()

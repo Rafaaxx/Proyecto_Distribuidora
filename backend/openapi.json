@@ -10955,7 +10955,7 @@
           "stock"
         ],
         "summary": "Rendir Jornada",
-        "description": "`JORNADA_RENDIR` v2 (change 24, RUT-05, RUT-06): rinde una jornada `ABIERTA` y entregada con\nel conteo físico y deja `EN_RENDICION`. 200 con la jornada, la rendición y sus líneas;\n`JORNADA_ESTADO_INVALIDO`, `JORNADA_SIN_ENTREGA` y `ESPERADO_DIFIERE` responden 409,\n`CONTEO_INCOMPLETO`, `CANTIDAD_INVALIDA`, `PRODUCTO_REPETIDO` y `OBSERVACION_INVALIDA` 422,\nuna jornada o un producto ajenos 404.",
+        "description": "`JORNADA_RENDIR` v2 (change 24, RUT-05, RUT-06): rinde una jornada `ABIERTA` y entregada con\nel conteo físico y deja `EN_RENDICION`. 200 con la jornada, la rendición y sus líneas;\n`JORNADA_ESTADO_INVALIDO`, `JORNADA_SIN_ENTREGA`, `ESPERADO_DIFIERE` y `RECHAZOS_PENDIENTES`\n(hay rechazos sin conexion de la jornada sin resolver, D9 del change 25) responden 409,\n`CONTEO_INCOMPLETO`, `CANTIDAD_INVALIDA`, `PRODUCTO_REPETIDO` y `OBSERVACION_INVALIDA` 422,\nuna jornada o un producto ajenos 404.",
         "operationId": "rendir_jornada_api_v1_stock_jornadas__jornada_id__rendicion_post",
         "parameters": [
           {
@@ -12073,6 +12073,643 @@
         }
       }
     },
+    "/api/v1/observaciones/resolucion": {
+      "post": {
+        "tags": [
+          "observaciones"
+        ],
+        "summary": "Resolver Observaciones",
+        "description": "`OBSERVACION_RESOLVER` (SYN-08): da por revisadas de 1 a 100 observaciones, con un\ncomentario de 1 a 500 caracteres. 200 con las resueltas; `OBSERVACIONES_INVALIDAS` y\n`COMENTARIO_INVALIDO` responden 422, una ya resuelta `OBSERVACION_YA_RESUELTA` 409 y una\ninexistente o de otra organización 404. Todo o nada (INV-01).",
+        "operationId": "resolver_observaciones_api_v1_observaciones_resolucion_post",
+        "parameters": [
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolverObservacionesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolucionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/observaciones/rechazos/{rechazo_id}/resolucion": {
+      "post": {
+        "tags": [
+          "observaciones"
+        ],
+        "summary": "Resolver Rechazo",
+        "description": "`RECHAZO_RESOLVER` (SYN-06, SYN-08): da por resuelto un rechazo sin conexión o una cuarentena\ncon un comentario de 1 a 500 caracteres y, si la operación ocurrió, el vínculo a la que la\ncorrige. NO reenvía ni crea nada. 200 con el registro; `COMENTARIO_INVALIDO` y\n`VINCULO_INVALIDO` responden 422, `RECHAZO_YA_RESUELTO` 409 y un registro o un vínculo\ninexistentes o de otra organización 404.",
+        "operationId": "resolver_rechazo_api_v1_observaciones_rechazos__rechazo_id__resolucion_post",
+        "parameters": [
+          {
+            "name": "rechazo_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rechazo Id"
+            }
+          },
+          {
+            "name": "Operation-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolverRechazoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolucionDeRechazoResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/observaciones": {
+      "get": {
+        "tags": [
+          "observaciones"
+        ],
+        "summary": "Listar Observaciones",
+        "description": "La bandeja de observaciones por operación (D3, SYN-07, SYN-08), de la llegada más reciente\na la más antigua. `estado` `PENDIENTE` (por defecto) trae las operaciones con al menos un\naviso pendiente, `RESUELTA` las que los tienen todos resueltos y `TODAS` las dos. `codigo` y\n`tipo` admiten varios valores; `desde` incluye y `hasta` excluye, sobre el momento de llegada.\nUn cursor ilegible es `CURSOR_INVALIDO`; `limite` va de 1 a 200 (422 fuera de rango).",
+        "operationId": "listar_observaciones_api_v1_observaciones_get",
+        "parameters": [
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "PENDIENTE",
+                "RESUELTA",
+                "TODAS"
+              ],
+              "type": "string",
+              "default": "PENDIENTE",
+              "title": "Estado"
+            }
+          },
+          {
+            "name": "codigo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Codigo"
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tipo"
+            }
+          },
+          {
+            "name": "usuario_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Usuario Id"
+            }
+          },
+          {
+            "name": "jornada_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Jornada Id"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Desde"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hasta"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaDeObservacionesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/observaciones/resumen": {
+      "get": {
+        "tags": [
+          "observaciones"
+        ],
+        "summary": "Resumen De Pendientes",
+        "description": "Lo pendiente de la organización para el aviso de `/admin` (D5, CRE-09): observaciones por\ncódigo, rechazos y cuarentenas pendientes y el total.",
+        "operationId": "resumen_de_pendientes_api_v1_observaciones_resumen_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumenDePendientesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/observaciones/rechazos": {
+      "get": {
+        "tags": [
+          "observaciones"
+        ],
+        "summary": "Listar Rechazos",
+        "description": "Los rechazos sin conexión y los comandos en cuarentena de la organización (SYN-06, SYN-09),\ndel más reciente al más antiguo, con el resumen legible de lo que envió el teléfono, si el\nmismo `operation_id` se aceptó después y la resolución. `estado` `PENDIENTE` (por defecto),\n`RESUELTO` o `TODOS`; `origen`, `tipo` (varios), `usuario_id` y `jornada_id` filtran (la\ncuarentena no tiene jornada). Un cursor ilegible es `CURSOR_INVALIDO`.",
+        "operationId": "listar_rechazos_api_v1_observaciones_rechazos_get",
+        "parameters": [
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "PENDIENTE",
+                "RESUELTO",
+                "TODOS"
+              ],
+              "type": "string",
+              "default": "PENDIENTE",
+              "title": "Estado"
+            }
+          },
+          {
+            "name": "origen",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "RECHAZO",
+                    "CUARENTENA"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origen"
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tipo"
+            }
+          },
+          {
+            "name": "usuario_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Usuario Id"
+            }
+          },
+          {
+            "name": "jornada_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Jornada Id"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaDeRechazosResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/observaciones/rechazos/{rechazo_id}": {
+      "get": {
+        "tags": [
+          "observaciones"
+        ],
+        "summary": "Obtener Rechazo",
+        "description": "Un rechazo o una cuarentena con lo crudo que envió el teléfono (`contenido`). 404 si no\nexiste en la organización o es de otra (INV-21).",
+        "operationId": "obtener_rechazo_api_v1_observaciones_rechazos__rechazo_id__get",
+        "parameters": [
+          {
+            "name": "rechazo_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rechazo Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RechazoResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/ventas": {
       "post": {
         "tags": [
@@ -12153,7 +12790,7 @@
           "ventas"
         ],
         "summary": "Listar Ventas",
-        "description": "Ventas de la organización de la más reciente a la más vieja, por cursor (D19, aprobada\npor el usuario el 2026-10-20): `VENDER` o `ANULAR_VENTA`, todas las de la organización.\n`desde` y `hasta` son fechas de negocio inclusivas en la zona de la organización (TR-04); un\n`limite` fuera de 1 a 200 es 422, y un rango invertido o un cursor ilegible también, con su\ncódigo. `estado` (change 19, D14, REP-02) filtra por `CONFIRMADA` o `ANULADA`; otro valor es\n422.",
+        "description": "Ventas de la organización de la más reciente a la más vieja, por cursor (D19, aprobada\npor el usuario el 2026-10-20): `VENDER` o `ANULAR_VENTA`, todas las de la organización.\n`desde` y `hasta` son fechas de negocio inclusivas en la zona de la organización (TR-04); un\n`limite` fuera de 1 a 200 es 422, y un rango invertido o un cursor ilegible también, con su\ncódigo. `estado` (change 19, D14, REP-02) filtra por `CONFIRMADA` o `ANULADA`; otro valor es\n422. `numero` (change 25, lote extra) busca el número de venta por coincidencia parcial, sin\ndistinguir mayúsculas, en la base (hasta 50 caracteres).",
         "operationId": "listar_ventas_api_v1_ventas_get",
         "parameters": [
           {
@@ -12276,6 +12913,23 @@
                 }
               ],
               "title": "Estado"
+            }
+          },
+          {
+            "name": "numero",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 50
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Numero"
             }
           },
           {
@@ -13665,6 +14319,14 @@
             },
             "type": "array",
             "title": "Autorizadores"
+          },
+          "rechazos_resueltos": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Rechazos Resueltos"
           }
         },
         "type": "object",
@@ -13679,7 +14341,8 @@
           "listas",
           "reglas_descuento",
           "stock",
-          "autorizadores"
+          "autorizadores",
+          "rechazos_resueltos"
         ],
         "title": "BootstrapResponse"
       },
@@ -15106,6 +15769,40 @@
               }
             ],
             "title": "Detalle"
+          },
+          "resuelto_por_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resuelto Por Nombre"
+          },
+          "resuelto_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resuelto En"
+          },
+          "comentario": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comentario"
           }
         },
         "type": "object",
@@ -15656,6 +16353,14 @@
                 "type": "null"
               }
             ]
+          },
+          "observaciones": {
+            "items": {
+              "$ref": "#/components/schemas/CompraObservacionResponse"
+            },
+            "type": "array",
+            "title": "Observaciones",
+            "default": []
           }
         },
         "type": "object",
@@ -15930,6 +16635,72 @@
           "referencia"
         ],
         "title": "CompraMedioResponse"
+      },
+      "CompraObservacionResponse": {
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "title": "Codigo"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "detalle": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detalle"
+          },
+          "resuelto_por_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resuelto Por Nombre"
+          },
+          "resuelto_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resuelto En"
+          },
+          "comentario": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comentario"
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo",
+          "estado",
+          "detalle"
+        ],
+        "title": "CompraObservacionResponse",
+        "description": "Una observación de sincronización de la compra con su resolución (change 25, D11, SYN-08).\n`detalle` es el JSON tal cual se guardó; la resolución, solo lectura, es nula mientras la\nobservación está pendiente."
       },
       "CompraPagoResponse": {
         "properties": {
@@ -17259,6 +18030,14 @@
                 "type": "null"
               }
             ]
+          },
+          "observaciones": {
+            "items": {
+              "$ref": "#/components/schemas/ObservacionDeStockResponse"
+            },
+            "type": "array",
+            "title": "Observaciones",
+            "default": []
           }
         },
         "type": "object",
@@ -17575,6 +18354,10 @@
               }
             ],
             "title": "Observacion Liberacion"
+          },
+          "rechazos_pendientes": {
+            "type": "integer",
+            "title": "Rechazos Pendientes"
           }
         },
         "type": "object",
@@ -17599,7 +18382,8 @@
           "liberada_por_nombre",
           "motivo_liberacion_id",
           "motivo_liberacion_nombre",
-          "observacion_liberacion"
+          "observacion_liberacion",
+          "rechazos_pendientes"
         ],
         "title": "DetalleDeJornadaResponse",
         "description": "Los datos de apertura, rendición, cierre y liberación con los nombres de quienes\nintervinieron y del motivo (RUT-09)."
@@ -17686,6 +18470,14 @@
                 "type": "null"
               }
             ]
+          },
+          "observaciones": {
+            "items": {
+              "$ref": "#/components/schemas/ObservacionDeStockResponse"
+            },
+            "type": "array",
+            "title": "Observaciones",
+            "default": []
           }
         },
         "type": "object",
@@ -19061,6 +19853,50 @@
         "title": "LineaDelResumenResponse",
         "description": "Un producto del resumen en unidad base (la pantalla lo muestra en cajas y unidades, CAT-08).\n`contado` y `diferencia` son nulos si la jornada no tiene conteo; `valor_diferencia` (string)\nsolo existe con `VER_COSTOS`: sin el permiso la ruta no lo establece y la clave desaparece\n(`response_model_exclude_unset`, ADR-036)."
       },
+      "LineaResumidaResponse": {
+        "properties": {
+          "producto": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Producto"
+          },
+          "cantidad": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cantidad"
+          },
+          "importe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Importe"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto",
+          "cantidad",
+          "importe"
+        ],
+        "title": "LineaResumidaResponse"
+      },
       "LineaStockInicialRequest": {
         "properties": {
           "producto_id": {
@@ -19841,6 +20677,38 @@
         "title": "MedioPagoResponse",
         "description": "Un medio de pago activo con su indicador de referencia obligatoria."
       },
+      "MedioResumidoResponse": {
+        "properties": {
+          "medio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Medio"
+          },
+          "importe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Importe"
+          }
+        },
+        "type": "object",
+        "required": [
+          "medio",
+          "importe"
+        ],
+        "title": "MedioResumidoResponse"
+      },
       "MiContrasenaRequest": {
         "properties": {
           "password_actual": {
@@ -20115,6 +20983,63 @@
         ],
         "title": "MovimientoEstadoDeCuentaResponse",
         "description": "Un movimiento del estado de cuenta con su saldo acumulado real (CC-07)."
+      },
+      "NombresDeObservacionResponse": {
+        "properties": {
+          "autorizador": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Autorizador"
+          },
+          "producto": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Producto"
+          },
+          "linea": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linea"
+          },
+          "vendedor_de_jornada": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendedor De Jornada"
+          }
+        },
+        "type": "object",
+        "required": [
+          "autorizador",
+          "producto",
+          "linea",
+          "vendedor_de_jornada"
+        ],
+        "title": "NombresDeObservacionResponse",
+        "description": "Nombres que el detalle solo nombra por id (change 25, lote extra); «(no existe)» si el id ya\nno existe en la organización; `None` lo que el detalle no trae."
       },
       "NotaAnulacionResponse": {
         "properties": {
@@ -20667,6 +21592,173 @@
         "title": "NumeracionResponse",
         "description": "Prefijo del dispositivo de la sesión, último correlativo y el número que sigue (D4)."
       },
+      "ObservacionDeBandejaResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "codigo": {
+            "type": "string",
+            "title": "Codigo"
+          },
+          "detalle": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detalle"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "PENDIENTE",
+              "RESUELTA"
+            ],
+            "title": "Estado"
+          },
+          "resuelto_por_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resuelto Por Id"
+          },
+          "resuelto_por_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resuelto Por Nombre"
+          },
+          "resuelto_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resuelto En"
+          },
+          "comentario": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comentario"
+          },
+          "nombres": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NombresDeObservacionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "codigo",
+          "detalle",
+          "estado",
+          "resuelto_por_id",
+          "resuelto_por_nombre",
+          "resuelto_en",
+          "comentario"
+        ],
+        "title": "ObservacionDeBandejaResponse"
+      },
+      "ObservacionDeStockResponse": {
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "title": "Codigo"
+          },
+          "estado": {
+            "type": "string",
+            "title": "Estado"
+          },
+          "detalle": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detalle"
+          },
+          "resuelto_por_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resuelto Por Nombre"
+          },
+          "resuelto_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resuelto En"
+          },
+          "comentario": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comentario"
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo",
+          "estado",
+          "detalle"
+        ],
+        "title": "ObservacionDeStockResponse",
+        "description": "Una observación de sincronización de una transferencia o un ajuste con su resolución\n(change 25, D11, SYN-08). `detalle` es el JSON tal cual se guardó; la resolución, solo\nlectura, es nula mientras está pendiente."
+      },
       "ObservacionResponse": {
         "properties": {
           "codigo": {
@@ -20704,6 +21796,111 @@
         ],
         "title": "ObservacionResponse",
         "description": "Una observación del comando (change 22c, D3, SYN-07)."
+      },
+      "OperacionObservadaResponse": {
+        "properties": {
+          "operacion_tipo": {
+            "type": "string",
+            "title": "Operacion Tipo"
+          },
+          "operacion_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Operacion Id"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "PENDIENTE",
+              "RESUELTA"
+            ],
+            "title": "Estado"
+          },
+          "resumen": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResumenDeOperacionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "usuario_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usuario Nombre"
+          },
+          "dispositivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Dispositivo Id"
+          },
+          "jornada_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jornada Id"
+          },
+          "modo": {
+            "type": "string",
+            "enum": [
+              "ONLINE",
+              "OFFLINE"
+            ],
+            "title": "Modo"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Registered At"
+          },
+          "observaciones": {
+            "items": {
+              "$ref": "#/components/schemas/ObservacionDeBandejaResponse"
+            },
+            "type": "array",
+            "title": "Observaciones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "operacion_tipo",
+          "operacion_id",
+          "estado",
+          "resumen",
+          "usuario_id",
+          "usuario_nombre",
+          "dispositivo_id",
+          "jornada_id",
+          "modo",
+          "occurred_at",
+          "registered_at",
+          "observaciones"
+        ],
+        "title": "OperacionObservadaResponse"
       },
       "OrganizacionDatosConfigurarRequest": {
         "properties": {
@@ -20999,6 +22196,62 @@
           "cursor_siguiente"
         ],
         "title": "PaginaDeJornadasResponse"
+      },
+      "PaginaDeObservacionesResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OperacionObservadaResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "cursor_siguiente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Siguiente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "cursor_siguiente"
+        ],
+        "title": "PaginaDeObservacionesResponse"
+      },
+      "PaginaDeRechazosResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RechazoResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "cursor_siguiente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Siguiente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "cursor_siguiente"
+        ],
+        "title": "PaginaDeRechazosResponse"
       },
       "PaginaDeTransferenciasResponse": {
         "properties": {
@@ -23095,6 +24348,215 @@
         "title": "PublicarRequest",
         "description": "Cuerpo de `POST /precios/listas/{lista_id}/versiones/{version_id}/publicar`. Las\nvigencias son instantes con zona horaria; sin `vigencia_desde` rige el momento de la\npublicación y nunca puede ser anterior a él (D6)."
       },
+      "RechazoResponse": {
+        "properties": {
+          "origen": {
+            "type": "string",
+            "enum": [
+              "RECHAZO",
+              "CUARENTENA"
+            ],
+            "title": "Origen"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "operation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Operation Id"
+          },
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "PENDIENTE",
+              "RESUELTO"
+            ],
+            "title": "Estado"
+          },
+          "codigo": {
+            "type": "string",
+            "title": "Codigo"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Usuario Id"
+          },
+          "usuario_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usuario Nombre"
+          },
+          "dispositivo_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Dispositivo Id"
+          },
+          "jornada_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jornada Id"
+          },
+          "recibido_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recibido En"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "aceptada_despues": {
+            "type": "boolean",
+            "title": "Aceptada Despues"
+          },
+          "resumen": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResumenDeContenidoResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resuelto_por_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resuelto Por Id"
+          },
+          "resuelto_por_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resuelto Por Nombre"
+          },
+          "resuelto_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resuelto En"
+          },
+          "comentario": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comentario"
+          },
+          "vinculo_tipo": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "VENTA",
+                  "COBRANZA"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vinculo Tipo"
+          },
+          "vinculo_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vinculo Id"
+          },
+          "contenido": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contenido"
+          }
+        },
+        "type": "object",
+        "required": [
+          "origen",
+          "id",
+          "operation_id",
+          "tipo",
+          "estado",
+          "codigo",
+          "usuario_id",
+          "usuario_nombre",
+          "dispositivo_id",
+          "jornada_id",
+          "recibido_en",
+          "occurred_at",
+          "aceptada_despues",
+          "resumen",
+          "resuelto_por_id",
+          "resuelto_por_nombre",
+          "resuelto_en",
+          "comentario",
+          "vinculo_tipo",
+          "vinculo_id"
+        ],
+        "title": "RechazoResponse",
+        "description": "Un rechazo sin conexión o una cuarentena (`origen`). `contenido` es lo crudo que envió el\nteléfono y solo viene en el detalle."
+      },
       "RedondeoCategoriaDefinirRequest": {
         "properties": {
           "multiplo": {
@@ -24225,6 +25687,161 @@
         "title": "RendicionResponse",
         "description": "La jornada rendida (`EN_RENDICION`) con su rendición y las líneas del conteo."
       },
+      "ResolucionDeRechazoResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "RECHAZO",
+              "CUARENTENA"
+            ],
+            "title": "Origen"
+          },
+          "estado": {
+            "type": "string",
+            "const": "RESUELTO",
+            "title": "Estado"
+          },
+          "resuelto_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Resuelto En"
+          },
+          "comentario": {
+            "type": "string",
+            "title": "Comentario"
+          },
+          "vinculo_tipo": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "VENTA",
+                  "COBRANZA"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vinculo Tipo"
+          },
+          "vinculo_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vinculo Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "origen",
+          "estado",
+          "resuelto_en",
+          "comentario",
+          "vinculo_tipo",
+          "vinculo_id"
+        ],
+        "title": "ResolucionDeRechazoResponse"
+      },
+      "ResolucionResponse": {
+        "properties": {
+          "observaciones": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Observaciones"
+          },
+          "resuelto_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Resuelto En"
+          },
+          "comentario": {
+            "type": "string",
+            "title": "Comentario"
+          }
+        },
+        "type": "object",
+        "required": [
+          "observaciones",
+          "resuelto_en",
+          "comentario"
+        ],
+        "title": "ResolucionResponse"
+      },
+      "ResolverObservacionesRequest": {
+        "properties": {
+          "observaciones": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Observaciones"
+          },
+          "comentario": {
+            "type": "string",
+            "title": "Comentario"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "observaciones",
+          "comentario"
+        ],
+        "title": "ResolverObservacionesRequest",
+        "description": "`POST /api/v1/observaciones/resolucion`. Sin límites de Pydantic: el largo de la lista y\ndel comentario los valida el dominio y responden con su código estable (D1)."
+      },
+      "ResolverRechazoRequest": {
+        "properties": {
+          "origen": {
+            "type": "string",
+            "enum": [
+              "RECHAZO",
+              "CUARENTENA"
+            ],
+            "title": "Origen"
+          },
+          "comentario": {
+            "type": "string",
+            "title": "Comentario"
+          },
+          "vinculo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VinculoRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "origen",
+          "comentario"
+        ],
+        "title": "ResolverRechazoRequest",
+        "description": "`POST /api/v1/observaciones/rechazos/{id}/resolucion`. El largo del comentario lo valida el\ndominio (`COMENTARIO_INVALIDO`)."
+      },
       "ResultadoItemLoteResponse": {
         "properties": {
           "operation_id": {
@@ -24275,6 +25892,72 @@
           "error_codigo"
         ],
         "title": "ResultadoItemLoteResponse"
+      },
+      "ResumenDeContenidoResponse": {
+        "properties": {
+          "titulo": {
+            "type": "string",
+            "title": "Titulo"
+          },
+          "cliente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cliente"
+          },
+          "numero": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Numero"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          },
+          "lineas": {
+            "items": {
+              "$ref": "#/components/schemas/LineaResumidaResponse"
+            },
+            "type": "array",
+            "title": "Lineas"
+          },
+          "medios": {
+            "items": {
+              "$ref": "#/components/schemas/MedioResumidoResponse"
+            },
+            "type": "array",
+            "title": "Medios"
+          }
+        },
+        "type": "object",
+        "required": [
+          "titulo",
+          "cliente",
+          "numero",
+          "total",
+          "lineas",
+          "medios"
+        ],
+        "title": "ResumenDeContenidoResponse",
+        "description": "Lo que envió el teléfono, legible; los campos que no se pudieron leer vienen nulos."
       },
       "ResumenDeJornadaResponse": {
         "properties": {
@@ -24347,6 +26030,85 @@
         ],
         "title": "ResumenDeJornadaResponse",
         "description": "El resumen de la jornada. `despues_de_la_rendicion` es nulo mientras la jornada no se\nrindió; `valor_de_diferencias` (string) solo existe con `VER_COSTOS` y conteo."
+      },
+      "ResumenDeOperacionResponse": {
+        "properties": {
+          "titulo": {
+            "type": "string",
+            "title": "Titulo"
+          },
+          "tercero": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tercero"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          },
+          "momento": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Momento"
+          }
+        },
+        "type": "object",
+        "required": [
+          "titulo",
+          "tercero",
+          "total",
+          "momento"
+        ],
+        "title": "ResumenDeOperacionResponse"
+      },
+      "ResumenDePendientesResponse": {
+        "properties": {
+          "observaciones_por_codigo": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Observaciones Por Codigo"
+          },
+          "observaciones_pendientes": {
+            "type": "integer",
+            "title": "Observaciones Pendientes"
+          },
+          "rechazos_pendientes": {
+            "type": "integer",
+            "title": "Rechazos Pendientes"
+          },
+          "cuarentenas_pendientes": {
+            "type": "integer",
+            "title": "Cuarentenas Pendientes"
+          },
+          "total_pendiente": {
+            "type": "integer",
+            "title": "Total Pendiente"
+          }
+        },
+        "type": "object",
+        "required": [
+          "observaciones_por_codigo",
+          "observaciones_pendientes",
+          "rechazos_pendientes",
+          "cuarentenas_pendientes",
+          "total_pendiente"
+        ],
+        "title": "ResumenDePendientesResponse"
       },
       "ResumenReglaIvaResponse": {
         "properties": {
@@ -26952,6 +28714,40 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Detalle"
+          },
+          "resuelto_por_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resuelto Por Nombre"
+          },
+          "resuelto_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resuelto En"
+          },
+          "comentario": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comentario"
           }
         },
         "type": "object",
@@ -27420,6 +29216,30 @@
         ],
         "title": "VersionesResponse",
         "description": "Las versiones de una lista, de la más nueva a la más antigua."
+      },
+      "VinculoRequest": {
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "VENTA",
+              "COBRANZA"
+            ],
+            "title": "Tipo"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tipo",
+          "id"
+        ],
+        "title": "VinculoRequest"
       },
       "YoResponse": {
         "properties": {

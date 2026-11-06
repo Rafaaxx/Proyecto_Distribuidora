@@ -22,6 +22,8 @@ const ComprasArea = lazy(() => import('./compras/ComprasArea'))
 const PagosArea = lazy(() => import('./pagos-proveedores/PagosArea'))
 const CobranzasArea = lazy(() => import('./cobranzas/CobranzasArea'))
 const VentasArea = lazy(() => import('./ventas/VentasArea'))
+// Revisión (change 25, D11): bandeja de observaciones y rechazadas, con `REVISAR_OBSERVACIONES`.
+const RevisionArea = lazy(() => import('./revision/RevisionArea'))
 const ImportacionArea = lazy(() => import('./importacion/ImportacionArea'))
 const ConfiguracionArea = lazy(() => import('./configuracion/ConfiguracionArea'))
 const RolesArea = lazy(() => import('./roles/RolesArea'))
@@ -180,6 +182,14 @@ export function AdminScreen() {
             element={
               <Suspense fallback={null}>
                 <StockArea />
+              </Suspense>
+            }
+          />
+          <Route
+            path="revision/*"
+            element={
+              <Suspense fallback={null}>
+                <RevisionArea />
               </Suspense>
             }
           />

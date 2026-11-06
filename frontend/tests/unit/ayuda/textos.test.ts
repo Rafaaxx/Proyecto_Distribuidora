@@ -11,8 +11,8 @@ const claves = Object.keys(AYUDAS) as ClaveDeAyuda[]
 const temas = Object.keys(TEMAS) as TemaDeAyuda[]
 
 describe('AYUDAS: cada entrada tiene título, texto y regla citada', () => {
-  it('tiene las 108 claves aprobadas (27 del 16b, 5 de cobranzas, 5 de medios de pago y roles, 9 de ventas, 12 del 18b, 6 de la anulación de venta del 19, 4 de la nota de venta del 20 y 6 de usuarios, roles y cartera del 20b y 6 de motivos, alícuotas y redondeo por defecto del 20c y 4 del área de ruta del 21, 5 de la venta de ruta del 22a y 4 de la sincronización del 22b y 1 de las observaciones y rechazos del 22c y 3 de la anulación sin conexión del 22d y 4 de la cobranza sin conexión del 23 y 7 de la rendición del 24; la de "Operador" y la de compartir la nota se eliminaron)', () => {
-    expect(claves).toHaveLength(108)
+  it('tiene las 115 claves aprobadas (27 del 16b, 5 de cobranzas, 5 de medios de pago y roles, 9 de ventas, 12 del 18b, 6 de la anulación de venta del 19, 4 de la nota de venta del 20 y 6 de usuarios, roles y cartera del 20b y 6 de motivos, alícuotas y redondeo por defecto del 20c y 4 del área de ruta del 21, 5 de la venta de ruta del 22a y 4 de la sincronización del 22b y 1 de las observaciones y rechazos del 22c y 3 de la anulación sin conexión del 22d y 4 de la cobranza sin conexión del 23 y 7 de la rendición del 24 y 7 de la revisión del 25; la de "Operador" y la de compartir la nota se eliminaron)', () => {
+    expect(claves).toHaveLength(115)
     expect(claves).not.toContain('descuentos.operador')
     expect(claves).not.toContain('ventas.compartirNota')
     expect(claves).toEqual(
@@ -123,7 +123,7 @@ describe('ayuda de cobranzas (change 17, D20; variante 5b)', () => {
       ['cobranzas.saldoAFavor', ['COB-03', 'CC-04']],
       ['cobranzas.jornada', ['RUT-07']],
       ['cobranzas.anulacion', ['COB-05', 'CC-02']],
-      ['cobranzas.observaciones', ['SYN-05', 'SYN-07', 'SYN-10', 'RUT-09']],
+      ['cobranzas.observaciones', ['SYN-05', 'SYN-07', 'SYN-08', 'SYN-10', 'RUT-09']],
     ])
   })
 
@@ -141,10 +141,10 @@ describe('ayuda de cobranzas (change 17, D20; variante 5b)', () => {
     const entrada: { texto: string; verMas?: string } = AYUDAS['cobranzas.observaciones']
     expect(entrada.verMas).toBe('cobranzas-observaciones')
     expect(entrada.texto).toContain('porque la plata ya se cobró')
-    expect(entrada.texto.split('.').length).toBeLessThanOrEqual(4)
+    expect(entrada.texto.split('.').length).toBeLessThanOrEqual(5)
   })
 
-  it('el tema explica las cinco marcas con su ejemplo y avisa que la bandeja llega más adelante', () => {
+  it('el tema explica las cinco marcas con su ejemplo y manda a «Revisión» (change 25)', () => {
     const tema = TEMAS['cobranzas-observaciones']
     const titulos = tema.secciones.map((seccion) => seccion.titulo)
 
@@ -152,12 +152,12 @@ describe('ayuda de cobranzas (change 17, D20; variante 5b)', () => {
     expect(titulos).toEqual(
       expect.arrayContaining(['Medio inactivo', 'Falta la referencia', 'Permiso revocado', 'Jornada liberada', 'Cliente no habilitado']),
     )
-    const marcas = tema.secciones.filter((seccion) => seccion.titulo !== 'Por qué el pago se toma igual' && seccion.titulo !== 'Qué hacer con los avisos')
+    const marcas = tema.secciones.filter((seccion) => !['Por qué el pago se toma igual', 'Qué hacer con los avisos', 'Llegó después de la rendición'].includes(seccion.titulo))
     expect(marcas).toHaveLength(5)
     for (const marca of marcas) {
       expect(marca.ejemplo?.startsWith('Ej.:')).toBe(true)
     }
-    expect(tema.secciones.flatMap((seccion) => seccion.parrafos).join(' ')).toContain('La bandeja para darlos por revisados llega más adelante')
+    expect(tema.secciones.flatMap((seccion) => seccion.parrafos).join(' ')).toContain('Se dan por revisados en «Revisión», con un comentario.')
   })
 })
 
@@ -171,7 +171,7 @@ describe('ayuda de ventas (change 18a, D22; textos aprobados el 2026-10-17 y el 
     ['ventas.stock', ['STK-05', 'STK-01', 'ADR-054']],
     ['ventas.numero', ['VTA-06', 'ADR-008']],
     ['ventas.costo', ['VTA-05', 'INV-10']],
-    ['ventas.observaciones', ['SYN-05', 'SYN-07', 'STK-06', 'ADR-054']],
+    ['ventas.observaciones', ['SYN-05', 'SYN-07', 'SYN-08', 'STK-06', 'ADR-054']],
   ] as const
 
   it('las nueve claves existen y citan las reglas aprobadas', () => {

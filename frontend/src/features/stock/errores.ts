@@ -113,6 +113,9 @@ const MENSAJES_POR_CODIGO: Record<string, string> = {
   ESPERADO_DIFIERE:
     'El stock del vehículo cambió mientras contabas. Revisá los esperados marcados y volvé a confirmar.',
   UBICACION_CON_TOMA: 'El destino es un vehículo con jornada; elegí un depósito.',
+  // Change 25 (D9 = B, D12, aprobado en 0.2): la rendición espera a que se resuelvan los rechazos de la jornada.
+  RECHAZOS_PENDIENTES:
+    'Esta jornada tiene operaciones rechazadas sin resolver. Hay que resolverlas en «Revisión» antes de rendir.',
   // Sin los nombres (la pantalla arma «Falta contar: {productos}.» con ellos): texto de reserva.
   CONTEO_INCOMPLETO: 'Falta contar algún producto.',
 }

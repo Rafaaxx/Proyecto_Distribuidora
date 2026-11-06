@@ -155,8 +155,8 @@ REGLAS_DE_LA_VENTA: dict[str, tuple[Callable[[Session], Armado], set[str]]] = {
     "permiso_revocado": (_permiso_revocado, {"PERMISO_REVOCADO"}),
     "medio_desactivado": (_medio_desactivado, {"MEDIO_INACTIVO"}),
     "referencia_faltante": (_referencia_faltante, {"REFERENCIA_FALTANTE"}),
-    "producto_desactivado": (_desactivar("producto"), set()),
-    "presentacion_desactivada": (_desactivar("presentacion"), set()),
+    "producto_desactivado": (_desactivar("producto"), {"PRODUCTO_DESACTIVADO"}),  # change 25, D10
+    "presentacion_desactivada": (_desactivar("presentacion"), {"PRODUCTO_DESACTIVADO"}),
     # Change 24 (D7): la propia jornada en rendición también observa `JORNADA_RENDIDA`.
     "ubicacion_tomada": (
         _ubicacion_tomada,

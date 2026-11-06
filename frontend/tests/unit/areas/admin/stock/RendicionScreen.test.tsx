@@ -408,3 +408,109 @@ describe('RendicionScreen: cuándo se puede rendir (tarea 12.1; RUT-05)', () => 
     expect(llamadas(apiFetchMock, 'GET', `/stock/jornadas/${JORNADA}/resumen`)).toHaveLength(0)
   })
 })
+
+/**
+ * Change 25, tarea 15.3 (spec `stock/rendicion-de-jornada`, escenarios de pantalla «Pantalla de conteo con
+ * rechazos pendientes», «Sin permiso de revisión» y «Sin rechazos pendientes»; D9 = B, D12; RUT-05, SEG-06).
+ */
+describe('RendicionScreen: rechazos pendientes de la jornada (tarea 15.3; D9 = B)', () => {
+  const AVISO = (n: string) => `Esta jornada tiene ${n} sin resolver. Hay que resolverlas antes de rendir.`
+
+  function reglasConRechazos(cantidad: () => number | undefined): ReglaDeApi[] {
+    return [
+      {
+        ruta: `/stock/jornadas/${JORNADA}`,
+        responder: () => ({ status: 200, cuerpo: { ...detalle('ABIERTA', true), rechazos_pendientes: cantidad() } }),
+      },
+      ...reglasBase(),
+    ]
+  }
+
+  function renderConPermisos(permisos: string[]) {
+    return render(
+      <QueryClientProvider client={queryClientConYo('SUP', { permisos } as never)}>
+        <MemoryRouter initialEntries={[`/admin/stock/jornadas/${JORNADA}/rendicion`]}>
+          <UbicacionActual />
+          <Routes>
+            <Route path="/admin/stock/*" element={<StockArea />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+  }
+
+  const PERMISOS_DE_RENDIR = ['RENDIR_JORNADA', 'TRANSFERIR_STOCK']
+
+  it('con rechazos pendientes avisa cuántos, deshabilita «Registrar rendición» y ofrece «Ver rechazadas» filtrada por la jornada', async () => {
+    enrutar(apiFetchMock, reglasConRechazos(() => 3))
+    renderConPermisos([...PERMISOS_DE_RENDIR, 'REVISAR_OBSERVACIONES'])
+
+    expect(await screen.findByText(AVISO('3 operaciones rechazadas'))).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Registrar rendición' })).toBeDisabled()
+    expect(screen.getByRole('link', { name: 'Ver rechazadas' })).toHaveAttribute(
+      'href',
+      `/admin/revision/rechazadas?jornada=${JORNADA}`,
+    )
+    expect(screen.queryByText('Las resuelve quien revisa las observaciones.')).not.toBeInTheDocument()
+  })
+
+  it('con una sola dice «1 operación rechazada»', async () => {
+    enrutar(apiFetchMock, reglasConRechazos(() => 1))
+    renderConPermisos([...PERMISOS_DE_RENDIR, 'REVISAR_OBSERVACIONES'])
+
+    expect(await screen.findByText(AVISO('1 operación rechazada'))).toBeInTheDocument()
+  })
+
+  it('sin REVISAR_OBSERVACIONES dice quién las resuelve, no ofrece el acceso y no pide la lista (SEG-06)', async () => {
+    enrutar(apiFetchMock, reglasConRechazos(() => 2))
+    renderConPermisos(PERMISOS_DE_RENDIR)
+
+    expect(await screen.findByText(AVISO('2 operaciones rechazadas'))).toBeInTheDocument()
+    expect(screen.getByText('Las resuelve quien revisa las observaciones.')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Ver rechazadas' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Registrar rendición' })).toBeDisabled()
+    expect(llamadas(apiFetchMock, 'GET', '/observaciones/rechazos')).toHaveLength(0)
+  })
+
+  it('sin rechazos pendientes no hay aviso y «Registrar rendición» está habilitado', async () => {
+    enrutar(apiFetchMock, reglasConRechazos(() => 0))
+    renderConPermisos([...PERMISOS_DE_RENDIR, 'REVISAR_OBSERVACIONES'])
+
+    await screen.findByRole('heading', { name: 'Rendición de Camioneta 1' })
+    expect(screen.queryByText(/operaciones? rechazadas? sin resolver/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Registrar rendición' })).toBeEnabled()
+  })
+
+  it('si el servidor responde RECHAZOS_PENDIENTES muestra su texto, recarga la cantidad y no pierde el conteo', async () => {
+    const usuario = userEvent.setup()
+    let rechazos = 0
+    enrutar(apiFetchMock, [
+      {
+        metodo: 'POST',
+        ruta: `/stock/jornadas/${JORNADA}/rendicion`,
+        responder: () => {
+          rechazos = 2
+          return { status: 409, cuerpo: { title: 'Hay rechazos.', codigo: 'RECHAZOS_PENDIENTES', cantidad: 2 } }
+        },
+      },
+      ...reglasConRechazos(() => rechazos),
+    ])
+    renderConPermisos([...PERMISOS_DE_RENDIR, 'REVISAR_OBSERVACIONES'])
+    await usuario.type(await screen.findByLabelText('Cajas de Vino A'), '6')
+    await usuario.type(screen.getByLabelText('Unidades de Vino A'), '4')
+    await usuario.type(screen.getByLabelText('Unidades de Gaseosa'), '12')
+    await usuario.click(screen.getByRole('button', { name: 'Registrar rendición' }))
+    await usuario.click(await screen.findByRole('button', { name: 'Confirmar' }))
+
+    expect(
+      await screen.findByText(
+        'Esta jornada tiene operaciones rechazadas sin resolver. Hay que resolverlas en «Revisión» antes de rendir.',
+      ),
+    ).toBeInTheDocument()
+    expect(await screen.findByText(AVISO('2 operaciones rechazadas'))).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Registrar rendición' })).toBeDisabled()
+    expect(screen.getByLabelText('Cajas de Vino A')).toHaveValue('6')
+    expect(screen.getByLabelText('Unidades de Vino A')).toHaveValue('4')
+    expect(screen.getByLabelText('Unidades de Gaseosa')).toHaveValue('12')
+  })
+})

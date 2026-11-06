@@ -19,6 +19,7 @@ import { SiTienePermiso } from '../../../features/identidad/SiTienePermiso'
 import { formatearFechaDeNegocio, formatearFechaHora } from '../../../lib/fecha'
 import { formatearCosto, formatearImporte, parsearImporteDesdeApi } from '../../../lib/money'
 import { ETIQUETA_DE_CONDICION, ETIQUETA_DE_ESTADO } from './etiquetas'
+import { ObservacionesDeLaOperacion } from '../revision/ObservacionesDeLaOperacion'
 
 const SIN_PERMISO = 'No tenés permiso para ver las compras.'
 const AMBITO_DE_ANULACION = 'ANULACION_COMPRA'
@@ -126,6 +127,8 @@ function DetalleDeCompra() {
           {datos.pago.estado !== 'CONFIRMADO' && <p className="text-primary/70">Pago {datos.pago.estado.toLowerCase()}.</p>}
         </Card>
       )}
+
+      <ObservacionesDeLaOperacion observaciones={datos.observaciones ?? []} />
 
       {datos.anulacion && (
         <Card className="flex flex-col gap-1 text-sm text-primary">

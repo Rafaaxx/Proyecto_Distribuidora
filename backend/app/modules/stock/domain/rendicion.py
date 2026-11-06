@@ -17,9 +17,26 @@ from app.modules.stock.domain.errores import (
     EsperadoDifiereError,
     ObservacionInvalidaError,
     ProductoRepetidoError,
+    RechazosPendientesError,
 )
 
 MAXIMO_OBSERVACION = 500
+
+
+def validar_sin_rechazos_pendientes(cantidad: int) -> None:
+    """RUT-05, SYN-06 (change 25, D9 = B): con operaciones rechazadas sin resolver en la jornada
+    no se rinde, porque el esperado no incluiría lo que el vendedor sí entregó y el faltante
+    saldría sin explicación (o se descontaría dos veces al cargar la corrección). El detalle lleva
+    la cantidad. Una cantidad negativa es un error de quien la calcula."""
+    if cantidad < 0:
+        raise ValueError("La cantidad de rechazos pendientes no puede ser negativa.")
+    if cantidad > 0:
+        raise RechazosPendientesError(
+            f"La jornada tiene {cantidad} "
+            f"{'operación rechazada' if cantidad == 1 else 'operaciones rechazadas'} "
+            "sin resolver: hay que resolverlas antes de rendir.",
+            extension={"rechazos_pendientes": cantidad},
+        )
 
 
 @dataclass(frozen=True)

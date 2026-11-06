@@ -115,7 +115,8 @@ describe('AdminLayout: el menú muestra solo las secciones permitidas (tareas 7.
     await montarRol('ADM')
 
     expect(screen.getByRole('link', { name: 'Catálogo' })).toBeInTheDocument()
-    expect(apiFetchMock).not.toHaveBeenCalled()
+    // Change 25 (D5): quien tiene `REVISAR_OBSERVACIONES` pide además el resumen del aviso; `/yo`, nunca.
+    expect(apiFetchMock.mock.calls.filter(([ruta]) => String(ruta).startsWith('/yo'))).toHaveLength(0)
   })
 
   it('los enlaces del menú son absolutos: desde /admin/dispositivos, "Catálogo" lleva a /admin/catalogo y no a /admin/dispositivos/catalogo (tarea 10.8 del change 05)', async () => {
@@ -179,8 +180,8 @@ describe('AdminLayout: estado pendiente y estado de error de la consulta de sesi
 
     expect(await screen.findByRole('link', { name: 'Catálogo' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Proveedores' })).toBeInTheDocument()
-    expect(apiFetchMock).toHaveBeenCalledTimes(2)
-    expect(apiFetchMock).toHaveBeenLastCalledWith('/yo')
+    // Change 25 (D5): GES revisa observaciones, así que después de `/yo` se pide además el resumen del aviso.
+    expect(apiFetchMock.mock.calls.filter(([ruta]) => ruta === '/yo')).toHaveLength(2)
   })
 
   it('si la consulta falla con 401 (la renovación del token fue rechazada), el aviso ofrece iniciar sesión y no reintentar', async () => {
@@ -256,7 +257,9 @@ describe('AdminLayout: la ruta índice /admin/inicio (tarea 7.6, B3)', () => {
   })
 
   it('Administración aterriza en Catálogo, la primera sección permitida', async () => {
-    montarLayout(queryClientConYo('GES'), '/admin/inicio')
+    // Change 25 (D5): quien revisa observaciones aterriza en «Para revisar» (AdminInicio.test.tsx); el criterio
+    // de la primera sección se comprueba con un usuario de Administración sin ese permiso.
+    montarLayout(queryClientConYo('GES', { permisos: ['GESTIONAR_CATALOGO', 'GESTIONAR_PROVEEDORES'] }), '/admin/inicio')
 
     expect(await screen.findByText('Pantalla de catálogo')).toBeInTheDocument()
   })
@@ -265,7 +268,10 @@ describe('AdminLayout: la ruta índice /admin/inicio (tarea 7.6, B3)', () => {
     // `Clientes` precede a `Dispositivos` en `SECCIONES`, y el Supervisor
     // comercial tiene `GESTIONAR_CLIENTES` (`01` §19): el aterrizaje sigue
     // el orden del menú (B3), no un orden fijo por rol.
-    montarLayout(queryClientConYo('SUP'), '/admin/inicio')
+    montarLayout(
+      queryClientConYo('SUP', { permisos: ['GESTIONAR_CLIENTES', 'GESTIONAR_DISPOSITIVOS'] }),
+      '/admin/inicio',
+    )
 
     expect(await screen.findByText('Pantalla de clientes')).toBeInTheDocument()
   })
@@ -296,5 +302,54 @@ describe('AdminLayout: la ruta índice /admin/inicio (tarea 7.6, B3)', () => {
     await screen.findByText(/no se pudieron obtener tus permisos/i)
 
     expect(screen.queryByText(/tu usuario no tiene secciones/i)).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * Change 25, tarea 15.1 (spec `sync/revision-de-observaciones`, «Administración ve un aviso de lo pendiente»;
+ * D5; CRE-09, SEG-06): el menú muestra «Revisión» con el total pendiente; sin permiso no hay sección ni se
+ * pide el resumen.
+ */
+describe('AdminLayout: «Revisión» con el total pendiente (tarea 15.1, D5)', () => {
+  const resumen = (total: number) => ({
+    observaciones_por_codigo: {},
+    observaciones_pendientes: total,
+    rechazos_pendientes: 0,
+    cuarentenas_pendientes: 0,
+    total_pendiente: total,
+  })
+
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+  })
+
+  it('muestra «Revisión» con el total y lo pide al servidor', async () => {
+    apiFetchMock.mockResolvedValue(respuesta(200, resumen(4)))
+    await montarRol('GES')
+
+    expect(await screen.findByRole('link', { name: 'Revisión 4' })).toHaveAttribute('href', '/admin/revision')
+    expect(apiFetchMock).toHaveBeenCalledWith('/observaciones/resumen')
+  })
+
+  it('sin pendientes no muestra contador', async () => {
+    apiFetchMock.mockResolvedValue(respuesta(200, resumen(0)))
+    await montarRol('GES')
+
+    expect(await screen.findByRole('link', { name: 'Revisión' })).toBeInTheDocument()
+    expect(screen.queryByText('0')).not.toBeInTheDocument()
+  })
+
+  it('sin REVISAR_OBSERVACIONES no ve «Revisión» y no se pide el resumen', async () => {
+    await montarRol('VEN')
+
+    expect(screen.queryByRole('link', { name: /^Revisión/ })).not.toBeInTheDocument()
+    expect(apiFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('si el resumen falla, «Revisión» sigue y no inventa un contador', async () => {
+    apiFetchMock.mockResolvedValue(respuesta(500, ERROR_DEL_SERVIDOR))
+    await montarRol('GES')
+
+    expect(await screen.findByRole('link', { name: 'Revisión' })).toBeInTheDocument()
   })
 })

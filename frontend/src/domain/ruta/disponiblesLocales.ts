@@ -31,6 +31,11 @@ export interface OperacionConciliable {
   rechazada: boolean
   /** Solo en una anulación: si su venta está «Rechazada» (D7). */
   anulacion?: { ventaRechazada: boolean }
+  /**
+   * Change 25 (D8; SYN-09, CRE-08): el rechazo ya lo resolvio administracion (esta en los
+   * `rechazos_resueltos` del ultimo bootstrap). Solo se informa en una operacion rechazada.
+   */
+  resuelta?: boolean
   /** `true` solo en una cobranza independiente (change 23, D6); el cobro de una venta no la lleva. */
   cobranzaIndependiente?: boolean
 }
@@ -49,6 +54,8 @@ function cuenta(m: MovimientoLocal, jornadaId: string, conciliacion: Conciliacio
   if (m.jornada_id !== jornadaId) return false
   const marca = conciliacion.secuenciaProcesada
   const operacion = conciliacion.operaciones.get(m.operation_id)
+  // Change 25 (D8): un rechazo resuelto deja de contar completo (stock, débito y cobro en el momento).
+  if (operacion?.resuelta === true) return false
   // D7 (22d): una anulación rechazada no cuenta, tenga o no marca el bootstrap, salvo que su venta
   // también esté rechazada (se compensan).
   if (operacion?.rechazada === true && operacion.anulacion !== undefined) return operacion.anulacion.ventaRechazada

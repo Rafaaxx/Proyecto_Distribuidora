@@ -302,3 +302,164 @@ class BootstrapResponse(BaseModel):
     reglas_descuento: list[ReglaDescuentoBootstrap]
     stock: list[StockBootstrap]
     autorizadores: list[AutorizadorBootstrap]
+    # Change 25, D8 (SYN-11): los `operation_id` de los rechazos ya resueltos de la jornada; el
+    # telefono deja de contar esas ventas. Sin comentario ni vinculo.
+    rechazos_resueltos: list[UUID]
+
+
+# --- Revisión de observaciones (change 25) ------------------------------------------------
+
+
+class ResolverObservacionesRequest(BaseModel):
+    """`POST /api/v1/observaciones/resolucion`. Sin límites de Pydantic: el largo de la lista y
+    del comentario los valida el dominio y responden con su código estable (D1)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    observaciones: list[UUID]
+    comentario: str
+
+
+class ResolucionResponse(BaseModel):
+    observaciones: list[UUID]
+    resuelto_en: datetime
+    comentario: str
+
+
+class VinculoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tipo: Literal["VENTA", "COBRANZA"]
+    id: UUID
+
+
+class ResolverRechazoRequest(BaseModel):
+    """`POST /api/v1/observaciones/rechazos/{id}/resolucion`. El largo del comentario lo valida el
+    dominio (`COMENTARIO_INVALIDO`)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    origen: Literal["RECHAZO", "CUARENTENA"]
+    comentario: str
+    vinculo: VinculoRequest | None = None
+
+
+class ResolucionDeRechazoResponse(BaseModel):
+    id: UUID
+    origen: Literal["RECHAZO", "CUARENTENA"]
+    estado: Literal["RESUELTO"]
+    resuelto_en: datetime
+    comentario: str
+    vinculo_tipo: Literal["VENTA", "COBRANZA"] | None
+    vinculo_id: UUID | None
+
+
+class ResumenDeOperacionResponse(BaseModel):
+    titulo: str
+    tercero: str | None
+    total: str | None
+    momento: datetime
+
+
+class NombresDeObservacionResponse(BaseModel):
+    """Nombres que el detalle solo nombra por id (change 25, lote extra); «(no existe)» si el id ya
+    no existe en la organización; `None` lo que el detalle no trae."""
+
+    autorizador: str | None
+    producto: str | None
+    linea: int | None
+    vendedor_de_jornada: str | None
+
+
+class ObservacionDeBandejaResponse(BaseModel):
+    id: UUID
+    codigo: str
+    detalle: dict[str, object] | None
+    estado: Literal["PENDIENTE", "RESUELTA"]
+    resuelto_por_id: UUID | None
+    resuelto_por_nombre: str | None
+    resuelto_en: datetime | None
+    comentario: str | None
+    nombres: NombresDeObservacionResponse | None = None
+
+
+class OperacionObservadaResponse(BaseModel):
+    operacion_tipo: str
+    operacion_id: UUID
+    estado: Literal["PENDIENTE", "RESUELTA"]
+    resumen: ResumenDeOperacionResponse | None
+    usuario_id: UUID
+    usuario_nombre: str | None
+    dispositivo_id: UUID
+    jornada_id: UUID | None
+    modo: Literal["ONLINE", "OFFLINE"]
+    occurred_at: datetime
+    registered_at: datetime
+    observaciones: list[ObservacionDeBandejaResponse]
+
+
+class PaginaDeObservacionesResponse(BaseModel):
+    items: list[OperacionObservadaResponse]
+    cursor_siguiente: str | None
+
+
+class ResumenDePendientesResponse(BaseModel):
+    observaciones_por_codigo: dict[str, int]
+    observaciones_pendientes: int
+    rechazos_pendientes: int
+    cuarentenas_pendientes: int
+    total_pendiente: int
+
+
+class LineaResumidaResponse(BaseModel):
+    producto: str | None
+    cantidad: int | None
+    importe: str | None
+
+
+class MedioResumidoResponse(BaseModel):
+    medio: str | None
+    importe: str | None
+
+
+class ResumenDeContenidoResponse(BaseModel):
+    """Lo que envió el teléfono, legible; los campos que no se pudieron leer vienen nulos."""
+
+    titulo: str
+    cliente: str | None
+    numero: str | None
+    total: str | None
+    lineas: list[LineaResumidaResponse]
+    medios: list[MedioResumidoResponse]
+
+
+class RechazoResponse(BaseModel):
+    """Un rechazo sin conexión o una cuarentena (`origen`). `contenido` es lo crudo que envió el
+    teléfono y solo viene en el detalle."""
+
+    origen: Literal["RECHAZO", "CUARENTENA"]
+    id: UUID
+    operation_id: UUID
+    tipo: str
+    estado: Literal["PENDIENTE", "RESUELTO"]
+    codigo: str
+    usuario_id: UUID
+    usuario_nombre: str | None
+    dispositivo_id: UUID
+    jornada_id: UUID | None
+    recibido_en: datetime
+    occurred_at: datetime | None
+    aceptada_despues: bool
+    resumen: ResumenDeContenidoResponse | None
+    resuelto_por_id: UUID | None
+    resuelto_por_nombre: str | None
+    resuelto_en: datetime | None
+    comentario: str | None
+    vinculo_tipo: Literal["VENTA", "COBRANZA"] | None
+    vinculo_id: UUID | None
+    contenido: object | None = None
+
+
+class PaginaDeRechazosResponse(BaseModel):
+    items: list[RechazoResponse]
+    cursor_siguiente: str | None

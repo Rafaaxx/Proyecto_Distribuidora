@@ -2,11 +2,11 @@ import { Alert } from '../../../components/ui/Alert'
 import { Ayuda } from '../../../components/ui/Ayuda'
 import { Card } from '../../../components/ui/Card'
 import { Tabla, type ColumnaTabla } from '../../../components/ui/Table'
-import { formatearCantidad, referenciaDeRespuesta, type ReferenciaDePresentacion } from '../../../domain/stock/cantidades'
-import { usePermisos } from '../../../features/identidad/usePermisos'
-import type { DineroDeLaJornada, LineaDelResumen } from '../../../features/stock/api'
-import { useProductosParaRendicion, useResumenDeJornada, useSaldosCompletos } from '../../../features/stock/hooks'
+import { formatearCantidad } from '../../../domain/stock/cantidades'
+import type { DineroDeLaJornada, LineaDelResumen, ResumenDeJornada } from '../../../features/stock/api'
+import { useResumenDeJornada } from '../../../features/stock/hooks'
 import { formatearImporte, parsearImporteDesdeApi } from '../../../lib/money'
+import { useContextoDelResumen, type ContextoDelResumen } from './useContextoDelResumen'
 
 /**
  * Resumen de una jornada en `/admin` (change 24, tarea 13.1; `design.md` D4, D8, D9; RUT-07, STK-04,
@@ -26,20 +26,26 @@ const dinero = (valor: string) => formatearImporte(parsearImporteDesdeApi(valor)
 
 export function ResumenDeJornada({ jornadaId, ubicacionId }: ResumenDeJornadaProps) {
   const resumen = useResumenDeJornada(jornadaId)
-  const catalogo = useProductosParaRendicion()
-  const permisos = usePermisos()
-  const saldos = useSaldosCompletos(permisos.tiene('TRANSFERIR_STOCK') ? ubicacionId : undefined)
+  const contexto = useContextoDelResumen(ubicacionId)
 
   if (resumen.isPending) return <p className="text-sm text-primary/70">Cargando…</p>
   if (resumen.isError) return <Alert>No se pudo obtener el resumen de la jornada.</Alert>
 
-  const datos = resumen.data
-  const nombres = new Map(catalogo.productos.map((p) => [p.id, p.nombre]))
-  const referencias = new Map<string, ReferenciaDePresentacion>()
-  for (const saldo of saldos.lineas) {
-    const referencia = referenciaDeRespuesta(saldo.unidades_referencia, saldo.nombre_referencia)
-    if (referencia !== null) referencias.set(saldo.producto_id, referencia)
-  }
+  return <ResumenDeJornadaVista datos={resumen.data} contexto={contexto} />
+}
+
+export interface ResumenDeJornadaVistaProps {
+  /**
+   * El resumen ya leído. Lo mismo vale el de `GET /jornadas/{id}/resumen` que el de
+   * `GET /reportes/rendiciones/{id}` (change 26, D7, D11): tienen la misma forma y la misma pantalla.
+   */
+  datos: ResumenDeJornada
+  contexto: ContextoDelResumen
+}
+
+/** La parte visual del resumen (RUT-07): no sabe de dónde vino el dato, así el reporte reutiliza el componente. */
+export function ResumenDeJornadaVista({ datos, contexto }: ResumenDeJornadaVistaProps) {
+  const { nombres, referencias } = contexto
   const cantidad = (productoId: string, valor: number) => formatearCantidad(valor, referencias.get(productoId) ?? null)
   const conValor = datos.valor_de_diferencias !== undefined && datos.valor_de_diferencias !== null
 

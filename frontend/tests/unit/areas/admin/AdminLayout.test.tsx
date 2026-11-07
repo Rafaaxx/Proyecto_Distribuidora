@@ -35,6 +35,7 @@ function montarLayout(queryClient: QueryClient, rutaInicial = '/admin/catalogo')
             <Route path="proveedores" element={<p>Pantalla de proveedores</p>} />
             <Route path="clientes" element={<p>Pantalla de clientes</p>} />
             <Route path="dispositivos" element={<p>Pantalla de dispositivos</p>} />
+            <Route path="reportes" element={<p>Pantalla de reportes</p>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -103,12 +104,11 @@ describe('AdminLayout: el menú muestra solo las secciones permitidas (tareas 7.
     expect(screen.getAllByRole('link').map((enlace) => enlace.textContent)).toEqual(['Ventas', 'Cobranzas', 'Stock', 'Ayuda', 'Mi contraseña'])
   })
 
-  it('Consulta/Dirección no ve ninguna sección', async () => {
+  it('Consulta/Dirección ve solo «Reportes» (change 26, D11; VER_REPORTES)', async () => {
     await montarRol('CON')
 
-    // Solo queda "Ayuda" (change 16b): ninguna sección de negocio.
-    // Change 20b (D20): "Mi contraseña" la ve todo usuario con sesión, aunque no tenga secciones.
-    expect(screen.getAllByRole('link').map((enlace) => enlace.textContent)).toEqual(['Ayuda', 'Mi contraseña'])
+    // «Ayuda» (change 16b) y «Mi contraseña» (change 20b) las ve todo usuario con sesión.
+    expect(screen.getAllByRole('link').map((enlace) => enlace.textContent)).toEqual(['Reportes', 'Ayuda', 'Mi contraseña'])
   })
 
   it('con los permisos ya sembrados no hace ninguna petición extra a /yo (ADR-027: una consulta por sesión)', async () => {
@@ -276,15 +276,11 @@ describe('AdminLayout: la ruta índice /admin/inicio (tarea 7.6, B3)', () => {
     expect(await screen.findByText('Pantalla de clientes')).toBeInTheDocument()
   })
 
-  it('Consulta/Dirección ve que no tiene secciones de administración disponibles', async () => {
+  it('Consulta/Dirección aterriza en «Reportes», su primera sección (change 26, D11)', async () => {
     montarLayout(queryClientConYo('CON'), '/admin/inicio')
 
-    expect(
-      await screen.findByText('Tu usuario no tiene secciones de administración disponibles'),
-    ).toBeInTheDocument()
-    // Solo queda "Ayuda" (change 16b): ninguna sección de negocio.
-    // Change 20b (D20): "Mi contraseña" la ve todo usuario con sesión, aunque no tenga secciones.
-    expect(screen.getAllByRole('link').map((enlace) => enlace.textContent)).toEqual(['Ayuda', 'Mi contraseña'])
+    expect(await screen.findByText('Pantalla de reportes')).toBeInTheDocument()
+    expect(screen.queryByText('Tu usuario no tiene secciones de administración disponibles')).not.toBeInTheDocument()
   })
 
   it('mientras /yo está pendiente espera y no redirige a ninguna sección (B1)', () => {

@@ -18,6 +18,7 @@ function montar(rol: RolDePrueba) {
           <Route path="/admin" element={<AdminLayout />}>
             <Route path="inicio" element={<AdminInicio />} />
             <Route path="catalogo" element={<p>Pantalla de catálogo</p>} />
+            <Route path="reportes" element={<p>Pantalla de reportes</p>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -161,10 +162,10 @@ describe('AdminInicio: tarjeta «Para revisar» (tarea 15.1, D5)', () => {
     expect(llamadasAlResumen()).toHaveLength(0)
   })
 
-  it('el usuario de Consulta no ve la tarjeta ni «Revisión»', async () => {
+  it('el usuario de Consulta aterriza en «Reportes» (change 26, D11) y no ve la tarjeta ni «Revisión»', async () => {
     montar('CON')
 
-    expect(await screen.findByText('Tu usuario no tiene secciones de administración disponibles')).toBeInTheDocument()
+    expect(await screen.findByText('Pantalla de reportes')).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Para revisar' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^Revisión/ })).not.toBeInTheDocument()
     expect(llamadasAlResumen()).toHaveLength(0)

@@ -77,6 +77,14 @@ ignore_imports = [
     "app.modules.sync.revision_api -> sqlalchemy",
     "app.modules.sync.revision_api -> app.api_v1.dependencias",
     "app.modules.sync.revision_api -> app.core.autenticacion",
+    # Change 26 (reportes de la etapa 1): solo lectura; `repository.py` y `queries.py` arman las
+    # consultas con SQLAlchemy Core y `api.py` expone las rutas.
+    "app.modules.reportes.repository -> sqlalchemy",
+    "app.modules.reportes.queries -> sqlalchemy",
+    "app.modules.reportes.api -> fastapi",
+    "app.modules.reportes.api -> sqlalchemy",
+    "app.modules.reportes.api -> app.api_v1.dependencias",
+    "app.modules.reportes.api -> app.core.autenticacion",
     "app.modules.catalogo.models -> app.core.db",
     "app.modules.catalogo.models -> sqlalchemy",
     "app.modules.catalogo.repository -> sqlalchemy",
@@ -297,6 +305,7 @@ source_modules = [
     "app.modules.cobranzas.domain",
     "app.modules.ventas.domain",
     "app.modules.sync.domain",
+    "app.modules.reportes.domain",
 ]
 forbidden_modules = ["app.commands"]
 
@@ -1248,3 +1257,155 @@ forbidden_modules = [
     "app.modules.ventas.queries",
 ]
 allow_indirect_imports = "true"
+
+# Change 26 (`design.md` D6, `02` SS5.2): `reportes` es el decimo cuarto modulo de negocio y el
+# unico de solo lectura: lee las tablas de los demas por sus `models` y consulta sus servicios por
+# `service.py`, nunca por comandos, repositorios, casos de uso, consultas, api ni dominio ajenos.
+# Su `domain/` es puro (periodo y armado segun permisos): ni infraestructura, ni el bus, ni otro
+# modulo de negocio.
+[[tool.importlinter.contracts]]
+id = "reportes-domain-no-infraestructura"
+name = "reportes domain no importa infraestructura, el bus de comandos ni otros modulos"
+type = "forbidden"
+source_modules = ["app.modules.reportes.domain"]
+forbidden_modules = [
+    "fastapi",
+    "sqlalchemy",
+    "app.commands",
+    "app.modules.identidad",
+    "app.modules.configuracion",
+    "app.modules.catalogo",
+    "app.modules.proveedores",
+    "app.modules.clientes",
+    "app.modules.cuentas_corrientes",
+    "app.modules.costeo",
+    "app.modules.stock",
+    "app.modules.importacion",
+    "app.modules.precios",
+    "app.modules.descuentos",
+    "app.modules.cobranzas",
+    "app.modules.ventas",
+    "app.modules.sync",
+]
+
+[[tool.importlinter.contracts]]
+id = "reportes-solo-models-y-service-ajenos"
+name = "reportes alcanza a los demas modulos solo por su models y su service.py"
+type = "forbidden"
+source_modules = ["app.modules.reportes"]
+forbidden_modules = [
+    "app.modules.identidad.api",
+    "app.modules.identidad.commands",
+    "app.modules.identidad.domain",
+    "app.modules.identidad.repository",
+    "app.modules.configuracion.api",
+    "app.modules.configuracion.commands",
+    "app.modules.configuracion.domain",
+    "app.modules.configuracion.queries",
+    "app.modules.configuracion.repository",
+    "app.modules.configuracion.schemas",
+    "app.modules.catalogo.api",
+    "app.modules.catalogo.commands",
+    "app.modules.catalogo.domain",
+    "app.modules.catalogo.queries",
+    "app.modules.catalogo.repository",
+    "app.modules.catalogo.schemas",
+    "app.modules.proveedores.api",
+    "app.modules.proveedores.commands",
+    "app.modules.proveedores.domain",
+    "app.modules.proveedores.queries",
+    "app.modules.proveedores.repository",
+    "app.modules.proveedores.schemas",
+    "app.modules.clientes.api",
+    "app.modules.clientes.commands",
+    "app.modules.clientes.domain",
+    "app.modules.clientes.repository",
+    "app.modules.clientes.schemas",
+    "app.modules.cuentas_corrientes.api",
+    "app.modules.cuentas_corrientes.commands",
+    "app.modules.cuentas_corrientes.domain",
+    "app.modules.cuentas_corrientes.repository",
+    "app.modules.cuentas_corrientes.schemas",
+    "app.modules.costeo.domain",
+    "app.modules.costeo.repository",
+    "app.modules.stock.api",
+    "app.modules.stock.commands",
+    "app.modules.stock.domain",
+    "app.modules.stock.jornadas_casos",
+    "app.modules.stock.jornadas_commands",
+    "app.modules.stock.jornadas_repository",
+    "app.modules.stock.queries",
+    "app.modules.stock.rendicion_casos",
+    "app.modules.stock.rendicion_commands",
+    "app.modules.stock.rendicion_repository",
+    "app.modules.stock.repository",
+    "app.modules.stock.schemas",
+    "app.modules.importacion.api",
+    "app.modules.importacion.commands",
+    "app.modules.importacion.domain",
+    "app.modules.importacion.importadores",
+    "app.modules.importacion.lectores",
+    "app.modules.importacion.queries",
+    "app.modules.importacion.repository",
+    "app.modules.importacion.schemas",
+    "app.modules.precios.api",
+    "app.modules.precios.commands",
+    "app.modules.precios.domain",
+    "app.modules.precios.queries",
+    "app.modules.precios.repository",
+    "app.modules.precios.schemas",
+    "app.modules.descuentos.api",
+    "app.modules.descuentos.commands",
+    "app.modules.descuentos.domain",
+    "app.modules.descuentos.queries",
+    "app.modules.descuentos.repository",
+    "app.modules.descuentos.schemas",
+    "app.modules.cobranzas.api",
+    "app.modules.cobranzas.commands",
+    "app.modules.cobranzas.domain",
+    "app.modules.cobranzas.queries",
+    "app.modules.cobranzas.repository",
+    "app.modules.cobranzas.schemas",
+    "app.modules.ventas.api",
+    "app.modules.ventas.commands",
+    "app.modules.ventas.domain",
+    "app.modules.ventas.queries",
+    "app.modules.ventas.repository",
+    "app.modules.ventas.schemas",
+    "app.modules.sync.api",
+    "app.modules.sync.bootstrap",
+    "app.modules.sync.domain",
+    "app.modules.sync.repository",
+    "app.modules.sync.revision_api",
+    "app.modules.sync.revision_casos",
+    "app.modules.sync.revision_commands",
+    "app.modules.sync.revision_queries",
+    "app.modules.sync.revision_repository",
+    "app.modules.sync.schemas",
+]
+# `reportes -> X.service` arrastra los internos de X de forma indirecta (service -> repository):
+# lo prohibido es el import directo, igual que en los demas contratos "solo por service".
+allow_indirect_imports = "true"
+
+# Nadie depende de `reportes`: es una hoja del grafo de modulos (`02` SS5.2).
+[[tool.importlinter.contracts]]
+id = "nadie-importa-reportes"
+name = "ningun otro modulo de negocio importa reportes"
+type = "forbidden"
+source_modules = [
+    "app.modules.identidad",
+    "app.modules.configuracion",
+    "app.modules.catalogo",
+    "app.modules.proveedores",
+    "app.modules.clientes",
+    "app.modules.cuentas_corrientes",
+    "app.modules.costeo",
+    "app.modules.stock",
+    "app.modules.importacion",
+    "app.modules.precios",
+    "app.modules.descuentos",
+    "app.modules.cobranzas",
+    "app.modules.ventas",
+    "app.modules.sync",
+]
+forbidden_modules = ["app.modules.reportes"]

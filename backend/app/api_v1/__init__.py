@@ -17,6 +17,7 @@ from app.modules.identidad import api as identidad_api
 from app.modules.importacion import api as importacion_api
 from app.modules.precios import api as precios_api
 from app.modules.proveedores import api as proveedores_api
+from app.modules.reportes import api as reportes_api
 from app.modules.stock import api as stock_api
 from app.modules.sync import api as sync_api
 from app.modules.sync import revision_api as sync_revision_api
@@ -38,6 +39,7 @@ router.include_router(cuentas_corrientes_api.router)
 router.include_router(descuentos_api.router)
 router.include_router(precios_api.router)
 router.include_router(proveedores_api.router)
+router.include_router(reportes_api.router)
 router.include_router(stock_api.router)
 router.include_router(sync_api.router)
 router.include_router(sync_revision_api.router)

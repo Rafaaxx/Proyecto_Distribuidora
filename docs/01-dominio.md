@@ -458,9 +458,9 @@ Ejemplo de FAC-02 y FAC-03 (ventas por $100.000 netos al 21%, costo $70.000):
 | ID | Regla | Etapa |
 | --- | --- | --- |
 | REP-01 | Los reportes se calculan desde las operaciones registradas. No existen cifras mantenidas manualmente. | 1 |
-| REP-02 | Las ventas se asignan al período por su fecha de negocio (TR-04). Las ventas anuladas se excluyen de los totales de su período y se informan por separado. | 1 |
-| REP-03 | Las cantidades se informan en cajas equivalentes, unidades base y detalle por presentación vendida. | 1 |
-| REP-04 | Utilidad real = neto − costo congelado − IVA absorbido asignado. Solo la ven usuarios con `VER_UTILIDAD`. | 1 |
+| REP-02 | Las ventas se asignan al período por su fecha de negocio (TR-04). Las ventas anuladas se excluyen de los totales de su período y se informan por separado. **El período son fechas de negocio inclusivas; sin fechas, el mes en curso hasta hoy, y como máximo 366 días (`PERIODO_DEMASIADO_LARGO`). Una venta anulada se excluye del período de la venta aunque se anule después, y se lista en ese período con la fecha y el motivo de la anulación (ADR-070).** | 1 |
+| REP-03 | Las cantidades se informan en cajas equivalentes, unidades base y detalle por presentación vendida. **Las cajas equivalentes de cada línea usan sus `unidades_referencia` congeladas, se suman exactas y se redondean a 2 decimales una sola vez por cifra. El reporte de ventas trae resumen, por día, por vendedor y por producto; por producto, solo cantidades y neto (ADR-070).** | 1 |
+| REP-04 | Utilidad real = neto − costo congelado − IVA absorbido asignado. Solo la ven usuarios con `VER_UTILIDAD`. **Con la utilidad se informa el costo vendido. Se calcula solo sobre las líneas con costo; las vendidas sin costo (VTA-05, sin conexión) se informan aparte con su cantidad y su neto. Hasta que exista el módulo de facturación, el IVA absorbido asignado es cero. No se informa margen porcentual (ADR-070).** | 1 |
 | REP-05 | Los reportes usan los valores congelados de cada operación, nunca precios ni costos actuales. | 1 |
 | REP-06 | Utilidad por producto, cliente, proveedor y categoría; costo vendido por proveedor frente a deuda; comparativos; exportación. | 2 |
 
@@ -539,7 +539,7 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 | REGISTRAR_COBRANZA | Registrar cobranzas | ✓ | ✓ | ✓ | ✓ | |
 | ANULAR_COBRANZA | Anular cobranzas | ✓ | ✓ | ✓ | | |
 | REVISAR_OBSERVACIONES | Resolver observaciones; **leer la bandeja de observaciones, el resumen de pendientes, y revisar y resolver los rechazos sin conexión y la cuarentena (ADR-069)** | ✓ | ✓ | ✓ | | |
-| VER_REPORTES | Reportes | ✓ | ✓ | ✓ | | ✓ |
+| VER_REPORTES | Reportes. **Los saldos de proveedores exigen además `GESTIONAR_PROVEEDORES`, `REGISTRAR_PAGO_PROVEEDOR` o `VER_UTILIDAD` (ADR-070)** | ✓ | ✓ | ✓ | | ✓ |
 | VER_AUDITORIA | Consultar auditoría | ✓ | | | | ✓ |
 | FACTURAR | Emitir facturas | ✓ | ✓ | | | |
 | FACTURAR_ABSORBIENDO_IVA | Emitir con IVA absorbido | ✓ | | | | |
@@ -560,6 +560,8 @@ Las lecturas de listas, reglas, versiones y precios las puede hacer quien tenga 
 El listado y el detalle de transferencias se leen con `TRANSFERIR_STOCK`; los de ajustes, con `AJUSTAR_STOCK`, y sus costos solo con `VER_COSTOS`. `ANULAR_TRANSFERENCIA` solo agrega el alcance sobre las transferencias de otros usuarios y no abre ninguna lectura; sin ese permiso, anular la transferencia de otro responde 403. Quien tiene `PERMITIR_STOCK_NEGATIVO` puede, además, dejar stock negativo con la salida de una transferencia y con la anulación de una transferencia o de un ajuste (ADR-048).
 
 El listado, el detalle **y el resumen** de jornadas se leen con cualquiera de `ABRIR_JORNADA`, `RENDIR_JORNADA` o `LIBERAR_UBICACION`, y alcanzan a todas las jornadas de la organización **(el valor de las diferencias, además con `VER_COSTOS`); `RENDIR_JORNADA` lee también, solo en lectura, los productos activos para agregar un sobrante, y devolver el remanente en el cierre exige además `TRANSFERIR_STOCK`. La entrega del día se hace con `ABRIR_JORNADA` (ADR-068)**; la jornada actual del usuario y del dispositivo de la sesión se lee con `ABRIR_JORNADA`. El listado de ubicaciones y el stock por ubicación (`TRANSFERIR_STOCK`) indican qué ubicaciones están tomadas, por quién y desde cuándo. Quien tiene `LIBERAR_UBICACION` puede además mover una ubicación tomada (STK-09); los permisos propios de cada operación se exigen igual (ADR-049).
+
+Los reportes (ventas por período, rendiciones, saldos de clientes y de proveedores, observaciones por vendedor y ajustes por motivo) se leen con `VER_REPORTES` y alcanzan a toda la organización. Con `VER_UTILIDAD` traen además el costo vendido y la utilidad (REP-04); con `VER_COSTOS`, el valor de las diferencias de rendición y de los ajustes. El resumen de una jornada se lee también desde los reportes con `VER_REPORTES`. Los saldos de clientes se leen solo con `VER_REPORTES`; los saldos de proveedores, con `VER_REPORTES` y además `GESTIONAR_PROVEEDORES`, `REGISTRAR_PAGO_PROVEEDOR` o `VER_UTILIDAD` (con la plantilla, ADM, GES y CON; el Supervisor no, por el criterio de ADR-033), y `/admin` oculta su pestaña a quien no cumple la regla. Desde los reportes, «Ver estado de cuenta» exige el permiso de la ficha y «Ver en Revisión», `REVISAR_OBSERVACIONES` (ADR-070).
 
 ## 20. Invariantes
 

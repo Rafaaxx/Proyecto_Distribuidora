@@ -289,6 +289,24 @@ PERMISOS_ESPERADOS_POR_RUTA: dict[tuple[str, str], frozenset[str]] = {
     ("GET", "/api/v1/ventas/precios"): frozenset({"VENDER"}),
     ("GET", "/api/v1/ventas/numeracion"): frozenset({"VENDER"}),
     ("GET", "/api/v1/ventas/versiones"): frozenset({"USAR_LISTA_ANTERIOR"}),
+    # Change 26, tarea 3.1 (`01` §19): el reporte de ventas exige `VER_REPORTES`; `VER_UTILIDAD`
+    # solo decide si trae costo y utilidad (no es un permiso de la ruta).
+    ("GET", "/api/v1/reportes/ventas"): frozenset({"VER_REPORTES"}),
+    # Change 26, tareas 4.1 a 6.1: rendiciones (y su detalle), observaciones por vendedor y ajustes
+    # por motivo exigen `VER_REPORTES`; `VER_COSTOS` solo decide si traen valores (no es un
+    # permiso de la ruta).
+    ("GET", "/api/v1/reportes/rendiciones"): frozenset({"VER_REPORTES"}),
+    ("GET", "/api/v1/reportes/rendiciones/{jornada_id}"): frozenset({"VER_REPORTES"}),
+    ("GET", "/api/v1/reportes/observaciones"): frozenset({"VER_REPORTES"}),
+    ("GET", "/api/v1/reportes/ajustes"): frozenset({"VER_REPORTES"}),
+    # Change 26, tarea 7.1 (D8 = B): los saldos de clientes exigen solo `VER_REPORTES`; los de
+    # proveedores, ademas, `GESTIONAR_PROVEEDORES`, `REGISTRAR_PAGO_PROVEEDOR` o `VER_UTILIDAD`.
+    # Este ratchet une los codigos y no distingue "y" de "o": la regla compuesta la prueban
+    # `reportes/test_reporte_saldos.py` (403 y 200 segun el rol).
+    ("GET", "/api/v1/reportes/saldos/clientes"): frozenset({"VER_REPORTES"}),
+    ("GET", "/api/v1/reportes/saldos/proveedores"): frozenset(
+        {"VER_REPORTES", "GESTIONAR_PROVEEDORES", "REGISTRAR_PAGO_PROVEEDOR", "VER_UTILIDAD"}
+    ),
 }
 
 

@@ -11,7 +11,12 @@ from decimal import Decimal
 
 import pytest
 
-from app.core.money import EntradaNoEsDineroExactoError, redondear_costo, redondear_importe
+from app.core.money import (
+    EntradaNoEsDineroExactoError,
+    redondear_cantidad,
+    redondear_costo,
+    redondear_importe,
+)
 
 
 class TestRedondearImporte:
@@ -59,3 +64,29 @@ class TestRedondearCosto:
     def test_rechaza_cadena_no_numerica(self) -> None:
         with pytest.raises(EntradaNoEsDineroExactoError):
             redondear_costo("no-es-un-numero")
+
+
+class TestRedondearCantidad:
+    """Cantidades decimales de los reportes (cajas equivalentes, TR-03, INV-03; change 26 D4)."""
+
+    def test_un_valor_exacto_de_un_decimal_queda_con_dos(self) -> None:
+        # 15 botellas de un vino x6 = 15/6 = 2,5 cajas.
+        assert str(redondear_cantidad(Decimal("2.5"))) == "2.50"
+
+    def test_el_medio_se_redondea_hacia_arriba(self) -> None:
+        # ROUND_HALF_UP: 0.125 -> 0.13 (el redondeo al par daria 0.12).
+        assert redondear_cantidad(Decimal("0.125")) == Decimal("0.13")
+
+    def test_tres_sextos_exactos_dan_medio(self) -> None:
+        # La suma exacta 3/6 se redondea una sola vez: 0.50, no 3 x 0.17 = 0.51.
+        assert str(redondear_cantidad(Decimal(3) / Decimal(6))) == "0.50"
+
+    def test_un_sexto_periodico_se_redondea_a_dos_decimales(self) -> None:
+        assert str(redondear_cantidad(Decimal(1) / Decimal(6))) == "0.17"
+
+    def test_acepta_una_cadena_numerica_exacta(self) -> None:
+        assert redondear_cantidad("1.5") == Decimal("1.50")
+
+    def test_rechaza_float_binario(self) -> None:
+        with pytest.raises(EntradaNoEsDineroExactoError):
+            redondear_cantidad(0.5)  # type: ignore[arg-type]

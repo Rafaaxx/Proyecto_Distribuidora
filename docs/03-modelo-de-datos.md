@@ -685,7 +685,7 @@ El resto (INV-01, INV-07, INV-08, INV-10 a INV-15, INV-17, INV-19 a INV-21) se g
 | Costo informado vigente | `costo_informado (organizacion_id, producto_id, vigencia_desde DESC)` |
 | Verificación de consistencia | Recorridos completos por producto y por cuenta, en tarea nocturna |
 
-Los reportes de utilidad por producto, cliente o proveedor se implementan como vistas (`vista_venta_utilidad`) que combinan `venta_linea` con `ajuste_iva_absorbido`. En la etapa 1 son vistas simples; si el volumen lo exige, pasan a vistas materializadas con actualización programada.
+Los reportes de utilidad por producto, cliente o proveedor (REP-06, etapa 2) se implementan como vistas (`vista_venta_utilidad`) que combinan `venta_linea` con `ajuste_iva_absorbido`; si el volumen lo exige, pasan a vistas materializadas con actualización programada. **Los reportes de la etapa 1 (change 26) consultan las tablas con SQLAlchemy Core, sin vistas ni migración; la utilidad del período suma `venta_linea` con el IVA absorbido en cero hasta que exista `ajuste_iva_absorbido` (ADR-070).**
 
 ## 17. Migraciones
 

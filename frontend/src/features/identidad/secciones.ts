@@ -75,6 +75,9 @@ export const SECCIONES: readonly SeccionAdmin[] = [
   { ruta: '/admin/stock', etiqueta: 'Stock', permiso: 'TRANSFERIR_STOCK' },
   // Change 25 (D5, D11): bandeja de observaciones y rechazadas; el menú le suma el total pendiente.
   { ruta: '/admin/revision', etiqueta: 'Revisión', permiso: 'REVISAR_OBSERVACIONES' },
+  // Change 26 (D11): seis reportes de solo lectura en una sola sección; la pestaña de saldos de proveedores
+  // tiene además su regla compuesta (`domain/reportes/permisos.ts`, D8 = B).
+  { ruta: '/admin/reportes', etiqueta: 'Reportes', permiso: 'VER_REPORTES' },
   { ruta: '/admin/importacion', etiqueta: 'Importación', permiso: 'IMPORTAR_DATOS' },
   {
     ruta: '/admin/configuracion',

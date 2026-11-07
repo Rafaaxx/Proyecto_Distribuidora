@@ -61,6 +61,24 @@ describe('ObservacionesScreen (tarea 13.2)', () => {
     expect(llamadas(apiFetchMock, 'GET', '/observaciones')).toHaveLength(0)
   })
 
+  it('llega filtrada por el vendedor de la URL (?usuario=), como la manda el reporte de observaciones por vendedor', async () => {
+    montarApi(apiFetchMock, [reglaDeLista()])
+    renderPantalla('GES', undefined, '/admin/revision?usuario=u-vend-1')
+
+    await screen.findAllByRole('row')
+    const pedidos = llamadas(apiFetchMock, 'GET', '/observaciones')
+    expect(pedidos.length).toBeGreaterThan(0)
+    expect(pedidos.every(({ url }) => url.searchParams.get('usuario_id') === 'u-vend-1')).toBe(true)
+  })
+
+  it('sin ?usuario= no filtra por vendedor', async () => {
+    montarApi(apiFetchMock, [reglaDeLista()])
+    renderPantalla()
+
+    await screen.findAllByRole('row')
+    expect(llamadas(apiFetchMock, 'GET', '/observaciones')[0]?.url.searchParams.has('usuario_id')).toBe(false)
+  })
+
   it('una operación con tres avisos es una sola fila, con etiqueta y detalle legible de cada aviso (SYN-07)', async () => {
     montarApi(apiFetchMock, [reglaDeLista()])
     renderPantalla()

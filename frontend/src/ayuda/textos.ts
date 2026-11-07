@@ -1102,6 +1102,61 @@ export const AYUDAS = {
       'Administración ya revisó esta operación rechazada. Si cargó la venta en la oficina, el teléfono deja de descontarla.',
     reglas: ['SYN-09', 'CRE-08', 'ADR-069'],
   },
+  // --- Reportes de la etapa 1 (change 26, ADR-070; textos aprobados el 2026-11-06, sin ejemplos) ---
+  'reportes.periodo': {
+    titulo: 'Período',
+    texto:
+      'Cada operación entra por su fecha en la zona horaria de la organización. Las ventas sin conexión entran en el día en que se hicieron, aunque se envíen después. Sin fechas elegidas se muestra el mes en curso.',
+    reglas: ['TR-04', 'REP-02'],
+  },
+  'reportes.anuladas': {
+    titulo: 'Ventas anuladas',
+    texto:
+      'Una venta anulada no suma en los totales del período en que se hizo, aunque se haya anulado después. Se muestran aparte, con la fecha y el motivo de la anulación.',
+    reglas: ['REP-02'],
+  },
+  'reportes.cajasEquivalentes': {
+    titulo: 'Cajas equivalentes',
+    texto:
+      'Las unidades vendidas divididas por las unidades de la presentación de referencia que tenía el producto en cada venta. Permiten sumar productos y presentaciones distintas.',
+    reglas: ['REP-03', 'REP-05'],
+  },
+  'reportes.utilidad': {
+    titulo: 'Utilidad',
+    texto:
+      'Neto vendido menos el costo congelado de cada línea al confirmar la venta. No cambia aunque después cambien los costos o los precios. Solo la ve quien tiene permiso para ver la utilidad.',
+    reglas: ['REP-04', 'REP-05'],
+  },
+  'reportes.lineasSinCosto': {
+    titulo: 'Líneas sin costo',
+    texto:
+      'Ventas hechas sin conexión de productos que todavía no tenían costo promedio. Se informan aparte porque no tienen costo para calcular su utilidad.',
+    reglas: ['REP-04', 'VTA-05', 'ADR-054'],
+  },
+  'reportes.rendiciones': {
+    titulo: 'Rendiciones',
+    texto:
+      'Las jornadas que empezaron en el período, con lo vendido, lo anulado y lo cobrado en cada una, y las diferencias del conteo. Lo que llegó después de la rendición se muestra aparte. El valor de las diferencias lo ve quien tiene permiso para ver costos.',
+    reglas: ['RUT-07'],
+  },
+  'reportes.saldos': {
+    titulo: 'Saldos',
+    texto:
+      'Lo que cada cliente nos debe o lo que le debemos a cada proveedor, hoy. Un saldo «a favor» es dinero a favor de la otra parte en el caso del cliente y a nuestro favor en el del proveedor.',
+    reglas: ['CC-04'],
+  },
+  'reportes.observacionesPorVendedor': {
+    titulo: 'Observaciones por vendedor',
+    texto:
+      'Cuántas ventas hizo cada vendedor sin conexión y cuántos avisos y operaciones rechazadas dejaron. Sirve para ver quién opera seguido sin señal y con qué resultados.',
+    reglas: ['SYN-07', 'SYN-06'],
+  },
+  'reportes.ajustesPorMotivo': {
+    titulo: 'Ajustes por motivo',
+    texto:
+      'Las entradas y salidas de stock que se cargaron como ajuste, agrupadas por motivo, y las diferencias del conteo de las rendiciones. Los ajustes anulados no suman.',
+    reglas: ['STK-03', 'RUT-06'],
+  },
 } as const satisfies Record<string, EntradaDeAyuda>
 
 export type ClaveDeAyuda = keyof typeof AYUDAS

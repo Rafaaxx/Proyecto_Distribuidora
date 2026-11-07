@@ -6,7 +6,8 @@
 y nunca debe usarse para cuantizar dinero.
 
 Ninguna otra parte del sistema redondea un importe, costo o porcentaje por su
-cuenta: siempre pasa por `redondear_importe` o `redondear_costo`.
+cuenta: siempre pasa por `redondear_importe`, `redondear_costo` o, para cantidades
+decimales de los reportes (cajas equivalentes), `redondear_cantidad`.
 """
 
 from __future__ import annotations
@@ -75,3 +76,14 @@ def redondear_costo(valor: Decimal | str) -> Decimal:
     """
     decimal_exacto = _a_decimal_exacto(valor)
     return decimal_exacto.quantize(_SEIS_DECIMALES, rounding=ROUND_HALF_UP)
+
+
+def redondear_cantidad(valor: Decimal | str) -> Decimal:
+    """Cuantiza una cantidad decimal exacta (cajas equivalentes de los reportes, TR-03) a 2
+    decimales con `ROUND_HALF_UP`.
+
+    Se aplica una sola vez, sobre la suma exacta, nunca sobre sumandos ya redondeados
+    (`design.md` D4 del change 26): `3/6` da `0.50`, no `3 x 0.17 = 0.51`.
+    """
+    decimal_exacto = _a_decimal_exacto(valor)
+    return decimal_exacto.quantize(_DOS_DECIMALES, rounding=ROUND_HALF_UP)

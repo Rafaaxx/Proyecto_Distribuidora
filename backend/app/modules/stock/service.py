@@ -28,6 +28,7 @@ from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -133,6 +134,9 @@ from app.modules.stock.models import (
     Ubicacion,
 )
 
+if TYPE_CHECKING:  # `queries` importa este módulo: el tipo solo se usa en anotaciones
+    from app.modules.stock.queries import ResumenDeJornada
+
 __all__ = [
     "LineaContada",
     "ResultadoDeRendicion",
@@ -156,6 +160,7 @@ __all__ = [
     "CobranzasDeJornada",
     "TotalDeMedio",
     "TotalDeVentas",
+    "ResumenDeJornada",
     "VentasDeJornada",
     "ajustar",
     "anular_ajuste",
@@ -171,6 +176,7 @@ __all__ = [
     "lineas_de_ajuste",
     "listar_ubicaciones",
     "modificar_ubicacion",
+    "obtener_resumen_de_jornada",
     "obtener_saldo",
     "obtener_ubicacion",
     "producto_tiene_stock",
@@ -1976,6 +1982,20 @@ def cobranzas_de_jornada(
     if _LECTOR_DE_COBRANZAS is None:
         raise RuntimeError("`cobranzas` no registró su lector de cobranzas de jornada.")
     return _LECTOR_DE_COBRANZAS(organizacion_id, sesion, jornada_id, corte)
+
+
+def obtener_resumen_de_jornada(
+    organizacion_id: UUID, sesion: Session, *, jornada_id: UUID, con_costos: bool
+) -> ResumenDeJornada:
+    """El resumen de RUT-07 de una jornada (change 24), para quien lo muestra fuera de `stock`
+    (los reportes del change 26, `design.md` D7): una sola implementación de la regla. Delega en
+    `queries.obtener_resumen_de_jornada` sin cambiar su comportamiento; una jornada ajena o
+    inexistente es `RecursoNoEncontradoError` (404, INV-21)."""
+    from app.modules.stock import queries  # noqa: PLC0415  (`queries` importa este módulo)
+
+    return queries.obtener_resumen_de_jornada(
+        organizacion_id, sesion, jornada_id=jornada_id, con_costos=con_costos
+    )
 
 
 # --- Puerto de los rechazos pendientes de la jornada (change 25, D9 = B) ---------------------

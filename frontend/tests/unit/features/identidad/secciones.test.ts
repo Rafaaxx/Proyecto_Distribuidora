@@ -53,3 +53,23 @@ describe('sección "Configuración" del menú (change 11b, D7, tarea 7.4)', () =
     ).not.toContain('Configuración')
   })
 })
+
+describe('sección "Reportes" del menú (change 26, D11, tarea 10.1; 01 §19, ADR-027)', () => {
+  it('está declarada con /admin/reportes, después de «Revisión»', () => {
+    const etiquetas = SECCIONES.map((s) => s.etiqueta)
+
+    expect(SECCIONES.find((s) => s.ruta === '/admin/reportes')?.etiqueta).toBe('Reportes')
+    expect(etiquetas.indexOf('Reportes')).toBe(etiquetas.indexOf('Revisión') + 1)
+  })
+
+  it('se ofrece con VER_REPORTES y no sin él', () => {
+    expect(seccionesPermitidas(conPermisos('VER_REPORTES')).map((s) => s.etiqueta)).toContain('Reportes')
+    expect(seccionesPermitidas(conPermisos('VER_UTILIDAD', 'VENDER')).map((s) => s.etiqueta)).not.toContain('Reportes')
+  })
+
+  it('quien solo tiene VER_REPORTES (Consulta/Dirección) aterriza en Reportes', () => {
+    expect(primeraSeccionPermitida(conPermisos('VER_REPORTES', 'VER_UTILIDAD', 'VER_AUDITORIA'))?.ruta).toBe(
+      '/admin/reportes',
+    )
+  })
+})

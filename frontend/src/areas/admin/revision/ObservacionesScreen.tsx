@@ -42,7 +42,7 @@ const ESTADOS: readonly { valor: NonNullable<FiltrosDeObservaciones['estado']>; 
  * fila por operación observada con su resumen y sus avisos (etiqueta y detalle legible), casilla por aviso
  * pendiente y por operación, «Resolver {N} avisos» con comentario y confirmación, y «Ver» a la pantalla de la
  * operación si el usuario la puede abrir. Resolver no modifica la operación (SYN-08). La jornada y el código
- * pueden llegar por la URL (`?jornada=`, `?codigo=`), por ejemplo desde el aviso del inicio.
+ * pueden llegar por la URL (`?jornada=`, `?codigo=`, `?usuario=`), por ejemplo desde el aviso del inicio.
  */
 export function ObservacionesScreen() {
   const [parametros, setParametros] = useSearchParams()
@@ -51,6 +51,8 @@ export function ObservacionesScreen() {
   const [local, setLocal] = useState<FiltrosDeObservaciones>(() => ({
     estado: 'PENDIENTE',
     codigo: parametros.get('codigo') ?? undefined,
+    // Change 26: el reporte de observaciones por vendedor llega con `?usuario=` (D9).
+    usuarioId: parametros.get('usuario') ?? undefined,
   }))
   const filtros: FiltrosDeObservaciones = { ...local, jornadaId }
   const observaciones = useObservaciones(filtros)

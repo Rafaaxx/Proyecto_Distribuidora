@@ -2191,6 +2191,167 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reportes/ventas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reporte De Ventas
+         * @description Ventas del período (REP-01 a REP-05): resumen, por día y por vendedor de las `CONFIRMADA`,
+         *     y las `ANULADA` aparte. «Por día» (la fecha más reciente primero), «Por producto» y las
+         *     anuladas (la más reciente primero) viajan en páginas de 50, cada una por su lado (D14); lo
+         *     demás, y la cantidad y el total de anuladas, son los de todo el período.
+         *     Costo vendido y utilidad solo con `VER_UTILIDAD` (`null` sin él).
+         *     Sin fechas, el mes en curso; un rango invertido es 422 `RANGO_DE_FECHAS_INVALIDO` y más de
+         *     366 días, 422 `PERIODO_DEMASIADO_LARGO`.
+         */
+        get: operations["reporte_de_ventas_api_v1_reportes_ventas_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/rendiciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reporte De Rendiciones
+         * @description Rendiciones (RUT-07): las jornadas abiertas en el período (la más reciente primero, en
+         *     páginas de 50, D14), de cualquier estado, con lo
+         *     vendido, anulado y cobrado, lo registrado después de la rendición aparte y las diferencias del
+         *     conteo («sin conteo» si no hay rendición), y los totales por vendedor. El valor de las
+         *     diferencias solo con `VER_COSTOS` (`null` sin él).
+         */
+        get: operations["reporte_de_rendiciones_api_v1_reportes_rendiciones_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/rendiciones/{jornada_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Detalle De Rendicion
+         * @description El resumen de RUT-07 de una jornada, con la misma implementación que el detalle de
+         *     jornadas (`stock`) pero con `VER_REPORTES`. El valor de las diferencias (string) solo con
+         *     `VER_COSTOS`. 404 si la jornada es ajena o no existe.
+         */
+        get: operations["detalle_de_rendicion_api_v1_reportes_rendiciones__jornada_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/observaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reporte De Observaciones
+         * @description Observaciones por vendedor (SYN-06, SYN-07): ventas sin conexión, avisos por código (total
+         *     y pendientes), operaciones rechazadas y excesos de crédito detectados al sincronizar, por el
+         *     momento del comando. Solo cantidades: el detalle sigue en «Revisión».
+         */
+        get: operations["reporte_de_observaciones_api_v1_reportes_observaciones_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/ajustes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reporte De Ajustes
+         * @description Ajustes por motivo (STK-03, RUT-06): los ajustes confirmados agrupados por motivo y
+         *     producto, las diferencias de rendición en una fila aparte y la cantidad de ajustes anulados
+         *     (no suman). El valor de cada sentido y las unidades sin costo solo con `VER_COSTOS` (`null`
+         *     sin él).
+         */
+        get: operations["reporte_de_ajustes_api_v1_reportes_ajustes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/saldos/clientes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reporte De Saldos De Clientes
+         * @description Saldos de clientes (CC-04, INV-13): el saldo actual de `saldo_cuenta` (cero sin movimientos)
+         *     con el límite y el disponible, ordenados por saldo descendente, y los totales adeudado y a
+         *     favor de lo filtrado. Solo `VER_REPORTES`.
+         */
+        get: operations["reporte_de_saldos_de_clientes_api_v1_reportes_saldos_clientes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/saldos/proveedores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reporte De Saldos De Proveedores
+         * @description Saldos de proveedores (CC-04, INV-13; D8 = B): `VER_REPORTES` y además
+         *     `GESTIONAR_PROVEEDORES`, `REGISTRAR_PAGO_PROVEEDOR` o `VER_UTILIDAD`; sin la regla completa,
+         *     403 `PERMISO_REQUERIDO`. Saldo actual, ordenado descendente, con los totales de lo filtrado.
+         */
+        get: operations["reporte_de_saldos_de_proveedores_api_v1_reportes_saldos_proveedores_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/stock/ubicaciones": {
         parameters: {
             query?: never;
@@ -3323,6 +3484,17 @@ export interface components {
             anulada_por_id: string;
         };
         /**
+         * AnuladasResponse
+         * @description `cantidad` y `total` son los de todo el período; `ventas` es la página pedida.
+         */
+        AnuladasResponse: {
+            /** Cantidad */
+            cantidad: number;
+            /** Total */
+            total: string;
+            ventas: components["schemas"]["VentasAnuladasPaginaResponse"];
+        };
+        /**
          * AutorizadorBootstrap
          * @description La derivación PBKDF2 del PIN de un autorizador (`02` §12.4, ADR-011): nunca el PIN.
          */
@@ -3359,6 +3531,15 @@ export interface components {
             puede_autorizar_descuento: boolean;
             /** Puede Superar Credito */
             puede_superar_credito: boolean;
+        };
+        /** AvisoPorCodigoResponse */
+        AvisoPorCodigoResponse: {
+            /** Codigo */
+            codigo: string;
+            /** Total */
+            total: number;
+            /** Pendientes */
+            pendientes: number;
         };
         /** Body_importar_api_v1_importaciones__tipo__post */
         Body_importar_api_v1_importaciones__tipo__post: {
@@ -3499,6 +3680,30 @@ export interface components {
             /** Transferencia Id */
             transferencia_id: string | null;
         };
+        /** CifrasDeVentasResponse */
+        CifrasDeVentasResponse: {
+            /** Cantidad Ventas */
+            cantidad_ventas: number;
+            /** Cajas Equivalentes */
+            cajas_equivalentes: string;
+            /** Unidades Base */
+            unidades_base: number;
+            /** Importe Bruto */
+            importe_bruto: string;
+            /** Importe Descuento */
+            importe_descuento: string;
+            /** Importe Neto */
+            importe_neto: string;
+            /** Importe Iva */
+            importe_iva: string;
+            /** Total */
+            total: string;
+            /** Costo Vendido */
+            costo_vendido: string | null;
+            /** Utilidad */
+            utilidad: string | null;
+            sin_costo: components["schemas"]["SinCostoResponse"] | null;
+        };
         /** ClienteBootstrap */
         ClienteBootstrap: {
             /**
@@ -3531,6 +3736,36 @@ export interface components {
             /** Saldo */
             saldo: string;
             credito: components["schemas"]["CreditoBootstrap"];
+        };
+        /**
+         * ClienteConSaldoResponse
+         * @description Un cliente con su saldo actual; `disponible` es el límite menos el saldo (`null` sin
+         *     límite).
+         */
+        ClienteConSaldoResponse: {
+            /**
+             * Cliente Id
+             * Format: uuid
+             */
+            cliente_id: string;
+            /** Codigo */
+            codigo: string | null;
+            /** Nombre */
+            nombre: string;
+            /** Razon Social */
+            razon_social: string | null;
+            /** Vendedor Id */
+            vendedor_id: string | null;
+            /** Vendedor Nombre */
+            vendedor_nombre: string | null;
+            /** Estado */
+            estado: string;
+            /** Limite Credito */
+            limite_credito: string | null;
+            /** Saldo */
+            saldo: string;
+            /** Disponible */
+            disponible: string | null;
         };
         /**
          * ClienteCrearRequest
@@ -3745,6 +3980,19 @@ export interface components {
             cliente_ids: string[];
             /** Cambiados */
             cambiados: number;
+        };
+        /** ClientesConSaldoPaginaResponse */
+        ClientesConSaldoPaginaResponse: {
+            /** Pagina */
+            pagina: number;
+            /** Tamano */
+            tamano: number;
+            /** Total Filas */
+            total_filas: number;
+            /** Paginas */
+            paginas: number;
+            /** Filas */
+            filas: components["schemas"]["ClienteConSaldoResponse"][];
         };
         /** CobranzaAnulacionResponse */
         CobranzaAnulacionResponse: {
@@ -3993,6 +4241,15 @@ export interface components {
             /** Jornada Id */
             jornada_id: string | null;
         };
+        /** CobranzasDeResumenResponse */
+        CobranzasDeResumenResponse: {
+            /** Cantidad */
+            cantidad: number;
+            /** Total */
+            total: string;
+            /** Por Medio */
+            por_medio: components["schemas"]["MedioDeResumenResponse"][];
+        };
         /** CobranzasDelResumenResponse */
         CobranzasDelResumenResponse: {
             /** Cantidad */
@@ -4001,6 +4258,15 @@ export interface components {
             total: string;
             /** Por Medio */
             por_medio: components["schemas"]["TotalDeMedioResponse"][];
+        };
+        /** CobranzasResponse */
+        CobranzasResponse: {
+            /** Cantidad */
+            cantidad: number;
+            /** Total */
+            total: string;
+            /** Por Medio */
+            por_medio: components["schemas"]["MedioCobradoResponse"][];
         };
         /** ComposicionRolRequest */
         ComposicionRolRequest: {
@@ -4436,6 +4702,13 @@ export interface components {
             /** Habilitado */
             habilitado: boolean;
             cliente: components["schemas"]["ClienteResponse"] | null;
+        };
+        /** ContadorResponse */
+        ContadorResponse: {
+            /** Total */
+            total: number;
+            /** Pendientes */
+            pendientes: number;
         };
         /**
          * ContextoDeVentaResponse
@@ -5074,6 +5347,24 @@ export interface components {
             costo_base_vigente: string | null;
         };
         /**
+         * DiferenciasDeRendicionResponse
+         * @description La fila «Diferencias de rendición» (RUT-06): sin motivo, con las mismas columnas.
+         */
+        DiferenciasDeRendicionResponse: {
+            /** Entradas */
+            entradas: number;
+            /** Salidas */
+            salidas: number;
+            /** Valor De Entradas */
+            valor_de_entradas: string | null;
+            /** Valor De Salidas */
+            valor_de_salidas: string | null;
+            /** Unidades Sin Costo */
+            unidades_sin_costo: number | null;
+            /** Productos */
+            productos: components["schemas"]["ProductoAjustadoResponse"][];
+        };
+        /**
          * DineroDeLaJornadaResponse
          * @description Ventas vigentes, ventas anuladas, cobranzas confirmadas por medio de pago y cobranzas
          *     anuladas (COB-05); importes como string (INV-03).
@@ -5083,6 +5374,22 @@ export interface components {
             anuladas: components["schemas"]["TotalDelResumenResponse"];
             cobranzas: components["schemas"]["CobranzasDelResumenResponse"];
             cobranzas_anuladas: components["schemas"]["CobranzasDelResumenResponse"];
+        };
+        /** DineroDeResumenResponse */
+        DineroDeResumenResponse: {
+            ventas: components["schemas"]["TotalDeResumenResponse"];
+            anuladas: components["schemas"]["TotalDeResumenResponse"];
+            cobranzas: components["schemas"]["CobranzasDeResumenResponse"];
+            cobranzas_anuladas: components["schemas"]["CobranzasDeResumenResponse"];
+        };
+        /**
+         * DineroResponse
+         * @description Ventas vigentes, anuladas y cobranzas confirmadas por medio de pago (RUT-07).
+         */
+        DineroResponse: {
+            ventas: components["schemas"]["TotalResponse"];
+            anuladas: components["schemas"]["TotalResponse"];
+            cobranzas: components["schemas"]["CobranzasResponse"];
         };
         /** DispositivoResponse */
         DispositivoResponse: {
@@ -5289,6 +5596,60 @@ export interface components {
         JornadaCerrarRequest: {
             devolucion?: components["schemas"]["DevolucionRequest"] | null;
         };
+        /**
+         * JornadaDeRendicionResponse
+         * @description Una jornada del período. `despues_de_la_rendicion` es nulo mientras no se rindió;
+         *     `faltantes`, `sobrantes` y `valor_de_diferencias` son nulos «sin conteo» y el valor, además,
+         *     sin `VER_COSTOS`.
+         */
+        JornadaDeRendicionResponse: {
+            /**
+             * Jornada Id
+             * Format: uuid
+             */
+            jornada_id: string;
+            /**
+             * Vendedor Id
+             * Format: uuid
+             */
+            vendedor_id: string;
+            /** Vendedor Nombre */
+            vendedor_nombre: string;
+            /**
+             * Ubicacion Id
+             * Format: uuid
+             */
+            ubicacion_id: string;
+            /** Ubicacion Nombre */
+            ubicacion_nombre: string;
+            /** Estado */
+            estado: string;
+            /** En Curso */
+            en_curso: boolean;
+            /**
+             * Abierta En
+             * Format: date-time
+             */
+            abierta_en: string;
+            /** Rendida En */
+            rendida_en: string | null;
+            /** Cerrada En */
+            cerrada_en: string | null;
+            /** Liberada En */
+            liberada_en: string | null;
+            /** Con Conteo */
+            con_conteo: boolean;
+            ventas: components["schemas"]["TotalResponse"];
+            anuladas: components["schemas"]["TotalResponse"];
+            cobranzas: components["schemas"]["CobranzasResponse"];
+            despues_de_la_rendicion: components["schemas"]["DineroResponse"] | null;
+            /** Faltantes */
+            faltantes: number | null;
+            /** Sobrantes */
+            sobrantes: number | null;
+            /** Valor De Diferencias */
+            valor_de_diferencias: string | null;
+        };
         /** JornadaDelListadoResponse */
         JornadaDelListadoResponse: {
             /**
@@ -5398,6 +5759,19 @@ export interface components {
             motivo_liberacion_id: string | null;
             /** Observacion Liberacion */
             observacion_liberacion: string | null;
+        };
+        /** JornadasPaginaResponse */
+        JornadasPaginaResponse: {
+            /** Pagina */
+            pagina: number;
+            /** Tamano */
+            tamano: number;
+            /** Total Filas */
+            total_filas: number;
+            /** Paginas */
+            paginas: number;
+            /** Filas */
+            filas: components["schemas"]["JornadaDeRendicionResponse"][];
         };
         /** KardexResponse */
         KardexResponse: {
@@ -5614,6 +5988,40 @@ export interface components {
             unidades_referencia: number | null;
             /** Nombre Referencia */
             nombre_referencia: string | null;
+        };
+        /** LineaDelResumenDeReporteResponse */
+        LineaDelResumenDeReporteResponse: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Producto Codigo */
+            producto_codigo: string | null;
+            /** Producto Nombre */
+            producto_nombre: string | null;
+            /** Unidades Referencia */
+            unidades_referencia: number | null;
+            /** Nombre Referencia */
+            nombre_referencia: string | null;
+            /** Al Abrir */
+            al_abrir: number;
+            /** Ingresos */
+            ingresos: number;
+            /** Ventas */
+            ventas: number;
+            /** Anulaciones */
+            anulaciones: number;
+            /** Otros */
+            otros: number;
+            /** Esperado */
+            esperado: number;
+            /** Contado */
+            contado: number | null;
+            /** Diferencia */
+            diferencia: number | null;
+            /** Valor Diferencia */
+            valor_diferencia?: string | null;
         };
         /**
          * LineaDelResumenResponse
@@ -5959,6 +6367,30 @@ export interface components {
              */
             actualizado_en: string;
         };
+        /** MedioCobradoResponse */
+        MedioCobradoResponse: {
+            /**
+             * Medio Pago Id
+             * Format: uuid
+             */
+            medio_pago_id: string;
+            /** Nombre */
+            nombre: string | null;
+            /** Total */
+            total: string;
+        };
+        /** MedioDeResumenResponse */
+        MedioDeResumenResponse: {
+            /**
+             * Medio Pago Id
+             * Format: uuid
+             */
+            medio_pago_id: string;
+            /** Nombre */
+            nombre: string | null;
+            /** Total */
+            total: string;
+        };
         /**
          * MedioPagoAdminResponse
          * @description Un medio de pago activo o no, para la administración (change 17b, D2, D6).
@@ -6140,6 +6572,30 @@ export interface components {
             ambito: string;
             /** Nombre */
             nombre: string;
+        };
+        /** MotivoDeAjusteResponse */
+        MotivoDeAjusteResponse: {
+            /** Entradas */
+            entradas: number;
+            /** Salidas */
+            salidas: number;
+            /** Valor De Entradas */
+            valor_de_entradas: string | null;
+            /** Valor De Salidas */
+            valor_de_salidas: string | null;
+            /** Unidades Sin Costo */
+            unidades_sin_costo: number | null;
+            /**
+             * Motivo Id
+             * Format: uuid
+             */
+            motivo_id: string;
+            /** Motivo Nombre */
+            motivo_nombre: string;
+            /** Ajustes */
+            ajustes: number;
+            /** Productos */
+            productos: components["schemas"]["ProductoAjustadoResponse"][];
         };
         /**
          * MotivoModificarRequest
@@ -6464,6 +6920,28 @@ export interface components {
             detalle: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * ObservacionesDeVendedorResponse
+         * @description Solo cantidades: el detalle de cada aviso sigue en «Revisión» (`design.md` D9).
+         *     `excesos_de_credito_detectados` es el aviso `EXCESO_CREDITO_DETECTADO_SYNC` (CRE-09), que
+         *     también figura en `avisos_por_codigo`.
+         */
+        ObservacionesDeVendedorResponse: {
+            /**
+             * Vendedor Id
+             * Format: uuid
+             */
+            vendedor_id: string;
+            /** Vendedor Nombre */
+            vendedor_nombre: string;
+            /** Ventas Sin Conexion */
+            ventas_sin_conexion: number;
+            avisos: components["schemas"]["ContadorResponse"];
+            /** Avisos Por Codigo */
+            avisos_por_codigo: components["schemas"]["AvisoPorCodigoResponse"][];
+            rechazadas: components["schemas"]["ContadorResponse"];
+            excesos_de_credito_detectados: components["schemas"]["ContadorResponse"];
         };
         /** OperacionObservadaResponse */
         OperacionObservadaResponse: {
@@ -6906,6 +7384,21 @@ export interface components {
             /** Compra Id */
             compra_id: string | null;
         };
+        /** PeriodoResponse */
+        PeriodoResponse: {
+            /**
+             * Desde
+             * Format: date
+             */
+            desde: string;
+            /**
+             * Hasta
+             * Format: date
+             */
+            hasta: string;
+            /** Zona Horaria */
+            zona_horaria: string;
+        };
         /** PermisoCatalogoResponse */
         PermisoCatalogoResponse: {
             /** Codigo */
@@ -7199,6 +7692,47 @@ export interface components {
              */
             actualizado_en: string;
         };
+        /**
+         * PresentacionVendidaResponse
+         * @description El detalle de un producto por presentación vendida (REP-03, VTA-02).
+         */
+        PresentacionVendidaResponse: {
+            /**
+             * Presentacion Id
+             * Format: uuid
+             */
+            presentacion_id: string;
+            /** Nombre */
+            nombre: string;
+            /** Unidades Presentacion */
+            unidades_presentacion: number;
+            /** Cantidad */
+            cantidad: number;
+            /** Unidades Base */
+            unidades_base: number;
+        };
+        /** ProductoAjustadoResponse */
+        ProductoAjustadoResponse: {
+            /** Entradas */
+            entradas: number;
+            /** Salidas */
+            salidas: number;
+            /** Valor De Entradas */
+            valor_de_entradas: string | null;
+            /** Valor De Salidas */
+            valor_de_salidas: string | null;
+            /** Unidades Sin Costo */
+            unidades_sin_costo: number | null;
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Codigo */
+            codigo: string;
+            /** Nombre */
+            nombre: string;
+        };
         /** ProductoBootstrap */
         ProductoBootstrap: {
             /**
@@ -7435,6 +7969,20 @@ export interface components {
             /** Causa */
             causa: string;
         };
+        /** ProveedorConSaldoResponse */
+        ProveedorConSaldoResponse: {
+            /**
+             * Proveedor Id
+             * Format: uuid
+             */
+            proveedor_id: string;
+            /** Nombre */
+            nombre: string;
+            /** Estado */
+            estado: string;
+            /** Saldo */
+            saldo: string;
+        };
         /** ProveedorCrearRequest */
         ProveedorCrearRequest: {
             /** Nombre */
@@ -7510,6 +8058,19 @@ export interface components {
              * Format: date-time
              */
             actualizado_en: string;
+        };
+        /** ProveedoresConSaldoPaginaResponse */
+        ProveedoresConSaldoPaginaResponse: {
+            /** Pagina */
+            pagina: number;
+            /** Tamano */
+            tamano: number;
+            /** Total Filas */
+            total_filas: number;
+            /** Paginas */
+            paginas: number;
+            /** Filas */
+            filas: components["schemas"]["ProveedorConSaldoResponse"][];
         };
         /**
          * PublicarRequest
@@ -8011,6 +8572,67 @@ export interface components {
             /** Lineas */
             lineas: components["schemas"]["LineaDeRendicionResponse"][];
         };
+        /** ReporteDeAjustesResponse */
+        ReporteDeAjustesResponse: {
+            periodo: components["schemas"]["PeriodoResponse"];
+            /** Ve Costos */
+            ve_costos: boolean;
+            /** Motivos */
+            motivos: components["schemas"]["MotivoDeAjusteResponse"][];
+            diferencias_de_rendicion: components["schemas"]["DiferenciasDeRendicionResponse"];
+            /** Ajustes Anulados */
+            ajustes_anulados: number;
+        };
+        /** ReporteDeObservacionesResponse */
+        ReporteDeObservacionesResponse: {
+            periodo: components["schemas"]["PeriodoResponse"];
+            /** Vendedores */
+            vendedores: components["schemas"]["ObservacionesDeVendedorResponse"][];
+        };
+        /** ReporteDeRendicionesResponse */
+        ReporteDeRendicionesResponse: {
+            periodo: components["schemas"]["PeriodoResponse"];
+            /** Ve Costos */
+            ve_costos: boolean;
+            jornadas: components["schemas"]["JornadasPaginaResponse"];
+            /** Por Vendedor */
+            por_vendedor: components["schemas"]["VendedorDeRendicionResponse"][];
+        };
+        /**
+         * ReporteDeSaldosDeClientesResponse
+         * @description `total_adeudado` suma los saldos positivos y `total_a_favor` los negativos (negativo), de
+         *     todo lo filtrado y no de la página. `vendedores` son todos los que tienen clientes asignados,
+         *     por nombre, sin importar la página ni los filtros.
+         */
+        ReporteDeSaldosDeClientesResponse: {
+            clientes: components["schemas"]["ClientesConSaldoPaginaResponse"];
+            /** Vendedores */
+            vendedores: components["schemas"]["VendedorConClientesResponse"][];
+            /** Total Adeudado */
+            total_adeudado: string;
+            /** Total A Favor */
+            total_a_favor: string;
+        };
+        /** ReporteDeSaldosDeProveedoresResponse */
+        ReporteDeSaldosDeProveedoresResponse: {
+            proveedores: components["schemas"]["ProveedoresConSaldoPaginaResponse"];
+            /** Total Adeudado */
+            total_adeudado: string;
+            /** Total A Favor */
+            total_a_favor: string;
+        };
+        /** ReporteDeVentasResponse */
+        ReporteDeVentasResponse: {
+            periodo: components["schemas"]["PeriodoResponse"];
+            /** Ve Utilidad */
+            ve_utilidad: boolean;
+            resumen: components["schemas"]["CifrasDeVentasResponse"];
+            por_dia: components["schemas"]["VentasPorDiaPaginaResponse"];
+            /** Por Vendedor */
+            por_vendedor: components["schemas"]["VentasPorVendedorResponse"][];
+            por_producto: components["schemas"]["VentasPorProductoPaginaResponse"];
+            anuladas: components["schemas"]["AnuladasResponse"];
+        };
         /** ResolucionDeRechazoResponse */
         ResolucionDeRechazoResponse: {
             /**
@@ -8113,6 +8735,26 @@ export interface components {
             lineas: components["schemas"]["LineaResumidaResponse"][];
             /** Medios */
             medios: components["schemas"]["MedioResumidoResponse"][];
+        };
+        /** ResumenDeJornadaDeReporteResponse */
+        ResumenDeJornadaDeReporteResponse: {
+            /**
+             * Jornada Id
+             * Format: uuid
+             */
+            jornada_id: string;
+            /** Estado */
+            estado: string;
+            /** Con Conteo */
+            con_conteo: boolean;
+            /** Rendida En */
+            rendida_en: string | null;
+            /** Lineas */
+            lineas: components["schemas"]["LineaDelResumenDeReporteResponse"][];
+            dinero: components["schemas"]["DineroDeResumenResponse"];
+            despues_de_la_rendicion: components["schemas"]["DineroDeResumenResponse"] | null;
+            /** Valor De Diferencias */
+            valor_de_diferencias?: string | null;
         };
         /**
          * ResumenDeJornadaResponse
@@ -8377,6 +9019,16 @@ export interface components {
             /** Secuencia Procesada */
             secuencia_procesada: number | null;
         };
+        /**
+         * SinCostoResponse
+         * @description Las líneas vendidas sin costo (ADR-054): fuera del costo vendido y de la utilidad.
+         */
+        SinCostoResponse: {
+            /** Lineas */
+            lineas: number;
+            /** Importe Neto */
+            importe_neto: string;
+        };
         /** StockBootstrap */
         StockBootstrap: {
             /**
@@ -8481,8 +9133,22 @@ export interface components {
             /** Total */
             total: string;
         };
+        /** TotalDeResumenResponse */
+        TotalDeResumenResponse: {
+            /** Cantidad */
+            cantidad: number;
+            /** Total */
+            total: string;
+        };
         /** TotalDelResumenResponse */
         TotalDelResumenResponse: {
+            /** Cantidad */
+            cantidad: number;
+            /** Total */
+            total: string;
+        };
+        /** TotalResponse */
+        TotalResponse: {
             /** Cantidad */
             cantidad: number;
             /** Total */
@@ -8852,6 +9518,37 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /** VendedorConClientesResponse */
+        VendedorConClientesResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
+        };
+        /** VendedorDeRendicionResponse */
+        VendedorDeRendicionResponse: {
+            /**
+             * Vendedor Id
+             * Format: uuid
+             */
+            vendedor_id: string;
+            /** Vendedor Nombre */
+            vendedor_nombre: string;
+            /** Jornadas */
+            jornadas: number;
+            ventas: components["schemas"]["TotalResponse"];
+            anuladas: components["schemas"]["TotalResponse"];
+            cobranzas: components["schemas"]["CobranzasResponse"];
+            /** Faltantes */
+            faltantes: number;
+            /** Sobrantes */
+            sobrantes: number;
+            /** Valor De Diferencias */
+            valor_de_diferencias: string | null;
+        };
         /**
          * VendedorElegibleResponse
          * @description Un vendedor asignable (change 20b, D15): solo identificador y nombre.
@@ -8892,6 +9589,43 @@ export interface components {
             motivo_nombre: string | null;
             /** Observacion */
             observacion: string | null;
+            /** Devuelve Dinero */
+            devuelve_dinero: boolean | null;
+        };
+        /** VentaAnuladaResponse */
+        VentaAnuladaResponse: {
+            /**
+             * Venta Id
+             * Format: uuid
+             */
+            venta_id: string;
+            /** Numero */
+            numero: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * Cliente Id
+             * Format: uuid
+             */
+            cliente_id: string;
+            /** Cliente Nombre */
+            cliente_nombre: string;
+            /**
+             * Vendedor Id
+             * Format: uuid
+             */
+            vendedor_id: string;
+            /** Vendedor Nombre */
+            vendedor_nombre: string;
+            /** Total */
+            total: string;
+            /** Anulada En */
+            anulada_en: string | null;
+            /** Motivo */
+            motivo: string | null;
             /** Devuelve Dinero */
             devuelve_dinero: boolean | null;
         };
@@ -9358,6 +10092,128 @@ export interface components {
             estado_facturacion: string;
             /** Modo Confirmacion */
             modo_confirmacion: string;
+        };
+        /** VentasAnuladasPaginaResponse */
+        VentasAnuladasPaginaResponse: {
+            /** Pagina */
+            pagina: number;
+            /** Tamano */
+            tamano: number;
+            /** Total Filas */
+            total_filas: number;
+            /** Paginas */
+            paginas: number;
+            /** Filas */
+            filas: components["schemas"]["VentaAnuladaResponse"][];
+        };
+        /** VentasPorDiaPaginaResponse */
+        VentasPorDiaPaginaResponse: {
+            /** Pagina */
+            pagina: number;
+            /** Tamano */
+            tamano: number;
+            /** Total Filas */
+            total_filas: number;
+            /** Paginas */
+            paginas: number;
+            /** Filas */
+            filas: components["schemas"]["VentasPorDiaResponse"][];
+        };
+        /** VentasPorDiaResponse */
+        VentasPorDiaResponse: {
+            /** Cantidad Ventas */
+            cantidad_ventas: number;
+            /** Cajas Equivalentes */
+            cajas_equivalentes: string;
+            /** Unidades Base */
+            unidades_base: number;
+            /** Importe Bruto */
+            importe_bruto: string;
+            /** Importe Descuento */
+            importe_descuento: string;
+            /** Importe Neto */
+            importe_neto: string;
+            /** Importe Iva */
+            importe_iva: string;
+            /** Total */
+            total: string;
+            /** Costo Vendido */
+            costo_vendido: string | null;
+            /** Utilidad */
+            utilidad: string | null;
+            sin_costo: components["schemas"]["SinCostoResponse"] | null;
+            /**
+             * Fecha
+             * Format: date
+             */
+            fecha: string;
+        };
+        /** VentasPorProductoPaginaResponse */
+        VentasPorProductoPaginaResponse: {
+            /** Pagina */
+            pagina: number;
+            /** Tamano */
+            tamano: number;
+            /** Total Filas */
+            total_filas: number;
+            /** Paginas */
+            paginas: number;
+            /** Filas */
+            filas: components["schemas"]["VentasPorProductoResponse"][];
+        };
+        /**
+         * VentasPorProductoResponse
+         * @description Sin costo ni utilidad: la utilidad por producto es REP-06 (etapa 2).
+         */
+        VentasPorProductoResponse: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Codigo */
+            codigo: string;
+            /** Nombre */
+            nombre: string;
+            /** Cajas Equivalentes */
+            cajas_equivalentes: string;
+            /** Unidades Base */
+            unidades_base: number;
+            /** Importe Neto */
+            importe_neto: string;
+            /** Presentaciones */
+            presentaciones: components["schemas"]["PresentacionVendidaResponse"][];
+        };
+        /** VentasPorVendedorResponse */
+        VentasPorVendedorResponse: {
+            /** Cantidad Ventas */
+            cantidad_ventas: number;
+            /** Cajas Equivalentes */
+            cajas_equivalentes: string;
+            /** Unidades Base */
+            unidades_base: number;
+            /** Importe Bruto */
+            importe_bruto: string;
+            /** Importe Descuento */
+            importe_descuento: string;
+            /** Importe Neto */
+            importe_neto: string;
+            /** Importe Iva */
+            importe_iva: string;
+            /** Total */
+            total: string;
+            /** Costo Vendido */
+            costo_vendido: string | null;
+            /** Utilidad */
+            utilidad: string | null;
+            sin_costo: components["schemas"]["SinCostoResponse"] | null;
+            /**
+             * Vendedor Id
+             * Format: uuid
+             */
+            vendedor_id: string;
+            /** Vendedor Nombre */
+            vendedor_nombre: string;
         };
         /** VersionBootstrap */
         VersionBootstrap: {
@@ -14080,6 +14936,255 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PagoDetalleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reporte_de_ventas_api_v1_reportes_ventas_get: {
+        parameters: {
+            query?: {
+                desde?: string | null;
+                hasta?: string | null;
+                vendedor_id?: string | null;
+                pagina_por_dia?: number;
+                pagina_por_producto?: number;
+                pagina_anuladas?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteDeVentasResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reporte_de_rendiciones_api_v1_reportes_rendiciones_get: {
+        parameters: {
+            query?: {
+                desde?: string | null;
+                hasta?: string | null;
+                vendedor_id?: string | null;
+                estado?: ("ABIERTA" | "EN_RENDICION" | "CERRADA" | "LIBERADA") | null;
+                pagina?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteDeRendicionesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    detalle_de_rendicion_api_v1_reportes_rendiciones__jornada_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                jornada_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumenDeJornadaDeReporteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reporte_de_observaciones_api_v1_reportes_observaciones_get: {
+        parameters: {
+            query?: {
+                desde?: string | null;
+                hasta?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteDeObservacionesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reporte_de_ajustes_api_v1_reportes_ajustes_get: {
+        parameters: {
+            query?: {
+                desde?: string | null;
+                hasta?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteDeAjustesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reporte_de_saldos_de_clientes_api_v1_reportes_saldos_clientes_get: {
+        parameters: {
+            query?: {
+                saldo?: "DEUDORES" | "A_FAVOR" | "CON_SALDO" | "TODOS";
+                vendedor_id?: string | null;
+                estado?: ("ACTIVO" | "SUSPENDIDO" | "INACTIVO") | null;
+                texto?: string | null;
+                pagina?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteDeSaldosDeClientesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reporte_de_saldos_de_proveedores_api_v1_reportes_saldos_proveedores_get: {
+        parameters: {
+            query?: {
+                saldo?: "DEUDORES" | "A_FAVOR" | "CON_SALDO" | "TODOS";
+                estado?: ("ACTIVO" | "INACTIVO") | null;
+                texto?: string | null;
+                pagina?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteDeSaldosDeProveedoresResponse"];
                 };
             };
             /** @description Validation Error */

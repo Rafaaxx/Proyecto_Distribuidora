@@ -238,6 +238,7 @@ catalogo ──► costeo (solo lectura del costo promedio de un producto, ADR-0
 facturacion ──► ventas (lectura), cuentas_corrientes, costeo
 sync ──► todos los módulos con comandos
 importacion ──► catalogo, proveedores, clientes, stock, cuentas_corrientes, configuracion, identidad (solo por service.py; nadie depende de importacion, ADR-042)
+reportes ──► lectura de las tablas de todos los módulos con SQLAlchemy Core (solo sus `models`, excepción de §5.2) y stock (resumen de la jornada, por service.py); nadie depende de reportes; sin comandos (ADR-070)
 auditoria, configuracion, identidad ◄── todos
 cuentas_corrientes, costeo ──► (sin dependencias de negocio)
 ```
@@ -536,7 +537,7 @@ El caso completo de venta con IVA y total (`modo_impositivo`, `alicuota`, `iva`,
 - El OpenAPI generado por FastAPI es el contrato. El front genera sus tipos con openapi-typescript en cada cambio; CI verifica que los tipos generados estén actualizados.
 - Errores en formato Problem Details (RFC 9457) con un campo `codigo` de dominio estable (`STOCK_INSUFICIENTE`, `CREDITO_EXCEDIDO`, `PERMISO_REQUERIDO`, `COMANDO_INCONSISTENTE`).
 - **Códigos de error nuevos**: `IDENTIDAD_AUTOBAJA`, `IDENTIDAD_ROL_INACTIVO`, `IDENTIDAD_USUARIO_DUPLICADO`, `IDENTIDAD_NOMBRE_DE_USUARIO_INVALIDO`, `IDENTIDAD_NOMBRE_DE_ROL_INVALIDO`, `IDENTIDAD_NOMBRE_DE_ROL_DUPLICADO`, `IDENTIDAD_ROL_CON_USUARIOS_ACTIVOS`, `IDENTIDAD_CONTRASENA_INVALIDA`, `IDENTIDAD_CONTRASENA_NUEVA_IGUAL_A_ACTUAL`, `VENDEDOR_INVALIDO` y `CLIENTE_CONSUMIDOR_FINAL_SIN_VENDEDOR`. **Rutas nuevas:** `GET /identidad/usuarios` (filtros `estado`, `rol_id`, `con_tope_propio`), `GET/PUT /identidad/usuarios/{id}`, `POST .../baja`, `POST .../reactivacion`, `PUT .../rol`, `POST .../contrasena`, `PUT .../tope-descuento`, `POST /identidad/roles`, `PUT /identidad/roles/{id}/nombre`, `POST .../baja`, `POST .../reactivacion`, `POST /yo/contrasena`, `POST /clientes/vendedor`, `GET /clientes/vendedores` (`GESTIONAR_CLIENTES`; vendedores elegibles, `id` y `nombre`), y `GET /clientes/opciones?alcance=todos`, `GET /clientes?vendedor_id=&sin_vendedor=`.
-- Los listados usan paginación por cursor y un límite máximo por página.
+- Los listados usan paginación por cursor y un límite máximo por página. **Excepción: las listas de los reportes («Por día», «Por producto», anuladas, jornadas y saldos) se paginan por número de página de a 50 filas, con `total_filas` y `paginas`, y los totales del reporte se calculan sobre todo el período y los filtros (ADR-070).**
 - Las fechas viajan en ISO 8601 con zona horaria.
 - **Ruta nueva del change 21:** `GET /api/v1/sync/bootstrap` (jornada `ABIERTA` propia en el dispositivo; 409 `JORNADA_REQUERIDA` sin ella; `since` aceptado e ignorado).
 
@@ -559,7 +560,7 @@ Agrupación de endpoints de la etapa 1:
 | Sync | `GET /sync/bootstrap`, `POST /sync/comandos` |
 | Observaciones | `GET /observaciones` (por operación, con filtros y cursor), `GET /observaciones/resumen`, `POST /observaciones/resolucion`, `GET /observaciones/rechazos`, `GET /observaciones/rechazos/{id}`, `POST /observaciones/rechazos/{id}/resolucion`, todas con `REVISAR_OBSERVACIONES`; los detalles de venta, cobranza, compra, transferencia y ajuste informan la resolución de sus observaciones (ADR-069) |
 | Importación | carga de planillas, puesta en marcha: `POST /api/v1/importaciones/{tipo}` (multipart, `Operation-Id` obligatorio), `GET /api/v1/importaciones` (historial paginado por cursor) y `GET /api/v1/importaciones/plantillas/{tipo}` (CSV con solo el encabezado), todas con `IMPORTAR_DATOS` |
-| Reportes | ventas por período, rendición, saldos |
+| Reportes | `GET /reportes/ventas`, `GET /reportes/rendiciones`, `GET /reportes/rendiciones/{jornada_id}`, `GET /reportes/saldos/clientes`, `GET /reportes/saldos/proveedores`, `GET /reportes/observaciones`, `GET /reportes/ajustes`, todas con `VER_REPORTES` (saldos de proveedores, además `GESTIONAR_PROVEEDORES`, `REGISTRAR_PAGO_PROVEEDOR` o `VER_UTILIDAD`); período por fechas de negocio; listas largas paginadas por número de a 50 (`pagina`; en ventas, `pagina_por_dia`, `pagina_por_producto` y `pagina_anuladas`) (ADR-070) |
 | Auditoría | consulta |
 | Sistema | `GET /salud`, `GET /version` |
 

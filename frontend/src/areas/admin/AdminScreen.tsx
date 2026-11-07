@@ -24,6 +24,8 @@ const CobranzasArea = lazy(() => import('./cobranzas/CobranzasArea'))
 const VentasArea = lazy(() => import('./ventas/VentasArea'))
 // Revisión (change 25, D11): bandeja de observaciones y rechazadas, con `REVISAR_OBSERVACIONES`.
 const RevisionArea = lazy(() => import('./revision/RevisionArea'))
+// Reportes (change 26, D11): seis reportes de solo lectura, con `VER_REPORTES`.
+const ReportesArea = lazy(() => import('./reportes/ReportesArea'))
 const ImportacionArea = lazy(() => import('./importacion/ImportacionArea'))
 const ConfiguracionArea = lazy(() => import('./configuracion/ConfiguracionArea'))
 const RolesArea = lazy(() => import('./roles/RolesArea'))
@@ -190,6 +192,14 @@ export function AdminScreen() {
             element={
               <Suspense fallback={null}>
                 <RevisionArea />
+              </Suspense>
+            }
+          />
+          <Route
+            path="reportes/*"
+            element={
+              <Suspense fallback={null}>
+                <ReportesArea />
               </Suspense>
             }
           />

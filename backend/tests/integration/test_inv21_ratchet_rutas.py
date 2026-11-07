@@ -518,6 +518,27 @@ COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
         ("post", "/api/v1/observaciones/resolucion"),
         ("get", "/api/v1/observaciones"),
         ("get", "/api/v1/observaciones/resumen"),
+        # Change 26 (reportes de la etapa 1), tarea 3.1: el reporte de ventas, con login real y dos
+        # organizaciones (`reportes/test_reporte_ventas.py::test_inv21_el_reporte_no_incluye_
+        # ventas_de_otra_organizacion`, `test_inv21_filtrar_por_un_vendedor_de_otra_organizacion_
+        # devuelve_el_reporte_vacio` y `test_inv21_la_organizacion_no_se_toma_de_la_consulta`).
+        ("get", "/api/v1/reportes/ventas"),
+        # Tareas 4.1 a 6.1: rendiciones y su detalle, observaciones por vendedor y ajustes,
+        # con login real y dos organizaciones (`reportes/test_reporte_rendiciones.py::test_inv21_la_
+        # lista_no_incluye_jornadas_de_otra_organizacion`, `test_inv21_filtrar_por_un_vendedor_
+        # ajeno_devuelve_vacio` y `test_inv21_el_detalle_de_una_jornada_ajena_o_inexistente_es_404`;
+        # `reportes/test_reporte_observaciones.py::test_inv21_no_cuenta_observaciones_ni_rechazos_
+        # de_otra_organizacion`; `reportes/test_reporte_ajustes.py::test_inv21_no_cuenta_ajustes_
+        # ni_diferencias_de_otra_organizacion`).
+        ("get", "/api/v1/reportes/rendiciones"),
+        ("get", "/api/v1/reportes/rendiciones/{jornada_id}"),
+        ("get", "/api/v1/reportes/observaciones"),
+        ("get", "/api/v1/reportes/ajustes"),
+        # Tarea 7.1: saldos de clientes y de proveedores, con login real y dos organizaciones
+        # (`reportes/test_reporte_saldos.py::test_inv21_no_ve_saldos_de_clientes_de_otra_
+        # organizacion` y `test_inv21_no_ve_saldos_de_proveedores_de_otra_organizacion`).
+        ("get", "/api/v1/reportes/saldos/clientes"),
+        ("get", "/api/v1/reportes/saldos/proveedores"),
         # Rechazos y cuarentenas (Lote 3), login real y dos organizaciones: la lista solo ve la
         # organización del token y el detalle y la resolución de uno ajeno responden 404
         # (`test_lista_de_rechazos.py::test_inv21_otra_organizacion_no_ve_los_rechazos_y_su_

@@ -1,6 +1,9 @@
 # Entorno
 .env
 *.local
+# Archivos de entorno de produccion (con secretos); las plantillas .env.example si se versionan
+*.env
+!*.env.example
 
 # Sistema operativo / editores
 .DS_Store

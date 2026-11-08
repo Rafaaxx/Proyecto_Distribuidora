@@ -104,6 +104,7 @@ const MAPA: Record<string, Destino> = {
   'reportes/rendicion-por-vendedor: Ver el detalle': unit(RENDICIONES_UI, '«Ver detalle» abre el resumen de la jornada pedido al reporte, sin valores de costo (RUT-07)'),
   'reportes/rendicion-por-vendedor: Sin jornadas': unit(RENDICIONES_UI, 'un período sin jornadas muestra «Sin jornadas en el período.»'),
   // reportes/saldos-de-cuentas
+  'reportes/saldos-de-cuentas: Vendedores del filtro': servidor(SALDOS, 'test_la_lista_de_vendedores_es_completa_y_no_depende_de_la_pagina_ni_del_filtro'),
   'reportes/saldos-de-cuentas: El saldo es la suma de los movimientos': servidor(SALDOS, 'test_el_saldo_es_la_suma_de_los_movimientos_del_libro'),
   'reportes/saldos-de-cuentas: Deudores y saldo a favor': servidor(SALDOS, 'test_deudores_a_favor_con_saldo_y_todos_con_sus_totales'),
   'reportes/saldos-de-cuentas: Límite y disponible': servidor(SALDOS, 'test_limite_y_disponible_con_y_sin_limite'),

@@ -1,0 +1,34 @@
+# Imagen de producción del backend (change 27a, D5; `docs/02` §16.2, §18).
+# Sin recarga, sin dependencias de desarrollo, sin pruebas, usuario sin
+# privilegios. La misma imagen sirve al servicio `migraciones` (alembic).
+# El de desarrollo es `backend/Dockerfile` y no cambia.
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# `.dockerignore` deja afuera tests/, .venv/, .env y cachés.
+COPY . .
+
+RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin app \
+    && chown -R app:app /app
+USER app
+
+EXPOSE 8000
+
+# Forma de shell para resolver las variables. Primero se verifica la configuración
+# (si está mal armada el contenedor sale con error nombrando la variable, antes de que
+# uvicorn lance sus workers, D6); `exec` deja a uvicorn como proceso principal (recibe
+# las señales de parada). Solo se cree en los
+# encabezados `X-Forwarded-*` si la conexión viene de la red `frente`
+# (subred fija del compose; uvicorn acepta redes en CIDR).
+CMD python -m app.core.verificar_config \
+    && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 \
+    --workers "${WEB_CONCURRENCY:-2}" \
+    --proxy-headers \
+    --forwarded-allow-ips "${FORWARDED_ALLOW_IPS:-172.30.10.0/24}"

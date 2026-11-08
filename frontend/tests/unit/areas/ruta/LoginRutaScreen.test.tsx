@@ -64,6 +64,26 @@ describe('LoginRutaScreen (tarea 9.1)', () => {
     expect(obtenerAccessToken()).toBe('tok-ruta')
   })
 
+  it('envía organización y usuario sin espacios en los extremos y la contraseña tal cual (ADR-057, enmienda)', async () => {
+    apiFetchMock.mockResolvedValueOnce(respuesta(200, { access_token: 'tok-ruta' }))
+    const onIniciada = vi.fn()
+    render(<LoginRutaScreen onIniciada={onIniciada} />)
+
+    const u = userEvent.setup()
+    await u.type(screen.getByLabelText(/organización/i), 'organizacion-inicial ')
+    await u.type(screen.getByLabelText(/^usuario$/i), ' admin ')
+    await u.type(screen.getByLabelText(/contraseña/i), ' clave ')
+    await u.click(screen.getByRole('button', { name: /iniciar sesión/i }))
+
+    await waitFor(() => expect(onIniciada).toHaveBeenCalledTimes(1))
+    const [, init] = apiFetchMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      organizacion_slug: 'organizacion-inicial',
+      usuario: 'admin',
+      contrasena: ' clave ',
+    })
+  })
+
   it.each([
     [401, 'Usuario o contraseña incorrectos.'],
     [423, 'La cuenta está bloqueada por intentos fallidos.'],

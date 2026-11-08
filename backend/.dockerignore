@@ -1,0 +1,11 @@
+# Contexto de la imagen de producción (backend/Dockerfile.produccion).
+.venv
+.env
+.env.*
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.hypothesis
+tests

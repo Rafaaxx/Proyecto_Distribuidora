@@ -1,5 +1,6 @@
 """Punto de entrada de la aplicación FastAPI (`docs/02-arquitectura.md` §11)."""
 
+import os
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -160,4 +161,9 @@ app: FastAPI | None
 try:
     app = crear_app_desde_entorno()
 except ValidationError:
+    # Fuera de producción se tolera (pruebas, generación del OpenAPI, import-linter importan este
+    # módulo sin variables de entorno). En producción una configuración inválida no se silencia:
+    # el proceso debe caer con el error que nombra la variable (change 27a, D6).
+    if os.environ.get("ENVIRONMENT") == "production":
+        raise
     app = None

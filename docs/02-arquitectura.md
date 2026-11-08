@@ -657,6 +657,7 @@ En la versión 2 de Dexie (change 21) el saldo viaja dentro de `clientes` (no ha
 - **DEBE NO** cachear respuestas de la API: los datos offline viven en Dexie.
 - Una nueva versión se instala en segundo plano y se aplica con aviso al usuario. **DEBE NO** recargar automáticamente la aplicación mientras hay un carrito abierto: con líneas cargadas el aviso dice «Hay una versión nueva: se instala al terminar la venta» y no ofrece «Actualizar» hasta confirmar o descartar la venta. Con líneas cargadas, toda salida de la venta pide confirmar «¿Descartar la venta?»: el menú inferior, «Cancelar», cualquier enlace del cuerpo (por ejemplo «Ver más» de una ayuda) y el botón atrás del navegador; recargar o cerrar la pestaña pide el aviso propio del navegador (`beforeunload`). Confirmar la venta no pregunta. La aplicación usa el enrutador de datos de React Router (`createBrowserRouter`), que admite `useBlocker`; la guarda vive en la pantalla de venta (`useBlocker` y `beforeunload` con el carrito ocupado), y una referencia `salidaLibre` se enciende antes de las salidas propias de la pantalla (confirmar o descartar a pedido) para que no pregunte por ellas (ADR-063, ADR-064).
 - Se implementa con `vite-plugin-pwa` (`generateSW`, `registerType: 'prompt'`); precachea el shell, `/ruta`, la ayuda y pdfmake, no el código de `/admin`; el manifiesto abre en `/ruta` (ADR-062).
+- Si falla la carga de una pantalla diferida (por ejemplo tras un despliegue nuevo, cuando desaparecieron los archivos con hash viejo), el área muestra «Hay una versión nueva del sistema» con un botón «Recargar» en lugar de la pantalla de error por defecto del enrutador (change 27a, D19).
 
 ### 13.6 Nota de venta
 
@@ -703,6 +704,8 @@ CI en cada push:
 5. Integración y concurrencia con Testcontainers
 6. Build del frontend
 
+El paso 5 también corre `backend/tests/infra` (compose de producción, Caddyfile en los dos modos de `CADDY_TLS`, imagen de backup, roles de base) (ADR-071).
+
 En la rama principal, además: suite de Playwright contra el entorno levantado con Docker Compose.
 
 ## 16. Entornos y despliegue
@@ -722,10 +725,18 @@ Un servidor con Docker Compose:
 | `caddy` | TLS automático, sirve el build del frontend, proxy de `/api` al backend |
 | `backend` | FastAPI con varios workers |
 | `postgres` | Volumen persistente, puerto no expuesto |
-| `backup` | `pg_dump` diario comprimido, retención de 14 diarios y 8 semanales, copia a almacenamiento externo |
+| `migraciones` | De una sola vez: `alembic upgrade head` con `app_migrations` antes de iniciar el backend |
+| `backup` | `pg_dump` diario comprimido con un rol de solo lectura, verificado al generarse; retención de 14 diarios y 8 semanales y copia a almacenamiento externo (27b; el 27a conserva los últimos 7) |
 
-- Los secretos se cargan desde un archivo de entorno fuera del repositorio.
-- El despliegue ejecuta las migraciones antes de iniciar la nueva versión del backend.
+- Archivo `docker-compose.prod.yml`, independiente del de desarrollo; redes `frente` (Caddy y backend) y `datos` (interna: backend, Postgres, migraciones y backup); solo Caddy publica puertos (ADR-071).
+- El mismo compose corre en una PC de la oficina o en un servidor con dominio: `DOMINIO` y `CADDY_TLS` (autoridad propia de Caddy o Let's Encrypt) se fijan en el archivo de entorno (ADR-071).
+- Los secretos se cargan desde un archivo de entorno fuera del repositorio (`infra/produccion.env.example` es la plantilla, sin valores).
+- El despliegue ejecuta las migraciones antes de iniciar la nueva versión del backend (servicio `migraciones`); el backend no recibe la credencial de migraciones.
+- Los backups se escriben en un directorio del equipo, fuera de los volúmenes de Docker.
+- Primera puesta en marcha y actualización: `docs/runbook/puesta-en-marcha.md`.
+- Agregar al compose de producción: imágenes propias `distribuidora-backend`, `distribuidora-migraciones`, `distribuidora-caddy` y `distribuidora-backup`, todas etiquetadas con `APP_VERSION`; `backend` y `migraciones` comparten `Dockerfile.produccion` pero llevan nombres de imagen distintos.
+- La configuración del backend se valida al arrancar en producción (`JWT_SECRET` de al menos 32 caracteres, `APP_VERSION` con forma `X.Y.Z`): el contenedor sale con código 1 y nombra la variable, nunca su valor (`python -m app.core.verificar_config`).
+- Backups: archivos `distribuidora-AAAAMMDD-HHMMSS.dump`, verificados con `pg_restore --list` (las cuatro tablas de libro); un archivo ilegible pasa a `.dump.fallido`; la salud del servicio `backup` falla si el último backup válido tiene más de 26 horas.
 - **DEBE:** una restauración de backup se prueba en un entorno separado antes de salir a producción y luego al menos una vez por mes (`00` §9, criterio 12).
 
 ## 17. Observabilidad
@@ -744,9 +755,12 @@ Un servidor con Docker Compose:
 - El servidor exige el permiso de cada comando por cualquier camino (ADR-056).
 - El límite de 5 del login se cuenta por el par (slug de la organización, usuario) tal como se escribió, exista o no (un nombre inexistente se bloquea igual que uno real); todo rechazo de credenciales verifica la contraseña (hash ficticio si no hay usuario utilizable); el 429 del login muestra siempre la hora de `America/Argentina/Buenos_Aires` (ADR-057, enmienda a ADR-018).
 - Encabezados de seguridad, incluida una política CSP restrictiva.
-- El usuario de base de datos de la aplicación no es superusuario ni dueño del esquema; las migraciones usan un usuario distinto.
+- El usuario de base de datos de la aplicación no es superusuario ni dueño del esquema; las migraciones usan un usuario distinto, y el backup un tercero de solo lectura (`pg_read_all_data`) (ADR-020, ADR-071).
+- HSTS de un año sin `includeSubDomains` ni `preload` desde el 27a (también con la autoridad propia de Caddy); el backend confía en `X-Forwarded-For` solo desde la red del proxy (ADR-018 punto 5, ADR-071).
 - Validación de toda entrada con Pydantic; SQL siempre parametrizado.
 - Dependencias con actualizaciones de seguridad revisadas periódicamente.
+- El frontend recorta los espacios de los extremos de organización y usuario en el login (no de la contraseña); el servidor sigue comparando tal cual (ADR-057, enmienda 2026-11-08).
+- Limitación conocida del entorno en Docker Desktop para Windows: todos los clientes llegan con la misma IP al backend, así que el límite de 20 fallos de login por IP cuenta a toda la oficina; con servidor Linux se ve la IP real de cada cliente (ADR-071).
 
 ## 19. Decisiones de este documento
 

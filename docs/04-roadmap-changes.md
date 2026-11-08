@@ -268,9 +268,11 @@ La tabla indica qué changes deben estar archivados antes de empezar cada uno.
 
 | # | Change | Entrega | Invariantes que cierra |
 | --- | --- | --- | --- |
-| 27a | `despliegue-basico` | Docker Compose de producción con Caddy, PostgreSQL y backend; backups diarios con retención mínima; HTTPS; runbook de primera puesta en marcha | — |
+| 27a | `despliegue-basico` | Docker Compose de producción con Caddy, PostgreSQL y backend; backups diarios con retención mínima; HTTPS; runbook de primera puesta en marcha — **terminado (ADR-071)** | — |
 
 **Adelantar el despliegue aquí tiene dos ventajas:** los errores de configuración aparecen antes de que haya datos reales, y la rutina de backups (con datos de prueba) queda ejercitada antes de la aceptación final, donde el criterio 12 pide restaurar uno.
+
+**Change 27a (`despliegue-basico`) archivado 2026-11-08 — terminado (ADR-071).** Entrega: `docker-compose.prod.yml` independiente del de desarrollo, con el servicio `migraciones` antes del backend, redes `frente` y `datos` y solo Caddy publicado; la configuración del backend validada al arrancar (`python -m app.core.verificar_config`); backups `pg_dump` verificados al generarse con un rol de solo lectura y retención de los últimos 7 en este change; el runbook `docs/runbook/puesta-en-marcha.md` con dos escenarios (PC de la oficina con Windows y Docker Desktop, y VPS con dominio); HSTS sin `includeSubDomains` ni `preload`. Ajustes de la prueba manual (2026-11-08): recorte de espacios en el login de organización y usuario (ADR-057, enmienda), recarga ante una versión nueva en lugar de la pantalla de error (D19) y límite de login por IP compartido en Docker Desktop (limitación documentada). **Deudas al 27b:** retención 14 + 8, copia a almacenamiento externo, restauración probada con `docs/runbook/restauracion.md` y restauración de un backup para pasar los datos de la PC a un VPS; Q1 (servidor y dominio reales) si no se resolvió; acceso desde la calle mientras el entorno siga en la PC de la oficina (*port forwarding*, DNS dinámico o paso al VPS). **Prueba manual:** 2026-11-07/08 (ensayo con `DOMINIO=localhost` y puesta en marcha en la PC del usuario con un teléfono en el Wi-Fi de la oficina y el certificado raíz de Caddy instalado); resultados en `openspec/changes/archive/2026-11-08-27a-despliegue-basico/design.md`.
 
 ## 11. Hito 6 — Offline
 

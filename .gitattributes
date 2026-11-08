@@ -1,0 +1,6 @@
+# Los scripts de shell y los de imagen se ejecutan en Linux: siempre con saltos de linea LF,
+# aunque el repositorio se clone en Windows (autocrlf). Un CRLF los rompe («bad interpreter»).
+*.sh text eol=lf
+Dockerfile* text eol=lf
+# Los Caddyfile tambien van con LF (la imagen es Linux). Caddyfile.dev ya esta en LF en el repositorio.
+Caddyfile* text eol=lf

@@ -1,0 +1,190 @@
+# Compose de PRODUCCION (change 27a, D3; docs/02 §16.2, ADR-071).
+#
+# Es independiente del docker-compose.yml de desarrollo: no hereda puertos, montajes de codigo
+# ni recarga. Se usa siempre con un archivo de entorno que vive FUERA del repositorio
+# (plantilla: infra/produccion.env.example):
+#
+#   docker compose -f docker-compose.prod.yml --env-file <archivo-de-entorno> up -d --build
+#
+# Solo `caddy` publica puertos (80 y 443). La base y el backend no se ven desde afuera.
+# El servicio `backup` hace un backup diario verificado con el rol de solo lectura `app_backup`
+# y lo deja en una carpeta del equipo (BACKUP_DIR), fuera de los volumenes de Docker.
+
+name: distribuidora
+
+# Rotacion de registros: sin esto el disco se llena (D14).
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      # Superusuario de arranque de la imagen: solo inicializa el volumen y corre
+      # init-app-roles.sh. Ni la aplicacion ni Alembic lo usan (ADR-020).
+      POSTGRES_USER: ${POSTGRES_USER:-distribuidora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en el archivo de entorno}
+      POSTGRES_DB: ${POSTGRES_DB:-distribuidora}
+      APP_MIGRATIONS_DB_PASSWORD: ${APP_MIGRATIONS_DB_PASSWORD:?Falta APP_MIGRATIONS_DB_PASSWORD en el archivo de entorno}
+      APP_RUNTIME_DB_PASSWORD: ${APP_RUNTIME_DB_PASSWORD:?Falta APP_RUNTIME_DB_PASSWORD en el archivo de entorno}
+      APP_BACKUP_DB_PASSWORD: ${APP_BACKUP_DB_PASSWORD:?Falta APP_BACKUP_DB_PASSWORD en el archivo de entorno}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Solo corre la primera vez que se inicializa postgres_data.
+      - ./infra/postgres/init-app-roles.sh:/docker-entrypoint-initdb.d/10-init-app-roles.sh:ro
+      # Rol de solo lectura del backup (D11): se monta solo en produccion.
+      - ./infra/postgres/20-init-backup-role.sh:/docker-entrypoint-initdb.d/20-init-backup-role.sh:ro
+    networks: [datos]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-distribuidora} -d ${POSTGRES_DB:-distribuidora}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    logging: *logging
+
+  # Mismo codigo que `backend` (mismo Dockerfile y contexto, la segunda construccion sale de la
+  # cache), con su propio nombre de imagen: dos servicios no pueden construir el mismo nombre.
+  # Aplica las migraciones con el rol dueño del esquema y termina (D7). El backend no recibe
+  # esta credencial.
+  migraciones:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.produccion
+    image: distribuidora-migraciones:${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    environment:
+      DATABASE_URL_MIGRATIONS: postgresql+psycopg://app_migrations:${APP_MIGRATIONS_DB_PASSWORD:?Falta APP_MIGRATIONS_DB_PASSWORD en el archivo de entorno}@postgres:5432/${POSTGRES_DB:-distribuidora}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [datos]
+    logging: *logging
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.produccion
+    image: distribuidora-backend:${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+    restart: unless-stopped
+    environment:
+      # Rol app_runtime: el unico que usa la aplicacion (INV-05, ADR-020). Sin
+      # DATABASE_URL_MIGRATIONS.
+      DATABASE_URL: postgresql+psycopg://app_runtime:${APP_RUNTIME_DB_PASSWORD:?Falta APP_RUNTIME_DB_PASSWORD en el archivo de entorno}@postgres:5432/${POSTGRES_DB:-distribuidora}
+      ENVIRONMENT: production
+      APP_VERSION: ${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      JWT_SECRET: ${JWT_SECRET:?Falta JWT_SECRET en el archivo de entorno}
+      JWT_KID: ${JWT_KID:-1}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      # Solo se cree en X-Forwarded-For si la conexion viene de la red `frente` (D5): debe
+      # coincidir con la subred declarada abajo.
+      FORWARDED_ALLOW_IPS: 172.30.10.0/24
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migraciones:
+        condition: service_completed_successfully
+    networks: [frente, datos]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/salud', timeout=4)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging: *logging
+
+  # Proxy HTTPS + frontend compilado (imagen de dos etapas, D4).
+  caddy:
+    build:
+      context: .
+      dockerfile: infra/caddy/Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+    image: distribuidora-caddy:${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+    restart: unless-stopped
+    environment:
+      # Dominio, IP de la red local o localhost; y quien emite el certificado (D1).
+      DOMINIO: ${DOMINIO:?Falta DOMINIO en el archivo de entorno}
+      CADDY_TLS: ${CADDY_TLS:?Falta CADDY_TLS en el archivo de entorno (internal o un correo)}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      # Certificados y autoridad propia de Caddy: si se pierden, se emiten de nuevo (y con
+      # `internal` cada telefono debe volver a confiar en la autoridad).
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [frente]
+    healthcheck:
+      # Punto de administracion local de Caddy (solo dentro del contenedor; escucha en IPv4, por eso
+      # 127.0.0.1 y no localhost).
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging: *logging
+
+  # Backup diario de la base (D10 a D13). Rol de solo lectura, sin salida a internet (red
+  # `datos`) y sin puertos. Deja los archivos en BACKUP_DIR del equipo. Un backup a pedido:
+  #   docker compose -f docker-compose.prod.yml --env-file <archivo> run --rm backup ahora
+  backup:
+    build:
+      context: ./infra/backup
+    image: distribuidora-backup:${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGUSER: app_backup
+      PGPASSWORD: ${APP_BACKUP_DB_PASSWORD:?Falta APP_BACKUP_DB_PASSWORD en el archivo de entorno}
+      PGDATABASE: ${POSTGRES_DB:-distribuidora}
+      BACKUP_DIR: /backups
+      BACKUP_HORA: ${BACKUP_HORA:-03:00}
+      BACKUP_RETENCION: ${BACKUP_RETENCION:-7}
+      TZ: ${TZ:-America/Argentina/Mendoza}
+    volumes:
+      # Carpeta del equipo (debe existir), fuera de los volumenes: sobrevive a `down -v`.
+      - ${BACKUP_DIR:?Falta BACKUP_DIR en el archivo de entorno}:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [datos]
+    healthcheck:
+      # No sano si el ultimo backup valido tiene mas de 26 horas (salud.sh).
+      test: ["CMD", "sh", "/opt/backup/salud.sh"]
+      interval: 5m
+      timeout: 10s
+      retries: 1
+      start_period: 1m
+    logging: *logging
+
+networks:
+  # Caddy <-> backend. Subred fija para poder confiar en el proxy (D5).
+  frente:
+    ipam:
+      config:
+        - subnet: 172.30.10.0/24
+  # Backend, base y migraciones. Sin salida a internet y sin Caddy.
+  datos:
+    internal: true
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

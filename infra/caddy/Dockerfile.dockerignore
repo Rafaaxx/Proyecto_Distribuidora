@@ -1,0 +1,9 @@
+# Contexto de la imagen de Caddy de produccion (infra/caddy/Dockerfile): la raiz del
+# repositorio, pero solo entran el frontend y el Caddyfile.
+*
+!frontend
+!infra/caddy/Caddyfile
+**/node_modules
+**/dist
+**/.env
+**/.env.*

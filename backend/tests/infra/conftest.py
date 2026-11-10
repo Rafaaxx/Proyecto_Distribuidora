@@ -184,6 +184,8 @@ class Corredor:
         script: str,
         entorno: dict[str, str] | None = None,
         red: bool = True,
+        usuario: str | None = None,
+        volumenes: dict[str, dict[str, str]] | None = None,
     ) -> tuple[int, str]:
         env = {
             "PGHOST": ALIAS_BASE,
@@ -191,7 +193,8 @@ class Corredor:
             "PGPASSWORD": CLAVE_BACKUP,
             "PGDATABASE": BASE,
             "BACKUP_DIR": "/tmp/respaldos",
-            "BACKUP_RETENCION": "7",
+            "BACKUP_DIARIOS": "14",
+            "BACKUP_SEMANALES": "8",
             "TZ": "America/Argentina/Mendoza",
             **(entorno or {}),
         }
@@ -200,6 +203,8 @@ class Corredor:
             entrypoint=["sh", "-c", script],
             environment=env,
             network=self.red if red else "none",
+            user=usuario,
+            volumes=volumenes,
         )
         try:
             c.start()
@@ -213,3 +218,37 @@ class Corredor:
 @pytest.fixture(scope="session")
 def corredor(docker_cliente, base_migrada, imagen_backup) -> Corredor:
     return Corredor(docker_cliente, imagen_backup, base_migrada.red)
+
+
+@dataclass
+class Respaldo:
+    """Backup real de la base de origen, dentro de un volumen de Docker."""
+
+    volumen: str
+    nombre: str
+
+
+@pytest.fixture(scope="session")
+def respaldo_de_origen(docker_cliente, base_migrada, corredor) -> Iterator[Respaldo]:
+    """Backup de la base de origen con datos en un libro (change 27b, Lote 3)."""
+    motor = create_engine(base_migrada.url("app_migrations", CLAVE_MIGRACIONES))
+    with motor.begin() as c:
+        c.execute(
+            text(
+                "INSERT INTO auditoria (id, organizacion_id, accion, entidad, occurred_at, "
+                "registered_at) SELECT gen_random_uuid(), id, 'PRUEBA-' || g, 'cosa', now(), "
+                "now() FROM organizacion, generate_series(1, 3) g"
+            )
+        )
+    motor.dispose()
+    volumen = docker_cliente.volumes.create()
+    montaje = {volumen.name: {"bind": "/tmp/respaldos", "mode": "rw"}}
+    codigo, salida = corredor.correr("sh /opt/backup/respaldar.sh", volumenes=montaje)
+    assert codigo == 0, salida
+    codigo, listado = corredor.correr("ls -1 /tmp/respaldos", volumenes=montaje)
+    nombres = [n for n in listado.split() if n.endswith(".dump")]
+    assert codigo == 0 and len(nombres) == 1, listado
+    try:
+        yield Respaldo(volumen=volumen.name, nombre=nombres[0])
+    finally:
+        volumen.remove(force=True)

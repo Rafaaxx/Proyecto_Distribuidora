@@ -324,9 +324,51 @@ dc run --rm backup ahora
 
 **Recomendado justo después de instalar:** ejecutar este comando una vez, así hay un backup desde el primer día (si no, el primero lo hace el servicio recién a la hora programada).
 
-Termina con una línea «Backup verificado» que dice archivo y tamaño. El archivo `distribuidora-AAAAMMDD-HHMMSS.dump` queda en la carpeta `BACKUP_DIR` del equipo (`C:\distribuidora\backups` o `/var/backups/distribuidora`), **fuera de los volúmenes de Docker**: sobrevive aunque se borren los volúmenes. Cada backup se verifica al generarse (se lista su contenido y deben estar las cuatro tablas de libro); si falla, el archivo pasa a `.fallido` y no se borra nada. Se conservan los últimos 7 válidos (`BACKUP_RETENCION`).
+Termina con una línea «Backup verificado» que dice archivo y tamaño. El archivo `distribuidora-AAAAMMDD-HHMMSS.dump` queda en la carpeta `BACKUP_DIR` del equipo (`C:\distribuidora\backups` o `/var/backups/distribuidora`), **fuera de los volúmenes de Docker**: sobrevive aunque se borren los volúmenes. Cada backup se verifica al generarse (se lista su contenido y deben estar las cuatro tablas de libro); si falla, el archivo pasa a `.fallido` y no se borra nada. Se conservan, de los backups válidos, **el más reciente de cada uno de los últimos 14 días que tienen backup y de cada una de las últimas 8 semanas** (lunes a domingo): en total, hasta unos 20 archivos distintos. Las cantidades se cambian con `BACKUP_DIARIOS` (14) y `BACKUP_SEMANALES` (8) en el archivo de entorno; antes se usaba `BACKUP_RETENCION`, que ya no existe. Nunca se borra por el solo paso del tiempo: si los backups se detienen, los que hay se quedan.
 
-> Estos backups están **en el mismo equipo**. Hasta que exista la copia externa (change 27b) conviene copiar de vez en cuando la carpeta a un disco externo o a la nube. El procedimiento de restauración se documentará en `docs/runbook/restauracion.md` (change 27b).
+**Usuario de los servicios de respaldo.** Los servicios `backup`, `copia-externa`, `prueba-restauracion` y `restauracion` no corren como administrador del sistema sino con un usuario sin privilegios (`BACKUP_UID`/`BACKUP_GID`, por defecto 999). Para qué: si alguno fuera vulnerado, no podría tocar el resto del equipo. En **Windows con Docker Desktop**, una carpeta de backups **nueva** no necesita nada. Pero una carpeta que **ya existía de la versión 0.27.x (27a)** guarda permisos puestos por el usuario administrador de entonces, y los servicios nuevos no pueden escribir ni borrar en ella: el backup falla con `Permission denied` sobre `/backups`. Se arregla **una sola vez** (cambiar `C:/distribuidora/backups` si `BACKUP_DIR` es otra carpeta; en Git Bash anteponer `MSYS_NO_PATHCONV=1`):
+
+```powershell
+docker run --rm -v "C:/distribuidora/backups:/b" alpine chown -R 999:999 /b
+```
+
+Cubre también los backups viejos, para que la retención y la prueba de restauración puedan leerlos y borrarlos. En **Linux**, la carpeta de backups tiene que pertenecerle a ese usuario, o los servicios no pueden escribirla (el equivalente de lo anterior, con la carpeta del equipo):
+
+```bash
+sudo mkdir -p /var/backups/distribuidora/bajados
+sudo chown 999:999 /var/backups/distribuidora /var/backups/distribuidora/bajados
+```
+
+> Estos backups están **en el mismo equipo**: si se pierde o se rompe la PC, se pierden con ella. Por eso existe la **copia externa** (paso C7b). La restauración, la prueba mensual y la mudanza a otro equipo están en [`restauracion.md`](restauracion.md).
+
+### C7b Copia externa de los backups
+
+El servicio `copia-externa` sube cada backup válido, **cifrado en la PC antes de salir**, a un almacenamiento en internet. Para qué: que un incendio, un robo o un virus en la PC no se lleven también los backups. Es la única forma de que el negocio sobreviva a perder el equipo. Se hace una sola vez, y lleva unos 20 minutos:
+
+1. **Abrir una cuenta de almacenamiento compatible con S3** (el proveedor elegido es Backblaze B2; sirve cualquiera que diga «compatible con S3»). Esta cuenta la abre y la paga el dueño del negocio.
+2. **Crear un cubo** («bucket», una carpeta de nivel superior) **privado**, y una **clave de acceso limitada a ese cubo** (el proveedor da dos valores: el identificador y la clave secreta). Limitada significa que, si alguien la roba, solo alcanza esos archivos (que además están cifrados). Anotar también la dirección del servicio (`endpoint`, por ejemplo `https://s3.us-west-004.backblazeb2.com`) y la región.
+3. **Inventar dos frases largas y distintas** (la de la clave de cifrado y la de la «sal», un segundo ingrediente del cifrado) y **ofuscarlas** con `rclone obscure` (el archivo de entorno no guarda la frase en claro). Para cada una:
+
+   ```bash
+   docker run --rm --entrypoint rclone rclone/rclone:1.68.2 obscure "su frase larga"
+   ```
+
+   El resultado (una cadena rara) va a `COPIA_CLAVE_CIFRADO` y `COPIA_SAL_CIFRADO` respectivamente. **Una vez que hay copias, no se cambian**: las copias ya hechas quedarían ilegibles.
+4. **Completar el archivo de entorno** con: `COPIA_TIPO=s3`, `COPIA_RUTA` (nombre del cubo, opcionalmente `cubo/carpeta`), `COPIA_S3_ENDPOINT`, `COPIA_S3_REGION`, `COPIA_S3_PROVEEDOR` (si el proveedor tiene un nombre propio en rclone; si no, queda `Other`), `COPIA_ACCESS_KEY_ID`, `COPIA_SECRET_ACCESS_KEY`, `COPIA_CLAVE_CIFRADO` y `COPIA_SAL_CIFRADO`. Sin la clave de cifrado el sistema no arranca el servicio (a propósito: una copia sin cifrar nunca sale).
+5. **Guardar la hoja de recuperación fuera de la PC**: estos mismos valores, copiados a un gestor de contraseñas o a un sobre en poder del dueño (ver `restauracion.md`). **Sin las dos claves de cifrado las copias no se pueden leer.**
+6. **Primera copia y cómo verla.** Con el sistema levantado (`dc up -d --build`):
+
+   ```bash
+   dc run --rm copia-externa ahora
+   ```
+
+   Termina con líneas «Copia externa verificada: archivo=… tamano=…» (una por backup subido; cada una se bajó y se comparó con el original). En la consola del proveedor se ve que **los archivos están pero con nombres sin sentido**: eso es el cifrado. Después la subida es automática, cada hora, y solo sube lo que falta.
+
+**Qué se conserva en el destino.** La misma regla que en la PC (14 diarios y 8 semanales), calculada sobre lo que hay en el destino. Borrar archivos de la PC **no** borra nada del destino, y si el destino no responde la copia espera y reintenta sin borrar nada.
+
+**Ensayar sin cuenta (destino local).** Para probar sin abrir cuenta: `COPIA_TIPO=local`, `COPIA_RUTA=/destino-local/copias`, y `no-aplica` en `COPIA_ACCESS_KEY_ID` y `COPIA_SECRET_ACCESS_KEY` (no pueden quedar vacías). `COPIA_LOCAL_DIR` es la carpeta de la PC que hace de destino (si se deja `copia_local`, es un volumen de Docker). No protege de perder la PC.
+
+**Aviso por correo (opcional).** Si `AVISO_URL` tiene una dirección (por ejemplo la de un control gratuito de «hombre muerto» como healthchecks.io), `copia-externa` la llama después de cada corrida buena, y a `<dirección>/fail` si falla; si no la reciben a tiempo, el servicio les manda un correo al dueño. Vacía, no se avisa nada. No se envía ningún dato del negocio. La prueba mensual de restauración **no** avisa: no tiene red (ver C8).
 
 ### C8 Salud y registros
 
@@ -336,7 +378,9 @@ dc logs --tail 100 backend  # últimas 100 líneas del backend (también: caddy,
 dc logs -f caddy            # seguir en vivo (Ctrl+C para salir)
 ```
 
-Los registros rotan solos (no llenan el disco). `backup` pasa a «unhealthy» si el último backup válido tiene más de 26 horas, o si no hay ninguno pasada la primera hora programada.
+Los registros rotan solos (no llenan el disco). `backup` pasa a «unhealthy» si el último backup válido tiene más de 26 horas, o si no hay ninguno pasada la primera hora programada. `copia-externa` pasa a «unhealthy» si el backup más reciente que hay en el destino tiene más de 26 horas, o si la última corrida falló por credenciales o por la clave (un corte de internet por sí solo no lo marca). `prueba-restauracion` pasa a «unhealthy» si la última prueba falló o pasaron más de 35 días sin una buena.
+
+**Revisión semanal (dos minutos).** Una vez por semana correr `dc ps` y comprobar que `backup`, `copia-externa` y `prueba-restauracion` dicen `healthy`. Es **la única señal de la prueba mensual** (no manda avisos, porque corre sin red): si nadie mira, un fallo puede pasar semanas sin que se note. Qué hacer si alguno falla: `restauracion.md`, sección «Si algo no funciona».
 
 > **Hora de gracia.** Recién instalado, `backup` figura como «healthy» aunque todavía no haya hecho ningún backup: no pasa a «unhealthy» hasta que haya transcurrido una hora desde la primera hora programada (`BACKUP_HORA`). Un «healthy» del primer día **no** prueba que haya un backup; por eso conviene hacer uno a pedido (C7) apenas se instala.
 
@@ -388,7 +432,17 @@ La clave es **migrar antes de reemplazar**: primero se aplican las migraciones c
 **Si el sistema quedó caído** (por ejemplo, alguien ejecutó `dc up -d` y `migraciones` falló: `backend` y `caddy` figuran como `Created` y la dirección `/api/v1/version` no responde). Hay dos salidas:
 
 - *Corregir y seguir adelante:* arreglar la causa (por ejemplo el archivo de entorno), comprobar con `dc run --rm migraciones` y ejecutar `dc up -d`.
-- *Volver atrás:* `git checkout <commit-anterior>`, volver `APP_VERSION` al valor anterior, `dc build` y `dc up -d`. Las migraciones son compatibles hacia adelante, así que normalmente no hace falta restaurar la base; si hiciera falta, existe el backup previo (el procedimiento de restauración llega con el change 27b).
+- *Volver atrás:* `git checkout <commit-anterior>`, volver `APP_VERSION` al valor anterior, `dc build` y `dc up -d`. Las migraciones son compatibles hacia adelante, así que normalmente no hace falta restaurar la base; si hiciera falta, existe el backup previo (el procedimiento está en [`restauracion.md`](restauracion.md)).
+
+#### Actualizar desde 0.27.x (27a)
+
+Además de los pasos anteriores, quien actualiza desde la versión 27a hace **una sola vez** esto (antes del paso 6):
+
+1. **Permisos de la carpeta de backups** (si no, `dc run --rm backup ahora` falla con `Permission denied`). En Windows: `docker run --rm -v "C:/distribuidora/backups:/b" alpine chown -R 999:999 /b`. En Linux: `sudo chown -R 999:999 <BACKUP_DIR>`.
+2. **Retención:** en el archivo de entorno, reemplazar `BACKUP_RETENCION` (ya no existe) por `BACKUP_DIARIOS` (14) y `BACKUP_SEMANALES` (8).
+3. **Variables nuevas:** las `COPIA_*` (copia externa, paso C7b; `COPIA_CLAVE_CIFRADO` y `COPIA_SAL_CIFRADO` con valores reales, no el texto de ejemplo) y las `PRUEBA_*` (prueba mensual), copiándolas de `infra/produccion.env.example`.
+4. **Crear la subcarpeta `bajados`** dentro de `BACKUP_DIR` (en Linux, con dueño 999).
+5. **Levantar construyendo:** `dc up -d --build` (hay servicios nuevos que construir), y comprobar con `dc ps`.
 
 ### C10 Crear el usuario de backup en una base que ya existía
 
@@ -404,7 +458,7 @@ Si usó otros valores en `POSTGRES_USER` o `POSTGRES_DB`, usar esos. Después, `
 
 No se cambia código: solo el archivo de entorno del servidor nuevo, con `DOMINIO` (el dominio) y `CADDY_TLS` (un correo). Pasos: preparar el servidor (Escenario 2), clonar el repositorio, armar su archivo de entorno con secretos nuevos y levantar con `dc up -d --build`. Los teléfonos dejan de usar el certificado de la PC (ya no hace falta) y entran por el dominio.
 
-Mientras el entorno tenga solo datos de prueba, alcanza con sembrar de nuevo en el servidor (C6). Llevar los datos reales de la PC al servidor requiere restaurar un backup, procedimiento que se documenta con el change 27b.
+Mientras el entorno tenga solo datos de prueba, alcanza con sembrar de nuevo en el servidor (C6). Llevar los datos reales de la PC al servidor requiere restaurar un backup: el procedimiento completo está en la sección «Mudanza a otro equipo» de [`restauracion.md`](restauracion.md). Lo más importante, antes de mudarse: **la cola de cada teléfono tiene que estar vacía** (la cola pertenece a la dirección vieja y no se ve desde la nueva).
 
 ---
 
@@ -419,4 +473,5 @@ Mientras el entorno tenga solo datos de prueba, alcanza con sembrar de nuevo en 
 | El teléfono no llega al sistema | Comprobar que está en el Wi-Fi de la oficina, que la IP de la PC no cambió (`ipconfig`) y las reglas del firewall (E1.1, paso 5). |
 | Tras reiniciar Windows el sistema no responde | Docker Desktop debe estar iniciado (ícono de la ballena en la barra); esperar uno o dos minutos y `dc ps`. |
 | `curl` en Windows imprime `000` | Es el manejo del certificado en Windows; usar el navegador o `curl -v`. |
+| `dc run --rm backup ahora` falla con `Permission denied` sobre `/backups` | La carpeta de backups quedó con permisos de la versión 27a. Una sola vez: `docker run --rm -v "C:/distribuidora/backups:/b" alpine chown -R 999:999 /b` (Linux: `sudo chown -R 999:999 <BACKUP_DIR>`). Ver C7. |
 | Let's Encrypt no emite el certificado (Escenario 2) | Ver E2.4 y `dc logs caddy`. |

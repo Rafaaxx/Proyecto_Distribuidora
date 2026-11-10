@@ -13,6 +13,7 @@ La documentación funcional y técnica completa vive en [`docs/`](docs/) y es la
 - [`docs/03-modelo-de-datos.md`](docs/03-modelo-de-datos.md) — modelo de datos
 - [`docs/04-roadmap-changes.md`](docs/04-roadmap-changes.md) — roadmap de construcción
 - [`docs/runbook/puesta-en-marcha.md`](docs/runbook/puesta-en-marcha.md) — poner el sistema en marcha en producción (PC de la oficina o servidor con dominio), actualizar y hacer backups
+- [`docs/runbook/restauracion.md`](docs/runbook/restauracion.md) — restaurar un backup, copia externa cifrada, prueba mensual y mudanza a otro equipo
 
 ## Prerrequisitos
 

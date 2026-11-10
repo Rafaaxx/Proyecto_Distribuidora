@@ -726,7 +726,10 @@ Un servidor con Docker Compose:
 | `backend` | FastAPI con varios workers |
 | `postgres` | Volumen persistente, puerto no expuesto |
 | `migraciones` | De una sola vez: `alembic upgrade head` con `app_migrations` antes de iniciar el backend |
-| `backup` | `pg_dump` diario comprimido con un rol de solo lectura, verificado al generarse; retención de 14 diarios y 8 semanales y copia a almacenamiento externo (27b; el 27a conserva los últimos 7) |
+| `backup` | `pg_dump` diario comprimido con un rol de solo lectura, verificado al generarse; retención del más reciente de cada uno de los 14 días y de cada una de las 8 semanas con backup (ADR-072) |
+| `copia-externa` | Sube cada backup conservado, cifrado en el equipo, a un almacenamiento externo compatible con S3; no replica borrados; misma retención en el destino; sin credenciales de base (ADR-072) |
+| `prueba-restauracion` | Una vez por mes, sin red y sin aviso externo, restaura el último backup en un Postgres temporal propio (en el disco del contenedor, que se borra tras la prueba) y comprueba que los datos coinciden; si falla, queda `unhealthy` (ADR-072) |
+| `restauracion` | A pedido (perfil aparte): restaura un backup solo en una base vacía, como `app_migrations` (ADR-072) |
 
 - Archivo `docker-compose.prod.yml`, independiente del de desarrollo; redes `frente` (Caddy y backend) y `datos` (interna: backend, Postgres, migraciones y backup); solo Caddy publica puertos (ADR-071).
 - El mismo compose corre en una PC de la oficina o en un servidor con dominio: `DOMINIO` y `CADDY_TLS` (autoridad propia de Caddy o Let's Encrypt) se fijan en el archivo de entorno (ADR-071).
@@ -737,7 +740,11 @@ Un servidor con Docker Compose:
 - Agregar al compose de producción: imágenes propias `distribuidora-backend`, `distribuidora-migraciones`, `distribuidora-caddy` y `distribuidora-backup`, todas etiquetadas con `APP_VERSION`; `backend` y `migraciones` comparten `Dockerfile.produccion` pero llevan nombres de imagen distintos.
 - La configuración del backend se valida al arrancar en producción (`JWT_SECRET` de al menos 32 caracteres, `APP_VERSION` con forma `X.Y.Z`): el contenedor sale con código 1 y nombra la variable, nunca su valor (`python -m app.core.verificar_config`).
 - Backups: archivos `distribuidora-AAAAMMDD-HHMMSS.dump`, verificados con `pg_restore --list` (las cuatro tablas de libro); un archivo ilegible pasa a `.dump.fallido`; la salud del servicio `backup` falla si el último backup válido tiene más de 26 horas.
-- **DEBE:** una restauración de backup se prueba en un entorno separado antes de salir a producción y luego al menos una vez por mes (`00` §9, criterio 12).
+- Red `salida` solo para `copia-externa` (salida a internet, sin acceso a la base); `prueba-restauracion` sin red.
+- Los servicios de respaldo corren con un usuario sin privilegios (`${BACKUP_UID:-999}:${BACKUP_GID:-999}`); la carpeta de backups heredada del 27a necesita un `chown` único a ese dueño.
+- Restauración, prueba mensual y mudanza a otro equipo: `docs/runbook/restauracion.md`.
+- `copia-externa` se configura solo por variables, verifica cada archivo subido con `rclone check --download` y avisa por salud a las 26 horas sin copia nueva o ante un fallo de credenciales o de clave. `prueba-restauracion` avisa por salud a los 35 días sin una prueba buena y guarda su Postgres temporal en el disco del contenedor, no en memoria.
+- **DEBE:** una restauración de backup se prueba en un entorno separado antes de salir a producción (desde la copia externa, con la hoja de recuperación) y luego al menos una vez por mes; la prueba mensual es automática y su salud avisa a los 35 días sin una prueba buena (`00` §9, criterio 12; ADR-072).
 
 ## 17. Observabilidad
 
@@ -761,6 +768,8 @@ Un servidor con Docker Compose:
 - Dependencias con actualizaciones de seguridad revisadas periódicamente.
 - El frontend recorta los espacios de los extremos de organización y usuario en el login (no de la contraseña); el servidor sigue comparando tal cual (ADR-057, enmienda 2026-11-08).
 - Limitación conocida del entorno en Docker Desktop para Windows: todos los clientes llegan con la misma IP al backend, así que el límite de 20 fallos de login por IP cuenta a toda la oficina; con servidor Linux se ve la IP real de cada cliente (ADR-071).
+- Las copias externas de los backups se cifran en el equipo antes de salir; la clave son dos valores (`COPIA_CLAVE_CIFRADO` y `COPIA_SAL_CIFRADO`, ofuscados con `rclone obscure`), nunca se guardan en el almacenamiento externo, y una copia queda en custodia del dueño fuera del equipo (ADR-072).
+- Los contenedores de respaldo no corren como root; el que sube copias a internet no tiene credenciales de la base (ADR-072).
 
 ## 19. Decisiones de este documento
 

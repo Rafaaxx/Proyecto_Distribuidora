@@ -71,3 +71,5 @@
 - **Hora de gracia del backup.** Recién instalado, `backup` no pasa a `unhealthy` hasta una hora después de la primera hora programada; se recomienda `run --rm backup ahora` tras instalar.
 - **`run --rm migraciones` puede recrear `postgres`** si cambió una variable de su entorno (corte de segundos); en una actualización normal no cambia (D15).
 - **Frontend (sin cambio de API).** Recorte de organización y usuario en el login (enmienda de ADR-057) y pantalla de error de ruta «Hay una versión nueva del sistema» con «Recargar» ante un fallo de carga de módulo tras un despliegue (design D18 y D19).
+
+- **Enmienda (2026-11-10, change 27b, ADR-072).** Sin cambiar lo decidido aquí: ADR-072 enmienda D12 (restauración probada), D13 (retención 14 + 8) y la limitación del contenedor `backup` como root (que pasa a usuario sin privilegios).

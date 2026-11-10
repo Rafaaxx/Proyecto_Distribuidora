@@ -5,7 +5,9 @@
 # Variables (las de conexion son las estandar de PostgreSQL):
 #   PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE   conexion con el rol de solo lectura
 #   BACKUP_DIR         carpeta de destino              (por defecto /backups)
-#   BACKUP_RETENCION   cuantos backups validos quedan  (por defecto 7)
+#   BACKUP_DIARIOS     dias con backup que se conservan   (por defecto 14)
+#   BACKUP_SEMANALES   semanas con backup que se conservan (por defecto 8)
+# La regla esta en retencion.sh (change 27b; D1).
 #
 # Pasos: pg_dump -Fc a un archivo .tmp -> verificacion con pg_restore --list (deben estar las
 # cuatro tablas de libro) -> renombre a .dump -> retencion. Si algo falla no queda ningun .dump
@@ -13,15 +15,21 @@
 # del dump borra el .tmp. Los registros no incluyen datos del negocio.
 
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
-BACKUP_RETENCION="${BACKUP_RETENCION:-7}"
+BACKUP_DIARIOS="${BACKUP_DIARIOS:-14}"
+BACKUP_SEMANALES="${BACKUP_SEMANALES:-8}"
+DIR_SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 LIBROS="cuenta_movimiento stock_movimiento costo_producto_mov auditoria"
 
 registrar() { echo "$(date '+%Y-%m-%d %H:%M:%S %z') $*"; }
 fallar() { registrar "ERROR: $*" >&2; exit 1; }
 
-case "$BACKUP_RETENCION" in
-  ''|*[!0-9]*|0) fallar "BACKUP_RETENCION debe ser un numero entero mayor que 0 (valor recibido: '$BACKUP_RETENCION')" ;;
-esac
+for variable in BACKUP_DIARIOS BACKUP_SEMANALES; do
+  eval "valor=\$$variable"
+  case "$valor" in
+    ''|*[!0-9]*|0) fallar "$variable debe ser un numero entero mayor que 0 (valor recibido: '$valor')" ;;
+  esac
+done
+RETENCION_SOLO_FUNCIONES=1 . "$DIR_SCRIPTS/retencion.sh"
 
 # Solo el usuario que corre el servicio lee lo que se cree. En una carpeta de Windows montada
 # (Docker Desktop) los permisos no se pueden fijar: no es un error.
@@ -58,10 +66,10 @@ done
 chmod 600 "$temporal" 2>/dev/null || true
 mv "$temporal" "$final" || fallar "no se pudo renombrar el backup a $nombre"
 
-# Retencion (D13): despues de un backup verificado, se borran solo los .dump con el formato de
-# nombre de los backups que excedan los ultimos N. Todo lo demas (.fallido, .tmp, otros
-# nombres) no se toca.
-ls -1 "$BACKUP_DIR" | grep -E '^distribuidora-[0-9]{8}-[0-9]{6}\.dump$' | sort | head -n "-$BACKUP_RETENCION" |
+# Retencion (27b, D1): despues de un backup verificado, se borran solo los .dump con el formato
+# de nombre que no entran en los N diarios y M semanales (retencion.sh). Todo lo demas
+# (.fallido, .tmp, otros nombres, subcarpetas) no se toca.
+ls -1 "$BACKUP_DIR" | retencion_sobrantes "$BACKUP_DIARIOS" "$BACKUP_SEMANALES" |
   while IFS= read -r viejo; do
     rm -f "$BACKUP_DIR/$viejo" && registrar "Retencion: se borro $viejo"
   done

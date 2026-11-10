@@ -195,12 +195,28 @@ def test_backup_usa_el_rol_de_solo_lectura_y_solo_la_red_de_datos(servicios):
     assert env["PGUSER"] == "app_backup"
     assert env["PGHOST"] == "postgres"
     assert "APP_BACKUP_DB_PASSWORD" in env["PGPASSWORD"]
-    assert set(env) >= {"BACKUP_HORA", "BACKUP_RETENCION", "TZ", "BACKUP_DIR"}
+    assert set(env) >= {"BACKUP_HORA", "BACKUP_DIARIOS", "BACKUP_SEMANALES", "TZ", "BACKUP_DIR"}
     for prohibida in ("POSTGRES_PASSWORD", "APP_RUNTIME_DB_PASSWORD", "APP_MIGRATIONS_DB_PASSWORD"):
         assert prohibida not in env
     assert b["networks"] == ["datos"]
     assert "ports" not in b
     assert b["depends_on"]["postgres"]["condition"] == "service_healthy"
+
+
+def test_backup_usa_la_retencion_14_mas_8_y_ya_no_backup_retencion(servicios):
+    # Requisito «Retencion de 14 backups diarios y 8 semanales» (D1): configurable, 14 y 8.
+    env = _entorno(servicios["backup"])
+    assert "BACKUP_RETENCION" not in env
+    assert env["BACKUP_DIARIOS"] == "${BACKUP_DIARIOS:-14}"
+    assert env["BACKUP_SEMANALES"] == "${BACKUP_SEMANALES:-8}"
+    assert "BACKUP_RETENCION" not in COMPOSE.read_text(encoding="utf-8")
+
+
+def test_backup_corre_con_un_usuario_sin_privilegios(servicios):
+    # Requisito «Los servicios de respaldo no corren como superusuario» (D11).
+    usuario = servicios["backup"]["user"]
+    assert usuario == "${BACKUP_UID:-999}:${BACKUP_GID:-999}"
+    assert not usuario.startswith(("0:", "root"))
 
 
 def test_backup_se_construye_de_su_propia_imagen_y_la_salud_la_da_salud_sh(servicios):
@@ -226,3 +242,207 @@ def test_backup_dir_es_obligatorio():
     texto = COMPOSE.read_text(encoding="utf-8")
     usos = re.findall(r"\$\{BACKUP_DIR([^}]*)\}", texto)
     assert usos and all(u.startswith(":?") and len(u) > 2 for u in usos)
+
+
+# --- Servicio `copia-externa` (change 27b, Lote 2; D4, D5, D6, D11) ----------------------------
+
+SECRETOS_COPIA = (
+    "COPIA_ACCESS_KEY_ID",
+    "COPIA_SECRET_ACCESS_KEY",
+    "COPIA_CLAVE_CIFRADO",
+    "COPIA_SAL_CIFRADO",
+)
+
+
+def test_copia_externa_no_amplia_la_exposicion_ni_toca_la_base(compose, servicios):
+    # Escenarios «Los servicios nuevos de respaldo no amplian la exposicion», «Roles de los
+    # servicios de respaldo» (parte de `copia-externa`) y «El servicio de copia no puede llegar
+    # a la base».
+    s = servicios["copia-externa"]
+    assert "ports" not in s
+    assert s["networks"] == ["salida"]
+    assert not compose["networks"]["salida"].get("internal", False)
+    assert compose["networks"]["datos"]["internal"] is True
+    assert "depends_on" not in s
+    env = _entorno(s)
+    assert not [v for v in env if v.startswith("PG") or "DB_PASSWORD" in v or "DATABASE" in v]
+    for prohibida in ("POSTGRES_PASSWORD", "JWT_SECRET"):
+        assert prohibida not in env
+
+
+def test_copia_externa_lee_los_backups_solo_lectura_y_corre_sin_privilegios(servicios):
+    s = servicios["copia-externa"]
+    assert (
+        s["image"]
+        == "distribuidora-copia:${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}"
+    )
+    assert s["build"]["dockerfile"] == "copia/Dockerfile"
+    assert s["build"]["context"] == "./infra"
+    montajes = s["volumes"]
+    assert any(m.startswith("${BACKUP_DIR:?") and m.endswith(":/backups:ro") for m in montajes), (
+        montajes
+    )
+    # La carpeta de `bajar` es una subcarpeta de BACKUP_DIR, montada aparte y con escritura.
+    assert any(m.startswith("${BACKUP_DIR:?") and m.endswith("/bajados:/bajados") for m in montajes)
+    assert s["user"] == "${BACKUP_UID:-999}:${BACKUP_GID:-999}"
+    assert _entorno(s)["BACKUP_DIR"] == "/backups"
+
+
+def test_copia_externa_se_reinicia_declara_salud_y_rota_registros(servicios):
+    s = servicios["copia-externa"]
+    assert s["restart"] == "unless-stopped"
+    assert "salud.sh" in " ".join(s["healthcheck"]["test"])
+    assert s["healthcheck"]["interval"]
+    assert s["logging"]["options"]["max-size"] == "10m"
+
+
+def test_copia_externa_recibe_la_configuracion_del_destino_y_la_retencion(servicios):
+    env = _entorno(servicios["copia-externa"])
+    assert set(env) >= {
+        "COPIA_TIPO", "COPIA_RUTA", "COPIA_S3_PROVEEDOR", "COPIA_S3_ENDPOINT", "COPIA_S3_REGION",
+        "BACKUP_DIARIOS", "BACKUP_SEMANALES", "TZ", "AVISO_URL", *SECRETOS_COPIA,
+    }  # fmt: skip
+    assert env["BACKUP_DIARIOS"] == "${BACKUP_DIARIOS:-14}"
+    assert env["BACKUP_SEMANALES"] == "${BACKUP_SEMANALES:-8}"
+
+
+def test_los_secretos_de_la_copia_externa_exigen_valor_y_nombran_la_variable():
+    # Escenario «Falta la clave de cifrado de la copia externa».
+    texto = COMPOSE.read_text(encoding="utf-8")
+    for secreto in SECRETOS_COPIA:
+        usos = re.findall(r"\$\{" + secreto + r"([^}]*)\}", texto)
+        assert usos, f"{secreto} no se usa en el compose"
+        for resto in usos:
+            assert resto.startswith(":?") and len(resto) > 2, f"{secreto}: {resto!r}"
+    for variable in ("COPIA_TIPO", "COPIA_RUTA"):
+        usos = re.findall(r"\$\{" + variable + r"([^}]*)\}", texto)
+        assert usos and all(u.startswith(":?") and len(u) > 2 for u in usos)
+
+
+def test_el_compose_se_niega_a_levantar_sin_la_clave_de_cifrado(tmp_path):
+    # Escenario «Falta la clave de cifrado de la copia externa», ejecutado con `docker compose
+    # config`: el error nombra la variable. Se omite si no esta el cliente de compose.
+    import shutil
+    import subprocess
+
+    if shutil.which("docker") is None:
+        pytest.skip("sin cliente docker: la lectura del compose cubre el escenario")
+    base = {
+        "POSTGRES_PASSWORD": "a", "APP_MIGRATIONS_DB_PASSWORD": "b", "APP_RUNTIME_DB_PASSWORD": "c",
+        "APP_BACKUP_DB_PASSWORD": "d", "JWT_SECRET": "e" * 32, "DOMINIO": "localhost",
+        "CADDY_TLS": "internal", "APP_VERSION": "0.27.0", "BACKUP_DIR": "/tmp/b",
+        "COPIA_TIPO": "local", "COPIA_RUTA": "/destino-local/x", "COPIA_ACCESS_KEY_ID": "n",
+        "COPIA_SECRET_ACCESS_KEY": "n", "COPIA_CLAVE_CIFRADO": "k", "COPIA_SAL_CIFRADO": "s",
+    }  # fmt: skip
+
+    def config(valores: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        archivo = tmp_path / "entorno.env"
+        archivo.write_text("\n".join(f"{k}={v}" for k, v in valores.items()), encoding="utf-8")
+        return subprocess.run(
+            ["docker", "compose", "-f", str(COMPOSE), "--env-file", str(archivo), "config", "-q"],
+            capture_output=True, text=True, check=False, env=dict(__import__("os").environ),
+        )  # fmt: skip
+
+    assert config(base).returncode == 0
+    for falta in ("COPIA_CLAVE_CIFRADO", "COPIA_SAL_CIFRADO"):
+        r = config({k: v for k, v in base.items() if k != falta})
+        assert r.returncode != 0 and falta in r.stderr, r.stderr
+
+
+# --- Restauracion y prueba periodica (27b, Lote 3; D8, D10, D11) -------------------------------
+
+SIN_CONEXION_A_LA_BASE = ("PGHOST", "PGUSER", "PGPASSWORD", "PGDATABASE", "DATABASE_URL")
+
+
+def test_prueba_restauracion_no_tiene_red_ni_credenciales_ni_puertos(compose, servicios):
+    # Escenarios «Los servicios nuevos de respaldo no amplian la exposicion», «Roles de los
+    # servicios de respaldo» y «La prueba no toca produccion» (D10).
+    s = servicios["prueba-restauracion"]
+    assert s["network_mode"] == "none"
+    assert "networks" not in s and "ports" not in s
+    assert "depends_on" not in s
+    env = _entorno(s)
+    assert not [v for v in env if v in SIN_CONEXION_A_LA_BASE or "PASSWORD" in v or "SECRET" in v]
+    assert not [v for v in env if v.startswith("PG") or "DB_PASSWORD" in v or "DATABASE" in v]
+
+
+def test_prueba_restauracion_lee_los_backups_solo_lectura_sin_privilegios_y_con_salud(servicios):
+    s = servicios["prueba-restauracion"]
+    montajes = s["volumes"]
+    assert any(m.startswith("${BACKUP_DIR:?") and m.endswith(":/backups:ro") for m in montajes), (
+        montajes
+    )
+    # Sin otro montaje del equipo con escritura: solo el volumen con el estado de la salud.
+    assert [m for m in montajes if not m.endswith(":ro")] == ["estado_prueba:/estado-prueba"]
+    assert s["user"] == "${BACKUP_UID:-999}:${BACKUP_GID:-999}"
+    assert s["restart"] == "unless-stopped"
+    assert "salud_prueba.sh" in " ".join(s["healthcheck"]["test"])
+    assert s["healthcheck"]["interval"]
+    assert s["logging"]["options"]["max-size"] == "10m"
+
+
+def test_prueba_restauracion_arranca_el_programador_mensual_con_dia_y_hora(servicios):
+    s = servicios["prueba-restauracion"]
+    assert s["entrypoint"] == ["sh", "/opt/backup/programar_prueba.sh"]
+    assert s["build"]["context"] == "./infra/backup"
+    assert s["image"].startswith("distribuidora-prueba-restauracion:${APP_VERSION:?")
+    env = _entorno(s)
+    assert env["PRUEBA_DIA"] == "${PRUEBA_DIA:-1}"
+    assert env["PRUEBA_HORA"] == "${PRUEBA_HORA:-04:00}"
+    assert env["BACKUP_DIR"] == "/backups"
+    assert env["TZ"] == "${TZ:-America/Argentina/Mendoza}"
+
+
+def test_restauracion_esta_en_un_perfil_aparte_y_se_conecta_como_dueno_del_esquema(
+    compose, servicios
+):
+    # Escenarios «Los servicios nuevos de respaldo no amplian la exposicion» (perfil que `up` no
+    # arranca) y «Roles de los servicios de respaldo» (app_migrations, ADR-020, D8).
+    s = servicios["restauracion"]
+    assert s["profiles"] == ["restauracion"]
+    assert "ports" not in s
+    assert s["networks"] == ["datos"]
+    assert s["restart"] == "no"
+    env = _entorno(s)
+    assert env["PGUSER"] == "app_migrations"
+    assert env["PGHOST"] == "postgres"
+    assert env["PGPASSWORD"].startswith("${APP_MIGRATIONS_DB_PASSWORD:?")
+    assert env["BACKUP_DIR"] == "/backups"
+    for prohibida in ("POSTGRES_PASSWORD", "APP_RUNTIME_DB_PASSWORD", "APP_BACKUP_DB_PASSWORD",
+                      "JWT_SECRET"):  # fmt: skip
+        assert prohibida not in env and prohibida not in " ".join(env.values())
+
+
+def test_restauracion_lee_los_backups_solo_lectura_y_corre_sin_privilegios(servicios):
+    s = servicios["restauracion"]
+    assert s["volumes"] and all(
+        m.startswith("${BACKUP_DIR:?") and m.endswith(":/backups:ro") for m in s["volumes"]
+    )
+    assert s["user"] == "${BACKUP_UID:-999}:${BACKUP_GID:-999}"
+    assert s["entrypoint"] == ["sh", "/opt/backup/restaurar.sh"]
+    assert s["build"]["context"] == "./infra/backup"
+    assert s["image"].startswith("distribuidora-restauracion:${APP_VERSION:?")
+
+
+def test_solo_los_servicios_del_entorno_normal_arrancan_con_up(servicios):
+    # `up` no arranca los servicios con perfil: la restauracion solo corre a pedido.
+    con_perfil = {n for n, s in servicios.items() if s.get("profiles")}
+    assert con_perfil == {"restauracion"}
+
+
+def test_la_restauracion_usa_la_base_de_produccion_y_espera_a_que_este_sana(servicios):
+    s = servicios["restauracion"]
+    assert s["depends_on"]["postgres"]["condition"] == "service_healthy"
+    assert _entorno(s)["PGDATABASE"] == "${POSTGRES_DB:-distribuidora}"
+
+
+def test_el_volumen_de_estado_de_la_prueba_esta_declarado(compose):
+    assert "estado_prueba" in compose["volumes"]
+
+
+@pytest.mark.parametrize(
+    "nombre", ["backup", "copia-externa", "prueba-restauracion", "restauracion"]
+)
+def test_todo_servicio_de_respaldo_fija_la_zona_horaria(servicios, nombre):
+    # Ajuste de la prueba manual: los registros de todos salen en la misma hora local.
+    assert _entorno(servicios[nombre])["TZ"] == "${TZ:-America/Argentina/Mendoza}"

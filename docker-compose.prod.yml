@@ -149,6 +149,9 @@ services:
       context: ./infra/backup
     image: distribuidora-backup:${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
     restart: unless-stopped
+    # Sin privilegios dentro del contenedor (27b, D11). En Linux la carpeta BACKUP_DIR debe
+    # pertenecer a este usuario (chown 999:999).
+    user: "${BACKUP_UID:-999}:${BACKUP_GID:-999}"
     environment:
       PGHOST: postgres
       PGUSER: app_backup
@@ -156,7 +159,8 @@ services:
       PGDATABASE: ${POSTGRES_DB:-distribuidora}
       BACKUP_DIR: /backups
       BACKUP_HORA: ${BACKUP_HORA:-03:00}
-      BACKUP_RETENCION: ${BACKUP_RETENCION:-7}
+      BACKUP_DIARIOS: ${BACKUP_DIARIOS:-14}
+      BACKUP_SEMANALES: ${BACKUP_SEMANALES:-8}
       TZ: ${TZ:-America/Argentina/Mendoza}
     volumes:
       # Carpeta del equipo (debe existir), fuera de los volumenes: sobrevive a `down -v`.
@@ -174,6 +178,115 @@ services:
       start_period: 1m
     logging: *logging
 
+  # Copia externa de los backups (27b, D2 a D6, D14). Sube cada hora a un almacenamiento fuera
+  # del equipo los .dump validos, CIFRADOS antes de salir (rclone crypt), y los baja y descifra
+  # a pedido:
+  #   docker compose -f docker-compose.prod.yml --env-file <archivo> run --rm copia-externa ahora
+  #   docker compose -f docker-compose.prod.yml --env-file <archivo> run --rm copia-externa bajar <archivo.dump>
+  # NO recibe ninguna credencial de la base y no esta en la red `datos`: solo en `salida`, que
+  # tiene internet pero no ve ni Postgres ni el backend. Lee los backups en solo lectura; lo
+  # que baja con `bajar` queda en la subcarpeta `bajados` de BACKUP_DIR (la unica con escritura;
+  # en Linux debe existir y pertenecer a BACKUP_UID: mkdir + chown 999:999).
+  copia-externa:
+    build:
+      context: ./infra
+      dockerfile: copia/Dockerfile
+    image: distribuidora-copia:${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+    restart: unless-stopped
+    user: "${BACKUP_UID:-999}:${BACKUP_GID:-999}"
+    environment:
+      BACKUP_DIR: /backups
+      BACKUP_DIARIOS: ${BACKUP_DIARIOS:-14}
+      BACKUP_SEMANALES: ${BACKUP_SEMANALES:-8}
+      TZ: ${TZ:-America/Argentina/Mendoza}
+      COPIA_TIPO: ${COPIA_TIPO:?Falta COPIA_TIPO en el archivo de entorno (s3 o local)}
+      COPIA_RUTA: ${COPIA_RUTA:?Falta COPIA_RUTA en el archivo de entorno}
+      COPIA_S3_PROVEEDOR: ${COPIA_S3_PROVEEDOR:-Other}
+      COPIA_S3_ENDPOINT: ${COPIA_S3_ENDPOINT:-}
+      COPIA_S3_REGION: ${COPIA_S3_REGION:-}
+      COPIA_ACCESS_KEY_ID: ${COPIA_ACCESS_KEY_ID:?Falta COPIA_ACCESS_KEY_ID en el archivo de entorno}
+      COPIA_SECRET_ACCESS_KEY: ${COPIA_SECRET_ACCESS_KEY:?Falta COPIA_SECRET_ACCESS_KEY en el archivo de entorno}
+      COPIA_CLAVE_CIFRADO: ${COPIA_CLAVE_CIFRADO:?Falta COPIA_CLAVE_CIFRADO en el archivo de entorno}
+      COPIA_SAL_CIFRADO: ${COPIA_SAL_CIFRADO:?Falta COPIA_SAL_CIFRADO en el archivo de entorno}
+      AVISO_URL: ${AVISO_URL:-}
+    volumes:
+      - ${BACKUP_DIR:?Falta BACKUP_DIR en el archivo de entorno}:/backups:ro
+      - ${BACKUP_DIR:?Falta BACKUP_DIR en el archivo de entorno}/bajados:/bajados
+      # Destino LOCAL del ensayo (COPIA_TIPO=local, COPIA_RUTA bajo /destino-local): carpeta del
+      # equipo o, por defecto, un volumen. Con un destino S3 no se usa.
+      - ${COPIA_LOCAL_DIR:-copia_local}:/destino-local
+    networks: [salida]
+    healthcheck:
+      # No sano si el backup mas reciente del destino tiene mas de 26 horas o la ultima corrida
+      # fallo por credenciales o clave (salud.sh).
+      test: ["CMD", "sh", "/opt/copia/salud.sh"]
+      interval: 5m
+      timeout: 60s
+      retries: 1
+      start_period: 1m
+    logging: *logging
+
+  # Prueba mensual de restauracion (27b, D10, D11). SIN RED (`network_mode: none`) y sin ninguna
+  # credencial de la base: levanta dentro de su contenedor un Postgres temporal propio, restaura
+  # el backup valido mas reciente, lo comprueba y lo descarta. Lee los backups en solo lectura.
+  # Salud: no sano si la ultima prueba buena tiene mas de 35 dias o si la ultima fallo. A pedido:
+  #   docker compose -f docker-compose.prod.yml --env-file <archivo> run --rm prueba-restauracion ahora [archivo]
+  # Aviso externo (AVISO_URL): este servicio no tiene red, por eso no lo recibe (ver el runbook).
+  prueba-restauracion:
+    build:
+      context: ./infra/backup
+    image: distribuidora-prueba-restauracion:${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+    entrypoint: ["sh", "/opt/backup/programar_prueba.sh"]
+    restart: unless-stopped
+    network_mode: none
+    user: "${BACKUP_UID:-999}:${BACKUP_GID:-999}"
+    environment:
+      BACKUP_DIR: /backups
+      ESTADO_DIR: /estado-prueba
+      PRUEBA_DIA: ${PRUEBA_DIA:-1}
+      PRUEBA_HORA: ${PRUEBA_HORA:-04:00}
+      TZ: ${TZ:-America/Argentina/Mendoza}
+    volumes:
+      - ${BACKUP_DIR:?Falta BACKUP_DIR en el archivo de entorno}:/backups:ro
+      # Unico lugar con escritura: la ultima prueba y la hora de arranque (para la salud).
+      - estado_prueba:/estado-prueba
+    healthcheck:
+      # No sano si la ultima prueba buena tiene mas de 35 dias o si la ultima fallo.
+      test: ["CMD", "sh", "/opt/backup/salud_prueba.sh"]
+      interval: 1h
+      timeout: 10s
+      retries: 1
+      start_period: 1m
+    logging: *logging
+
+  # Restauracion de un backup en una base VACIA (27b, D8). No arranca con `up` (perfil aparte):
+  # solo a pedido, con el backend detenido y la base recien creada y vacia:
+  #   docker compose -f docker-compose.prod.yml --env-file <archivo> --profile restauracion run --rm restauracion <archivo.dump>
+  # Se conecta como `app_migrations` (dueno del esquema, ADR-020), nunca como superusuario. Lee
+  # los backups en solo lectura (tambien la subcarpeta `bajados` con lo que baja la copia externa).
+  restauracion:
+    build:
+      context: ./infra/backup
+    image: distribuidora-restauracion:${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+    profiles: [restauracion]
+    entrypoint: ["sh", "/opt/backup/restaurar.sh"]
+    restart: "no"
+    user: "${BACKUP_UID:-999}:${BACKUP_GID:-999}"
+    environment:
+      PGHOST: postgres
+      PGUSER: app_migrations
+      PGPASSWORD: ${APP_MIGRATIONS_DB_PASSWORD:?Falta APP_MIGRATIONS_DB_PASSWORD en el archivo de entorno}
+      PGDATABASE: ${POSTGRES_DB:-distribuidora}
+      BACKUP_DIR: /backups
+      TZ: ${TZ:-America/Argentina/Mendoza}
+    volumes:
+      - ${BACKUP_DIR:?Falta BACKUP_DIR en el archivo de entorno}:/backups:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [datos]
+    logging: *logging
+
 networks:
   # Caddy <-> backend. Subred fija para poder confiar en el proxy (D5).
   frente:
@@ -183,8 +296,14 @@ networks:
   # Backend, base y migraciones. Sin salida a internet y sin Caddy.
   datos:
     internal: true
+  # Solo `copia-externa`: sale a internet, sin acceso a la base ni al backend (27b, D4).
+  salida: {}
 
 volumes:
   postgres_data:
   caddy_data:
   caddy_config:
+  # Estado de la salud de la prueba de restauracion (sobrevive a recrear el contenedor).
+  estado_prueba:
+  # Destino local de la copia externa para ensayar sin cuenta (COPIA_LOCAL_DIR lo reemplaza).
+  copia_local:

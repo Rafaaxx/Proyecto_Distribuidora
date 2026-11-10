@@ -153,6 +153,69 @@ def test_archivo_truncado_pasa_a_fallido_y_no_cuenta(corredor):
     assert "ERROR" in registro and "Backup verificado" not in registro
 
 
+# --- Usuario sin privilegios (27b, D11) -----------------------------------------------------
+
+
+@pytest.fixture
+def carpeta_de_999(docker_cliente, imagen_backup):
+    """Volumen de Docker cuya raiz pertenece a 999:999, como el `chown 999:999` del runbook."""
+    volumen = docker_cliente.volumes.create()
+    preparacion = docker_cliente.containers.run(
+        imagen_backup,
+        entrypoint=["sh", "-c", "chown 999:999 /datos && chmod 700 /datos"],
+        user="0:0",
+        volumes={volumen.name: {"bind": "/datos", "mode": "rw"}},
+        remove=True,
+    )
+    del preparacion
+    yield {volumen.name: {"bind": "/tmp/respaldos", "mode": "rw"}}
+    volumen.remove(force=True)
+
+
+def test_backup_con_usuario_sin_privilegios_escribe_en_la_carpeta(corredor, carpeta_de_999):
+    # Escenario «Backup con usuario sin privilegios» (D11): el proceso no es root y el archivo
+    # queda en el directorio de backups.
+    _, salida = corredor.correr(
+        "id -u; id -g; sh /opt/backup/programar.sh ahora; rc=$?; echo ---RC=$rc; "
+        "ls -ln /tmp/respaldos; exit 0",
+        usuario="999:999",
+        volumenes=carpeta_de_999,
+    )
+    assert salida.startswith("999\n999\n")
+    rc, _, _ = _resultado(salida)
+    assert rc == 0
+    assert re.search(r"^-rw------- 1 999 999 \d+ .* distribuidora-\d{8}-\d{6}\.dump$", salida, re.M)
+
+
+def test_con_usuario_sin_privilegios_el_servicio_programa_y_la_salud_funciona(
+    corredor, carpeta_de_999
+):
+    # El directorio de estado (ESTADO_DIR) debe ser escribible sin root y la salud debe leerlo.
+    _, salida = corredor.correr(
+        "timeout 3 sh /opt/backup/programar.sh >/dev/null 2>&1; "
+        "echo PRIMERA=$(test -s /tmp/estado-backup/primera && echo si || echo no); "
+        "sh /opt/backup/salud.sh; echo SALUD=$?; exit 0",
+        entorno={"BACKUP_DIR": "/tmp/respaldos"},
+        usuario="999:999",
+        volumenes=carpeta_de_999,
+        red=False,
+    )
+    assert "PRIMERA=si" in salida
+    assert "SALUD=0" in salida
+
+
+def test_los_scripts_son_legibles_y_no_escribibles_por_el_usuario_sin_privilegios(corredor):
+    _, salida = corredor.correr(
+        "for f in /opt/backup/*.sh; do test -r $f || echo ILEGIBLE:$f; "
+        "test -w $f && echo ESCRIBIBLE:$f; done; echo FIN; exit 0",
+        usuario="999:999",
+        red=False,
+    )
+    assert "FIN" in salida
+    assert "ILEGIBLE" not in salida
+    assert "ESCRIBIBLE" not in salida
+
+
 # --- Retencion ---------------------------------------------------------------------------
 
 
@@ -165,61 +228,101 @@ def _crear_antiguos(cantidad: int, extra: str = "") -> str:
     return "; ".join(lineas) + "; " + extra
 
 
-def test_retencion_deja_los_siete_mas_recientes_incluido_el_nuevo(corredor):
-    _, salida = corredor.correr(_con_listado(_crear_antiguos(8) + "sh /opt/backup/respaldar.sh"))
+def test_retencion_por_defecto_conserva_14_diarios_y_8_semanales(corredor):
+    # Requisito «Retencion de 14 backups diarios y 8 semanales» (D1): 25 backups viejos
+    # (2026-01-06 al 2026-01-30) mas el nuevo. Quedan los 13 diarios mas recientes viejos
+    # (01-18 al 01-30), el nuevo, y el semanal de la semana 01-05..01-11 (el del 01-11).
+    _, salida = corredor.correr(_con_listado(_crear_antiguos(25) + "sh /opt/backup/respaldar.sh"))
     rc, _, archivos = _resultado(salida)
     assert rc == 0
-    assert len(archivos) == 7
     assert all(NOMBRE_VALIDO.match(a) for a in archivos)
     assert archivos == sorted(archivos)
-    # Se fueron los mas viejos; el nuevo (fecha real de hoy) es el ultimo.
-    assert "distribuidora-20260124-030000.dump" not in archivos
-    assert archivos[0] == "distribuidora-20260125-030000.dump"
+    assert len(archivos) == 15
+    assert archivos[0] == "distribuidora-20260111-030000.dump"
+    assert archivos[1] == "distribuidora-20260118-030000.dump"
+    assert "distribuidora-20260110-030000.dump" not in archivos
 
 
-def test_retencion_respeta_backup_retencion(corredor):
+def test_retencion_respeta_backup_diarios_y_backup_semanales(corredor):
     _, salida = corredor.correr(
         _con_listado(_crear_antiguos(5) + "sh /opt/backup/respaldar.sh"),
-        entorno={"BACKUP_RETENCION": "2"},
+        entorno={"BACKUP_DIARIOS": "2", "BACKUP_SEMANALES": "1"},
     )
     _, _, archivos = _resultado(salida)
-    assert len(archivos) == 2
+    assert len(archivos) == 2  # el nuevo y el 01-30; el semanal es el nuevo
+    assert archivos[0] == "distribuidora-20260130-030000.dump"
+
+
+def test_backup_retencion_ya_no_se_lee(corredor):
+    _, salida = corredor.correr(
+        _con_listado(_crear_antiguos(5) + "sh /opt/backup/respaldar.sh"),
+        entorno={"BACKUP_RETENCION": "1"},
+    )
+    rc, _, archivos = _resultado(salida)
+    assert rc == 0
+    assert len(archivos) == 6
+
+
+@pytest.mark.parametrize(
+    ("variable", "valor"),
+    [
+        ("BACKUP_DIARIOS", "abc"),
+        ("BACKUP_DIARIOS", "0"),
+        ("BACKUP_SEMANALES", "0"),
+        ("BACKUP_SEMANALES", "-3"),
+    ],
+)
+def test_cantidades_invalidas_fallan_nombrando_la_variable(corredor, variable, valor):
+    _, salida = corredor.correr(
+        _con_listado(_crear_antiguos(3) + "sh /opt/backup/respaldar.sh 2>&1"),
+        entorno={variable: valor},
+    )
+    rc, _, archivos = _resultado(salida)
+    assert rc != 0
+    # stderr se unio a stdout en la orden: el contenedor puede entregar ambos en otro orden.
+    assert variable in salida
+    assert len(archivos) == 3  # no hizo backup ni borro nada
 
 
 def test_backup_fallido_no_borra_nada(corredor):
+    # Escenario «Un backup fallido no dispara la limpieza».
     _, salida = corredor.correr(
-        _con_listado(_crear_antiguos(7) + "sh /opt/backup/respaldar.sh"),
+        _con_listado(_crear_antiguos(25) + "sh /opt/backup/respaldar.sh"),
         entorno={"PGHOST": "no-existe"},
     )
     rc, _, archivos = _resultado(salida)
     assert rc != 0
-    assert len(archivos) == 7
+    assert len(archivos) == 25
 
 
 def test_verificacion_fallida_no_dispara_la_limpieza(corredor):
     _, salida = corredor.correr(
-        _con_listado(_crear_antiguos(7) + STUB_TRUNCADO + "sh /opt/backup/respaldar.sh")
+        _con_listado(_crear_antiguos(25) + STUB_TRUNCADO + "sh /opt/backup/respaldar.sh")
     )
     _, _, archivos = _resultado(salida)
     validos = [a for a in archivos if NOMBRE_VALIDO.match(a)]
-    assert len(validos) == 7
+    assert len(validos) == 25
     assert any(a.endswith(".fallido") for a in archivos)
 
 
 def test_retencion_no_toca_archivos_ajenos_ni_fallidos(corredor):
+    # Escenario «Archivos ajenos no se tocan», con una subcarpeta incluida.
     previos = (
         "echo x > /tmp/respaldos/restauracion-de-prueba.sql; "
         "echo x > /tmp/respaldos/distribuidora-20250101-030000.dump.fallido; "
         "echo x > /tmp/respaldos/distribuidora-20250101-030000.dump.tmp; "
         "echo x > /tmp/respaldos/notas.txt; "
+        "mkdir -p /tmp/respaldos/bajados; "
+        "echo x > /tmp/respaldos/bajados/distribuidora-20200101-030000.dump; "
     )
     _, salida = corredor.correr(
         _con_listado(_crear_antiguos(9, previos) + "sh /opt/backup/respaldar.sh"),
-        entorno={"BACKUP_RETENCION": "3"},
+        entorno={"BACKUP_DIARIOS": "3", "BACKUP_SEMANALES": "1"},
     )
     _, _, archivos = _resultado(salida)
     assert "restauracion-de-prueba.sql" in archivos
     assert "notas.txt" in archivos
+    assert "bajados" in archivos
     assert "distribuidora-20250101-030000.dump.fallido" in archivos
     assert "distribuidora-20250101-030000.dump.tmp" in archivos
     assert len([a for a in archivos if NOMBRE_VALIDO.match(a)]) == 3

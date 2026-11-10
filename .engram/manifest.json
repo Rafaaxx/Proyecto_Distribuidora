@@ -664,6 +664,22 @@
       "sessions": 0,
       "memories": 2,
       "prompts": 0
+    },
+    {
+      "id": "4370f0bf",
+      "created_by": "rafan",
+      "created_at": "2026-11-08T20:11:32Z",
+      "sessions": 0,
+      "memories": 1,
+      "prompts": 0
+    },
+    {
+      "id": "9d1e3c3f",
+      "created_by": "rafan",
+      "created_at": "2026-11-10T04:11:51Z",
+      "sessions": 0,
+      "memories": 3,
+      "prompts": 0
     }
   ]
 }

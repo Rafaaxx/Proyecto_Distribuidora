@@ -91,6 +91,9 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./tests/unit/setup.ts'],
+    // Zona horaria fija para las pruebas: las que muestran fechas esperan la hora argentina
+    // (UTC-3) y no deben depender de la máquina (la CI de GitHub corre en UTC).
+    env: { TZ: 'America/Argentina/Buenos_Aires' },
     include: ['tests/unit/**/*.test.{ts,tsx}'],
     // La suite de aceptación (Playwright) corre aparte: `npm run test:e2e` (change 28).
     exclude: ['tests/e2e/**', 'node_modules/**'],

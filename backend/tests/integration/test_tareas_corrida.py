@@ -131,7 +131,7 @@ def test_la_corrida_a_pedido_tambien_limpia_los_intentos_de_login_viejos(
 
     with _engine_de_sesion.connect() as conexion:
         assert conexion.execute(text("SELECT count(*) FROM intento_login")).scalar_one() == 1
-    assert "1 intentos de inicio de sesión de más de 24 horas" in capsys.readouterr().out
+    assert "1 intento de inicio de sesión de más de 24 horas borrado" in capsys.readouterr().out
 
 
 def test_una_diferencia_es_error_critico_sin_datos_personales_y_la_salud_cae_hasta_corregirla(

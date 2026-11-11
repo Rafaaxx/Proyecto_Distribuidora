@@ -25,6 +25,7 @@ from app.core.clock import Clock, SystemClock
 from app.modules.identidad import service as identidad_service
 from app.modules.reportes import queries
 from app.modules.reportes.schemas import (
+    ConsistenciaResponse,
     ReporteDeAjustesResponse,
     ReporteDeObservacionesResponse,
     ReporteDeRendicionesResponse,
@@ -32,6 +33,7 @@ from app.modules.reportes.schemas import (
     ReporteDeSaldosDeProveedoresResponse,
     ReporteDeVentasResponse,
     ResumenDeJornadaDeReporteResponse,
+    consistencia_response,
     reporte_de_ajustes_response,
     reporte_de_observaciones_response,
     reporte_de_rendiciones_response,
@@ -49,6 +51,12 @@ PERMISO_VER_UTILIDAD = "VER_UTILIDAD"
 PERMISO_VER_COSTOS = "VER_COSTOS"
 
 router = APIRouter(prefix="/reportes", tags=["reportes"])
+
+PERMISO_VER_CONSISTENCIA = "VER_CONSISTENCIA"
+
+# El aviso de consistencia (change 28, D5) es una lectura que compone nombres de varios módulos
+# por sus `service.py`, igual que los reportes; cuelga de `/sistema`, no de `/reportes`.
+router_sistema = APIRouter(prefix="/sistema", tags=["sistema"])
 
 
 def obtener_reloj() -> Clock:
@@ -242,3 +250,15 @@ def reporte_de_saldos_de_proveedores(
         contexto.organizacion_id, sesion, saldo=saldo, estado=estado, texto=texto, pagina=pagina
     )
     return reporte_de_saldos_de_proveedores_response(reporte)
+
+
+@router_sistema.get("/consistencia", response_model=ConsistenciaResponse)
+def consistencia_del_sistema(
+    contexto: Annotated[ContextoAutenticado, Depends(requiere_permiso(PERMISO_VER_CONSISTENCIA))],
+    sesion: Annotated[Session, Depends(get_session)],
+) -> ConsistenciaResponse:
+    """El último resultado de la verificación de consistencia de la organización del token
+    (ADR-015, `02` §7.6): momento de la corrida y, si hubo diferencias, el detalle con los nombres
+    de cuentas, productos y ubicaciones. Solo lectura: nunca corrige un saldo. Sin ninguna corrida
+    todavía, `resultado` y `ejecutada_en` vienen en `null`."""
+    return consistencia_response(queries.obtener_consistencia(contexto.organizacion_id, sesion))

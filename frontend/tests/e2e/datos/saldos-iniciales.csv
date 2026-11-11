@@ -1,0 +1,4 @@
+cuenta_tipo,entidad,importe,sentido
+CLIENTE,C001,"25000,00",Nos debe
+CLIENTE,C002,"8000,00",Nos debe
+PROVEEDOR,Bodega del Valle,"50000,00",Le debemos

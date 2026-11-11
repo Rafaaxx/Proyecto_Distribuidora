@@ -103,6 +103,7 @@ from app.modules.identidad.models import (
     Permiso,
     Rol,
     Usuario,
+    VerificacionConsistencia,
 )
 
 
@@ -200,6 +201,57 @@ def crear_organizacion_con_configuracion(
 
 def obtener_organizacion(organizacion_id: UUID, sesion: Session) -> Organizacion | None:
     return repository.obtener_organizacion_por_id(organizacion_id, sesion)
+
+
+def listar_organizaciones_ids(sesion: Session) -> list[UUID]:
+    """Identificadores de todas las organizaciones, para las tareas periódicas del servicio
+    `tareas` (change 28, D2)."""
+    return repository.listar_organizaciones_ids(sesion)
+
+
+def registrar_verificacion_de_consistencia(
+    organizacion_id: UUID,
+    sesion: Session,
+    reloj: Clock,
+    *,
+    ejecutada_en: datetime,
+    diferencias: list[dict[str, object]],
+) -> str:
+    """Guarda el resultado de una corrida de la verificación de consistencia de la organización
+    y devuelve `SIN_DIFERENCIAS` o `CON_DIFERENCIAS` (change 28, D5). No es una operación de
+    negocio (no la origina un usuario ni tiene `operation_id`): la escribe solo el servicio
+    `tareas` con el rol `app_mantenimiento`, igual que el `INSERT` de `intento_login`. Sin
+    `commit`: lo hace quien llama."""
+    resultado = "CON_DIFERENCIAS" if diferencias else "SIN_DIFERENCIAS"
+    repository.registrar_verificacion_de_consistencia(
+        organizacion_id,
+        sesion,
+        verificacion_id=nuevo_id(),
+        ejecutada_en=ejecutada_en,
+        resultado=resultado,
+        diferencias=diferencias,
+        registered_at=reloj.now(),
+    )
+    return resultado
+
+
+def ultima_verificacion_de_consistencia(
+    organizacion_id: UUID, sesion: Session
+) -> VerificacionConsistencia | None:
+    """El resultado de la corrida más reciente de la verificación de consistencia de la
+    organización, o `None` si todavía no corrió (change 28, D5): lo que lee el aviso de `/admin`.
+    Solo lectura."""
+    return repository.ultima_verificacion_de_consistencia(organizacion_id, sesion)
+
+
+def limpiar_intentos_de_login(sesion: Session, reloj: Clock) -> int:
+    """Borra los intentos de inicio de sesión de más de 24 horas respecto del reloj y devuelve
+    cuántos fueron (ADR-018, change 28 D7). Incluye las marcas de desbloqueo manual: el bloqueo
+    mira solo 15 minutos. No toca la auditoría. Solo lo ejecuta el rol de mantenimiento. Sin
+    `commit`: lo hace quien llama."""
+    return repository.borrar_intentos_de_login_anteriores_a(
+        sesion, limite=reloj.now() - RETENCION_DE_INTENTOS_DE_LOGIN
+    )
 
 
 def resolver_organizacion_por_slug(slug: str, sesion: Session) -> Organizacion | None:
@@ -2261,6 +2313,9 @@ todos. Constante del código, junto a los límites del login: `03` no tiene camp
 VENTANA_BLOQUEO_PIN = timedelta(minutes=15)
 
 _MENSAJE_PIN_BLOQUEADO = "Demasiados intentos con el PIN de autorización. Probá más tarde."
+
+RETENCION_DE_INTENTOS_DE_LOGIN = timedelta(hours=24)
+"""Cuánto se conservan las filas de `intento_login` (ADR-018, change 28 D7)."""
 
 logger = logging.getLogger("app.identidad")
 

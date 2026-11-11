@@ -7,14 +7,17 @@ inyectable (TR-04) y se arma cada fila según los permisos de quien consulta (RE
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from app.core.clock import Clock
+from app.modules.catalogo import service as catalogo_service
+from app.modules.clientes import service as clientes_service
 from app.modules.identidad import service as identidad_service
+from app.modules.proveedores import service as proveedores_service
 from app.modules.reportes import repository
 from app.modules.reportes.domain.armado import (
     CifrasDeAjuste,
@@ -481,4 +484,113 @@ def obtener_saldos_de_proveedores(
     en páginas de 50 (D14)."""
     return repository.saldos_de_proveedores(
         organizacion_id, sesion, saldo=saldo, estado=estado, texto=texto, pagina=pagina
+    )
+
+
+@dataclass(frozen=True)
+class DiferenciaDeConsistencia:
+    """Una diferencia de la verificación con los nombres leídos al mostrar (D5). Los campos que no
+    corresponden al `tipo` quedan en `None`; los importes y los costos siguen siendo texto."""
+
+    tipo: str
+    cuenta_tipo: str | None = None
+    entidad_id: UUID | None = None
+    entidad_nombre: str | None = None
+    saldo_materializado: str | None = None
+    suma_del_libro: str | None = None
+    producto_id: UUID | None = None
+    producto_nombre: str | None = None
+    ubicacion_id: UUID | None = None
+    ubicacion_nombre: str | None = None
+    materializado: int | None = None
+    esperado: int | None = None
+    promedio_vigente: str | None = None
+    promedio_historia: str | None = None
+
+
+@dataclass(frozen=True)
+class ConsistenciaDeSistema:
+    """El último resultado de la verificación de la organización; sin ninguna corrida, todo en
+    `None` y sin diferencias."""
+
+    ejecutada_en: datetime | None
+    resultado: str | None
+    diferencias: list[DiferenciaDeConsistencia]
+
+
+def _uuid_o_none(valor: object) -> UUID | None:
+    return None if valor is None else UUID(str(valor))
+
+
+def _texto_o_none(valor: object) -> str | None:
+    return None if valor is None else str(valor)
+
+
+def _entero_o_none(valor: object) -> int | None:
+    return None if valor is None else int(str(valor))
+
+
+def obtener_consistencia(organizacion_id: UUID, sesion: Session) -> ConsistenciaDeSistema:
+    """`GET /sistema/consistencia`: la corrida más reciente de la verificación de la organización
+    con los nombres de cuentas, productos y ubicaciones leídos por los servicios de cada módulo,
+    siempre con la organización del token (un identificador ajeno no resuelve nombre, INV-21)."""
+    ultima = identidad_service.ultima_verificacion_de_consistencia(organizacion_id, sesion)
+    if ultima is None:
+        return ConsistenciaDeSistema(ejecutada_en=None, resultado=None, diferencias=[])
+
+    detalle = ultima.diferencias
+    clientes = {
+        _uuid_o_none(d.get("entidad_id")) for d in detalle if d.get("cuenta_tipo") == "CLIENTE"
+    }
+    proveedores = {
+        _uuid_o_none(d.get("entidad_id")) for d in detalle if d.get("cuenta_tipo") == "PROVEEDOR"
+    }
+    productos = {_uuid_o_none(d.get("producto_id")) for d in detalle}
+    ubicaciones = {_uuid_o_none(d.get("ubicacion_id")) for d in detalle}
+
+    nombres_de_clientes = clientes_service.nombres_de_clientes(
+        organizacion_id, {i for i in clientes if i}, sesion
+    )
+    nombres_de_proveedores = proveedores_service.nombres_de_proveedores(
+        organizacion_id, {i for i in proveedores if i}, sesion
+    )
+    nombres_de_productos = catalogo_service.nombres_de_productos(
+        organizacion_id, {i for i in productos if i}, sesion
+    )
+    nombres_de_ubicaciones = stock_service.nombres_de_ubicaciones(
+        organizacion_id, sesion, {i for i in ubicaciones if i}
+    )
+
+    diferencias: list[DiferenciaDeConsistencia] = []
+    for d in detalle:
+        entidad_id = _uuid_o_none(d.get("entidad_id"))
+        producto_id = _uuid_o_none(d.get("producto_id"))
+        ubicacion_id = _uuid_o_none(d.get("ubicacion_id"))
+        nombres_de_cuentas = (
+            nombres_de_clientes if d.get("cuenta_tipo") == "CLIENTE" else nombres_de_proveedores
+        )
+        diferencias.append(
+            DiferenciaDeConsistencia(
+                tipo=str(d["tipo"]),
+                cuenta_tipo=_texto_o_none(d.get("cuenta_tipo")),
+                entidad_id=entidad_id,
+                entidad_nombre=None if entidad_id is None else nombres_de_cuentas.get(entidad_id),
+                saldo_materializado=_texto_o_none(d.get("saldo_materializado")),
+                suma_del_libro=_texto_o_none(d.get("suma_del_libro")),
+                producto_id=producto_id,
+                producto_nombre=(
+                    None if producto_id is None else nombres_de_productos.get(producto_id)
+                ),
+                ubicacion_id=ubicacion_id,
+                ubicacion_nombre=(
+                    None if ubicacion_id is None else nombres_de_ubicaciones.get(ubicacion_id)
+                ),
+                materializado=_entero_o_none(d.get("materializado")),
+                esperado=_entero_o_none(d.get("esperado")),
+                promedio_vigente=_texto_o_none(d.get("promedio_vigente")),
+                promedio_historia=_texto_o_none(d.get("promedio_historia")),
+            )
+        )
+    return ConsistenciaDeSistema(
+        ejecutada_en=ultima.ejecutada_en, resultado=ultima.resultado, diferencias=diferencias
     )

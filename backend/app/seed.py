@@ -28,11 +28,23 @@ from app import modelos  # noqa: F401 (registra todos los modelos: claves forán
 from app.core.clock import Clock, SystemClock
 from app.core.config import Settings
 from app.core.db import crear_engine, crear_session_factory
+from app.core.ids import nuevo_id
+from app.modules.catalogo import service as catalogo_service
 from app.modules.configuracion import service as configuracion_service
+from app.modules.descuentos import service as descuentos_service
+from app.modules.descuentos.service import DatosDeRegla
+from app.modules.identidad import repository as identidad_repository
 from app.modules.identidad import service as identidad_service
-from app.modules.identidad.domain.permisos import ADMINISTRADOR
+from app.modules.identidad.domain.permisos import (
+    ADMINISTRACION,
+    ADMINISTRADOR,
+    CONSULTA_DIRECCION,
+    SUPERVISOR_COMERCIAL,
+    VENDEDOR_REPARTIDOR,
+)
 from app.modules.identidad.models import Organizacion
 from app.modules.identidad.service import DatosConfiguracionInicial
+from app.modules.stock import service as stock_service
 
 # `01` §4, columna "Organización inicial". Los parámetros que esa columna
 # marca "A definir al configurar" NO se sembran con un valor (tarea 8.3): se
@@ -176,29 +188,16 @@ def _ya_sembrado(sesion: Session) -> bool:
         ) from error
 
 
-def sembrar(sesion: Session, reloj: Clock, *, password_administrador: str) -> Organizacion | None:
-    """Siembra la organización inicial y sus catálogos si todavía no existe
-    ninguna organización. Devuelve la organización sembrada, o `None` si ya
-    estaba sembrada (no vuelve a crear ni a pisar nada existente, tarea 8.6
-    y, para el administrador, tarea 8.13: "repetir la puesta en marcha no
-    pisa la contraseña existente").
-
-    `password_administrador` es obligatoria y sin valor por defecto (tarea
-    8.13, `design.md` D8): si falta, falla antes de crear nada, ni siquiera
-    la organización."""
-    if not password_administrador:
-        raise AdminPasswordNoDefinidaError(
-            "password_administrador vacía: la puesta en marcha no puede crear el "
-            "usuario administrador sin una contraseña provista (design.md D8)."
-        )
-    if _ya_sembrado(sesion):
-        return None
-
+def _sembrar_organizacion(
+    sesion: Session, reloj: Clock, *, nombre: str, slug: str, password_administrador: str
+) -> Organizacion:
+    """Crea una organización con su configuración, sus catálogos, sus cinco roles y su `admin`.
+    Lo comparten la siembra inicial y la del escenario de aceptación (la segunda organización)."""
     organizacion = identidad_service.crear_organizacion_con_configuracion(
         sesion,
         reloj,
-        nombre=NOMBRE_ORGANIZACION_INICIAL,
-        slug=SLUG_ORGANIZACION_INICIAL,
+        nombre=nombre,
+        slug=slug,
         cuit=None,
         moneda=MONEDA_INICIAL,
         zona_horaria=ZONA_HORARIA_INICIAL,
@@ -293,7 +292,218 @@ def sembrar(sesion: Session, reloj: Clock, *, password_administrador: str) -> Or
     return organizacion
 
 
+def sembrar(sesion: Session, reloj: Clock, *, password_administrador: str) -> Organizacion | None:
+    """Siembra la organización inicial y sus catálogos si todavía no existe
+    ninguna organización. Devuelve la organización sembrada, o `None` si ya
+    estaba sembrada (no vuelve a crear ni a pisar nada existente, tarea 8.6
+    y, para el administrador, tarea 8.13: "repetir la puesta en marcha no
+    pisa la contraseña existente").
+
+    `password_administrador` es obligatoria y sin valor por defecto (tarea
+    8.13, `design.md` D8): si falta, falla antes de crear nada, ni siquiera
+    la organización."""
+    if not password_administrador:
+        raise AdminPasswordNoDefinidaError(
+            "password_administrador vacía: la puesta en marcha no puede crear el "
+            "usuario administrador sin una contraseña provista (design.md D8)."
+        )
+    if _ya_sembrado(sesion):
+        return None
+
+    return _sembrar_organizacion(
+        sesion,
+        reloj,
+        nombre=NOMBRE_ORGANIZACION_INICIAL,
+        slug=SLUG_ORGANIZACION_INICIAL,
+        password_administrador=password_administrador,
+    )
+
+
+# --- Escenario de aceptación (change 28, D14) -------------------------------------------------
+#
+# `python -m app.seed --escenario-aceptacion` deja lista la base del entorno de aceptación
+# (`infra/aceptacion.env`, compose de producción en un proyecto aparte, descartable): la
+# organización inicial con los usuarios de nombres de desarrollo, la configuración que la
+# demostración necesita y una segunda organización para el control de aislamiento. Productos,
+# clientes, proveedores, stock y saldos NO se siembran: los carga el criterio 1 importando
+# planillas. La contraseña es de prueba y fija: SOLO para ese entorno desechable.
+
+PASSWORD_DE_PRUEBA_ACEPTACION = "Aceptacion-2026"
+"""Contraseña común de todos los usuarios del entorno de aceptación. No sirve fuera de él."""
+
+SLUG_SEGUNDA_ORGANIZACION = "organizacion-dos"
+NOMBRE_SEGUNDA_ORGANIZACION = "Segunda organización"
+
+USUARIOS_DE_ACEPTACION: tuple[tuple[str, str], ...] = (
+    ("admin", ADMINISTRADOR),
+    ("administracion", ADMINISTRACION),
+    ("ges01", ADMINISTRACION),
+    ("consulta", CONSULTA_DIRECCION),
+    ("supervisor", SUPERVISOR_COMERCIAL),
+    ("sup01", SUPERVISOR_COMERCIAL),
+    ("vendedor", VENDEDOR_REPARTIDOR),
+    ("vendedor2", VENDEDOR_REPARTIDOR),
+)
+"""(usuario, rol): los mismos nombres que el usuario tiene en desarrollo."""
+
+TOPE_DESCUENTO_VENDEDOR_ACEPTACION = "0.100000"
+TOLERANCIA_ACEPTACION_IMPORTE = "50000.00"
+NOMBRE_REGLA_VOLUMEN_ACEPTACION = "Volumen 20 cajas"
+CATEGORIAS_DE_ACEPTACION = ("Vinos", "Cervezas")
+"""Las planillas de productos referencian la categoría por nombre y no la crean al vuelo
+(IMP-04): sin ellas el criterio 1 no podría importar los productos."""
+
+
+def sembrar_escenario_aceptacion(sesion: Session, reloj: Clock) -> bool:
+    """Siembra el escenario de aceptación sobre una base migrada, por los servicios de cada
+    módulo. Repetible: un paso ya hecho no se repite ni se pisa. Devuelve `True` si creó algo y
+    `False` si todo estaba (la segunda corrida no cambia nada). Sin `commit`."""
+    creo = _sembrar_primera_organizacion_de_aceptacion(sesion, reloj)
+    segunda = identidad_service.resolver_organizacion_por_slug(SLUG_SEGUNDA_ORGANIZACION, sesion)
+    if segunda is None:
+        _sembrar_organizacion(
+            sesion,
+            reloj,
+            nombre=NOMBRE_SEGUNDA_ORGANIZACION,
+            slug=SLUG_SEGUNDA_ORGANIZACION,
+            password_administrador=PASSWORD_DE_PRUEBA_ACEPTACION,
+        )
+        creo = True
+    return creo
+
+
+def _sembrar_primera_organizacion_de_aceptacion(sesion: Session, reloj: Clock) -> bool:
+    organizacion = identidad_service.resolver_organizacion_por_slug(
+        SLUG_ORGANIZACION_INICIAL, sesion
+    )
+    if organizacion is None:
+        organizacion = _sembrar_organizacion(
+            sesion,
+            reloj,
+            nombre=NOMBRE_ORGANIZACION_INICIAL,
+            slug=SLUG_ORGANIZACION_INICIAL,
+            password_administrador=PASSWORD_DE_PRUEBA_ACEPTACION,
+        )
+    org_id = organizacion.id
+    # Marcador de "ya sembrado el escenario": el último usuario de la lista.
+    ultimo, _ = USUARIOS_DE_ACEPTACION[-1]
+    if identidad_repository.obtener_usuario_por_nombre_usuario(org_id, ultimo, sesion):
+        return False
+
+    roles = {rol.nombre: rol for rol in identidad_repository.listar_roles(org_id, sesion)}
+    admin = identidad_repository.obtener_usuario_por_nombre_usuario(org_id, "admin", sesion)
+    assert admin is not None  # lo crea `_sembrar_organizacion`
+    for nombre_usuario, rol in USUARIOS_DE_ACEPTACION:
+        if identidad_repository.obtener_usuario_por_nombre_usuario(org_id, nombre_usuario, sesion):
+            continue
+        identidad_service.crear_usuario(
+            org_id,
+            sesion,
+            reloj,
+            usuario=nombre_usuario,
+            nombre=nombre_usuario,
+            email=None,
+            password=PASSWORD_DE_PRUEBA_ACEPTACION,
+            rol_id=roles[rol].id,
+            actor_id=admin.id,
+        )
+
+    ubicaciones = stock_service.listar_ubicaciones(
+        org_id, sesion, activo=None, cursor=None, limite=None
+    ).ubicaciones
+    if not ubicaciones:
+        for nombre, tipo, requiere_toma in (
+            ("Depósito central", "DEPOSITO", False),
+            ("Camioneta 1", "VEHICULO", True),
+        ):
+            stock_service.crear_ubicacion(
+                org_id,
+                sesion,
+                reloj,
+                nombre=nombre,
+                tipo=tipo,
+                requiere_toma=requiere_toma,
+                actor_id=admin.id,
+            )
+
+    existentes = {c.nombre for c in catalogo_service.listar_categorias(org_id, sesion)}
+    for nombre in CATEGORIAS_DE_ACEPTACION:
+        if nombre not in existentes:
+            catalogo_service.crear_categoria(
+                org_id, sesion, reloj, nombre=nombre, actor_id=admin.id
+            )
+
+    identidad_service.configurar_credito_organizacion(
+        org_id,
+        sesion,
+        reloj,
+        politica="AUTORIZAR",
+        tolerancia_tipo="IMPORTE",
+        tolerancia_valor=TOLERANCIA_ACEPTACION_IMPORTE,
+        actor_id=admin.id,
+        dispositivo_id_actor=None,
+        operation_id=nuevo_id(),
+    )
+    identidad_service.definir_tope_descuento_de_rol(
+        org_id,
+        sesion,
+        reloj,
+        rol_id=roles[VENDEDOR_REPARTIDOR].id,
+        tope_nuevo=TOPE_DESCUENTO_VENDEDOR_ACEPTACION,
+        actor_id=admin.id,
+        dispositivo_id_actor=None,
+        operation_id=nuevo_id(),
+    )
+    regla = descuentos_service.crear_regla(
+        org_id,
+        sesion,
+        reloj,
+        datos=DatosDeRegla(
+            nombre=NOMBRE_REGLA_VOLUMEN_ACEPTACION,
+            tipo="VOLUMEN_OPERACION",
+            medida="CAJAS_EQUIVALENTES",
+            operador="GTE",
+            umbral="20",
+            accion_tipo="PORCENTAJE",
+            accion_valor="0.050000",
+            prioridad=1,
+            acumulable=False,
+            alcances=[],
+            vigencia_desde=None,
+            vigencia_hasta=None,
+        ),
+        actor_id=admin.id,
+    )
+    descuentos_service.activar_regla(org_id, sesion, reloj, regla_id=regla.id, actor_id=admin.id)
+    return True
+
+
+def _main_escenario_aceptacion() -> None:
+    settings = Settings()  # type: ignore[call-arg]
+    engine = crear_engine(settings.database_url)
+    factory: sessionmaker[Session] = crear_session_factory(engine)
+    with factory() as sesion:
+        try:
+            creo = sembrar_escenario_aceptacion(sesion, SystemClock())
+        except ProgrammingError as error:
+            sesion.rollback()
+            print(
+                "error: la base no tiene las migraciones aplicadas. Corré `alembic upgrade head`.",
+                file=sys.stderr,
+            )
+            raise SystemExit(1) from error
+        sesion.commit()
+    print(
+        "Escenario de aceptación sembrado."
+        if creo
+        else "El escenario de aceptación ya estaba sembrado: no se hizo nada."
+    )
+
+
 def main() -> None:
+    if "--escenario-aceptacion" in sys.argv[1:]:
+        _main_escenario_aceptacion()
+        return
     try:
         password_administrador = _password_administrador_desde_entorno()
     except AdminPasswordNoDefinidaError as error:

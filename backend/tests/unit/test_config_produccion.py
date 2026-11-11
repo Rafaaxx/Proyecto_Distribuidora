@@ -81,3 +81,33 @@ def test_fuera_de_produccion_no_valida(monkeypatch):
 
     assert settings.jwt_secret == "x"
     assert settings.app_version == "dev"
+
+
+# --- Documentación interactiva apagada en producción (change 28, Lote 4; D8) --------------------
+# Spec `sistema/despliegue`, «Encabezados de seguridad…» (defensa extra). Cita `docs/02` §18.
+
+RUTAS_DE_DOCUMENTACION = ("/docs", "/redoc", "/openapi.json")
+
+
+def _cliente(monkeypatch, entorno: str):
+    from fastapi.testclient import TestClient
+
+    from app.main import crear_app
+
+    _entorno(monkeypatch, environment=entorno)
+    return TestClient(crear_app(_construir()))
+
+
+@pytest.mark.parametrize("ruta", RUTAS_DE_DOCUMENTACION)
+def test_en_produccion_la_documentacion_interactiva_no_existe(monkeypatch, ruta):
+    respuesta = _cliente(monkeypatch, "production").get(ruta)
+
+    assert respuesta.status_code == 404
+
+
+@pytest.mark.parametrize("ruta", RUTAS_DE_DOCUMENTACION)
+def test_fuera_de_produccion_la_documentacion_sigue_disponible(monkeypatch, ruta):
+    # La generación de tipos del cliente (`openapi.json`) y el desarrollo la usan.
+    respuesta = _cliente(monkeypatch, "development").get(ruta)
+
+    assert respuesta.status_code == 200

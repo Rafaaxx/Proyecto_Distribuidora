@@ -21,6 +21,7 @@ SECRETOS = (
     "APP_MIGRATIONS_DB_PASSWORD",
     "APP_RUNTIME_DB_PASSWORD",
     "APP_BACKUP_DB_PASSWORD",
+    "APP_MANTENIMIENTO_DB_PASSWORD",
     "JWT_SECRET",
 )
 LARGA_VIDA = ("caddy", "backend", "postgres", "backup")
@@ -54,9 +55,19 @@ def test_solo_caddy_publica_puertos(servicios):
     # Spec: «El compose de producción no publica la base ni el backend».
     con_puertos = {n for n, s in servicios.items() if s.get("ports")}
     assert con_puertos == {"caddy"}
-    publicados = {str(p).split(":")[1].split("/")[0] for p in servicios["caddy"]["ports"]}
+    # Puerto del contenedor: lo que sigue al ultimo ":" sin el protocolo.
+    publicados = {str(p).rsplit(":", 1)[1].split("/")[0] for p in servicios["caddy"]["ports"]}
     assert publicados == {"80", "443"}
     assert any(str(p).endswith("/udp") for p in servicios["caddy"]["ports"])
+
+
+def test_los_puertos_publicados_de_caddy_son_variables_con_el_80_y_el_443_por_defecto(servicios):
+    # Change 28, D13: el entorno de aceptacion corre al lado del de desarrollo y necesita otros
+    # puertos; en produccion, sin tocar nada, siguen siendo el 80 y el 443.
+    puertos = [str(p) for p in servicios["caddy"]["ports"]]
+    assert "${CADDY_HTTP_PORT:-80}:80" in puertos
+    assert "${CADDY_HTTPS_PORT:-443}:443" in puertos
+    assert "${CADDY_HTTPS_PORT:-443}:443/udp" in puertos
 
 
 def test_redes_frente_y_datos(compose, servicios):
@@ -71,7 +82,10 @@ def test_redes_frente_y_datos(compose, servicios):
 
 def test_frente_tiene_subred_fija_igual_a_forwarded_allow_ips(compose, servicios):
     subred = compose["networks"]["frente"]["ipam"]["config"][0]["subnet"]
-    ipaddress.ip_network(subred)
+    # Change 28, D13: la subred es una variable (por defecto 172.30.10.0/24) para que el entorno
+    # de aceptacion conviva con otro proyecto que ya ocupa esa; las dos referencias son la misma.
+    assert subred == "${FRENTE_SUBRED:-172.30.10.0/24}"
+    ipaddress.ip_network(subred.removeprefix("${FRENTE_SUBRED:-").removesuffix("}"))
     assert _entorno(servicios["backend"])["FORWARDED_ALLOW_IPS"] == subred
 
 
@@ -187,6 +201,43 @@ def test_postgres_crea_el_rol_de_backup_solo_en_produccion(servicios):
     dev = (RAIZ / "docker-compose.yml").read_text(encoding="utf-8")
     assert "20-init-backup-role" not in dev
     assert "app_backup" not in dev
+
+
+def test_postgres_crea_el_rol_de_mantenimiento_con_contrasena_obligatoria(servicios):
+    # Change 28, D3 (escenario «Falta la contraseña del rol de mantenimiento»): el script del
+    # rol se monta en produccion y en desarrollo; sin la variable no se levanta nada.
+    montajes = servicios["postgres"]["volumes"]
+    assert any(
+        m.startswith("./infra/postgres/30-init-mantenimiento-role.sh:")
+        and m.endswith(":/docker-entrypoint-initdb.d/30-init-mantenimiento-role.sh:ro")
+        for m in montajes
+    ), montajes
+    valor = _entorno(servicios["postgres"])["APP_MANTENIMIENTO_DB_PASSWORD"]
+    assert valor.startswith("${APP_MANTENIMIENTO_DB_PASSWORD:?")
+    assert "APP_MANTENIMIENTO_DB_PASSWORD" in valor[len("${APP_MANTENIMIENTO_DB_PASSWORD:?") :]
+
+
+def test_el_compose_de_desarrollo_tambien_crea_el_rol_de_mantenimiento():
+    # Sin el rol la migracion del change 28 falla: el entorno de desarrollo lo crea igual.
+    dev = yaml.safe_load((RAIZ / "docker-compose.yml").read_text(encoding="utf-8"))
+    postgres = dev["services"]["postgres"]
+    assert any(
+        m.startswith("./infra/postgres/30-init-mantenimiento-role.sh:")
+        and m.endswith(":/docker-entrypoint-initdb.d/30-init-mantenimiento-role.sh:ro")
+        for m in postgres["volumes"]
+    ), postgres["volumes"]
+    assert _entorno(postgres)["APP_MANTENIMIENTO_DB_PASSWORD"].startswith(
+        "${APP_MANTENIMIENTO_DB_PASSWORD:?"
+    )
+
+
+def test_ningun_otro_servicio_recibe_la_contrasena_de_mantenimiento(servicios):
+    # Solo postgres (para crear el rol): el backend, las migraciones y el backup no la conocen.
+    # El servicio `tareas` (Lote 2) se conecta con ese rol y lo verifica su propia prueba.
+    for nombre, servicio in servicios.items():
+        if nombre in ("postgres", "tareas"):
+            continue
+        assert "APP_MANTENIMIENTO_DB_PASSWORD" not in str(servicio), nombre
 
 
 def test_backup_usa_el_rol_de_solo_lectura_y_solo_la_red_de_datos(servicios):
@@ -329,7 +380,8 @@ def test_el_compose_se_niega_a_levantar_sin_la_clave_de_cifrado(tmp_path):
         pytest.skip("sin cliente docker: la lectura del compose cubre el escenario")
     base = {
         "POSTGRES_PASSWORD": "a", "APP_MIGRATIONS_DB_PASSWORD": "b", "APP_RUNTIME_DB_PASSWORD": "c",
-        "APP_BACKUP_DB_PASSWORD": "d", "JWT_SECRET": "e" * 32, "DOMINIO": "localhost",
+        "APP_BACKUP_DB_PASSWORD": "d", "APP_MANTENIMIENTO_DB_PASSWORD": "m", "JWT_SECRET": "e" * 32,
+        "DOMINIO": "localhost",
         "CADDY_TLS": "internal", "APP_VERSION": "0.27.0", "BACKUP_DIR": "/tmp/b",
         "COPIA_TIPO": "local", "COPIA_RUTA": "/destino-local/x", "COPIA_ACCESS_KEY_ID": "n",
         "COPIA_SECRET_ACCESS_KEY": "n", "COPIA_CLAVE_CIFRADO": "k", "COPIA_SAL_CIFRADO": "s",
@@ -347,6 +399,30 @@ def test_el_compose_se_niega_a_levantar_sin_la_clave_de_cifrado(tmp_path):
     for falta in ("COPIA_CLAVE_CIFRADO", "COPIA_SAL_CIFRADO"):
         r = config({k: v for k, v in base.items() if k != falta})
         assert r.returncode != 0 and falta in r.stderr, r.stderr
+
+
+def test_el_compose_se_niega_a_levantar_sin_la_contrasena_del_rol_de_mantenimiento(tmp_path):
+    # Escenario «Falta la contraseña del rol de mantenimiento», ejecutado con `docker compose
+    # config`: no se levanta ningun servicio y el error nombra la variable.
+    import shutil
+    import subprocess
+
+    if shutil.which("docker") is None:
+        pytest.skip("sin cliente docker: la lectura del compose cubre el escenario")
+    base = {
+        "POSTGRES_PASSWORD": "a", "APP_MIGRATIONS_DB_PASSWORD": "b", "APP_RUNTIME_DB_PASSWORD": "c",
+        "APP_BACKUP_DB_PASSWORD": "d", "JWT_SECRET": "e" * 32, "DOMINIO": "localhost",
+        "CADDY_TLS": "internal", "APP_VERSION": "0.28.0", "BACKUP_DIR": "/tmp/b",
+        "COPIA_TIPO": "local", "COPIA_RUTA": "/destino-local/x", "COPIA_ACCESS_KEY_ID": "n",
+        "COPIA_SECRET_ACCESS_KEY": "n", "COPIA_CLAVE_CIFRADO": "k", "COPIA_SAL_CIFRADO": "s",
+    }  # fmt: skip
+    archivo = tmp_path / "entorno.env"
+    archivo.write_text("\n".join(f"{k}={v}" for k, v in base.items()), encoding="utf-8")
+    r = subprocess.run(
+        ["docker", "compose", "-f", str(COMPOSE), "--env-file", str(archivo), "config", "-q"],
+        capture_output=True, text=True, check=False, env=dict(__import__("os").environ),
+    )  # fmt: skip
+    assert r.returncode != 0 and "APP_MANTENIMIENTO_DB_PASSWORD" in r.stderr, r.stderr
 
 
 # --- Restauracion y prueba periodica (27b, Lote 3; D8, D10, D11) -------------------------------
@@ -446,3 +522,76 @@ def test_el_volumen_de_estado_de_la_prueba_esta_declarado(compose):
 def test_todo_servicio_de_respaldo_fija_la_zona_horaria(servicios, nombre):
     # Ajuste de la prueba manual: los registros de todos salen en la misma hora local.
     assert _entorno(servicios[nombre])["TZ"] == "${TZ:-America/Argentina/Mendoza}"
+
+
+# --- Servicio `tareas` (change 28, Lote 2; D2, D3, D6) -----------------------------------------
+
+
+def test_tareas_no_amplia_la_exposicion_y_declara_salud_restart_y_registros(servicios):
+    # Escenario «El servicio de tareas no amplía la exposición».
+    s = servicios["tareas"]
+    assert "ports" not in s
+    # `datos` (la base) y `salida` (solo saliente, para el aviso externo; ADR-073): ni `frente`,
+    # y `datos` sigue sin salida a internet.
+    assert set(s["networks"]) == {"datos", "salida"}
+    assert "frente" not in s["networks"]
+    assert s["restart"] == "unless-stopped"
+    assert s["logging"] == servicios["backend"]["logging"]
+    assert s["depends_on"]["postgres"]["condition"] == "service_healthy"
+    # La migracion que crea la tabla y los permisos corre antes.
+    assert s["depends_on"]["migraciones"]["condition"] == "service_completed_successfully"
+    assert s["healthcheck"]["test"] == ["CMD", "python", "-m", "app.tareas", "salud"]
+
+
+def test_tareas_usa_la_imagen_del_backend_y_se_puede_correr_a_pedido(servicios):
+    # D2: misma imagen (mismo Dockerfile y contexto), orden `python -m app.tareas`; el
+    # `entrypoint` hace que `run --rm tareas ahora` agregue `ahora` a la orden.
+    s = servicios["tareas"]
+    assert s["build"] == servicios["backend"]["build"]
+    assert s["image"].startswith("distribuidora-tareas:")
+    assert s["entrypoint"] == ["python", "-m", "app.tareas"]
+    assert "command" not in s
+
+
+def test_tareas_usa_su_propio_rol_y_ninguna_otra_contrasena(servicios):
+    # Escenario «El servicio de tareas usa su propio rol» (ADR-018, ADR-020, D3).
+    env = _entorno(servicios["tareas"])
+    url = env["DATABASE_URL"]
+    assert url.startswith(
+        "postgresql+psycopg://app_mantenimiento:${APP_MANTENIMIENTO_DB_PASSWORD:?"
+    )
+    assert url.endswith("@postgres:5432/${POSTGRES_DB:-distribuidora}")
+    for prohibida in (
+        "POSTGRES_PASSWORD",
+        "APP_RUNTIME_DB_PASSWORD",
+        "APP_MIGRATIONS_DB_PASSWORD",
+        "APP_BACKUP_DB_PASSWORD",
+        "JWT_SECRET",
+        "DATABASE_URL_MIGRATIONS",
+    ):
+        assert prohibida not in str(servicios["tareas"]), prohibida
+
+
+def test_tareas_recibe_hora_zona_y_aviso_opcional(servicios):
+    env = _entorno(servicios["tareas"])
+    assert env["TAREAS_HORA"] == "${TAREAS_HORA:-05:00}"
+    assert env["TZ"] == "${TZ:-America/Argentina/Mendoza}"
+    # Variable propia (distinta de AVISO_URL de la copia): cada control del aviso es independiente.
+    assert env["AVISO_TAREAS_URL"] == "${AVISO_TAREAS_URL:-}"
+    assert "AVISO_URL" not in env
+
+
+def test_tareas_sale_a_internet_solo_por_salida_y_datos_sigue_cerrada(compose, servicios):
+    # ADR-073: `salida` tiene internet pero no ve ni Postgres ni el backend; `datos` sigue internal.
+    assert compose["networks"]["datos"]["internal"] is True
+    assert not compose["networks"]["salida"].get("internal", False)
+    assert "ports" not in servicios["tareas"]
+    assert "salida" not in servicios["postgres"]["networks"]
+    assert "salida" not in servicios["backend"]["networks"]
+
+
+def test_tareas_corre_sin_privilegios_y_sin_ningun_montaje(servicios):
+    # Usa la imagen del backend, cuyo usuario no es root; el estado va a /tmp del contenedor.
+    s = servicios["tareas"]
+    assert "volumes" not in s
+    assert "user" not in s  # el usuario `app` (10001) lo fija la imagen

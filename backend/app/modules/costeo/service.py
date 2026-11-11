@@ -38,6 +38,7 @@ from app.core.clock import Clock
 from app.core.ids import nuevo_id
 from app.modules.costeo import repository
 from app.modules.costeo.domain.costo_promedio import (
+    DiferenciaDePromedio,
     calcular_egreso,
     calcular_ingreso,
     calcular_ingreso_sin_recalculo,
@@ -49,6 +50,7 @@ from app.modules.costeo.domain.errores import RecursoNoEncontradoError
 
 __all__ = [
     "CostoVigente",
+    "DiferenciaDePromedio",
     "ResultadoDeEgresoAplicado",
     "ResultadoDeIngresoAplicado",
     "ResultadoDeReversionAplicada",
@@ -62,6 +64,7 @@ __all__ = [
     "obtener_stock_totales",
     "revertir_ingreso",
     "validar_costo",
+    "verificar_consistencia",
 ]
 
 
@@ -345,3 +348,10 @@ def obtener_stock_totales(organizacion_id: UUID, sesion: Session) -> dict[UUID, 
     `stock.verificar_consistencia` para compararlo con la suma SQL de sus saldos
     (INV-12, `02` §7.6) sin importar el modelo de `costeo`."""
     return repository.obtener_stock_totales(organizacion_id, sesion)
+
+
+def verificar_consistencia(organizacion_id: UUID, sesion: Session) -> list[DiferenciaDePromedio]:
+    """Productos cuyo promedio vigente no coincide con el `promedio_nuevo` de su último
+    `costo_producto_mov` (CST-13, `02` §7.6). Solo informa: no corrige nada (ADR-015). La
+    ejecuta la tarea diaria (change 28)."""
+    return repository.diferencias_de_promedio_contra_la_historia(organizacion_id, sesion)

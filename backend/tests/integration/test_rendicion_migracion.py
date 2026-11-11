@@ -16,6 +16,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
+from conftest import cabeza_de_alembic
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.orm import Session
@@ -37,7 +38,9 @@ from test_jornadas_migracion import (
 
 REVISION = "d2f4a6c8e0b1"
 REVISION_ANTERIOR = "b7d3f1a9c2e4"  # `descripcion_permitir_stock_negativo`, la previa al change 24.
-REVISION_HEAD = "e3a5c7d9f1b2"  # la cabeza desde el change 25: un downgrade abortado la deja ahi.
+REVISION_HEAD = (
+    cabeza_de_alembic()
+)  # la cabeza actual, leida de Alembic (un downgrade abortado la deja ahi).
 MOMENTO = datetime(2026, 11, 4, 12, 0, tzinfo=UTC)
 OTRO_MOMENTO = datetime(2026, 11, 4, 18, 0, tzinfo=UTC)
 CODIGO_NUEVO = "JORNADA_RENDIDA"

@@ -4,6 +4,8 @@
 # Archivos de entorno de produccion (con secretos); las plantillas .env.example si se versionan
 *.env
 !*.env.example
+# Entorno de aceptacion automatica (change 28, D13): solo valores de prueba, se versiona.
+!infra/aceptacion.env
 
 # Sistema operativo / editores
 .DS_Store
@@ -20,3 +22,6 @@ frontend/node_modules/
 frontend/dist/
 
 *.stackdump
+
+# Carpetas del entorno de aceptacion automatica (change 28)
+.aceptacion/

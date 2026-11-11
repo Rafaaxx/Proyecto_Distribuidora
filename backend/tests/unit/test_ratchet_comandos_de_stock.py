@@ -4,9 +4,10 @@
   `STOCK_AJUSTE_ANULAR`) están en el catálogo de comandos como solo `ONLINE` (`02` §6.5).
 - D10 (`design.md`): EXACTAMENTE `STOCK_AJUSTAR`, `STOCK_TRANSFERENCIA_ANULAR` y
   `STOCK_AJUSTE_ANULAR` devuelven el motivo para la fila de auditoría del bus (AUD-02). Los
-  demás handlers, incluidos `COMPRA_ANULAR` y `PAGO_PROVEEDOR_ANULAR` (deuda nominada, fuera
-  del alcance aprobado), no lo devuelven. Un cuarto comando que empiece a devolverlo, o uno de
-  los cuatro que deje de hacerlo, rompe esta prueba y obliga a revisar la enmienda de ADR-022.
+  demás handlers no lo devuelven (la lista creció después: cobranzas, jornadas, ventas y, en el
+  change 28, `COMPRA_ANULAR` y `PAGO_PROVEEDOR_ANULAR`). Un comando que empiece a devolverlo, o
+  uno de los cuatro que deje de hacerlo, rompe esta prueba y obliga a revisar la enmienda de
+  ADR-022.
 
 CÓMO SE DETECTA "devuelve el motivo": se inspecciona el BYTECODE de la función del handler --
 `co_names` de su `__code__` -- buscando el nombre `DatosDeAuditoria`, igual que
@@ -47,6 +48,8 @@ TIPOS_CON_MOTIVO_DE_AUDITORIA = frozenset(
         "COBRANZA_ANULAR",
         "VENTA_CONFIRMAR",
         "VENTA_ANULAR",
+        "COMPRA_ANULAR",
+        "PAGO_PROVEEDOR_ANULAR",
     }
 )
 NOMBRE_DEL_DATO = "DatosDeAuditoria"
@@ -79,13 +82,14 @@ def tipos_que_devuelven_motivo_de_auditoria() -> frozenset[str]:
     )
 
 
-def test_exactamente_siete_comandos_devuelven_el_motivo_para_la_auditoria() -> None:
+def test_exactamente_nueve_comandos_devuelven_el_motivo_para_la_auditoria() -> None:
     """Change 17, tarea 10.2 (D15, AUD-02): el ratchet pasó de cuatro a cinco con
     `COBRANZA_ANULAR`; `COBRANZA_REGISTRAR` queda auditado solo por la fila del bus. Change 18a,
     tarea 10.1 (D20, AUD-01): pasa a seis con `VENTA_CONFIRMAR` (otra lista o versión no vigente;
     la fila lleva el motivo y la observación con lista y versión). Change 19, tarea 7.6 (D15,
     AUD-01, AUD-02): pasa a siete con `VENTA_ANULAR` (motivo de la anulación y, en la observación,
-    la cobranza anulada)."""
+    la cobranza anulada). Change 28, tarea 3.3 (D1, AUD-02): pasa a nueve con `COMPRA_ANULAR` y
+    `PAGO_PROVEEDOR_ANULAR` (la deuda nominada al 28: el motivo de la anulación)."""
     assert tipos_que_devuelven_motivo_de_auditoria() == TIPOS_CON_MOTIVO_DE_AUDITORIA
 
 
@@ -127,14 +131,15 @@ def test_exactamente_diez_comandos_pueden_devolver_la_constancia_de_ubicacion_to
     "tipo",
     [
         "STOCK_TRANSFERIR",
-        "COMPRA_ANULAR",
-        "PAGO_PROVEEDOR_ANULAR",
+        "COMPRA_CONFIRMAR",
+        "PAGO_PROVEEDOR_REGISTRAR",
         "STOCK_INICIAL_REGISTRAR",
         "COBRANZA_REGISTRAR",
     ],
 )
-def test_la_deuda_nominada_y_los_demas_comandos_siguen_sin_motivo(tipo: str) -> None:
-    """D10: `COMPRA_ANULAR` y `PAGO_PROVEEDOR_ANULAR` quedan fuera del alcance aprobado."""
+def test_los_demas_comandos_siguen_sin_motivo(tipo: str) -> None:
+    """Las altas y las operaciones sin anulación no llevan motivo; `COMPRA_ANULAR` y
+    `PAGO_PROVEEDOR_ANULAR` lo llevan desde el change 28 (D1)."""
     assert tipo not in tipos_que_devuelven_motivo_de_auditoria()
     assert registro.resolver_handler(tipo, 1).tipo == tipo  # el tipo existe: la prueba mira algo
 

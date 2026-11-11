@@ -22,8 +22,8 @@ class Permiso:
     modulo: str
 
 
-# Los 40 permisos de `01` §19 (los 39 originales más `ANULAR_TRANSFERENCIA`, change 14), en el
-# mismo orden que la tabla del documento.
+# Los 41 permisos de `01` §19 (los 39 originales más `ANULAR_TRANSFERENCIA`, change 14, y
+# `VER_CONSISTENCIA`, change 28), en el mismo orden que la tabla del documento.
 PERMISOS_DEL_CATALOGO: tuple[Permiso, ...] = (
     Permiso("ADMIN_USUARIOS", "Usuarios, roles y permisos", "identidad"),
     Permiso("ADMIN_CONFIGURACION", "Configuración de la organización", "identidad"),
@@ -65,6 +65,7 @@ PERMISOS_DEL_CATALOGO: tuple[Permiso, ...] = (
     Permiso("FACTURAR", "Emitir facturas", "facturacion"),
     Permiso("FACTURAR_ABSORBIENDO_IVA", "Emitir con IVA absorbido", "facturacion"),
     Permiso("ANULAR_FACTURA", "Anular facturas", "facturacion"),
+    Permiso("VER_CONSISTENCIA", "Ver el aviso de consistencia", "sistema"),
 )
 
 # Nombres canónicos de las cinco plantillas de rol (`01` §19).
@@ -76,7 +77,7 @@ CONSULTA_DIRECCION = "Consulta/Dirección"
 
 # Composición de cada plantilla: el subconjunto de códigos de
 # `PERMISOS_DEL_CATALOGO` que le confiere `01` §19. El Administrador tiene
-# los 40 (todas las columnas de la tabla marcan ADM).
+# los 41 (todas las columnas de la tabla marcan ADM).
 _TODOS_LOS_CODIGOS = frozenset(permiso.codigo for permiso in PERMISOS_DEL_CATALOGO)
 
 PLANTILLAS_DE_ROL: dict[str, frozenset[str]] = {
@@ -109,6 +110,10 @@ PLANTILLAS_DE_ROL: dict[str, frozenset[str]] = {
             "VER_REPORTES",
             "FACTURAR",
             "ANULAR_FACTURA",
+            # Change 28, D5 y Q2: solo lectura del aviso de consistencia; `Administración` no
+            # recibe `ADMIN_CONFIGURACION` para verlo. La migración `a5c7e9b1d3f4` lo deriva
+            # de acá.
+            "VER_CONSISTENCIA",
         }
     ),
     SUPERVISOR_COMERCIAL: frozenset(

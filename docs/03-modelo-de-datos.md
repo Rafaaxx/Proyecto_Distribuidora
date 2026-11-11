@@ -93,7 +93,7 @@ CREATE TABLE venta (
 ```
 identidad        organizacion · configuracion_organizacion · usuario · rol · permiso
                  rol_permiso · dispositivo · sesion_refresh · intento_login
-                 intento_pin_autorizacion
+                 intento_pin_autorizacion · verificacion_consistencia
 configuracion    alicuota_iva · medio_pago · motivo
 catalogo         categoria · marca · producto · presentacion
 proveedores      proveedor · costo_informado · compra · compra_linea
@@ -200,7 +200,11 @@ El catálogo de `permiso` se sincroniza por migración con `01` §19. Permisos p
 
 ### `intento_login`
 
-`id`, `usuario_id` (FK a `usuario`; nulo si el par escrito no resuelve un usuario), `clave_intento` `text` (SHA-256 hexadecimal, 64 caracteres, del par escrito `[slug, usuario]`; nulo solo en las filas anteriores al change 18b que no tenían `usuario_id`), `ip`, `exito` (`true` solo en el marcador del desbloqueo manual), `creado_en`. Índices `(usuario_id, creado_en)`, `(ip, creado_en)` y `(clave_intento, creado_en)`. Sin `organizacion_id` a propósito: es seguridad previa a la autenticación y existe también cuando el slug no existe (exenta de INV-02). Solo inserción (`app_runtime` con `SELECT, INSERT`, INV-05). El límite de 5 fallos se cuenta por `clave_intento` (ADR-057, ADR-018).
+`id`, `usuario_id` (FK a `usuario`; nulo si el par escrito no resuelve un usuario), `clave_intento` `text` (SHA-256 hexadecimal, 64 caracteres, del par escrito `[slug, usuario]`; nulo solo en las filas anteriores al change 18b que no tenían `usuario_id`), `ip`, `exito` (`true` solo en el marcador del desbloqueo manual), `creado_en`. Índices `(usuario_id, creado_en)`, `(ip, creado_en)` y `(clave_intento, creado_en)`. Sin `organizacion_id` a propósito: es seguridad previa a la autenticación y existe también cuando el slug no existe (exenta de INV-02). Solo inserción (`app_runtime` con `SELECT, INSERT`, INV-05); la tarea diaria borra las filas de más de 24 horas con `app_mantenimiento` (`SELECT, DELETE`; ADR-073). El límite de 5 fallos se cuenta por `clave_intento` (ADR-057, ADR-018).
+
+### `verificacion_consistencia`
+
+`id`, `organizacion_id`, `ejecutada_en` `timestamptz`, `resultado` (`SIN_DIFERENCIAS` o `CON_DIFERENCIAS`, con `CHECK`), `diferencias` `jsonb` (identificadores e importes como texto), `registered_at` `timestamptz`. `UNIQUE (organizacion_id, id)`; índice `(organizacion_id, ejecutada_en DESC)`. Solo inserción: la escribe el servicio `tareas` con `app_mantenimiento` (`INSERT, SELECT`), no el bus (no es una operación de negocio: no la origina un usuario ni tiene `operation_id`); `app_runtime` solo `SELECT` (`GET /api/v1/sistema/consistencia`, permiso `VER_CONSISTENCIA`). Una fila por organización y corrida (ADR-073).
 
 ### `intento_pin_autorizacion`
 

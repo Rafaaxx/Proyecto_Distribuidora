@@ -92,6 +92,8 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./tests/unit/setup.ts'],
     include: ['tests/unit/**/*.test.{ts,tsx}'],
+    // La suite de aceptación (Playwright) corre aparte: `npm run test:e2e` (change 28).
+    exclude: ['tests/e2e/**', 'node_modules/**'],
     // El módulo virtual del registro del service worker solo existe dentro del build.
     alias: { 'virtual:pwa-register/react': fileURLToPath(new URL('./tests/unit/utils/pwaRegisterStub.ts', import.meta.url)) },
   },

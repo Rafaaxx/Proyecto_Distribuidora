@@ -86,3 +86,7 @@ Agregar al final de la sección "Enmienda del change 18b (ADR-055)":
 ## Enmienda del 2026-11-08 (change 27a, prueba manual): el frontend recorta organización y usuario
 
 En la primera puesta en marcha el teclado de un teléfono agregó un espacio al final de `organizacion-inicial `; el servidor, que compara tal cual, no encontró la organización y el par escrito se bloqueó 15 minutos. **El backend no cambia** (la comparación exacta y el contador por par escrito de este ADR siguen igual). **Cambia el frontend:** los formularios de ingreso de `/admin` y de `/ruta` recortan (`trim`) los espacios de los extremos de **organización y usuario** antes de enviarlos (`frontend/src/domain/identidad/loginSchema.ts`). **La contraseña no se recorta**, porque los espacios pueden ser parte de ella. Los espacios del medio no se tocan. Resultado: ese error de tipeo deja de contar como intento fallido; un cliente que no sea nuestro frontend sigue siendo comparado tal cual.
+
+## Enmienda del 2026-11-11 (change 28, ADR-073)
+
+Punto 9: la limpieza periódica de `intento_login` de más de 24 horas quedó implementada en el change 28 (ADR-073).

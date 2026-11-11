@@ -1,0 +1,5 @@
+codigo,nombre,categoria,marca,proveedor,unidad_base,alicuota,presentacion,unidades_base,usar_en_venta,usar_en_compra,es_referencia
+VINO-A,Vino A,Vinos,,Bodega del Valle,botella,21,Botella,1,S,N,N
+VINO-A,Vino A,Vinos,,Bodega del Valle,botella,21,Caja x6,6,S,S,S
+CERV-B,Cerveza B,Cervezas,,Cervecería Andina,lata,21,Lata,1,S,S,N
+CERV-B,Cerveza B,Cervezas,,Cervecería Andina,lata,21,Caja x12,12,S,S,S

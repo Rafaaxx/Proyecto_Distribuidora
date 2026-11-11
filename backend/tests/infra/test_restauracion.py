@@ -24,6 +24,7 @@ from sqlalchemy.exc import ProgrammingError
 from tests.infra.conftest import (
     BASE,
     CLAVE_BACKUP,
+    CLAVE_MANTENIMIENTO,
     CLAVE_MIGRACIONES,
     CLAVE_RUNTIME,
     CLAVE_SUPER,
@@ -104,6 +105,7 @@ def destino(docker_cliente) -> Iterator[Destino]:
             "APP_MIGRATIONS_DB_PASSWORD": CLAVE_MIGRACIONES,
             "APP_RUNTIME_DB_PASSWORD": CLAVE_RUNTIME,
             "APP_BACKUP_DB_PASSWORD": CLAVE_BACKUP,
+            "APP_MANTENIMIENTO_DB_PASSWORD": CLAVE_MANTENIMIENTO,
         },
         volumes={
             str(INFRA / "postgres" / "init-app-roles.sh"): {
@@ -112,6 +114,10 @@ def destino(docker_cliente) -> Iterator[Destino]:
             },
             str(INFRA / "postgres" / "20-init-backup-role.sh"): {
                 "bind": "/docker-entrypoint-initdb.d/20-init-backup-role.sh",
+                "mode": "ro",
+            },
+            str(INFRA / "postgres" / "30-init-mantenimiento-role.sh"): {
+                "bind": "/docker-entrypoint-initdb.d/30-init-mantenimiento-role.sh",
                 "mode": "ro",
             },
         },

@@ -64,6 +64,8 @@ _TABLA_DOCUMENTO: tuple[tuple[str, bool, bool, bool, bool, bool], ...] = (
     ("FACTURAR", True, True, False, False, False),
     ("FACTURAR_ABSORBIENDO_IVA", True, False, False, False, False),
     ("ANULAR_FACTURA", True, True, False, False, False),
+    # Change 28 (`design.md` D5, Q2): el aviso de consistencia lo ven ADM y GES.
+    ("VER_CONSISTENCIA", True, True, False, False, False),
 )
 
 _ROLES_EN_ORDEN = (
@@ -75,14 +77,14 @@ _ROLES_EN_ORDEN = (
 )
 
 
-def test_la_tabla_transcripta_tiene_40_filas() -> None:
-    assert len(_TABLA_DOCUMENTO) == 40
+def test_la_tabla_transcripta_tiene_41_filas() -> None:
+    assert len(_TABLA_DOCUMENTO) == 41
 
 
-def test_el_catalogo_tiene_exactamente_40_permisos_sin_duplicados() -> None:
+def test_el_catalogo_tiene_exactamente_41_permisos_sin_duplicados() -> None:
     codigos = [permiso.codigo for permiso in PERMISOS_DEL_CATALOGO]
-    assert len(codigos) == 40
-    assert len(set(codigos)) == 40
+    assert len(codigos) == 41
+    assert len(set(codigos)) == 41
 
 
 def test_el_catalogo_coincide_con_los_codigos_de_la_tabla_transcripta() -> None:
@@ -93,7 +95,7 @@ def test_el_catalogo_coincide_con_los_codigos_de_la_tabla_transcripta() -> None:
 
 def test_cada_celda_de_cada_plantilla_coincide_con_la_tabla_del_documento() -> None:
     """Escenario "Las cinco plantillas de rol quedan disponibles al crear la
-    organización": recorre las 40 * 5 celdas, una por una."""
+    organización": recorre las 41 * 5 celdas, una por una."""
     errores = []
     for codigo, *marcas in _TABLA_DOCUMENTO:
         for rol, marcado in zip(_ROLES_EN_ORDEN, marcas, strict=True):
@@ -104,7 +106,7 @@ def test_cada_celda_de_cada_plantilla_coincide_con_la_tabla_del_documento() -> N
     assert errores == [], errores
 
 
-def test_el_administrador_tiene_los_40_permisos() -> None:
+def test_el_administrador_tiene_los_41_permisos() -> None:
     assert PLANTILLAS_DE_ROL[ADMINISTRADOR] == {fila[0] for fila in _TABLA_DOCUMENTO}
 
 
@@ -121,3 +123,16 @@ def test_el_vendedor_no_recibe_permisos_de_costo_ni_de_utilidad() -> None:
     }
     assert "VER_COSTOS" not in permisos_vendedor
     assert "VER_UTILIDAD" not in permisos_vendedor
+
+
+def test_ver_consistencia_es_solo_de_administrador_y_administracion_sin_ampliar_a_esta() -> None:
+    """Change 28, D5 y Q2 (SEG-06): el permiso de solo lectura lo reciben las dos plantillas y
+    ninguna otra; `Administración` NO recibe `ADMIN_CONFIGURACION` para ver el aviso."""
+    con_el_permiso = {
+        rol for rol, permisos in PLANTILLAS_DE_ROL.items() if "VER_CONSISTENCIA" in permisos
+    }
+
+    assert con_el_permiso == {ADMINISTRADOR, ADMINISTRACION}
+    assert "ADMIN_CONFIGURACION" not in PLANTILLAS_DE_ROL[ADMINISTRACION]
+    permiso = next(p for p in PERMISOS_DEL_CATALOGO if p.codigo == "VER_CONSISTENCIA")
+    assert (permiso.descripcion, permiso.modulo) == ("Ver el aviso de consistencia", "sistema")

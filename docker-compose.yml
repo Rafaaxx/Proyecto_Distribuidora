@@ -15,6 +15,9 @@ services:
       # se inyectan por separado, nunca con el mismo valor entre sí.
       APP_MIGRATIONS_DB_PASSWORD: ${APP_MIGRATIONS_DB_PASSWORD:?Definí APP_MIGRATIONS_DB_PASSWORD en el entorno o en un .env}
       APP_RUNTIME_DB_PASSWORD: ${APP_RUNTIME_DB_PASSWORD:?Definí APP_RUNTIME_DB_PASSWORD en el entorno o en un .env}
+      # Rol de las tareas periodicas (change 28, D3), que crea `30-init-mantenimiento-role.sh`.
+      # La migracion que le otorga permisos falla si el rol no existe.
+      APP_MANTENIMIENTO_DB_PASSWORD: ${APP_MANTENIMIENTO_DB_PASSWORD:?Definí APP_MANTENIMIENTO_DB_PASSWORD en el entorno o en un .env}
     ports:
       - "5432:5432"
     volumes:
@@ -22,6 +25,7 @@ services:
       # Solo corre la primera vez que se inicializa `postgres_data` (ver el
       # docstring del script). `:ro` porque Postgres no necesita escribirlo.
       - ./infra/postgres/init-app-roles.sh:/docker-entrypoint-initdb.d/10-init-app-roles.sh:ro
+      - ./infra/postgres/30-init-mantenimiento-role.sh:/docker-entrypoint-initdb.d/30-init-mantenimiento-role.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-distribuidora}"]
       interval: 5s
@@ -66,6 +70,28 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+
+  # Tareas periodicas (change 28, D2): verificacion de consistencia y limpieza de intentos de
+  # inicio de sesion, con el rol `app_mantenimiento`. No arranca con `up` (perfil aparte): solo a
+  # pedido, con las migraciones ya aplicadas:
+  #   docker compose run --rm tareas ahora
+  # AVISO_TAREAS_URL (opcional, ADR-073): aviso externo; en desarrollo el compose no tiene redes
+  # aparte, asi que sale a internet sin cambios.
+  tareas:
+    profiles: ["tareas"]
+    build:
+      context: ./backend
+    entrypoint: ["python", "-m", "app.tareas"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://app_mantenimiento:${APP_MANTENIMIENTO_DB_PASSWORD:?Definí APP_MANTENIMIENTO_DB_PASSWORD en el entorno o en un .env}@postgres:5432/${POSTGRES_DB:-distribuidora}
+      TAREAS_HORA: ${TAREAS_HORA:-05:00}
+      TZ: ${TZ:-America/Argentina/Mendoza}
+      AVISO_TAREAS_URL: ${AVISO_TAREAS_URL:-}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   frontend:
     build:
@@ -119,6 +145,8 @@ services:
       - "80:80"
     volumes:
       - ./infra/caddy/Caddyfile.dev:/etc/caddy/Caddyfile:ro
+      # Change 28, D8: encabezados de seguridad y CSP, compartidos con produccion.
+      - ./infra/caddy/encabezados.caddy:/etc/caddy/encabezados.caddy:ro
       - pwa_dist:/srv:ro
       # Guarda la autoridad propia de Caddy: si se pierde, el teléfono debe volver a confiar.
       - caddy_data:/data

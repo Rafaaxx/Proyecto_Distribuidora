@@ -22,9 +22,11 @@ escenario "Las rutas de autenticación quedan exentas por operar sin
 organización en contexto").
 
 CÓMO DECLARAR UNA RUTA NUEVA (tarea 9.2/12.1, para los changes siguientes):
-cuando un módulo agrega una ruta de negocio, agregar la tupla
-`(metodo, "/api/v1/<ruta>")` a `COBERTURA_DE_AISLAMIENTO` en este archivo,
-junto con la prueba de integración que demuestra su aislamiento real:
+cuando un módulo agrega una ruta de negocio, agregar la entrada
+`(metodo, "/api/v1/<ruta>"): ("archivo.py::[Clase::]nombre_de_la_prueba",)` a
+`COBERTURA_DE_AISLAMIENTO` en este archivo (change 28, D11: la ruta apunta a la prueba, que
+tiene que existir y citar INV-21 en su nombre, su docstring o su archivo), junto con la prueba de
+integración que demuestra su aislamiento real:
 - dos organizaciones, cada una con su propio usuario autenticado por
   `POST /api/v1/auth/login` (login real, NUNCA un access token fabricado a
   mano con `emitir_access_token`, porque eso no prueba que el flujo de
@@ -41,7 +43,11 @@ para evitar.
 
 from __future__ import annotations
 
+import ast
 import os
+import re
+from collections.abc import Mapping
+from pathlib import Path
 
 from app.core.config import Settings
 from app.main import crear_app
@@ -65,504 +71,712 @@ RUTAS_DE_AUTENTICACION = frozenset(
     }
 )
 
-# Ver "CÓMO DECLARAR UNA RUTA NUEVA" arriba. Las siete rutas de negocio del
-# grupo 10.7, cada una con su prueba de aislamiento real (login real, dos
-# organizaciones, "no encontrado" sobre el recurso ajeno):
-# - `test_identidad_api_usuarios.py`: composición de rol, rotación de PIN,
-#   desbloqueo manual.
-# - `test_inv21_aislamiento_endpoints_identidad.py`: listado y revocación de
-#   dispositivos, listado y alta de usuarios (incluida el alta con un
-#   `rol_id` de otra organización).
-COBERTURA_DE_AISLAMIENTO: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("get", "/api/v1/identidad/dispositivos"),
-        ("delete", "/api/v1/identidad/dispositivos/{dispositivo_id}"),
-        ("get", "/api/v1/identidad/usuarios"),
-        ("post", "/api/v1/identidad/usuarios"),
-        ("put", "/api/v1/identidad/roles/{rol_id}/permisos"),
-        # Change 16, tarea 13.2: el tope de descuento de un rol (escritura por el bus) y la
-        # lectura de roles. Prueba real de aislamiento en `test_identidad_tope_de_rol.py` (el
-        # rol de otra organizacion responde 404 sin efectos; la lectura no incluye roles ajenos).
-        ("put", "/api/v1/identidad/roles/{rol_id}/tope-descuento"),
-        ("get", "/api/v1/identidad/roles"),
-        # Change 17b, tarea 7.1: el catalogo global de permisos (`03` §4) no tiene datos de
-        # ninguna organizacion: no hay recurso ajeno que pedir. Prueba real:
-        # `test_identidad_permisos_catalogo.py` (403 sin `ADMIN_USUARIOS`, 401 sin sesion).
-        ("get", "/api/v1/identidad/permisos"),
-        ("post", "/api/v1/identidad/usuarios/{usuario_id}/pin"),
-        ("post", "/api/v1/identidad/usuarios/{usuario_id}/desbloqueo"),
-        # Change 20b, grupos 3 y 4: administración de usuarios. Cada una con su prueba real de
-        # aislamiento (login real de dos organizaciones, el administrador de una sobre un usuario
-        # o un rol de la otra -> 404 y nada cambia): `test_usuario_baja.py`,
-        # `test_usuario_reactivar.py`, `test_usuario_modificar.py`, `test_usuario_rol_cambiar.py`
-        # (usuario y rol ajenos) y `test_usuario_contrasena_restablecer.py`.
-        ("post", "/api/v1/identidad/usuarios/{usuario_id}/baja"),
-        ("post", "/api/v1/identidad/usuarios/{usuario_id}/reactivacion"),
-        ("put", "/api/v1/identidad/usuarios/{usuario_id}"),
-        ("put", "/api/v1/identidad/usuarios/{usuario_id}/rol"),
-        ("post", "/api/v1/identidad/usuarios/{usuario_id}/contrasena"),
-        # Tarea 5.1: el tope propio; `test_usuario_tope_descuento_definir.py` (ajeno -> 404).
-        ("put", "/api/v1/identidad/usuarios/{usuario_id}/tope-descuento"),
-        # Change 20b, tarea 4.5: "Mi contraseña". Todo sale del token (el cuerpo no acepta
-        # `usuario_id`); prueba real en `test_contrasena_propia_cambiar.py::test_inv21_cambiar_la_
-        # propia_no_toca_a_los_usuarios_de_otra_organizacion`.
-        ("post", "/api/v1/yo/contrasena"),
-        # Change 20b, grupo 8: administración de roles. Renombrar, baja y reactivación con su
-        # prueba real de rol ajeno -> 404 sin cambios (`test_rol_crear_y_renombrar.py`,
-        # `test_rol_baja_y_reactivacion.py`); el alta no recibe ningún id ajeno: el nombre es único
-        # por organización y el mismo nombre en otra se acepta (misma prueba).
-        ("post", "/api/v1/identidad/roles"),
-        # Tarea 8.4: el detalle de un usuario; `test_identidad_lecturas_usuarios_roles.py`
-        # (usuario de otra organizacion o inexistente -> 404).
-        ("get", "/api/v1/identidad/usuarios/{usuario_id}"),
-        ("put", "/api/v1/identidad/roles/{rol_id}/nombre"),
-        ("post", "/api/v1/identidad/roles/{rol_id}/baja"),
-        ("post", "/api/v1/identidad/roles/{rol_id}/reactivacion"),
-        # Change 04, grupo 8 (`sync/api.py`, tarea 8.6): a diferencia de las
-        # rutas de arriba, `POST /sync/comandos` no tiene un "recurso ajeno"
-        # por id -- `organizacion_id`/`usuario_id`/`dispositivo_id` salen
-        # siempre del token (nunca del cuerpo, `sobre.py`), así que no hay
-        # forma de pedir la cola de otra organización con esta ruta: el
-        # aislamiento es estructural, no una verificación en tiempo de
-        # ejecución sobre un id ajeno. Su prueba real de aislamiento no
-        # sigue el patrón de "recurso de otra organización -> 404" de las
-        # rutas de arriba, sino el de "cola ajena -> rechazada" (mismo
-        # principio, SEG-02/SEG-07): `test_bus_lote_sincronizacion.py::
-        # TestPropiedadDeLaCola` (otro usuario, otro dispositivo, sin
-        # sesión) y `test_cuarentena_comandos.py::
-        # test_la_cuarentena_de_otra_organizacion_no_es_alcanzable`
-        # (tarea 8.9, aislamiento de `comando_cuarentena` entre
-        # organizaciones).
-        ("post", "/api/v1/sync/comandos"),
-        # Change 21, grupo 2: el bootstrap no recibe ningún id (organización, usuario y
-        # dispositivo salen del token, el aislamiento es estructural); prueba real con dos
-        # organizaciones en `test_sync_bootstrap.py::test_inv21_nada_de_otra_organizacion_en_el_
-        # bootstrap` y `::test_inv21_ratchet_el_bootstrap_es_de_lectura_y_de_otra_organizacion_
-        # no_se_ve` (login real de cada una; nada de la ajena en la respuesta).
-        ("get", "/api/v1/sync/bootstrap"),
-        # Change 05, grupo 9 (`catalogo/api.py`, tarea 9.1/9.2), cobertura
-        # de tarea 11.1: las trece rutas nuevas, cada una con su prueba de
-        # aislamiento real -- incluida la referencia ajena EN EL CONTENIDO
-        # (categoría/marca/alícuota de otra organización), no solo el id
-        # de la ruta -- en `test_inv21_aislamiento_endpoints_catalogo.py`.
-        ("post", "/api/v1/catalogo/categorias"),
-        ("get", "/api/v1/catalogo/categorias"),
-        ("put", "/api/v1/catalogo/categorias/{categoria_id}"),
-        ("post", "/api/v1/catalogo/marcas"),
-        ("get", "/api/v1/catalogo/marcas"),
-        ("put", "/api/v1/catalogo/marcas/{marca_id}"),
-        ("post", "/api/v1/catalogo/productos"),
-        ("get", "/api/v1/catalogo/productos"),
-        ("put", "/api/v1/catalogo/productos/{producto_id}"),
-        ("get", "/api/v1/catalogo/productos/{producto_id}"),
-        ("post", "/api/v1/catalogo/productos/{producto_id}/presentaciones"),
-        ("put", "/api/v1/catalogo/presentaciones/{presentacion_id}"),
-        ("put", "/api/v1/catalogo/productos/{producto_id}/referencia"),
-        # Change 05, grupo 9/11 (tarea 9.6/11.5, D12): la ruta de solo
-        # lectura de `configuracion/api.py` -- cada organización lista solo
-        # sus propias alícuotas, `test_configuracion_api.py::
-        # TestAislamientoInv21`.
-        ("get", "/api/v1/configuracion/alicuotas"),
-        # Change 06, grupo 10/12 (`proveedores/api.py`, tarea 10.2),
-        # cobertura de tarea 12.1: las ocho rutas nuevas, cada una con su
-        # prueba de aislamiento real -- incluida la referencia ajena EN EL
-        # CONTENIDO de `COSTO_INFORMAR` (`proveedor_id`, `producto_id`,
-        # `presentacion_id` de otra organización) -- en
-        # `test_inv21_aislamiento_endpoints_proveedores.py`. La misma
-        # prueba cubre además `proveedor_id` ajeno en `PRODUCTO_CREAR`/
-        # `PRODUCTO_MODIFICAR` v2 (`catalogo/api.py`, ya cubiertas arriba,
-        # caso que las pruebas de la tarea 11.1 del change 05 no llegaban a
-        # ejercitar porque `proveedor_id` no existía en el contrato).
-        ("post", "/api/v1/proveedores"),
-        ("get", "/api/v1/proveedores"),
-        ("get", "/api/v1/proveedores/opciones"),
-        ("get", "/api/v1/proveedores/{proveedor_id}"),
-        ("put", "/api/v1/proveedores/{proveedor_id}"),
-        ("post", "/api/v1/costos"),
-        ("get", "/api/v1/costos/productos/{producto_id}/vigente"),
-        ("get", "/api/v1/costos/productos/{producto_id}/historial"),
-        # Change 06b, grupo 9, tarea 9.1 (`identidad/api.py::router_yo`,
-        # ADR-027), con la prueba real en
-        # `test_inv21_aislamiento_endpoints_identidad.py::TestAislamientoDeLaSesion`.
-        # La 4.6 dejó esta ruta sin cobertura A PROPÓSITO (mismo precedente
-        # que la 12.1 del change 02): el ratchet quedó en rojo nombrando
-        # `[('get', '/api/v1/yo')]` desde que la ruta se registró hasta que
-        # sus dos pruebas de aislamiento existen. Como `/yo` no recibe ningún
-        # identificador (todo sale del token, D1-A), su aislamiento no sigue
-        # el patrón "recurso de otra organización -> 404" de las rutas de
-        # arriba, sino el inverso: dos organizaciones con login real, y el
-        # usuario de B obtiene solo su usuario, su organización y su rol
-        # (ningún id, nombre ni permiso de A), tanto si informa los
-        # identificadores de A en la consulta y en encabezados como si no.
-        ("get", "/api/v1/yo"),
-        # Change 07, grupo 4 (`clientes/api.py`, tareas 4.2 y 4.3/4.4,
-        # `design.md` D9 enmienda 2026-09-29): las tres rutas de lectura y
-        # las cuatro rutas de escritura DEDICADAS (una por comando `ONLINE`,
-        # mismo patrón que `proveedores/api.py`, en vez del despacho
-        # genérico de `POST /sync/comandos`, ya cubierta arriba) -- con su
-        # prueba real de aislamiento en
-        # `test_inv21_aislamiento_endpoints_clientes.py::
-        # TestAislamientoDeLasRutasDeClientes` (login real de dos
-        # organizaciones, recurso ajeno -> 404, la referencia ajena EN EL
-        # CONTENIDO de `CLIENTE_CREDITO_MODIFICAR`, y el caso propio de
-        # `/consumidor-final`: el identificador ajeno sale de la
-        # configuración de la otra organización, nunca de la petición).
-        ("get", "/api/v1/clientes"),
-        ("post", "/api/v1/clientes"),
-        ("get", "/api/v1/clientes/consumidor-final"),
-        ("post", "/api/v1/clientes/consumidor-final"),
-        ("get", "/api/v1/clientes/{cliente_id}"),
-        ("put", "/api/v1/clientes/{cliente_id}"),
-        ("put", "/api/v1/clientes/{cliente_id}/credito"),
-        # Change 08, grupo 6 (`cuentas_corrientes/api.py`, `clientes/api.py`,
-        # `proveedores/api.py`, tareas 6.1 y 6.2): la ruta de escritura dedicada de
-        # `SALDO_INICIAL_REGISTRAR` y las dos lecturas del estado de cuenta, cada
-        # una con su prueba real de aislamiento (login real de dos organizaciones,
-        # entidad ajena o inexistente -> 404 sin revelar saldo ni movimientos) en
-        # `test_cuentas_corrientes_api.py::TestSaldoInicialRegistrar::
-        # test_una_entidad_de_otra_organizacion_o_inexistente_responde_404`,
-        # `TestEstadoDeCuentaDeUnCliente::
-        # test_un_cliente_de_otra_organizacion_o_inexistente_responde_404_sin_datos`
-        # y `TestEstadoDeCuentaDeUnProveedor::
-        # test_un_proveedor_de_otra_organizacion_responde_404`. La tarea 8.4
-        # agrega el archivo dedicado `test_inv21_aislamiento_endpoints_cuentas_
-        # corrientes.py` con los mismos casos por ruta.
-        ("post", "/api/v1/cuentas-corrientes/saldos-iniciales"),
-        ("get", "/api/v1/clientes/{cliente_id}/cuenta-corriente"),
-        ("get", "/api/v1/proveedores/{proveedor_id}/cuenta-corriente"),
-        # Change 09, grupo 7 (`stock/api.py`, `catalogo/api.py`, tareas 7.1 a 7.3):
-        # las tres escrituras dedicadas y las cuatro lecturas (ubicaciones, saldos,
-        # kardex y costo promedio), cada una con su prueba real de aislamiento (login
-        # real de dos organizaciones, recurso ajeno o inexistente -> 404 sin datos) en
-        # `test_stock_api.py` (clases TestUbicacionModificar, TestStockInicialRegistrar,
-        # TestSaldosDeUbicacion, TestKardex y TestCostoPromedioDeProducto; el alta y el
-        # listado de ubicaciones solo filtran por la organizacion del token). La tarea
-        # 9.5 agrega el archivo dedicado `test_inv21_aislamiento_endpoints_stock.py`.
-        ("post", "/api/v1/stock/ubicaciones"),
-        ("get", "/api/v1/stock/ubicaciones"),
-        ("put", "/api/v1/stock/ubicaciones/{ubicacion_id}"),
-        ("get", "/api/v1/stock/ubicaciones/{ubicacion_id}/saldos"),
-        ("post", "/api/v1/stock/iniciales"),
-        # Change 14 (tareas 5.3, 6.3, 9.6, 10.1, 10.2 y 11.1): las altas, las anulaciones y las
-        # lecturas de transferencias y ajustes, cada una con su prueba real de aislamiento (login
-        # real de dos organizaciones; lo ajeno responde 404 sin rastro; un `organizacion_id` en
-        # el cuerpo se rechaza) en `test_inv21_aislamiento_endpoints_stock.py`.
-        ("post", "/api/v1/stock/transferencias"),
-        ("get", "/api/v1/stock/transferencias"),
-        ("get", "/api/v1/stock/transferencias/{transferencia_id}"),
-        ("post", "/api/v1/stock/transferencias/{transferencia_id}/anulacion"),
-        ("post", "/api/v1/stock/ajustes"),
-        ("get", "/api/v1/stock/ajustes"),
-        ("get", "/api/v1/stock/ajustes/{ajuste_id}"),
-        ("post", "/api/v1/stock/ajustes/{ajuste_id}/anulacion"),
-        # Change 15 (tareas 4.3 y 11.1): la apertura, la rendición, el cierre y la liberación de
-        # una jornada, cada una con su prueba real de aislamiento en
-        # `test_inv21_aislamiento_endpoints_stock.py`.
-        ("post", "/api/v1/stock/jornadas"),
-        ("post", "/api/v1/stock/jornadas/{jornada_id}/rendicion"),
-        ("post", "/api/v1/stock/jornadas/{jornada_id}/cierre"),
-        ("post", "/api/v1/stock/jornadas/{jornada_id}/liberacion"),
-        # Tarea 10.1: las tres lecturas, con su prueba real de aislamiento en
-        # `test_jornadas_consultas_api.py` (otra organización: fuera del listado y 404 en el
-        # detalle) y en `test_jornadas_ubicaciones_api.py`.
-        ("get", "/api/v1/stock/jornadas"),
-        ("get", "/api/v1/stock/jornadas/actual"),
-        ("get", "/api/v1/stock/jornadas/{jornada_id}"),
-        # Change 24: el resumen, con su prueba real en `test_jornadas_api.py` (404 de otra org).
-        ("get", "/api/v1/stock/jornadas/{jornada_id}/resumen"),
-        ("get", "/api/v1/stock/kardex"),
-        ("get", "/api/v1/catalogo/productos/{producto_id}/costo"),
-        # Change 10, grupo 4 (`importacion/api.py`, tarea 4.3): la escritura dedicada de
-        # `IMPORTACION_REGISTRAR` (multipart), el historial y la plantilla, cada una con
-        # su prueba real de aislamiento (login real de dos organizaciones; la
-        # organizacion sale solo del token, una columna `organizacion_id` en el archivo
-        # se rechaza, un nombre de otra organizacion no cuenta como duplicado y el
-        # historial no muestra nada ajeno) en
-        # `test_inv21_aislamiento_endpoints_importacion.py`. Ninguna toma un
-        # identificador de recurso en la ruta: el aislamiento es estructural.
-        ("post", "/api/v1/importaciones/{tipo}"),
-        ("get", "/api/v1/importaciones"),
-        ("get", "/api/v1/importaciones/plantillas/{tipo}"),
-        # Change 11, grupo 5 (`proveedores/api.py`, tarea 5.3): la escritura dedicada de
-        # `COMPRA_CONFIRMAR`, con su prueba real de aislamiento (login real de dos
-        # organizaciones; el proveedor, la ubicacion y el producto de otra organizacion
-        # responden 404 sin efectos, la presentacion ajena se informa como
-        # `PRESENTACION_INVALIDA` y un `organizacion_id` en el cuerpo no se usa) en
-        # `test_compras_api.py` (`test_inv21_*` y `test_el_cuerpo_no_acepta_organizacion_id`).
-        ("post", "/api/v1/compras"),
-        # Change 11, grupo 9 (`proveedores/api.py`, tarea 9.3): la anulacion dedicada de
-        # `COMPRA_ANULAR`, con su prueba real de aislamiento (login real de dos
-        # organizaciones: anular la compra de otra organizacion responde 404 y la deja
-        # `CONFIRMADA`; un motivo ajeno responde 404; `organizacion_id` en el cuerpo se
-        # rechaza) en `test_compras_api.py`
-        # (`test_inv21_anular_la_compra_de_otra_organizacion_responde_404` y
-        # `test_la_anulacion_no_acepta_campos_ajenos`) y `test_compras_anular.py`.
-        ("post", "/api/v1/compras/{compra_id}/anulacion"),
-        # Change 11, grupo 10 (tarea 10.1, 10.2 y 10.3): las dos lecturas de compras, el
-        # filtro `proveedor_id` del listado de productos y las dos lecturas de
-        # configuracion, cada una con su prueba real de aislamiento en `test_compras_api.py`
-        # (`test_inv21_el_listado_no_devuelve_compras_de_otra_organizacion`,
-        # `test_inv21_el_detalle_de_una_compra_de_otra_organizacion_responde_404`,
-        # `test_inv21_filtrar_por_el_proveedor_de_otra_organizacion_devuelve_lista_vacia`,
-        # `test_medios_de_pago_devuelve_solo_los_activos_de_la_organizacion` y
-        # `test_motivos_devuelve_solo_los_activos_del_ambito_pedido_de_la_organizacion`).
-        ("get", "/api/v1/compras"),
-        ("get", "/api/v1/compras/{compra_id}"),
-        # Change 11b, grupo 5 (tareas 5.1 y 5.2): la escritura dedicada del cambio de
-        # condición frente al IVA y las dos lecturas nuevas, cada una con su prueba real de
-        # aislamiento (login real de dos organizaciones; la organización sale siempre del
-        # token y se ignora la que venga en la petición) en `test_condicion_iva_api.py`
-        # (`test_inv21_cada_organizacion_lee_solo_su_propia_configuracion_fiscal`,
-        # `test_inv21_el_cambio_afecta_solo_a_la_organizacion_del_token` y
-        # `test_inv21_el_resumen_cuenta_solo_los_costos_de_la_organizacion_del_token`).
-        ("get", "/api/v1/configuracion/fiscal"),
-        ("post", "/api/v1/configuracion/fiscal/condicion-iva"),
-        ("get", "/api/v1/costos/resumen-regla-iva"),
-        ("get", "/api/v1/configuracion/medios-pago"),
-        # Change 17b, grupo 4 y 5 (`configuracion/api.py`): el alta y la modificación de medios
-        # de pago y la lectura completa, cada una con su prueba real de aislamiento (login real
-        # de dos organizaciones; un medio ajeno responde 404, la lectura trae solo los de la
-        # organización del token y un `organizacion_id` en el cuerpo se rechaza) en
-        # `test_medio_pago_comandos.py` y `test_medios_pago_lectura.py`.
-        ("post", "/api/v1/configuracion/medios-pago"),
-        ("put", "/api/v1/configuracion/medios-pago/{medio_pago_id}"),
-        ("get", "/api/v1/configuracion/medios-pago/todos"),
-        ("get", "/api/v1/configuracion/motivos"),
-        # Change 20c, grupo 3 (`configuracion/api.py`): el alta y la modificación de motivos y la
-        # lectura completa, cada una con su prueba real de aislamiento (login real de dos
-        # organizaciones; un motivo ajeno responde 404 y la lectura trae solo los de la
-        # organización del token) en `test_motivo_comandos.py` y `test_motivos_lectura.py`.
-        ("post", "/api/v1/configuracion/motivos"),
-        ("put", "/api/v1/configuracion/motivos/{motivo_id}"),
-        ("get", "/api/v1/configuracion/motivos/todos"),
-        # Change 20c, grupos 4 y 5: el alta y la modificación de alícuotas (`configuracion/api.py`)
-        # y el redondeo por defecto (`identidad/api.py`). Pruebas reales de aislamiento (login real
-        # de dos organizaciones; una alícuota ajena responde 404, el redondeo cambia solo el de la
-        # organización del token) en `test_alicuota_comandos.py` y `test_redondeo_por_defecto.py`.
-        ("post", "/api/v1/configuracion/alicuotas"),
-        ("put", "/api/v1/configuracion/alicuotas/{alicuota_id}"),
-        ("get", "/api/v1/configuracion/redondeo-por-defecto"),
-        ("post", "/api/v1/configuracion/redondeo-por-defecto"),
-        # Change 12, grupo 4 (`proveedores/api.py`, tarea 4.3): la escritura dedicada de
-        # `PAGO_PROVEEDOR_REGISTRAR`, con su prueba real de aislamiento (login real de dos
-        # organizaciones en ambos sentidos: el proveedor y el medio de la otra
-        # organizacion responden 404 sin efectos --con el indice del medio en el Problem
-        # Details-- y un `organizacion_id` en el cuerpo se ignora, nunca llega al comando)
-        # en `test_pagos_proveedor_api.py` (`test_un_proveedor_ajeno_responde_404`,
-        # `test_un_medio_ajeno_responde_404_con_el_medio` y
-        # `test_el_cuerpo_no_acepta_organizacion_id`).
-        ("post", "/api/v1/pagos-proveedores"),
-        # Change 12, grupo 7 (tarea 7.1): las cuatro rutas nuevas -- la anulacion dedicada
-        # de `PAGO_PROVEEDOR_ANULAR` y las tres lecturas (saldo del proveedor, listado y
-        # detalle de pagos) -- con su prueba real de aislamiento en
-        # `test_inv21_aislamiento_endpoints_proveedores.py::
-        # TestAislamientoDePagosAProveedores`: login real de dos organizaciones y, en cada
-        # prueba, los dos sentidos (la propia lee/anula lo suyo con 200, y la misma llamada
-        # sobre un recurso de la otra responde 404 sin datos ni efectos). Ademas las tres
-        # lecturas y la anulacion se exerten con un `organizacion_id` ajeno en la consulta o
-        # en el cuerpo para confirmar que la organizacion sale siempre del token (INV-21,
-        # TR-08). Este ratchet quedo en rojo nombrando las cuatro rutas desde que el grupo 6
-        # las registro hasta que sus pruebas de aislamiento existen (mismo precedente que la
-        # tarea 12.1 del change 02).
-        ("post", "/api/v1/pagos-proveedores/{pago_id}/anulacion"),
-        ("get", "/api/v1/pagos-proveedores"),
-        ("get", "/api/v1/pagos-proveedores/{pago_id}"),
-        ("get", "/api/v1/proveedores/{proveedor_id}/saldo"),
-        # Change 13, grupo 5 (`precios/api.py`, tarea 5.4): las nueve rutas de listas, reglas
-        # de margen y redondeos por categoria -- cinco escrituras dedicadas y cuatro lecturas
-        # (listado, opciones, detalle y reglas) -- con su prueba real de aislamiento en
-        # `test_precios_api.py::test_inv21_cada_organizacion_ve_solo_sus_listas_y_las_ajenas_
-        # responden_404` (login real de dos organizaciones: la lista de otra organizacion
-        # responde 404 en el detalle, las reglas, la modificacion, el alta de regla y el
-        # redondeo, y el listado y las opciones solo traen las propias) y `test_inv21_una_
-        # regla_con_una_entidad_de_otra_organizacion_responde_404` (la referencia ajena EN EL
-        # CONTENIDO, para los cuatro alcances). El cuerpo no acepta `organizacion_id`
-        # (`test_el_cuerpo_no_acepta_la_organizacion`). El grupo 11 agrega las rutas de los
-        # lotes siguientes y el archivo dedicado `test_inv21_aislamiento_endpoints_precios.py`.
-        ("post", "/api/v1/precios/listas"),
-        ("get", "/api/v1/precios/listas"),
-        ("get", "/api/v1/precios/listas/opciones"),
-        ("get", "/api/v1/precios/listas/{lista_id}"),
-        ("put", "/api/v1/precios/listas/{lista_id}"),
-        ("get", "/api/v1/precios/listas/{lista_id}/reglas"),
-        ("post", "/api/v1/precios/listas/{lista_id}/reglas"),
-        ("put", "/api/v1/precios/listas/{lista_id}/reglas/{regla_id}"),
-        ("put", "/api/v1/precios/listas/{lista_id}/redondeos-categoria/{categoria_id}"),
-        # Change 13, grupo 7 (tarea 7.6): generar el borrador, fijar un precio manual y
-        # consultar el borrador. Prueba real de aislamiento en `test_precios_api.py`:
-        # `test_generar_sobre_una_lista_inactiva_responde_409_y_sobre_una_ajena_404`,
-        # `test_inv21_fijar_sobre_la_lista_o_la_version_de_otra_organizacion_responde_404` y
-        # `test_consultar_el_borrador_exige_gestionar_o_publicar_y_no_cruza_organizaciones`.
-        ("post", "/api/v1/precios/listas/{lista_id}/borrador"),
-        ("get", "/api/v1/precios/listas/{lista_id}/borrador"),
-        ("put", "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/precios/{producto_id}"),
-        # Change 13, grupo 8 (tarea 8.6): publicar, anular y consultar versiones y sus precios.
-        # Prueba real de aislamiento en `test_precios_api.py`: `test_publicar_exige_operation_id_
-        # publicar_listas_y_no_cruza_organizaciones`, `test_inv21_anular_la_version_de_otra_
-        # organizacion_responde_404` y `test_las_lecturas_de_versiones_exigen_un_permiso_de_
-        # listas_y_no_cruzan_organizaciones`.
-        ("post", "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/publicar"),
-        ("post", "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/anular"),
-        ("get", "/api/v1/precios/listas/{lista_id}/versiones"),
-        ("get", "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/precios"),
-        # Change 13, grupo 9 (tarea 9.2): la versión vigente de una lista a un momento (PRC-20).
-        # Prueba real de aislamiento en `test_precios_api.py::test_inv21_la_version_vigente_de_
-        # una_lista_de_otra_organizacion_responde_404`.
-        ("get", "/api/v1/precios/listas/{lista_id}/vigente"),
-        # Change 13, grupo 10 (tarea 10.3): definir y leer la lista predeterminada de la
-        # organizacion (`LISTA_PRECIO_PREDETERMINADA_DEFINIR`, PRC-20). Grupo 11 (tarea 11.1):
-        # las diecinueve rutas de `precios` tienen su prueba dedicada de aislamiento en
-        # `test_inv21_aislamiento_endpoints_precios.py` (login real de dos organizaciones; el
-        # recurso de otra organizacion responde 404 sin efectos).
-        ("put", "/api/v1/precios/lista-predeterminada"),
-        ("get", "/api/v1/precios/lista-predeterminada"),
-        # Change 16, grupo 11 (tarea 11.1): las cuatro escrituras y las dos lecturas de
-        # `descuentos/api.py` (alta, edición, activación, pausa, listado y detalle de una regla).
-        # Prueba real de aislamiento en `test_inv21_aislamiento_endpoints_descuentos.py` (login
-        # real de dos organizaciones; la regla o el alcance de otra organización responde 404
-        # sin efectos).
-        ("get", "/api/v1/descuentos/reglas"),
-        ("get", "/api/v1/descuentos/reglas/{regla_id}"),
-        ("post", "/api/v1/descuentos/reglas"),
-        ("put", "/api/v1/descuentos/reglas/{regla_id}"),
-        ("post", "/api/v1/descuentos/reglas/{regla_id}/activacion"),
-        ("post", "/api/v1/descuentos/reglas/{regla_id}/pausa"),
-        # Change 17, tarea 8.1: `POST /cobranzas` (`COBRANZA_REGISTRAR`). Prueba real de
-        # aislamiento en `test_cobranzas_api.py::test_inv21_*` (login real de dos
-        # organizaciones; el cliente o el medio de otra organización responde 404 sin efectos).
-        ("post", "/api/v1/cobranzas"),
-        # Change 17, tareas 9.1, 10.1 y 11.1: la anulación, el listado y el detalle de cobranzas
-        # y el selector y el saldo de clientes. Pruebas reales de aislamiento (login de dos
-        # organizaciones; lo ajeno responde 404 o no aparece) en `test_cobranzas_api.py`
-        # (`test_inv21_anular_*`), `test_cobranzas_consultas_api.py` (`test_inv21_*`) y
-        # `test_clientes_opciones_y_saldo_api.py` (`test_inv21_*`).
-        ("post", "/api/v1/cobranzas/{cobranza_id}/anulacion"),
-        ("get", "/api/v1/cobranzas"),
-        ("get", "/api/v1/cobranzas/{cobranza_id}"),
-        ("get", "/api/v1/clientes/opciones"),
-        ("get", "/api/v1/clientes/{cliente_id}/saldo"),
-        # Change 20b, tarea 9.2: `POST /clientes/vendedor` (`CLIENTE_VENDEDOR_ASIGNAR`). Pruebas
-        # reales de aislamiento en `test_cliente_vendedor_asignar.py` (un cliente o un vendedor de
-        # otra organizacion responde 404 y no cambia nada) y, para las lecturas de cartera y su
-        # filtro por vendedor, en `test_clientes_opciones_cartera.py` y
-        # `test_clientes_cartera_service.py`.
-        ("post", "/api/v1/clientes/vendedor"),
-        # Change 20b, tarea 10.3: `GET /clientes/vendedores`. Prueba real de aislamiento en
-        # `test_clientes_vendedores_elegibles.py::test_no_lista_usuarios_de_otra_organizacion`.
-        ("get", "/api/v1/clientes/vendedores"),
-        # Change 18a, tarea 8.1: `POST /ventas` (`VENTA_CONFIRMAR`). Prueba real de aislamiento
-        # en `test_ventas_api.py::test_inv21_*` (login real de dos organizaciones; el cliente de
-        # otra organización responde 404 sin efectos) y en `test_ventas_confirmar.py`.
-        ("post", "/api/v1/ventas"),
-        # Change 18a, tareas 9.1 y 9.2: las lecturas de `ventas`. Pruebas reales de aislamiento
-        # (login real de dos organizaciones; lo ajeno responde 404 o no aparece) en
-        # `test_ventas_consultas_api.py` (`test_inv21_*`, listado y detalle) y
-        # `test_ventas_lecturas_de_apoyo_api.py` (`test_inv21_*`: precios con ubicacion, cliente
-        # o lista ajenos; versiones de una lista ajena). La numeracion sale solo del dispositivo
-        # de la sesion, sin parametros de organizacion ni de recurso.
-        ("get", "/api/v1/ventas"),
-        ("get", "/api/v1/ventas/{venta_id}"),
-        # Change 20, tarea 6.3: `GET /ventas/{venta_id}/nota`. Prueba real de aislamiento en
-        # `test_ventas_nota.py::test_inv21_*` (login real de dos organizaciones; la venta de
-        # otra organizacion responde 404).
-        ("get", "/api/v1/ventas/{venta_id}/nota"),
-        ("get", "/api/v1/ventas/precios"),
-        ("get", "/api/v1/ventas/numeracion"),
-        ("get", "/api/v1/ventas/versiones"),
-        # Change 19, tarea 7.5: `POST /ventas/{venta_id}/anulacion` (`VENTA_ANULAR`). Prueba real
-        # de aislamiento en `test_ventas_anular_api.py::test_inv21_*` (login real de dos
-        # organizaciones; la venta o el motivo de otra organizacion responde 404 sin efectos).
-        ("post", "/api/v1/ventas/{venta_id}/anulacion"),
-        # Change 18b, grupo 5 (tareas 5.1 y 5.2): las cuatro rutas de parámetros de la
-        # organización (descuento manual y crédito: lectura y escritura dedicada). Pruebas
-        # reales de aislamiento en `test_descuento_manual_configurar.py` y
-        # `test_credito_organizacion_configurar.py` (`test_inv21_http_el_cambio_afecta_solo_a_
-        # la_organizacion_del_token`: login real de dos organizaciones, un `organizacion_id`
-        # ajeno en el cuerpo se ignora y cada lectura trae solo la propia).
-        ("get", "/api/v1/configuracion/descuento-manual"),
-        ("post", "/api/v1/configuracion/descuento-manual"),
-        ("get", "/api/v1/configuracion/credito"),
-        ("post", "/api/v1/configuracion/credito"),
-        # Change 20, grupo 5: parametros de la nota de venta. Prueba real de aislamiento en
-        # `test_nota_venta_configurar.py::test_inv21_http_*` (login real de dos organizaciones).
-        ("get", "/api/v1/configuracion/nota-de-venta"),
-        ("post", "/api/v1/configuracion/nota-de-venta"),
-        # Change 20, D15 (grupo 12): nombre y CUIT de la organizacion. Prueba real de aislamiento
-        # en `test_organizacion_cuit_configurar.py::test_inv21_http_*` (dos organizaciones).
-        ("get", "/api/v1/configuracion/organizacion"),
-        ("post", "/api/v1/configuracion/organizacion"),
-        # Change 18b, tarea 6.5 (`identidad/api.py::router_yo`): "Mi PIN". Todo sale del token (el
-        # cuerpo no acepta `usuario_id` ni `organizacion_id`); prueba real de aislamiento en
-        # `test_identidad_pin_propio_definir.py::test_inv21_definir_el_pin_propio_no_toca_a_los_
-        # usuarios_de_otra_organizacion`.
-        ("post", "/api/v1/yo/pin-autorizacion"),
-        # Change 18b, grupo 11 (tareas 11.1, 11.2 y 11.5): las tres lecturas para vender. Todo
-        # sale del token; pruebas reales de aislamiento en `test_ventas_contexto.py::test_syn11_no_
-        # son_autorizadores_los_que_no_cumplen_las_condiciones` y `test_dsc06_los_motivos_son_
-        # solo_los_activos_del_ambito_de_descuento_manual_propio` (usuarios y motivos de otra
-        # organización no figuran), `test_ventas_credito_lectura.py::test_seg07_el_credito_de_un_
-        # cliente_de_otra_organizacion_responde_404` y `test_identidad_yo_pin.py::test_seg07_cada_
-        # usuario_ve_solo_lo_suyo_y_get_yo_no_cambia`.
-        ("get", "/api/v1/ventas/contexto"),
-        ("get", "/api/v1/ventas/credito"),
-        # Apply del 2026-10-23: las reglas vigentes de la organización del token; aislamiento en
-        # `test_ventas_descuentos_aplicables.py::test_inv21_las_reglas_de_otra_organizacion_no_
-        # figuran`.
-        ("get", "/api/v1/ventas/descuentos-aplicables"),
-        # Change 25 (revisión de observaciones), login real y dos organizaciones: la resolución con
-        # una observación ajena responde 404 (`test_observacion_resolver.py::test_una_observacion_
-        # de_otra_organizacion_responde_404_y_no_se_resuelve_ninguna`); la bandeja y el resumen
-        # solo ven la organización del token (`test_bandeja_de_observaciones.py::test_otra_
-        # organizacion_no_aparece`, `test_resumen_de_pendientes.py::test_solo_cuenta_la_
-        # organizacion_del_token`).
-        ("post", "/api/v1/observaciones/resolucion"),
-        ("get", "/api/v1/observaciones"),
-        ("get", "/api/v1/observaciones/resumen"),
-        # Change 26 (reportes de la etapa 1), tarea 3.1: el reporte de ventas, con login real y dos
-        # organizaciones (`reportes/test_reporte_ventas.py::test_inv21_el_reporte_no_incluye_
-        # ventas_de_otra_organizacion`, `test_inv21_filtrar_por_un_vendedor_de_otra_organizacion_
-        # devuelve_el_reporte_vacio` y `test_inv21_la_organizacion_no_se_toma_de_la_consulta`).
-        ("get", "/api/v1/reportes/ventas"),
-        # Tareas 4.1 a 6.1: rendiciones y su detalle, observaciones por vendedor y ajustes,
-        # con login real y dos organizaciones (`reportes/test_reporte_rendiciones.py::test_inv21_la_
-        # lista_no_incluye_jornadas_de_otra_organizacion`, `test_inv21_filtrar_por_un_vendedor_
-        # ajeno_devuelve_vacio` y `test_inv21_el_detalle_de_una_jornada_ajena_o_inexistente_es_404`;
-        # `reportes/test_reporte_observaciones.py::test_inv21_no_cuenta_observaciones_ni_rechazos_
-        # de_otra_organizacion`; `reportes/test_reporte_ajustes.py::test_inv21_no_cuenta_ajustes_
-        # ni_diferencias_de_otra_organizacion`).
-        ("get", "/api/v1/reportes/rendiciones"),
-        ("get", "/api/v1/reportes/rendiciones/{jornada_id}"),
-        ("get", "/api/v1/reportes/observaciones"),
-        ("get", "/api/v1/reportes/ajustes"),
-        # Tarea 7.1: saldos de clientes y de proveedores, con login real y dos organizaciones
-        # (`reportes/test_reporte_saldos.py::test_inv21_no_ve_saldos_de_clientes_de_otra_
-        # organizacion` y `test_inv21_no_ve_saldos_de_proveedores_de_otra_organizacion`).
-        ("get", "/api/v1/reportes/saldos/clientes"),
-        ("get", "/api/v1/reportes/saldos/proveedores"),
-        # Rechazos y cuarentenas (Lote 3), login real y dos organizaciones: la lista solo ve la
-        # organización del token y el detalle y la resolución de uno ajeno responden 404
-        # (`test_lista_de_rechazos.py::test_inv21_otra_organizacion_no_ve_los_rechazos_y_su_
-        # pedido_responde_404`, `test_rechazo_resolver.py::test_inv21_un_rechazo_de_otra_
-        # organizacion_o_inexistente_responde_404`).
-        ("get", "/api/v1/observaciones/rechazos"),
-        ("get", "/api/v1/observaciones/rechazos/{rechazo_id}"),
-        ("post", "/api/v1/observaciones/rechazos/{rechazo_id}/resolucion"),
-        ("get", "/api/v1/yo/pin-autorizacion"),
-    }
-)
+# Ver "CÓMO DECLARAR UNA RUTA NUEVA" arriba. Change 28, tarea 5.1 (D11): cada ruta de negocio
+# apunta a la(s) prueba(s) que demuestran su aislamiento, como `archivo::nombre` (o
+# `archivo::Clase::nombre`) relativo a `backend/tests/integration/`. El ratchet comprueba, sin
+# correrlas, que cada una existe y cita INV-21, y que la ruta declarada sigue registrada.
+COBERTURA_DE_AISLAMIENTO: dict[tuple[str, str], tuple[str, ...]] = {
+    # Identidad
+    ("get", "/api/v1/identidad/dispositivos"): (
+        "test_inv21_aislamiento_endpoints_identidad.py::TestAislamientoDeDispositivos::test_listar_dispositivos_no_incluye_los_de_otra_organizacion",
+    ),
+    ("delete", "/api/v1/identidad/dispositivos/{dispositivo_id}"): (
+        "test_inv21_aislamiento_endpoints_identidad.py::TestAislamientoDeDispositivos::test_revocar_un_dispositivo_de_otra_organizacion_no_lo_encuentra",
+    ),
+    ("get", "/api/v1/identidad/usuarios"): (
+        "test_inv21_aislamiento_endpoints_identidad.py::TestAislamientoDeUsuarios::test_listar_usuarios_no_incluye_los_de_otra_organizacion",
+    ),
+    ("post", "/api/v1/identidad/usuarios"): (
+        "test_inv21_aislamiento_endpoints_identidad.py::TestAislamientoDeUsuarios::test_dar_de_alta_un_usuario_con_un_rol_de_otra_organizacion_no_lo_encuentra",
+    ),
+    ("get", "/api/v1/yo"): (
+        "test_inv21_aislamiento_endpoints_identidad.py::TestAislamientoDeLaSesion::test_yo_del_usuario_de_b_no_trae_nada_de_la_organizacion_a",
+        "test_inv21_aislamiento_endpoints_identidad.py::TestAislamientoDeLaSesion::test_yo_ignora_la_organizacion_y_el_usuario_de_a_informados",
+    ),
+    ("put", "/api/v1/identidad/roles/{rol_id}/permisos"): (
+        "test_identidad_api_usuarios.py::TestComposicionDeRol::test_cambiar_composicion_de_rol_de_otra_organizacion_no_lo_encuentra",
+    ),
+    ("post", "/api/v1/identidad/usuarios/{usuario_id}/pin"): (
+        "test_identidad_api_usuarios.py::TestRotacionDePin::test_rotar_el_pin_de_un_usuario_de_otra_organizacion_no_lo_encuentra",
+    ),
+    ("post", "/api/v1/identidad/usuarios/{usuario_id}/desbloqueo"): (
+        "test_identidad_api_usuarios.py::TestDesbloqueoManualDeLogin::test_desbloquear_un_usuario_de_otra_organizacion_no_lo_encuentra",
+    ),
+    ("put", "/api/v1/identidad/roles/{rol_id}/tope-descuento"): (
+        "test_identidad_tope_de_rol.py::test_inv21_put_sobre_un_rol_de_otra_organizacion_responde_404_sin_efectos",
+        "test_identidad_tope_de_rol.py::test_inv21_un_cuerpo_con_organizacion_id_se_rechaza",
+    ),
+    ("get", "/api/v1/identidad/roles"): (
+        "test_identidad_tope_de_rol.py::test_inv21_get_roles_no_mezcla_los_permisos_de_otra_organizacion",
+    ),
+    ("get", "/api/v1/identidad/permisos"): (
+        "test_identidad_permisos_catalogo.py::test_get_roles_no_cuenta_los_usuarios_de_otra_organizacion",
+    ),
+    ("post", "/api/v1/identidad/usuarios/{usuario_id}/baja"): (
+        "test_usuario_baja.py::test_un_usuario_de_otra_organizacion_responde_404_y_no_se_toca",
+    ),
+    ("post", "/api/v1/identidad/usuarios/{usuario_id}/reactivacion"): (
+        "test_usuario_reactivar.py::test_un_usuario_de_otra_organizacion_responde_404",
+    ),
+    ("put", "/api/v1/identidad/usuarios/{usuario_id}"): (
+        "test_usuario_modificar.py::test_un_usuario_de_otra_organizacion_responde_404",
+    ),
+    ("put", "/api/v1/identidad/usuarios/{usuario_id}/rol"): (
+        "test_usuario_rol_cambiar.py::test_un_usuario_de_otra_organizacion_responde_404",
+        "test_usuario_rol_cambiar.py::test_un_rol_de_otra_organizacion_responde_404",
+    ),
+    ("post", "/api/v1/identidad/usuarios/{usuario_id}/contrasena"): (
+        "test_usuario_contrasena_restablecer.py::test_un_usuario_de_otra_organizacion_responde_404",
+    ),
+    ("put", "/api/v1/identidad/usuarios/{usuario_id}/tope-descuento"): (
+        "test_usuario_tope_descuento_definir.py::test_un_usuario_de_otra_organizacion_responde_404",
+    ),
+    ("post", "/api/v1/yo/contrasena"): (
+        "test_contrasena_propia_cambiar.py::test_inv21_cambiar_la_propia_no_toca_a_los_usuarios_de_otra_organizacion",
+    ),
+    ("post", "/api/v1/identidad/roles"): (
+        "test_rol_crear_y_renombrar.py::test_el_mismo_nombre_en_otra_organizacion_se_acepta",
+    ),
+    ("put", "/api/v1/identidad/roles/{rol_id}/nombre"): (
+        "test_rol_crear_y_renombrar.py::test_renombrar_un_rol_de_otra_organizacion_responde_404",
+    ),
+    ("post", "/api/v1/identidad/roles/{rol_id}/baja"): (
+        "test_rol_baja_y_reactivacion.py::test_baja_y_reactivacion_de_un_rol_de_otra_organizacion_responden_404",
+    ),
+    ("post", "/api/v1/identidad/roles/{rol_id}/reactivacion"): (
+        "test_rol_baja_y_reactivacion.py::test_baja_y_reactivacion_de_un_rol_de_otra_organizacion_responden_404",
+    ),
+    ("get", "/api/v1/identidad/usuarios/{usuario_id}"): (
+        "test_identidad_lecturas_usuarios_roles.py::test_el_detalle_de_un_usuario_de_otra_organizacion_o_inexistente_responde_404",
+    ),
+    # Sync
+    ("post", "/api/v1/sync/comandos"): (
+        "test_bus_lote_sincronizacion.py::TestAislamientoEntreOrganizacionesHttp::test_una_organizacion_no_puede_sincronizar_declarando_usuario_de_otra",
+        "test_bus_lote_sincronizacion.py::TestAislamientoEntreOrganizacionesHttp::test_una_organizacion_no_puede_sincronizar_declarando_dispositivo_de_otra",
+        "test_cuarentena_comandos.py::TestAislamientoYNoBorrado::test_la_cuarentena_de_otra_organizacion_no_es_alcanzable",
+    ),
+    ("get", "/api/v1/sync/bootstrap"): (
+        "test_sync_bootstrap.py::test_inv21_nada_de_otra_organizacion_en_el_bootstrap",
+        "test_sync_bootstrap.py::test_inv21_ratchet_el_bootstrap_es_de_lectura_y_de_otra_organizacion_no_se_ve",
+    ),
+    # Catalogo
+    ("post", "/api/v1/catalogo/categorias"): (
+        "test_inv21_aislamiento_endpoints_catalogo.py::TestAislamientoDeCategorias::test_crear_categoria_es_independiente_por_organizacion",
+    ),
+    ("get", "/api/v1/catalogo/categorias"): (
+        "test_inv21_aislamiento_endpoints_catalogo.py::TestAislamientoDeCategorias::test_listar_categorias_no_incluye_las_de_otra_organizacion",
+    ),
+    ("put", "/api/v1/catalogo/categorias/{categoria_id}"): (
+        "test_inv21_aislamiento_endpoints_catalogo.py::TestAislamientoDeCategorias::test_modificar_una_categoria_de_otra_organizacion_no_la_encuentra",
+    ),
+    ("post", "/api/v1/catalogo/marcas"): (
+        "test_inv21_aislamiento_endpoints_catalogo.py::TestAislamientoDeMarcas::test_crear_marca_es_independiente_por_organizacion",
+    ),
+    ("get", "/api/v1/catalogo/marcas"): (
+        "test_inv21_aislamiento_endpoints_catalogo.py::TestAislamientoDeMarcas::test_listar_marcas_no_incluye_las_de_otra_organizacion",
+    ),
+    ("put", "/api/v1/catalogo/marcas/{marca_id}"): (
+        "test_inv21_aislamiento_endpoints_catalogo.py::TestAislamientoDeMarcas::test_modificar_una_marca_de_otra_organizacion_no_la_encuentra",
+    ),
+    ("post", "/api/v1/catalogo/productos"): (
+        "test_inv21_aislamiento_endpoints_catalogo.py::TestAislamientoDeProductos::test_crear_producto_con_categoria_de_otra_organizacion_no_la_encuentra",
+        "test_inv21_aislamiento_endpoints_catalogo.py::TestAislamientoDeProductos::test_crear_producto_con_marca_de_otra_organizacion_no_la_encuentra",
+        "test_inv21_aislamiento_endpoints_catalogo.py::TestAislamientoDeProductos::test_crear_producto_con_alicuota_de_otra_organizacion_no_la_encuentra",
+        "test_inv21_aislamiento_endpoints_proveedores.py::TestReferenciaProveedorAjenaEnProductoV2::test_crear_producto_con_proveedor_de_otra_organizacion_no_lo_encuentra",
+    ),
+    ("get", "/api/v1/catalogo/productos"): (
+        "test_inv21_aislamiento_endpoints_catalogo.py::TestAislamientoDeProductos::test_listar_productos_no_incluye_los_de_otra_organizacion",
+    ),
+    ("put", "/api/v1/catalogo/productos/{producto_id}"): (
+        "test_inv21_aislamiento_endpoints_catalogo.py::TestAislamientoDeProductos::test_modificar_un_producto_de_otra_organizacion_no_lo_encuentra",
+        "test_inv21_aislamiento_endpoints_catalogo.py::TestAislamientoDeProductos::test_modificar_un_producto_propio_con_categoria_de_otra_organizacion_no_la_encuentra",
+        "test_inv21_aislamiento_endpoints_proveedores.py::TestReferenciaProveedorAjenaEnProductoV2::test_modificar_producto_con_proveedor_de_otra_organizacion_no_lo_encuentra",
+    ),
+    ("get", "/api/v1/catalogo/productos/{producto_id}"): (
+        "test_inv21_aislamiento_endpoints_catalogo.py::TestAislamientoDeProductos::test_obtener_un_producto_de_otra_organizacion_no_lo_encuentra",
+    ),
+    ("post", "/api/v1/catalogo/productos/{producto_id}/presentaciones"): (
+        "test_inv21_aislamiento_endpoints_catalogo.py::TestAislamientoDePresentaciones::test_agregar_presentacion_a_un_producto_de_otra_organizacion_no_lo_encuentra",
+    ),
+    ("put", "/api/v1/catalogo/presentaciones/{presentacion_id}"): (
+        "test_inv21_aislamiento_endpoints_catalogo.py::TestAislamientoDePresentaciones::test_modificar_una_presentacion_de_otra_organizacion_no_la_encuentra",
+    ),
+    ("put", "/api/v1/catalogo/productos/{producto_id}/referencia"): (
+        "test_inv21_aislamiento_endpoints_catalogo.py::TestAislamientoDePresentaciones::test_cambiar_la_referencia_de_un_producto_de_otra_organizacion_no_lo_encuentra",
+        "test_inv21_aislamiento_endpoints_catalogo.py::TestAislamientoDePresentaciones::test_cambiar_la_referencia_con_una_presentacion_de_otra_organizacion_no_la_encuentra",
+    ),
+    ("get", "/api/v1/configuracion/alicuotas"): (
+        "test_configuracion_api.py::TestAislamientoInv21::test_cada_organizacion_lista_solo_sus_propias_alicuotas",
+    ),
+    # Proveedores y costos
+    ("post", "/api/v1/proveedores"): (
+        "test_inv21_aislamiento_endpoints_proveedores.py::TestAislamientoDeProveedores::test_crear_proveedor_no_lo_expone_a_otra_organizacion",
+    ),
+    ("get", "/api/v1/proveedores"): (
+        "test_inv21_aislamiento_endpoints_proveedores.py::TestAislamientoDeProveedores::test_listar_proveedores_no_incluye_los_de_otra_organizacion",
+    ),
+    ("get", "/api/v1/proveedores/opciones"): (
+        "test_inv21_aislamiento_endpoints_proveedores.py::TestAislamientoDeProveedores::test_opciones_de_proveedores_no_incluye_los_de_otra_organizacion",
+    ),
+    ("get", "/api/v1/proveedores/{proveedor_id}"): (
+        "test_inv21_aislamiento_endpoints_proveedores.py::TestAislamientoDeProveedores::test_obtener_un_proveedor_de_otra_organizacion_no_lo_encuentra",
+    ),
+    ("put", "/api/v1/proveedores/{proveedor_id}"): (
+        "test_inv21_aislamiento_endpoints_proveedores.py::TestAislamientoDeProveedores::test_modificar_un_proveedor_de_otra_organizacion_no_lo_encuentra",
+    ),
+    ("post", "/api/v1/costos"): (
+        "test_inv21_aislamiento_endpoints_proveedores.py::TestAislamientoDeCostos::test_informar_costos_con_proveedor_de_otra_organizacion_no_lo_encuentra",
+        "test_inv21_aislamiento_endpoints_proveedores.py::TestAislamientoDeCostos::test_informar_costos_con_producto_de_otra_organizacion_no_lo_encuentra",
+        "test_inv21_aislamiento_endpoints_proveedores.py::TestAislamientoDeCostos::test_informar_costos_con_presentacion_de_otra_organizacion_no_la_encuentra",
+    ),
+    ("get", "/api/v1/costos/productos/{producto_id}/vigente"): (
+        "test_inv21_aislamiento_endpoints_proveedores.py::TestAislamientoDeCostos::test_costo_vigente_de_un_producto_de_otra_organizacion_no_lo_encuentra",
+    ),
+    ("get", "/api/v1/costos/productos/{producto_id}/historial"): (
+        "test_inv21_aislamiento_endpoints_proveedores.py::TestAislamientoDeCostos::test_historial_de_costos_de_un_producto_de_otra_organizacion_no_lo_encuentra",
+    ),
+    # Clientes
+    ("get", "/api/v1/clientes"): (
+        "test_inv21_aislamiento_endpoints_clientes.py::TestAislamientoDeLasRutasDeClientes::test_el_listado_no_expone_clientes_de_otra_organizacion",
+        "test_inv21_aislamiento_endpoints_clientes.py::TestAislamientoDeLasRutasDeClientes::test_el_listado_ajeno_no_se_encuentra_tampoco_por_texto_ni_por_documento",
+    ),
+    ("post", "/api/v1/clientes"): (
+        "test_inv21_aislamiento_endpoints_clientes.py::TestAislamientoDeLasRutasDeClientes::test_el_alta_de_b_queda_en_b_y_a_no_la_ve",
+    ),
+    ("get", "/api/v1/clientes/consumidor-final"): (
+        "test_inv21_aislamiento_endpoints_clientes.py::TestAislamientoDeLasRutasDeClientes::test_la_lectura_del_consumidor_final_no_devuelve_el_de_otra_organizacion",
+        "test_inv21_aislamiento_endpoints_clientes.py::TestAislamientoDeLasRutasDeClientes::test_cada_organizacion_ve_su_propio_consumidor_final",
+    ),
+    ("post", "/api/v1/clientes/consumidor-final"): (
+        "test_inv21_aislamiento_endpoints_clientes.py::TestAislamientoDeLasRutasDeClientes::test_la_habilitacion_del_consumidor_final_de_a_no_toca_la_configuracion_de_b",
+    ),
+    ("get", "/api/v1/clientes/{cliente_id}"): (
+        "test_inv21_aislamiento_endpoints_clientes.py::TestAislamientoDeLasRutasDeClientes::test_la_ficha_de_un_cliente_ajeno_responde_404",
+        "test_inv21_aislamiento_endpoints_clientes.py::TestAislamientoDeLasRutasDeClientes::test_un_cliente_ajeno_es_indistinguible_de_uno_inexistente",
+    ),
+    ("put", "/api/v1/clientes/{cliente_id}"): (
+        "test_inv21_aislamiento_endpoints_clientes.py::TestAislamientoDeLasRutasDeClientes::test_modificar_un_cliente_de_otra_organizacion_responde_404_y_no_lo_cambia",
+    ),
+    ("put", "/api/v1/clientes/{cliente_id}/credito"): (
+        "test_inv21_aislamiento_endpoints_clientes.py::TestAislamientoDeLasRutasDeClientes::test_el_credito_de_un_cliente_ajeno_no_se_modifica",
+    ),
+    # Cuentas corrientes
+    ("post", "/api/v1/cuentas-corrientes/saldos-iniciales"): (
+        "test_inv21_aislamiento_endpoints_cuentas_corrientes.py::test_inv21_escribir_el_saldo_inicial_de_un_cliente_ajeno_es_404_sin_rastro",
+        "test_inv21_aislamiento_endpoints_cuentas_corrientes.py::test_inv21_escribir_el_saldo_inicial_de_un_proveedor_ajeno_es_404_sin_rastro",
+        "test_inv21_aislamiento_endpoints_cuentas_corrientes.py::test_inv21_el_id_de_organizacion_del_cuerpo_no_reasigna_la_cuenta",
+    ),
+    ("get", "/api/v1/clientes/{cliente_id}/cuenta-corriente"): (
+        "test_inv21_aislamiento_endpoints_cuentas_corrientes.py::test_inv21_leer_la_cuenta_de_un_cliente_ajeno_es_404_y_no_revela_el_saldo",
+        "test_inv21_aislamiento_endpoints_cuentas_corrientes.py::test_inv21_cada_organizacion_ve_solo_sus_movimientos",
+    ),
+    ("get", "/api/v1/proveedores/{proveedor_id}/cuenta-corriente"): (
+        "test_inv21_aislamiento_endpoints_cuentas_corrientes.py::test_inv21_leer_la_cuenta_de_un_proveedor_ajeno_es_404_y_no_revela_el_saldo",
+    ),
+    # Stock
+    ("post", "/api/v1/stock/ubicaciones"): (
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_una_ubicacion_creada_queda_en_la_organizacion_del_token",
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_el_id_de_organizacion_del_cuerpo_no_reasigna_la_ubicacion",
+    ),
+    ("get", "/api/v1/stock/ubicaciones"): (
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_una_ubicacion_creada_queda_en_la_organizacion_del_token",
+    ),
+    ("put", "/api/v1/stock/ubicaciones/{ubicacion_id}"): (
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_modificar_una_ubicacion_ajena_es_404_y_no_la_toca",
+    ),
+    ("get", "/api/v1/stock/ubicaciones/{ubicacion_id}/saldos"): (
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_leer_el_stock_de_una_ubicacion_ajena_es_404_y_no_revela_nada",
+    ),
+    ("post", "/api/v1/stock/iniciales"): (
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_registrar_stock_inicial_en_una_ubicacion_ajena_es_404_sin_rastro",
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_registrar_stock_inicial_de_un_producto_ajeno_es_404_sin_rastro",
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_el_id_de_organizacion_del_cuerpo_no_reasigna_el_stock_inicial",
+    ),
+    ("post", "/api/v1/stock/transferencias"): (
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_transferir_desde_o_hacia_una_ubicacion_ajena_es_404_sin_rastro",
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_transferir_un_producto_ajeno_es_404_sin_rastro",
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_el_id_de_organizacion_del_cuerpo_no_reasigna_la_transferencia",
+    ),
+    ("get", "/api/v1/stock/transferencias"): (
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_leer_transferencias_y_ajustes_ajenos_es_404_y_el_listado_no_los_muestra",
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_filtrar_por_una_ubicacion_o_un_motivo_ajeno_no_revela_nada",
+    ),
+    ("get", "/api/v1/stock/transferencias/{transferencia_id}"): (
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_leer_transferencias_y_ajustes_ajenos_es_404_y_el_listado_no_los_muestra",
+    ),
+    ("post", "/api/v1/stock/transferencias/{transferencia_id}/anulacion"): (
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_anular_una_transferencia_o_un_ajuste_ajeno_es_404_y_los_deja_confirmados",
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_el_motivo_de_otra_organizacion_no_anula_una_operacion_propia",
+    ),
+    ("post", "/api/v1/stock/ajustes"): (
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_ajustar_con_una_ubicacion_motivo_o_producto_ajeno_es_404_sin_rastro",
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_el_id_de_organizacion_del_cuerpo_no_reasigna_el_ajuste",
+    ),
+    ("get", "/api/v1/stock/ajustes"): (
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_leer_transferencias_y_ajustes_ajenos_es_404_y_el_listado_no_los_muestra",
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_filtrar_por_una_ubicacion_o_un_motivo_ajeno_no_revela_nada",
+    ),
+    ("get", "/api/v1/stock/ajustes/{ajuste_id}"): (
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_leer_transferencias_y_ajustes_ajenos_es_404_y_el_listado_no_los_muestra",
+    ),
+    ("post", "/api/v1/stock/ajustes/{ajuste_id}/anulacion"): (
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_anular_una_transferencia_o_un_ajuste_ajeno_es_404_y_los_deja_confirmados",
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_el_motivo_de_otra_organizacion_no_anula_una_operacion_propia",
+    ),
+    ("post", "/api/v1/stock/jornadas"): (
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_abrir_una_jornada_sobre_una_ubicacion_ajena_es_404_sin_rastro",
+    ),
+    ("post", "/api/v1/stock/jornadas/{jornada_id}/rendicion"): (
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_rendir_cerrar_o_liberar_una_jornada_ajena_es_404_y_no_la_toca",
+    ),
+    ("post", "/api/v1/stock/jornadas/{jornada_id}/cierre"): (
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_rendir_cerrar_o_liberar_una_jornada_ajena_es_404_y_no_la_toca",
+    ),
+    ("post", "/api/v1/stock/jornadas/{jornada_id}/liberacion"): (
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_rendir_cerrar_o_liberar_una_jornada_ajena_es_404_y_no_la_toca",
+    ),
+    ("get", "/api/v1/stock/jornadas"): (
+        "test_jornadas_ubicaciones_api.py::test_inv21_la_jornada_de_otra_organizacion_no_aparece",
+    ),
+    ("get", "/api/v1/stock/jornadas/actual"): (
+        "test_jornadas_ubicaciones_api.py::test_inv21_la_jornada_de_otra_organizacion_no_aparece",
+    ),
+    ("get", "/api/v1/stock/jornadas/{jornada_id}"): (
+        "test_jornadas_consultas_api.py::test_inv21_el_detalle_de_una_jornada_ajena_o_inexistente_responde_404",
+        "test_jornadas_api.py::test_inv21_una_jornada_ajena_o_inexistente_responde_404",
+    ),
+    ("get", "/api/v1/stock/jornadas/{jornada_id}/resumen"): (
+        "test_jornadas_api.py::test_inv21_el_resumen_de_una_jornada_ajena_o_inexistente_responde_404",
+    ),
+    ("get", "/api/v1/stock/kardex"): (
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_leer_el_kardex_con_una_ubicacion_o_un_producto_ajenos_es_404_y_no_revela_nada",
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_cada_organizacion_ve_solo_su_stock_su_kardex_y_su_costo",
+    ),
+    ("get", "/api/v1/catalogo/productos/{producto_id}/costo"): (
+        "test_inv21_aislamiento_endpoints_stock.py::test_inv21_leer_el_costo_de_un_producto_ajeno_es_404_y_no_revela_el_promedio",
+    ),
+    # Importacion
+    ("post", "/api/v1/importaciones/{tipo}"): (
+        "test_inv21_aislamiento_endpoints_importacion.py::test_inv21_la_importacion_escribe_solo_en_la_organizacion_del_token",
+        "test_inv21_aislamiento_endpoints_importacion.py::test_inv21_un_nombre_que_existe_en_otra_organizacion_no_es_duplicado_ni_se_revela",
+        "test_inv21_aislamiento_endpoints_importacion.py::test_inv21_una_columna_de_organizacion_en_el_archivo_se_rechaza_y_no_cambia_el_destino",
+    ),
+    ("get", "/api/v1/importaciones"): (
+        "test_inv21_aislamiento_endpoints_importacion.py::test_inv21_el_historial_no_muestra_nada_de_otra_organizacion",
+        "test_inv21_aislamiento_endpoints_importacion.py::test_inv21_un_cursor_de_otra_organizacion_no_filtra_su_historial",
+    ),
+    ("get", "/api/v1/importaciones/plantillas/{tipo}"): (
+        "test_inv21_aislamiento_endpoints_importacion.py::test_inv21_la_plantilla_es_la_misma_para_toda_organizacion_y_no_trae_datos_propios",
+    ),
+    # Compras
+    ("post", "/api/v1/compras"): (
+        "test_compras_api.py::test_inv21_un_proveedor_de_otra_organizacion_responde_404_sin_efectos",
+        "test_compras_api.py::test_inv21_una_ubicacion_ajena_responde_404",
+        "test_compras_api.py::test_inv21_un_producto_ajeno_responde_404",
+    ),
+    ("post", "/api/v1/compras/{compra_id}/anulacion"): (
+        "test_compras_api.py::test_inv21_anular_la_compra_de_otra_organizacion_responde_404",
+        "test_compras_anular.py::test_anular_una_compra_de_otra_organizacion_responde_404_inv_21",
+    ),
+    ("get", "/api/v1/compras"): (
+        "test_compras_api.py::test_inv21_el_listado_no_devuelve_compras_de_otra_organizacion",
+        "test_compras_api.py::test_inv21_filtrar_por_el_proveedor_de_otra_organizacion_devuelve_lista_vacia",
+    ),
+    ("get", "/api/v1/compras/{compra_id}"): (
+        "test_compras_api.py::test_inv21_el_detalle_de_una_compra_de_otra_organizacion_responde_404",
+    ),
+    ("get", "/api/v1/configuracion/medios-pago"): (
+        "test_compras_api.py::test_medios_de_pago_devuelve_solo_los_activos_de_la_organizacion",
+    ),
+    ("get", "/api/v1/configuracion/motivos"): (
+        "test_compras_api.py::test_motivos_devuelve_solo_los_activos_del_ambito_pedido_de_la_organizacion",
+    ),
+    # Condicion IVA
+    ("get", "/api/v1/configuracion/fiscal"): (
+        "test_condicion_iva_api.py::test_inv21_cada_organizacion_lee_solo_su_propia_configuracion_fiscal",
+    ),
+    ("post", "/api/v1/configuracion/fiscal/condicion-iva"): (
+        "test_condicion_iva_api.py::test_inv21_el_cambio_afecta_solo_a_la_organizacion_del_token",
+    ),
+    ("get", "/api/v1/costos/resumen-regla-iva"): (
+        "test_condicion_iva_api.py::test_inv21_el_resumen_cuenta_solo_los_costos_de_la_organizacion_del_token",
+    ),
+    # Catalogos de configuracion
+    ("post", "/api/v1/configuracion/medios-pago"): (
+        "test_medio_pago_comandos.py::TestMedioPagoCrear::test_el_mismo_nombre_en_otra_organizacion_se_acepta",
+    ),
+    ("put", "/api/v1/configuracion/medios-pago/{medio_pago_id}"): (
+        "test_medio_pago_comandos.py::TestMedioPagoModificar::test_un_medio_de_otra_organizacion_o_inexistente_responde_404",
+    ),
+    ("get", "/api/v1/configuracion/medios-pago/todos"): (
+        "test_medios_pago_lectura.py::test_solo_lee_los_medios_de_la_organizacion_del_token",
+    ),
+    ("post", "/api/v1/configuracion/motivos"): (
+        "test_motivo_comandos.py::TestMotivoCrear::test_inv02_el_mismo_nombre_en_otro_ambito_o_en_otra_organizacion_se_acepta",
+    ),
+    ("put", "/api/v1/configuracion/motivos/{motivo_id}"): (
+        "test_motivo_comandos.py::TestMotivoModificar::test_un_motivo_ajeno_o_inexistente_es_404",
+    ),
+    ("get", "/api/v1/configuracion/motivos/todos"): (
+        "test_motivos_lectura.py::TestLecturaCompleta::test_inv21_trae_solo_los_motivos_de_la_organizacion_del_token",
+    ),
+    ("post", "/api/v1/configuracion/alicuotas"): (
+        "test_alicuota_comandos.py::TestAlicuotaCrear::test_inv21_otra_organizacion_acepta_el_mismo_nombre_y_valor",
+    ),
+    ("put", "/api/v1/configuracion/alicuotas/{alicuota_id}"): (
+        "test_alicuota_comandos.py::TestAlicuotaModificar::test_inv21_una_alicuota_ajena_o_inexistente_es_404",
+    ),
+    ("get", "/api/v1/configuracion/redondeo-por-defecto"): (
+        "test_redondeo_por_defecto.py::test_inv21_http_el_cambio_afecta_solo_a_la_organizacion_del_token",
+    ),
+    ("post", "/api/v1/configuracion/redondeo-por-defecto"): (
+        "test_redondeo_por_defecto.py::test_inv21_http_el_cambio_afecta_solo_a_la_organizacion_del_token",
+    ),
+    # Pagos a proveedores
+    ("post", "/api/v1/pagos-proveedores"): (
+        "test_pagos_proveedor_api.py::test_un_proveedor_ajeno_responde_404",
+        "test_pagos_proveedor_api.py::test_un_medio_ajeno_responde_404_con_el_medio",
+    ),
+    ("post", "/api/v1/pagos-proveedores/{pago_id}/anulacion"): (
+        "test_inv21_aislamiento_endpoints_proveedores.py::TestAislamientoDePagosAProveedores::test_la_anulacion_propia_cambia_el_estado_y_la_de_un_pago_ajeno_responde_404",
+        "test_inv21_aislamiento_endpoints_proveedores.py::TestAislamientoDePagosAProveedores::test_la_anulacion_ignora_el_organizacion_id_del_cuerpo",
+    ),
+    ("get", "/api/v1/pagos-proveedores"): (
+        "test_pagos_proveedor_api.py::test_inv21_el_listado_no_muestra_los_pagos_de_otra_organizacion",
+    ),
+    ("get", "/api/v1/pagos-proveedores/{pago_id}"): (
+        "test_pagos_proveedor_api.py::test_inv21_el_detalle_de_un_pago_de_otra_organizacion_responde_404",
+    ),
+    ("get", "/api/v1/proveedores/{proveedor_id}/saldo"): (
+        "test_pagos_proveedor_api.py::test_inv21_el_saldo_de_un_proveedor_de_otra_organizacion_responde_404",
+    ),
+    # Precios
+    ("post", "/api/v1/precios/listas"): (
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_el_alta_el_listado_y_las_opciones_solo_ven_lo_propio",
+    ),
+    ("get", "/api/v1/precios/listas"): (
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_el_alta_el_listado_y_las_opciones_solo_ven_lo_propio",
+    ),
+    ("get", "/api/v1/precios/listas/opciones"): (
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_el_alta_el_listado_y_las_opciones_solo_ven_lo_propio",
+    ),
+    ("get", "/api/v1/precios/listas/{lista_id}"): (
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_toda_ruta_con_un_recurso_de_otra_organizacion_responde_404_sin_efectos",
+    ),
+    ("put", "/api/v1/precios/listas/{lista_id}"): (
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_toda_ruta_con_un_recurso_de_otra_organizacion_responde_404_sin_efectos",
+    ),
+    ("get", "/api/v1/precios/listas/{lista_id}/reglas"): (
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_toda_ruta_con_un_recurso_de_otra_organizacion_responde_404_sin_efectos",
+    ),
+    ("post", "/api/v1/precios/listas/{lista_id}/reglas"): (
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_toda_ruta_con_un_recurso_de_otra_organizacion_responde_404_sin_efectos",
+        "test_precios_api.py::test_inv21_una_regla_con_una_entidad_de_otra_organizacion_responde_404",
+    ),
+    ("put", "/api/v1/precios/listas/{lista_id}/reglas/{regla_id}"): (
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_toda_ruta_con_un_recurso_de_otra_organizacion_responde_404_sin_efectos",
+    ),
+    ("put", "/api/v1/precios/listas/{lista_id}/redondeos-categoria/{categoria_id}"): (
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_toda_ruta_con_un_recurso_de_otra_organizacion_responde_404_sin_efectos",
+    ),
+    ("post", "/api/v1/precios/listas/{lista_id}/borrador"): (
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_toda_ruta_con_un_recurso_de_otra_organizacion_responde_404_sin_efectos",
+    ),
+    ("get", "/api/v1/precios/listas/{lista_id}/borrador"): (
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_toda_ruta_con_un_recurso_de_otra_organizacion_responde_404_sin_efectos",
+    ),
+    ("put", "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/precios/{producto_id}"): (
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_una_version_o_un_producto_de_a_con_la_lista_de_b_responde_404",
+        "test_precios_api.py::test_inv21_fijar_sobre_la_lista_o_la_version_de_otra_organizacion_responde_404",
+    ),
+    ("post", "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/publicar"): (
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_toda_ruta_con_un_recurso_de_otra_organizacion_responde_404_sin_efectos",
+    ),
+    ("post", "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/anular"): (
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_toda_ruta_con_un_recurso_de_otra_organizacion_responde_404_sin_efectos",
+        "test_precios_api.py::test_inv21_anular_la_version_de_otra_organizacion_responde_404",
+    ),
+    ("get", "/api/v1/precios/listas/{lista_id}/versiones"): (
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_toda_ruta_con_un_recurso_de_otra_organizacion_responde_404_sin_efectos",
+    ),
+    ("get", "/api/v1/precios/listas/{lista_id}/versiones/{version_id}/precios"): (
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_toda_ruta_con_un_recurso_de_otra_organizacion_responde_404_sin_efectos",
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_una_version_o_un_producto_de_a_con_la_lista_de_b_responde_404",
+    ),
+    ("get", "/api/v1/precios/listas/{lista_id}/vigente"): (
+        "test_precios_api.py::test_inv21_la_version_vigente_de_una_lista_de_otra_organizacion_responde_404",
+    ),
+    ("put", "/api/v1/precios/lista-predeterminada"): (
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_la_lista_asignada_a_un_cliente_de_otra_organizacion_responde_404",
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_la_lista_predeterminada_leida_es_la_de_la_propia_organizacion",
+    ),
+    ("get", "/api/v1/precios/lista-predeterminada"): (
+        "test_inv21_aislamiento_endpoints_precios.py::test_inv21_la_lista_predeterminada_leida_es_la_de_la_propia_organizacion",
+    ),
+    # Descuentos
+    ("get", "/api/v1/descuentos/reglas"): (
+        "test_inv21_aislamiento_endpoints_descuentos.py::test_inv21_el_listado_de_b_no_trae_nada_de_a_y_el_de_a_trae_lo_suyo",
+    ),
+    ("get", "/api/v1/descuentos/reglas/{regla_id}"): (
+        "test_inv21_aislamiento_endpoints_descuentos.py::test_inv21_el_detalle_de_una_regla_de_a_responde_404_a_un_usuario_de_b",
+    ),
+    ("post", "/api/v1/descuentos/reglas"): (
+        "test_inv21_aislamiento_endpoints_descuentos.py::test_inv21_el_alta_con_una_entidad_de_a_en_el_alcance_responde_404_sin_efectos",
+        "test_inv21_aislamiento_endpoints_descuentos.py::test_inv21_el_alta_de_b_crea_la_regla_en_b_y_a_no_la_ve",
+        "test_inv21_aislamiento_endpoints_descuentos.py::test_inv21_un_organizacion_id_de_a_en_el_cuerpo_se_rechaza",
+    ),
+    ("put", "/api/v1/descuentos/reglas/{regla_id}"): (
+        "test_inv21_aislamiento_endpoints_descuentos.py::test_inv21_toda_escritura_sobre_una_regla_de_otra_organizacion_responde_404_sin_efectos",
+    ),
+    ("post", "/api/v1/descuentos/reglas/{regla_id}/activacion"): (
+        "test_inv21_aislamiento_endpoints_descuentos.py::test_inv21_toda_escritura_sobre_una_regla_de_otra_organizacion_responde_404_sin_efectos",
+    ),
+    ("post", "/api/v1/descuentos/reglas/{regla_id}/pausa"): (
+        "test_inv21_aislamiento_endpoints_descuentos.py::test_inv21_toda_escritura_sobre_una_regla_de_otra_organizacion_responde_404_sin_efectos",
+    ),
+    # Cobranzas
+    ("post", "/api/v1/cobranzas"): (
+        "test_cobranzas_api.py::test_inv21_un_cliente_de_otra_organizacion_responde_404_sin_efectos",
+        "test_cobranzas_api.py::test_inv21_un_medio_de_otra_organizacion_responde_404_con_el_medio",
+    ),
+    ("post", "/api/v1/cobranzas/{cobranza_id}/anulacion"): (
+        "test_cobranzas_api.py::test_inv21_anular_una_cobranza_de_otra_organizacion_responde_404",
+    ),
+    ("get", "/api/v1/cobranzas"): (
+        "test_cobranzas_consultas_api.py::test_inv21_el_detalle_y_el_listado_no_cruzan_organizaciones",
+    ),
+    ("get", "/api/v1/cobranzas/{cobranza_id}"): (
+        "test_cobranzas_consultas_api.py::test_inv21_el_detalle_y_el_listado_no_cruzan_organizaciones",
+    ),
+    ("get", "/api/v1/clientes/opciones"): (
+        "test_clientes_opciones_y_saldo_api.py::test_inv21_las_opciones_no_traen_clientes_de_otra_organizacion",
+    ),
+    ("get", "/api/v1/clientes/{cliente_id}/saldo"): (
+        "test_clientes_opciones_y_saldo_api.py::test_inv21_el_saldo_de_un_cliente_ajeno_o_inexistente_responde_404",
+    ),
+    ("post", "/api/v1/clientes/vendedor"): (
+        "test_cliente_vendedor_asignar.py::test_un_cliente_inexistente_o_ajeno_es_404_y_ninguno_cambia",
+        "test_cliente_vendedor_asignar.py::test_un_vendedor_de_otra_organizacion_es_404",
+    ),
+    ("get", "/api/v1/clientes/vendedores"): (
+        "test_clientes_vendedores_elegibles.py::test_no_lista_usuarios_de_otra_organizacion",
+    ),
+    # Ventas
+    ("post", "/api/v1/ventas"): (
+        "test_ventas_api.py::test_inv21_un_cliente_de_otra_organizacion_responde_404_sin_efectos",
+        "test_ventas_confirmar.py::test_inv21_el_contenido_no_elige_la_organizacion",
+    ),
+    ("get", "/api/v1/ventas"): (
+        "test_ventas_consultas_api.py::test_inv21_las_ventas_de_otra_organizacion_no_aparecen_y_su_detalle_es_404",
+    ),
+    ("get", "/api/v1/ventas/{venta_id}"): (
+        "test_ventas_consultas_api.py::test_inv21_las_ventas_de_otra_organizacion_no_aparecen_y_su_detalle_es_404",
+    ),
+    ("get", "/api/v1/ventas/{venta_id}/nota"): (
+        "test_ventas_nota.py::test_inv21_seg07_la_nota_de_una_venta_de_otra_organizacion_responde_404",
+    ),
+    ("get", "/api/v1/ventas/precios"): (
+        "test_ventas_lecturas_de_apoyo_api.py::test_inv21_una_ubicacion_cliente_o_lista_de_otra_organizacion_responde_404",
+    ),
+    ("get", "/api/v1/ventas/numeracion"): (
+        "test_ventas_lecturas_de_apoyo_api.py::test_inv21_la_numeracion_de_una_organizacion_no_cuenta_las_ventas_de_la_otra",
+    ),
+    ("get", "/api/v1/ventas/versiones"): (
+        "test_ventas_lecturas_de_apoyo_api.py::test_inv21_las_versiones_de_una_lista_ajena_responden_404_y_lista_id_es_obligatorio",
+        "test_ventas_lecturas_de_apoyo_api.py::test_inv21_los_precios_de_una_version_de_otra_organizacion_responden_404",
+    ),
+    ("post", "/api/v1/ventas/{venta_id}/anulacion"): (
+        "test_ventas_anular_api.py::test_inv21_una_venta_de_otra_organizacion_responde_404",
+    ),
+    ("get", "/api/v1/configuracion/descuento-manual"): (
+        "test_descuento_manual_configurar.py::test_inv21_http_el_cambio_afecta_solo_a_la_organizacion_del_token",
+    ),
+    ("post", "/api/v1/configuracion/descuento-manual"): (
+        "test_descuento_manual_configurar.py::test_inv21_http_el_cambio_afecta_solo_a_la_organizacion_del_token",
+    ),
+    ("get", "/api/v1/configuracion/credito"): (
+        "test_credito_organizacion_configurar.py::test_inv21_http_el_cambio_afecta_solo_a_la_organizacion_del_token",
+    ),
+    ("post", "/api/v1/configuracion/credito"): (
+        "test_credito_organizacion_configurar.py::test_inv21_http_el_cambio_afecta_solo_a_la_organizacion_del_token",
+    ),
+    ("get", "/api/v1/configuracion/nota-de-venta"): (
+        "test_nota_venta_configurar.py::test_inv21_http_el_cambio_afecta_solo_a_la_organizacion_del_token",
+    ),
+    ("post", "/api/v1/configuracion/nota-de-venta"): (
+        "test_nota_venta_configurar.py::test_inv21_http_el_cambio_afecta_solo_a_la_organizacion_del_token",
+    ),
+    ("get", "/api/v1/configuracion/organizacion"): (
+        "test_organizacion_cuit_configurar.py::test_inv21_http_el_cambio_afecta_solo_a_la_organizacion_del_token",
+    ),
+    ("post", "/api/v1/configuracion/organizacion"): (
+        "test_organizacion_cuit_configurar.py::test_inv21_http_el_cambio_afecta_solo_a_la_organizacion_del_token",
+    ),
+    ("post", "/api/v1/yo/pin-autorizacion"): (
+        "test_identidad_pin_propio_definir.py::test_inv21_definir_el_pin_propio_no_toca_a_los_usuarios_de_otra_organizacion",
+    ),
+    ("get", "/api/v1/yo/pin-autorizacion"): (
+        "test_identidad_yo_pin.py::test_seg07_cada_usuario_ve_solo_lo_suyo_y_get_yo_no_cambia",
+    ),
+    ("get", "/api/v1/ventas/contexto"): (
+        "test_ventas_contexto.py::test_syn11_no_son_autorizadores_los_que_no_cumplen_las_condiciones",
+        "test_ventas_contexto.py::test_dsc06_los_motivos_son_solo_los_activos_del_ambito_de_descuento_manual_propio",
+    ),
+    ("get", "/api/v1/ventas/credito"): (
+        "test_ventas_credito_lectura.py::test_seg07_el_credito_de_un_cliente_de_otra_organizacion_responde_404",
+    ),
+    ("get", "/api/v1/ventas/descuentos-aplicables"): (
+        "test_ventas_descuentos_aplicables.py::test_inv21_las_reglas_de_otra_organizacion_no_figuran",
+    ),
+    # Observaciones y rechazos
+    ("post", "/api/v1/observaciones/resolucion"): (
+        "test_observacion_resolver.py::test_una_observacion_de_otra_organizacion_responde_404_y_no_se_resuelve_ninguna",
+    ),
+    ("get", "/api/v1/observaciones"): (
+        "test_bandeja_de_observaciones.py::test_otra_organizacion_no_aparece",
+    ),
+    ("get", "/api/v1/observaciones/resumen"): (
+        "test_resumen_de_pendientes.py::test_solo_cuenta_la_organizacion_del_token",
+    ),
+    ("get", "/api/v1/observaciones/rechazos"): (
+        "test_lista_de_rechazos.py::test_inv21_otra_organizacion_no_ve_los_rechazos_y_su_pedido_responde_404",
+    ),
+    ("get", "/api/v1/observaciones/rechazos/{rechazo_id}"): (
+        "test_lista_de_rechazos.py::test_inv21_otra_organizacion_no_ve_los_rechazos_y_su_pedido_responde_404",
+    ),
+    ("post", "/api/v1/observaciones/rechazos/{rechazo_id}/resolucion"): (
+        "test_rechazo_resolver.py::test_inv21_un_rechazo_de_otra_organizacion_o_inexistente_responde_404",
+    ),
+    # Reportes
+    ("get", "/api/v1/reportes/ventas"): (
+        "reportes/test_reporte_ventas.py::test_inv21_el_reporte_no_incluye_ventas_de_otra_organizacion",
+        "reportes/test_reporte_ventas.py::test_inv21_filtrar_por_un_vendedor_de_otra_organizacion_devuelve_el_reporte_vacio",
+        "reportes/test_reporte_ventas.py::test_inv21_la_organizacion_no_se_toma_de_la_consulta",
+    ),
+    ("get", "/api/v1/reportes/rendiciones"): (
+        "reportes/test_reporte_rendiciones.py::test_inv21_la_lista_no_incluye_jornadas_de_otra_organizacion",
+        "reportes/test_reporte_rendiciones.py::test_inv21_filtrar_por_un_vendedor_ajeno_devuelve_vacio",
+    ),
+    ("get", "/api/v1/reportes/rendiciones/{jornada_id}"): (
+        "reportes/test_reporte_rendiciones.py::test_inv21_el_detalle_de_una_jornada_ajena_o_inexistente_es_404",
+    ),
+    ("get", "/api/v1/reportes/observaciones"): (
+        "reportes/test_reporte_observaciones.py::test_inv21_no_cuenta_observaciones_ni_rechazos_de_otra_organizacion",
+    ),
+    ("get", "/api/v1/reportes/ajustes"): (
+        "reportes/test_reporte_ajustes.py::test_inv21_no_cuenta_ajustes_ni_diferencias_de_otra_organizacion",
+    ),
+    ("get", "/api/v1/reportes/saldos/clientes"): (
+        "reportes/test_reporte_saldos.py::test_inv21_no_ve_saldos_de_clientes_de_otra_organizacion",
+    ),
+    ("get", "/api/v1/reportes/saldos/proveedores"): (
+        "reportes/test_reporte_saldos.py::test_inv21_no_ve_saldos_de_proveedores_de_otra_organizacion",
+    ),
+    # Sistema
+    ("get", "/api/v1/sistema/consistencia"): (
+        "test_consistencia_api.py::test_inv21_el_resultado_de_otra_organizacion_no_se_ve",
+        "test_consistencia_api.py::test_inv21_un_identificador_ajeno_en_el_detalle_no_revela_el_nombre",
+    ),
+}
+
+
+RAIZ_DE_PRUEBAS = Path(__file__).resolve().parent
+"""Carpeta a la que son relativos los `archivo::nombre` de `COBERTURA_DE_AISLAMIENTO`."""
+
+_CITA_INV21 = re.compile(r"INV[-_ ]?21", re.IGNORECASE)
+
+Cobertura = Mapping[tuple[str, str], tuple[str, ...]]
+Ruta = tuple[str, str]
 
 
 def rutas_de_negocio_sin_cobertura(
     rutas_del_esquema: dict[str, dict[str, object]],
     *,
     rutas_exentas: frozenset[tuple[str, str]],
-    cobertura: frozenset[tuple[str, str]],
+    cobertura: Cobertura,
 ) -> list[tuple[str, str]]:
     """Devuelve las rutas `(metodo, path)` que son de negocio (no están en
     `rutas_exentas`) y no están cubiertas por `cobertura`."""
     todas = [(metodo, path) for path, metodos in rutas_del_esquema.items() for metodo in metodos]
     de_negocio = [ruta for ruta in todas if ruta not in rutas_exentas]
     return [ruta for ruta in de_negocio if ruta not in cobertura]
+
+
+def rutas_declaradas_que_no_existen(
+    rutas_del_esquema: dict[str, dict[str, object]], cobertura: Cobertura
+) -> list[Ruta]:
+    """Rutas de `cobertura` que ya no están registradas en el esquema (D11)."""
+    presentes = {
+        (metodo, path) for path, metodos in rutas_del_esquema.items() for metodo in metodos
+    }
+    return [ruta for ruta in cobertura if ruta not in presentes]
+
+
+def rutas_declaradas_sin_pruebas(cobertura: Cobertura) -> list[Ruta]:
+    return [ruta for ruta, pruebas in cobertura.items() if not pruebas]
+
+
+def _buscar_prueba(raiz: Path, referencia: str) -> tuple[ast.Module, str, ast.AST] | None:
+    """Devuelve `(módulo, texto del archivo, nodo de la prueba)` o `None` si el archivo o la
+    prueba no están. Lee el archivo, no lo importa ni lo corre."""
+    archivo, separador, camino = referencia.partition("::")
+    if not separador or not camino:
+        return None
+    ruta = raiz / archivo
+    if not ruta.is_file():
+        return None
+    texto = ruta.read_text(encoding="utf-8")
+    modulo = ast.parse(texto)
+    cuerpo: list[ast.stmt] = modulo.body
+    nodo: ast.AST | None = None
+    for nombre in camino.split("::"):
+        nodo = next(
+            (
+                n
+                for n in cuerpo
+                if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+                and n.name == nombre
+            ),
+            None,
+        )
+        if nodo is None:
+            return None
+        cuerpo = getattr(nodo, "body", [])
+    assert nodo is not None
+    return modulo, texto, nodo
+
+
+def pruebas_declaradas_inexistentes(cobertura: Cobertura, raiz: Path) -> list[tuple[Ruta, str]]:
+    """`(ruta, referencia)` de cada prueba declarada que no está en su archivo (D11)."""
+    return [
+        (ruta, referencia)
+        for ruta, referencias in cobertura.items()
+        for referencia in referencias
+        if _buscar_prueba(raiz, referencia) is None
+    ]
+
+
+def pruebas_declaradas_que_no_citan_inv21(
+    cobertura: Cobertura, raiz: Path
+) -> list[tuple[Ruta, str]]:
+    """Las pruebas que existen pero no citan INV-21: ni en su nombre ni en su texto (docstring,
+    comentarios, código) ni en el texto de su archivo (D11). Las inexistentes las informa
+    `pruebas_declaradas_inexistentes`."""
+    sin_cita: list[tuple[Ruta, str]] = []
+    for ruta, referencias in cobertura.items():
+        for referencia in referencias:
+            hallada = _buscar_prueba(raiz, referencia)
+            if hallada is None:
+                continue
+            _, texto_del_archivo, nodo = hallada
+            texto_de_la_prueba = ast.get_source_segment(texto_del_archivo, nodo) or ""
+            if not (
+                _CITA_INV21.search(referencia.rpartition("::")[2])
+                or _CITA_INV21.search(texto_de_la_prueba)
+                or _CITA_INV21.search(texto_del_archivo)
+            ):
+                sin_cita.append((ruta, referencia))
+    return sin_cita
 
 
 def _rutas_reales_del_esquema() -> dict[str, dict[str, object]]:
@@ -703,3 +917,127 @@ def test_inv21_no_marca_una_ruta_de_negocio_que_si_tiene_cobertura_declarada() -
     )
 
     assert sin_cobertura == []
+
+
+# --- Change 28, tarea 5.1 (D11): cada ruta declarada apunta a pruebas que existen -------------
+
+
+def _tabla_de_pruebas(raiz: Path, archivo: str, contenido: str) -> None:
+    destino = raiz / archivo
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    destino.write_text(contenido, encoding="utf-8")
+
+
+def test_inv21_cada_prueba_declarada_existe() -> None:
+    """Escenario 'Una prueba declarada que no existe hace fallar la verificación': cada
+    `archivo::nombre` de `COBERTURA_DE_AISLAMIENTO` se encuentra en el archivo, sin correrla."""
+    inexistentes = pruebas_declaradas_inexistentes(COBERTURA_DE_AISLAMIENTO, RAIZ_DE_PRUEBAS)
+
+    assert inexistentes == [], f"INV-21: pruebas declaradas que no existen: {inexistentes}"
+
+
+def test_inv21_cada_prueba_declarada_cita_inv21() -> None:
+    """Escenario 'Una prueba que no cita INV-21 hace fallar la verificación'."""
+    sin_cita = pruebas_declaradas_que_no_citan_inv21(COBERTURA_DE_AISLAMIENTO, RAIZ_DE_PRUEBAS)
+
+    assert sin_cita == [], f"INV-21: pruebas declaradas que no citan INV-21: {sin_cita}"
+
+
+def test_inv21_toda_ruta_declarada_tiene_al_menos_una_prueba() -> None:
+    sin_pruebas = rutas_declaradas_sin_pruebas(COBERTURA_DE_AISLAMIENTO)
+
+    assert sin_pruebas == [], f"INV-21: rutas declaradas sin ninguna prueba: {sin_pruebas}"
+
+
+def test_inv21_no_hay_rutas_declaradas_que_ya_no_existen(database_url: str) -> None:
+    """Escenario 'Una ruta declarada que ya no existe hace fallar la verificación'."""
+    os.environ.setdefault("DATABASE_URL", database_url)
+    rutas = _rutas_reales_del_esquema()
+
+    sobrantes = rutas_declaradas_que_no_existen(rutas, COBERTURA_DE_AISLAMIENTO)
+
+    assert sobrantes == [], f"INV-21: rutas declaradas que ya no existen: {sobrantes}"
+
+
+def test_inv21_detecta_una_prueba_inexistente(tmp_path: Path) -> None:
+    """Negativo con datos de prueba: archivo ausente, función ausente, método de clase
+    ausente. La existente (función suelta y método de clase) no se marca."""
+    _tabla_de_pruebas(
+        tmp_path,
+        "test_a.py",
+        "class TestA:\n    def test_metodo(self):\n        pass\n\ndef test_suelta():\n    pass\n",
+    )
+    cobertura = {
+        ("get", "/x"): (
+            "test_a.py::test_suelta",
+            "test_a.py::TestA::test_metodo",
+            "test_a.py::test_no_esta",
+            "test_a.py::TestA::test_no_esta",
+            "test_b.py::test_suelta",
+        )
+    }
+
+    inexistentes = pruebas_declaradas_inexistentes(cobertura, tmp_path)
+
+    assert inexistentes == [
+        (("get", "/x"), "test_a.py::test_no_esta"),
+        (("get", "/x"), "test_a.py::TestA::test_no_esta"),
+        (("get", "/x"), "test_b.py::test_suelta"),
+    ]
+
+
+def test_inv21_una_referencia_mal_formada_cuenta_como_inexistente(tmp_path: Path) -> None:
+    cobertura = {("get", "/x"): ("sin_separador",)}
+
+    assert pruebas_declaradas_inexistentes(cobertura, tmp_path) == [
+        (("get", "/x"), "sin_separador")
+    ]
+
+
+def test_inv21_detecta_una_prueba_que_no_cita_inv21(tmp_path: Path) -> None:
+    """Negativo y triangulación: cita por el nombre, por la docstring de la prueba o por el
+    texto del archivo -> pasa; sin cita en ninguno -> se nombra."""
+    _tabla_de_pruebas(
+        tmp_path,
+        "test_con_cita.py",
+        "def test_inv21_por_nombre():\n    pass\n\n"
+        'def test_por_docstring():\n    """Cubre INV-21."""\n\n'
+        "def test_ajena():\n    pass\n",
+    )
+    _tabla_de_pruebas(
+        tmp_path,
+        "test_cita_en_el_archivo.py",
+        '"""Este archivo cubre el aislamiento (INV-21)."""\n\ndef test_x():\n    pass\n',
+    )
+    _tabla_de_pruebas(tmp_path, "test_sin_cita.py", "def test_y():\n    pass\n")
+    cobertura = {
+        ("get", "/x"): (
+            "test_con_cita.py::test_inv21_por_nombre",
+            "test_con_cita.py::test_por_docstring",
+            "test_cita_en_el_archivo.py::test_x",
+            "test_sin_cita.py::test_y",
+        )
+    }
+
+    sin_cita = pruebas_declaradas_que_no_citan_inv21(cobertura, tmp_path)
+
+    assert sin_cita == [(("get", "/x"), "test_sin_cita.py::test_y")]
+
+
+def test_inv21_detecta_una_ruta_declarada_que_ya_no_existe() -> None:
+    esquema = {"/api/v1/a": {"get": {}}, "/api/v1/b": {"post": {}, "get": {}}}
+    cobertura = {
+        ("get", "/api/v1/a"): ("t.py::t",),
+        ("get", "/api/v1/borrada"): ("t.py::t",),
+        ("delete", "/api/v1/b"): ("t.py::t",),
+    }
+
+    sobrantes = rutas_declaradas_que_no_existen(esquema, cobertura)
+
+    assert sobrantes == [("get", "/api/v1/borrada"), ("delete", "/api/v1/b")]
+
+
+def test_inv21_detecta_una_ruta_declarada_sin_pruebas() -> None:
+    cobertura = {("get", "/x"): ("t.py::t",), ("post", "/y"): ()}
+
+    assert rutas_declaradas_sin_pruebas(cobertura) == [("post", "/y")]

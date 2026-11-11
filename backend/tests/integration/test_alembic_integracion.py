@@ -21,6 +21,7 @@ from conftest import (
     NOMBRE_ROL_MIGRACIONES,
     _crear_roles_de_base,
     _url_con_credenciales,
+    cabeza_de_alembic,
 )
 from sqlalchemy import create_engine, text
 
@@ -311,7 +312,7 @@ def test_downgrade_y_upgrade_corren_limpios_con_datos_representativos(
     finally:
         engine.dispose()
 
-    assert cantidad_permisos == 40
+    assert cantidad_permisos == 41
     assert cantidad_organizaciones == 0
 
     # Deja la base en `head`, compartida con el resto de la sesión de pytest.
@@ -659,7 +660,7 @@ def test_downgrade_menos_uno_y_upgrade_corren_limpios_con_datos_de_catalogo_semb
 # --- ADR-057 (change 18b, tarea 24.3): `intento_login.clave_intento` -----------------------------
 
 REVISION_CLAVE_INTENTO = "c8d9e0f1a2b3"
-REVISION_HEAD_ACTUAL = "e3a5c7d9f1b2"  # `revision_de_observaciones_y_rechazos` (change 25)
+REVISION_HEAD_ACTUAL = cabeza_de_alembic()  # la cabeza actual, leida de Alembic
 REVISION_ANTERIOR_A_NOTA = "d9e0f1a2b3c4"  # `venta_anulacion` (change 19)
 REVISION_ANTERIOR_A_CLAVE_INTENTO = "b6c7d8e9f0a1"
 INDICE_CLAVE_INTENTO = "ix_intento_login__clave_intento_creado_en"

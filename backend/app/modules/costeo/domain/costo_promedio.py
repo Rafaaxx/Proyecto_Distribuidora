@@ -22,6 +22,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from decimal import Decimal, localcontext
+from uuid import UUID
 
 from app.core.money import redondear_costo
 from app.modules.costeo.domain.errores import (
@@ -45,6 +46,17 @@ ORIGENES_DE_COSTO = frozenset({"COMPRA", "ANULACION_COMPRA", "STOCK_INICIAL", "A
 """Los cuatro orígenes que dejan historia del promedio (`03` §7, D13)."""
 
 _FORMATO = re.compile(r"[0-9]+(\.[0-9]{1,6})?")
+
+
+@dataclass(frozen=True)
+class DiferenciaDePromedio:
+    """Un producto cuyo promedio vigente no coincide con el `promedio_nuevo` de su último
+    `costo_producto_mov` (CST-13, `02` §7.6). Cualquiera de los dos puede ser `None` (un promedio
+    sin historia, o historia sin promedio). Se informa, no se corrige (ADR-015)."""
+
+    producto_id: UUID
+    promedio_vigente: Decimal | None
+    promedio_historia: Decimal | None
 
 
 @dataclass(frozen=True)

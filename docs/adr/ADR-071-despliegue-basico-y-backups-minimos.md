@@ -73,3 +73,5 @@
 - **Frontend (sin cambio de API).** Recorte de organización y usuario en el login (enmienda de ADR-057) y pantalla de error de ruta «Hay una versión nueva del sistema» con «Recargar» ante un fallo de carga de módulo tras un despliegue (design D18 y D19).
 
 - **Enmienda (2026-11-10, change 27b, ADR-072).** Sin cambiar lo decidido aquí: ADR-072 enmienda D12 (restauración probada), D13 (retención 14 + 8) y la limitación del contenedor `backup` como root (que pasa a usuario sin privilegios).
+
+- **Enmienda (2026-11-11, change 28, ADR-073).** Punto 3: la CSP y los demás encabezados de seguridad quedaron implementados en Caddy en el change 28 (ADR-073).

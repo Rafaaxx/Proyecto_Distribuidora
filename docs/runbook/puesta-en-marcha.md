@@ -234,7 +234,7 @@ Completar:
 
 - `DOMINIO`, `CADDY_TLS` y `BACKUP_DIR`: según el escenario.
 - `APP_VERSION`: tres números, por ejemplo `0.27.0`. **Si no tiene esa forma, el backend no arranca** (a propósito).
-- Los **cinco secretos** (`POSTGRES_PASSWORD`, `APP_MIGRATIONS_DB_PASSWORD`, `APP_RUNTIME_DB_PASSWORD`, `APP_BACKUP_DB_PASSWORD`, `JWT_SECRET`): **cada uno distinto**, generado así (imprime una clave aleatoria de 64 caracteres; repetir el comando cinco veces y pegar cada resultado en su línea):
+- Los **seis secretos** (`POSTGRES_PASSWORD`, `APP_MIGRATIONS_DB_PASSWORD`, `APP_RUNTIME_DB_PASSWORD`, `APP_BACKUP_DB_PASSWORD`, `APP_MANTENIMIENTO_DB_PASSWORD`, `JWT_SECRET`): **cada uno distinto**, generado así (imprime una clave aleatoria de 64 caracteres; repetir el comando seis veces y pegar cada resultado en su línea):
 
   ```bash
   # Git Bash o Linux
@@ -368,7 +368,7 @@ El servicio `copia-externa` sube cada backup válido, **cifrado en la PC antes d
 
 **Ensayar sin cuenta (destino local).** Para probar sin abrir cuenta: `COPIA_TIPO=local`, `COPIA_RUTA=/destino-local/copias`, y `no-aplica` en `COPIA_ACCESS_KEY_ID` y `COPIA_SECRET_ACCESS_KEY` (no pueden quedar vacías). `COPIA_LOCAL_DIR` es la carpeta de la PC que hace de destino (si se deja `copia_local`, es un volumen de Docker). No protege de perder la PC.
 
-**Aviso por correo (opcional).** Si `AVISO_URL` tiene una dirección (por ejemplo la de un control gratuito de «hombre muerto» como healthchecks.io), `copia-externa` la llama después de cada corrida buena, y a `<dirección>/fail` si falla; si no la reciben a tiempo, el servicio les manda un correo al dueño. Vacía, no se avisa nada. No se envía ningún dato del negocio. La prueba mensual de restauración **no** avisa: no tiene red (ver C8).
+**Aviso por correo (opcional).** Si `AVISO_URL` tiene una dirección (por ejemplo la de un control gratuito de «hombre muerto» como healthchecks.io), `copia-externa` la llama después de cada corrida buena, y a `<dirección>/fail` si falla; si no la reciben a tiempo, el servicio les manda un correo al dueño. Vacía, no se avisa nada. No se envía ningún dato del negocio. La verificación diaria (`tareas`) tiene su propio aviso, con otra variable (`AVISO_TAREAS_URL`, ver C13). La prueba mensual de restauración **no** avisa: no tiene red (ver C8).
 
 ### C8 Salud y registros
 
@@ -380,7 +380,9 @@ dc logs -f caddy            # seguir en vivo (Ctrl+C para salir)
 
 Los registros rotan solos (no llenan el disco). `backup` pasa a «unhealthy» si el último backup válido tiene más de 26 horas, o si no hay ninguno pasada la primera hora programada. `copia-externa` pasa a «unhealthy» si el backup más reciente que hay en el destino tiene más de 26 horas, o si la última corrida falló por credenciales o por la clave (un corte de internet por sí solo no lo marca). `prueba-restauracion` pasa a «unhealthy» si la última prueba falló o pasaron más de 35 días sin una buena.
 
-**Revisión semanal (dos minutos).** Una vez por semana correr `dc ps` y comprobar que `backup`, `copia-externa` y `prueba-restauracion` dicen `healthy`. Es **la única señal de la prueba mensual** (no manda avisos, porque corre sin red): si nadie mira, un fallo puede pasar semanas sin que se note. Qué hacer si alguno falla: `restauracion.md`, sección «Si algo no funciona».
+`tareas` pasa a «unhealthy» si la última verificación de consistencia encontró diferencias, si la última corrida falló, o si pasaron más de 26 horas sin ninguna corrida (ver C13).
+
+**Revisión semanal (dos minutos).** Una vez por semana correr `dc ps` y comprobar que `backup`, `copia-externa`, `prueba-restauracion` y `tareas` dicen `healthy`. Es **la única señal de la prueba mensual** (no manda avisos, porque corre sin red): si nadie mira, un fallo puede pasar semanas sin que se note. Qué hacer si alguno falla: `restauracion.md`, sección «Si algo no funciona».
 
 > **Hora de gracia.** Recién instalado, `backup` figura como «healthy» aunque todavía no haya hecho ningún backup: no pasa a «unhealthy» hasta que haya transcurrido una hora desde la primera hora programada (`BACKUP_HORA`). Un «healthy» del primer día **no** prueba que haya un backup; por eso conviene hacer uno a pedido (C7) apenas se instala.
 
@@ -401,6 +403,7 @@ Los mismos pasos en la PC y en el servidor. Hay un corte de unos segundos mientr
 La clave es **migrar antes de reemplazar**: primero se aplican las migraciones con la imagen nueva mientras la versión vieja sigue atendiendo, y recién si salieron bien se reemplazan `backend` y `caddy`. Las migraciones son compatibles hacia adelante (`docs/02-arquitectura.md` §14): el backend viejo funciona con el esquema ya migrado.
 
 1. **Backup previo:** `dc run --rm backup ahora` y comprobar que dice «Backup verificado».
+   **Si el entorno es anterior al change 28** (no tiene el usuario `app_mantenimiento`), antes del paso de migrar hay que crearlo una vez: ver C12. Sin él, las migraciones se niegan a correr y lo dicen.
 2. **Traer la versión nueva:**
 
    ```bash
@@ -460,6 +463,94 @@ No se cambia código: solo el archivo de entorno del servidor nuevo, con `DOMINI
 
 Mientras el entorno tenga solo datos de prueba, alcanza con sembrar de nuevo en el servidor (C6). Llevar los datos reales de la PC al servidor requiere restaurar un backup: el procedimiento completo está en la sección «Mudanza a otro equipo» de [`restauracion.md`](restauracion.md). Lo más importante, antes de mudarse: **la cola de cada teléfono tiene que estar vacía** (la cola pertenece a la dirección vieja y no se ve desde la nueva).
 
+### C12 Crear el usuario de mantenimiento en una base que ya existía
+
+**Para qué sirve.** Desde el change 28 hay un servicio nuevo, `tareas`, que una vez por día revisa que los saldos coincidan con los movimientos y borra los intentos de inicio de sesión de más de 24 horas. Para hacerlo usa un usuario de base **propio**, `app_mantenimiento`, que puede leer los saldos, anotar el resultado de la revisión y borrar solo esos intentos viejos; no puede tocar nada más. El usuario con el que corre el sistema (`app_runtime`) sigue sin poder borrar nada: por eso este trabajo no se le da a él.
+
+**Cuándo hace falta.** En un entorno **nuevo** (volumen de la base recién creado) el usuario se crea solo. En un entorno que **ya existía**, hay que crearlo a mano **una sola vez y ANTES de migrar** (paso 5 de C9): las migraciones le otorgan sus permisos y, si el usuario no existe, se detienen con un mensaje que apunta a este paso (y la base queda como estaba).
+
+1. **Agregar la clave** al archivo de entorno: una línea `APP_MANTENIMIENTO_DB_PASSWORD=` con una clave nueva generada como en C2 (`openssl rand -hex 32`). Es distinta de las otras cinco. Para qué: es la contraseña con la que `tareas` entra a la base.
+2. **Crear el usuario** (sustituir `LA_CLAVE` por ese mismo valor). La contraseña viaja como variable de `psql` (`-v clave=...`) y no pegada dentro del texto SQL, así queda bien escrita aunque tenga caracteres raros:
+
+   ```bash
+   dc up -d postgres
+   echo "CREATE ROLE app_mantenimiento LOGIN PASSWORD :'clave'" | dc exec -T postgres psql -U distribuidora -d distribuidora -v clave=LA_CLAVE
+   ```
+
+   Si usó otros valores en `POSTGRES_USER` o `POSTGRES_DB`, usar esos. Debe imprimir `CREATE ROLE`. Si dice que el usuario ya existe, no hace falta repetirlo.
+3. **Seguir con la actualización** (C9, desde el paso 5: `dc run --rm migraciones`) y después `dc up -d --build`, que levanta el servicio `tareas`.
+
+Si olvidó este paso, `dc run --rm migraciones` termina con un error que nombra a `app_mantenimiento`: no se rompió nada; crear el usuario y repetir el paso.
+
+### C13 El servicio `tareas`: la verificación diaria y cómo leerla
+
+**Qué hace.** Todos los días a `TAREAS_HORA` (por defecto `05:00`, en la zona `TZ`; elegida después del backup de las 03:00 y de la prueba de restauración de las 04:00) hace dos cosas: (1) compara, para cada organización, los saldos de cuentas, el stock y el costo promedio contra los movimientos que los explican, y guarda el resultado; (2) borra los intentos de inicio de sesión de más de 24 horas. **Nunca corrige nada:** una diferencia significa que hay un defecto que alguien debe investigar.
+
+**Verificación a pedido** (para comprobar ahora mismo, sin esperar a las 05:00):
+
+```bash
+dc run --rm tareas ahora
+```
+
+Lo normal es leer:
+
+```text
+Verificación de consistencia: sin diferencias
+Limpieza: 12 intentos de inicio de sesión de más de 24 horas borrados
+```
+
+Si hay diferencias, la primera línea dice cuántas y recuerda «avisar a soporte». El detalle (qué cuenta, producto o ubicación, con el valor guardado y el recalculado) se ve en el inicio de `/admin` como administrador o personal de Administración; también queda en el registro: `dc logs tareas`.
+
+**Qué hacer ante el aviso de diferencias.** Regla: **no corregir a mano** (ni tocar la base, ni cargar un ajuste «para que cierre»): corregir tapa el síntoma y borra la pista de qué falló. Anotar la fecha y el detalle que muestra `/admin` y avisar a soporte. El aviso desaparece solo cuando la siguiente verificación da sin diferencias.
+
+**Variables** (en el archivo de entorno): `TAREAS_HORA` (formato `HH:MM`), `TZ` (zona horaria) y `AVISO_TAREAS_URL` (opcional: el aviso por correo, que se explica abajo). **No es la misma que `AVISO_URL`**: esa es de la copia externa (C7b). Cada una tiene su propio control en healthchecks.io.
+
+**Aviso por correo si la verificación no corre o encuentra diferencias (recomendado).** Las señales locales (el aviso en `/admin`, `dc logs tareas` y el estado `unhealthy` de `dc ps`) solo se ven si alguien mira. Para que le llegue un correo, se usa un servicio gratuito de «hombre muerto» (*dead man's switch*): `tareas` le avisa «estoy bien» después de cada corrida, y si el servicio **deja de recibir ese aviso a tiempo** (el equipo se apagó, el servicio se cayó, no hay internet) o recibe un aviso de falla, le manda un correo. Pasos:
+
+1. Crear una cuenta gratuita en `https://healthchecks.io` con su correo y confirmarlo.
+2. Crear un control nuevo (*Add Check*) y ponerle de nombre **Verificación diaria**. En *Period* (cada cuánto esperan el aviso) poner **1 day** y en *Grace Time* (cuánto esperan antes de dar la alarma) unas **2 hours**. En *Integrations* dejar tildado su correo.
+3. El control muestra una dirección de aviso (*ping URL*), parecida a `https://hc-ping.com/…`. Copiarla **completa**: es secreta (quien la tenga puede mandar avisos falsos), así que no se comparte ni se pega en chats.
+4. Pegarla en el archivo de entorno, en la línea `AVISO_TAREAS_URL=` (sin comillas), y aplicar:
+
+   ```bash
+   dc up -d
+   ```
+
+5. Probar sin esperar a las 05:00. La prueba **también avisa** (igual que la corrida programada):
+
+   ```bash
+   dc run --rm tareas ahora
+   ```
+
+   En healthchecks.io el control **Verificación diaria** pasa a verde («up») en unos segundos. Si no pasa, ver «Si el control no se pone verde» abajo.
+
+**Qué hace `tareas` con el aviso.** Después de cada corrida: si no hubo diferencias y la limpieza no falló, llama a la dirección (control en verde); si hubo diferencias o algo falló, llama a `<dirección>/fail` (el control se pone en rojo y llega un correo enseguida). Con `AVISO_TAREAS_URL` vacía no avisa nada. No se envía ningún dato del negocio. Un aviso que no llega **no rompe nada**: la verificación y su resultado son los mismos, y solo queda una línea en `dc logs tareas` («No se pudo llamar al aviso externo»; no muestra la dirección).
+
+**Qué correo llega y qué hacer.**
+
+- **Falla o diferencias** (correo «DOWN», o el control en rojo): es el mismo caso que el aviso de diferencias de arriba; seguir esa regla (no corregir a mano, anotar y avisar a soporte).
+- **Falta de aviso** (correo «DOWN» sin que haya habido diferencias, pasadas las 2 horas de gracia): la verificación no corrió. Revisar que el equipo esté encendido y con internet, `dc ps` (¿`tareas` está `healthy`?) y `dc logs tareas`.
+- Cuando la siguiente corrida da bien, el control vuelve a verde solo.
+
+**Si el control no se pone verde.** Correr `dc logs tareas` y buscar «No se pudo llamar al aviso externo». Causas habituales: la dirección está mal copiada (probar de nuevo desde healthchecks.io), el equipo no tiene internet, o se olvidó correr `dc up -d` después de editar el archivo de entorno.
+
+**Por qué `tareas` puede salir a internet.** `tareas` está en la red `datos` (la de la base, que **no** tiene salida a internet) y además en la red `salida`, la misma de `copia-externa`: esa red tiene internet pero no ve ni la base ni el backend, y no abre ningún puerto hacia adentro; `tareas` la usa solo para llamar al aviso. La base y la red `datos` siguen cerradas. Decisión: ADR-073.
+
+### C14 Correr la suite de aceptación (`npm run test:e2e`)
+
+**Para qué sirve.** Recorre automáticamente los 12 criterios de aceptación de la etapa 1 (`docs/00-vision-y-alcance.md` §9) contra una copia completa del sistema: sirve para comprobar, antes de entregar una versión, que todo funciona junto (incluida la venta sin señal).
+
+**Qué hace por su cuenta.** Levanta una copia del sistema **aparte** llamada `distribuidora-aceptacion` (base nueva, con datos de prueba, en HTTPS), corre el navegador contra ella y al terminar la **borra con sus datos**. No toca el entorno de desarrollo ni el de producción. Hace falta tener instalados Node.js y Docker.
+
+```bash
+cd frontend
+npm install
+npx playwright install chromium   # una sola vez
+npm run test:e2e
+```
+
+Tarda varios minutos. Conviene detener el entorno de desarrollo (`docker compose -p distribuidora stop`) para no quedarse sin memoria. Si falla una prueba, deja una traza en `frontend/test-results` y un informe en `frontend/playwright-report` (`npx playwright show-report`). Para dejar la copia levantada y mirarla: `npm run test:e2e:mantener` (después hay que bajarla a mano con `docker compose -p distribuidora-aceptacion down -v`). La misma suite corre sola en GitHub cuando se actualiza la rama principal.
+
 ---
 
 ## Si algo no funciona
@@ -474,4 +565,7 @@ Mientras el entorno tenga solo datos de prueba, alcanza con sembrar de nuevo en 
 | Tras reiniciar Windows el sistema no responde | Docker Desktop debe estar iniciado (ícono de la ballena en la barra); esperar uno o dos minutos y `dc ps`. |
 | `curl` en Windows imprime `000` | Es el manejo del certificado en Windows; usar el navegador o `curl -v`. |
 | `dc run --rm backup ahora` falla con `Permission denied` sobre `/backups` | La carpeta de backups quedó con permisos de la versión 27a. Una sola vez: `docker run --rm -v "C:/distribuidora/backups:/b" alpine chown -R 999:999 /b` (Linux: `sudo chown -R 999:999 <BACKUP_DIR>`). Ver C7. |
+| `dc run --rm migraciones` falla nombrando a `app_mantenimiento` | Falta crear el usuario de mantenimiento en una base que ya existía: ver C12. |
+| `tareas` figura «unhealthy» | Hay diferencias de consistencia, la última corrida falló o pasaron más de 26 horas sin corrida: ver C13 y `dc logs tareas`. |
+| El control «Verificación diaria» de healthchecks.io no se pone verde | La dirección de `AVISO_TAREAS_URL` está mal copiada, falta `dc up -d` o no hay internet: ver C13 («Si el control no se pone verde») y `dc logs tareas` |
 | Let's Encrypt no emite el certificado (Escenario 2) | Ver E2.4 y `dc logs caddy`. |

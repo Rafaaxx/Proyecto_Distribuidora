@@ -16,6 +16,7 @@ SECRETOS = {
     "APP_MIGRATIONS_DB_PASSWORD",
     "APP_RUNTIME_DB_PASSWORD",
     "APP_BACKUP_DB_PASSWORD",
+    "APP_MANTENIMIENTO_DB_PASSWORD",
     "JWT_SECRET",
 }
 
@@ -107,6 +108,15 @@ def test_la_plantilla_documenta_el_destino_de_la_copia_y_el_ensayo_local():
     assert {"COPIA_TIPO", "COPIA_RUTA", "COPIA_S3_PROVEEDOR", "COPIA_S3_ENDPOINT",
             "COPIA_S3_REGION", "AVISO_URL", "COPIA_LOCAL_DIR"} <= set(asignaciones)  # fmt: skip
     assert asignaciones["AVISO_URL"] == ""
+
+
+def test_la_plantilla_documenta_el_aviso_externo_de_las_tareas():
+    # ADR-073: variable propia, vacia (opcional) y explicada junto al control de healthchecks.io.
+    asignaciones = _asignaciones()
+    assert asignaciones["AVISO_TAREAS_URL"] == ""
+    texto = PLANTILLA.read_text(encoding="utf-8")
+    assert "Verificacion diaria" in texto
+    assert "AVISO_URL" in texto  # se aclara que es distinta de la de la copia
     texto = PLANTILLA.read_text(encoding="utf-8")
     assert "rclone obscure" in texto
     assert "ensayo" in texto and "local" in texto
@@ -120,3 +130,28 @@ def test_la_plantilla_documenta_el_dia_y_la_hora_de_la_prueba_de_restauracion():
     assert asignaciones["PRUEBA_HORA"] == "04:00"
     texto = PLANTILLA.read_text(encoding="utf-8")
     assert "prueba de restauracion" in texto.lower()
+
+
+def test_la_plantilla_documenta_la_contrasena_del_rol_de_mantenimiento_sin_valor():
+    # Change 28, D3 (escenario «Falta la contraseña del rol de mantenimiento»).
+    texto = PLANTILLA.read_text(encoding="utf-8")
+    assert _asignaciones()["APP_MANTENIMIENTO_DB_PASSWORD"] == ""
+    lineas = texto[: texto.index("APP_MANTENIMIENTO_DB_PASSWORD=")].rstrip().splitlines()
+    bloque = []
+    for linea in reversed(lineas):
+        if not linea.startswith("#"):
+            break
+        bloque.append(linea)
+    explicacion = " ".join(bloque).lower()
+    assert "tareas" in explicacion and "runbook" in explicacion
+
+
+def test_la_plantilla_documenta_la_hora_de_las_tareas_periodicas():
+    # Change 28, D6: TAREAS_HORA con su valor por defecto, explicada; despues del backup (03:00).
+    assert _asignaciones()["TAREAS_HORA"] == "05:00"
+    texto = PLANTILLA.read_text(encoding="utf-8")
+    bloque = texto[: texto.index("TAREAS_HORA=")]
+    explicacion = " ".join(
+        linea for linea in bloque.splitlines()[-8:] if linea.startswith("#")
+    ).lower()
+    assert "diferencias" in explicacion and "intentos" in explicacion

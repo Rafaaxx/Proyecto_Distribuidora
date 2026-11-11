@@ -51,3 +51,4 @@ export type CodigoPermiso =
   | 'FACTURAR'
   | 'FACTURAR_ABSORBIENDO_IVA'
   | 'ANULAR_FACTURA'
+  | 'VER_CONSISTENCIA'

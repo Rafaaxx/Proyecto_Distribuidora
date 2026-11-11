@@ -170,4 +170,44 @@ describe('AdminInicio: tarjeta «Para revisar» (tarea 15.1, D5)', () => {
     expect(screen.queryByRole('link', { name: /^Revisión/ })).not.toBeInTheDocument()
     expect(llamadasAlResumen()).toHaveLength(0)
   })
+
+  // Change 28, tarea 3.2 (D5): el aviso de consistencia aparece encima de «Para revisar» en el inicio.
+  it('con VER_CONSISTENCIA y diferencias en la última verificación muestra el aviso junto a «Para revisar»', async () => {
+    apiFetchMock.mockImplementation((ruta: string) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () =>
+          ruta === '/sistema/consistencia'
+            ? {
+                ejecutada_en: '2026-11-10T05:00:00Z',
+                resultado: 'CON_DIFERENCIAS',
+                diferencias: [
+                  {
+                    tipo: 'STOCK_TOTAL',
+                    cuenta_tipo: null,
+                    entidad_id: null,
+                    entidad_nombre: null,
+                    saldo_materializado: null,
+                    suma_del_libro: null,
+                    producto_id: null,
+                    producto_nombre: 'Vino A',
+                    ubicacion_id: null,
+                    ubicacion_nombre: null,
+                    materializado: 9,
+                    esperado: 5,
+                    promedio_vigente: null,
+                    promedio_historia: null,
+                  },
+                ],
+              }
+            : resumen(),
+      }),
+    )
+    montar('ADM')
+
+    const aviso = await screen.findByRole('alert')
+    expect(within(aviso).getByText('Stock total de Vino A: guardado 9, suma de sus ubicaciones 5.')).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Para revisar' })).toBeInTheDocument()
+  })
 })

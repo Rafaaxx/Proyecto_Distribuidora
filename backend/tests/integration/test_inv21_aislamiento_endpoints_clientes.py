@@ -536,3 +536,71 @@ class TestAislamientoDeLasRutasDeClientes:
         assert cuerpo_b["cliente"]["id"] == str(final_b_id), (
             "La habilitación de A no puede haber reapuntado la configuración de B."
         )
+
+    def test_el_alta_de_b_queda_en_b_y_a_no_la_ve(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """Change 28, tarea 5.1 (INV-21): `POST /api/v1/clientes` no recibe ningún
+        identificador: la organización sale del token. Dos organizaciones con login
+        real; el alta de B queda en B aunque el cuerpo traiga un `organizacion_id` de A (se
+        ignora) y el listado de A no la muestra."""
+        organizacion_a, organizacion_b = _dos_organizaciones(sesion)
+        organizacion_a_id, organizacion_b_id = organizacion_a.id, organizacion_b.id
+        sesion_a = _login(cliente, "org-a", "admin-a")
+        sesion_b = _login(cliente, "org-b", "admin-b")
+        cuerpo = {
+            "nombre": "Kiosco El Faro",
+            "direccion": "Av. San Martín 1420",
+            "contacto": "Rocío",
+        }
+
+        alta = cliente.post(
+            "/api/v1/clientes",
+            json={**cuerpo, "organizacion_id": str(organizacion_a_id)},
+            headers={"Authorization": f"Bearer {sesion_b.token}", "Operation-Id": str(uuid4())},
+        )
+        listado_a = cliente.get(
+            "/api/v1/clientes", headers={"Authorization": f"Bearer {sesion_a.token}"}
+        )
+
+        assert alta.status_code == 201, alta.text
+        assert "Kiosco El Faro" not in listado_a.text
+        verificacion = crear_session_factory(crear_engine(sesion.get_bind().url))()
+        try:
+            fila = verificacion.get(Cliente, UUID(alta.json()["id"]))
+            assert fila is not None
+            assert fila.organizacion_id == organizacion_b_id
+        finally:
+            verificacion.close()
+
+    def test_modificar_un_cliente_de_otra_organizacion_responde_404_y_no_lo_cambia(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """Change 28, tarea 5.1 (INV-21, SEG-07): `PUT /api/v1/clientes/{cliente_id}` de
+        un cliente de A con el login de B responde 404 y el cliente sigue igual."""
+        organizacion_a, _ = _dos_organizaciones(sesion)
+        ajeno = _crear_cliente(sesion, organizacion_a.id, nombre="Kiosco La Esquina")
+        sesion.commit()
+        ajeno_id = ajeno.id
+        sesion_b = _login(cliente, "org-b", "admin-b")
+
+        respuesta = cliente.put(
+            f"/api/v1/clientes/{ajeno_id}",
+            json={
+                "nombre": "Pisado",
+                "direccion": "Otra 1",
+                "contacto": "Rocío",
+                "estado": "SUSPENDIDO",
+            },
+            headers={"Authorization": f"Bearer {sesion_b.token}", "Operation-Id": str(uuid4())},
+        )
+
+        assert respuesta.status_code == 404, respuesta.text
+        assert respuesta.json()["codigo"] == "RECURSO_NO_ENCONTRADO"
+        verificacion = crear_session_factory(crear_engine(sesion.get_bind().url))()
+        try:
+            fila = verificacion.get(Cliente, ajeno_id)
+            assert fila is not None
+            assert fila.nombre == "Kiosco La Esquina"
+        finally:
+            verificacion.close()

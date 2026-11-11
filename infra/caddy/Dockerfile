@@ -20,3 +20,4 @@ FROM caddy:2
 
 COPY --from=frontend /app/dist /srv
 COPY infra/caddy/Caddyfile /etc/caddy/Caddyfile
+COPY infra/caddy/encabezados.caddy /etc/caddy/encabezados.caddy

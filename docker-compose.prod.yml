@@ -32,12 +32,16 @@ services:
       APP_MIGRATIONS_DB_PASSWORD: ${APP_MIGRATIONS_DB_PASSWORD:?Falta APP_MIGRATIONS_DB_PASSWORD en el archivo de entorno}
       APP_RUNTIME_DB_PASSWORD: ${APP_RUNTIME_DB_PASSWORD:?Falta APP_RUNTIME_DB_PASSWORD en el archivo de entorno}
       APP_BACKUP_DB_PASSWORD: ${APP_BACKUP_DB_PASSWORD:?Falta APP_BACKUP_DB_PASSWORD en el archivo de entorno}
+      APP_MANTENIMIENTO_DB_PASSWORD: ${APP_MANTENIMIENTO_DB_PASSWORD:?Falta APP_MANTENIMIENTO_DB_PASSWORD en el archivo de entorno}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Solo corre la primera vez que se inicializa postgres_data.
       - ./infra/postgres/init-app-roles.sh:/docker-entrypoint-initdb.d/10-init-app-roles.sh:ro
       # Rol de solo lectura del backup (D11): se monta solo en produccion.
       - ./infra/postgres/20-init-backup-role.sh:/docker-entrypoint-initdb.d/20-init-backup-role.sh:ro
+      # Rol de las tareas periodicas (change 28, D3): borra intentos de login viejos y escribe
+      # los resultados de la verificacion de consistencia; nada mas.
+      - ./infra/postgres/30-init-mantenimiento-role.sh:/docker-entrypoint-initdb.d/30-init-mantenimiento-role.sh:ro
     networks: [datos]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-distribuidora} -d ${POSTGRES_DB:-distribuidora}"]
@@ -84,7 +88,7 @@ services:
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
       # Solo se cree en X-Forwarded-For si la conexion viene de la red `frente` (D5): debe
       # coincidir con la subred declarada abajo.
-      FORWARDED_ALLOW_IPS: 172.30.10.0/24
+      FORWARDED_ALLOW_IPS: ${FRENTE_SUBRED:-172.30.10.0/24}
     depends_on:
       postgres:
         condition: service_healthy
@@ -119,9 +123,11 @@ services:
       DOMINIO: ${DOMINIO:?Falta DOMINIO en el archivo de entorno}
       CADDY_TLS: ${CADDY_TLS:?Falta CADDY_TLS en el archivo de entorno (internal o un correo)}
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+      # Por defecto 80 y 443; el entorno de aceptacion (change 28, D13) usa otros para convivir
+      # con el de desarrollo en la misma PC.
+      - "${CADDY_HTTP_PORT:-80}:80"
+      - "${CADDY_HTTPS_PORT:-443}:443"
+      - "${CADDY_HTTPS_PORT:-443}:443/udp"
     volumes:
       # Certificados y autoridad propia de Caddy: si se pierden, se emiten de nuevo (y con
       # `internal` cada telefono debe volver a confiar en la autoridad).
@@ -174,6 +180,43 @@ services:
       test: ["CMD", "sh", "/opt/backup/salud.sh"]
       interval: 5m
       timeout: 10s
+      retries: 1
+      start_period: 1m
+    logging: *logging
+
+  # Tareas periodicas (change 28, D2, D3, D6): cada dia a TAREAS_HORA verifica que los saldos
+  # coincidan con sus movimientos (nunca corrige nada: avisa) y borra los intentos de inicio de
+  # sesion de mas de 24 horas. Misma imagen que el backend, otra orden. Ve la base (red `datos`,
+  # que no sale a internet) y con su propio rol `app_mantenimiento`: no recibe ninguna otra
+  # contrasena. Sin puertos. Una corrida en el momento (el `entrypoint` recibe `ahora`):
+  #   docker compose -f docker-compose.prod.yml --env-file <archivo> run --rm tareas ahora
+  # Salud: no sano si la ultima corrida encontro diferencias o fallo, o si no hubo corrida en 26
+  # horas. Aviso externo (ADR-073): ademas esta en `salida` (la de copia-externa: tiene internet
+  # pero no ve ni Postgres ni el backend; solo se usa para SALIR) y, si AVISO_TAREAS_URL tiene una
+  # direccion, la llama tras cada corrida (a <direccion>/fail si hubo diferencias o fallo). Es una
+  # variable propia, distinta de AVISO_URL (la de la copia): cada control es independiente.
+  tareas:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.produccion
+    image: distribuidora-tareas:${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+    entrypoint: ["python", "-m", "app.tareas"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://app_mantenimiento:${APP_MANTENIMIENTO_DB_PASSWORD:?Falta APP_MANTENIMIENTO_DB_PASSWORD en el archivo de entorno}@postgres:5432/${POSTGRES_DB:-distribuidora}
+      TAREAS_HORA: ${TAREAS_HORA:-05:00}
+      TZ: ${TZ:-America/Argentina/Mendoza}
+      AVISO_TAREAS_URL: ${AVISO_TAREAS_URL:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migraciones:
+        condition: service_completed_successfully
+    networks: [datos, salida]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.tareas", "salud"]
+      interval: 5m
+      timeout: 30s
       retries: 1
       start_period: 1m
     logging: *logging
@@ -292,7 +335,7 @@ networks:
   frente:
     ipam:
       config:
-        - subnet: 172.30.10.0/24
+        - subnet: ${FRENTE_SUBRED:-172.30.10.0/24}
   # Backend, base y migraciones. Sin salida a internet y sin Caddy.
   datos:
     internal: true

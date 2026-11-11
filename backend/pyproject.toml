@@ -309,6 +309,43 @@ source_modules = [
 ]
 forbidden_modules = ["app.commands"]
 
+# Change 28 (`design.md` D2): `app.tareas` es el servicio de tareas periódicas (otra credencial de
+# base, `app_mantenimiento`). Alcanza a los módulos de negocio SOLO por su `service.py`: nunca por
+# sus modelos, repositorio, api, dominio ni comandos. `allow_indirect_imports` por las cadenas
+# `tareas -> service -> models` (mismo criterio que los contratos de arriba).
+[[tool.importlinter.contracts]]
+id = "tareas-solo-por-service"
+name = "tareas alcanza a los modulos de negocio solo por su service.py"
+type = "forbidden"
+source_modules = ["app.tareas"]
+forbidden_modules = [
+    "app.modules.identidad.models",
+    "app.modules.identidad.repository",
+    "app.modules.identidad.api",
+    "app.modules.identidad.domain",
+    "app.modules.costeo.models",
+    "app.modules.costeo.repository",
+    "app.modules.costeo.domain",
+    "app.modules.cuentas_corrientes.models",
+    "app.modules.cuentas_corrientes.repository",
+    "app.modules.cuentas_corrientes.api",
+    "app.modules.cuentas_corrientes.domain",
+    "app.modules.stock.models",
+    "app.modules.stock.repository",
+    "app.modules.stock.api",
+    "app.modules.stock.domain",
+    "app.commands",
+    "fastapi",
+]
+allow_indirect_imports = "true"
+
+[[tool.importlinter.contracts]]
+id = "nadie-importa-tareas"
+name = "ningun modulo de negocio ni el bus importan tareas"
+type = "forbidden"
+source_modules = ["app.modules", "app.commands", "app.core", "app.api_v1"]
+forbidden_modules = ["app.tareas"]
+
 [[tool.importlinter.contracts]]
 id = "sync-solo-service"
 name = "sync solo alcanza a los demas modulos por su service.py"

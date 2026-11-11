@@ -133,7 +133,7 @@ Todo movimiento y toda fila de saldo DEBEN referenciar un cliente o un proveedor
 
 ### Requirement: La consistencia entre saldo y libro se puede verificar sin corregir
 
-El servicio DEBE exponer una consulta SQL que compare cada fila de `saldo_cuenta` con la suma de su libro y devuelva las diferencias, sin corregirlas (`02` §7.6, ADR-015). La tarea diaria que la ejecuta y notifica es del change 28.
+El servicio DEBE exponer una consulta SQL que compare cada fila de `saldo_cuenta` con la suma de su libro y devuelva las diferencias, sin corregirlas (`02` §7.6, ADR-015). La tarea diaria que la ejecuta y notifica (servicio `tareas`, con aviso en `/admin`, registro crítico y aviso externo opcional) está implementada desde el change 28 (ADR-073).
 
 #### Scenario: Sin diferencias después de operar
 

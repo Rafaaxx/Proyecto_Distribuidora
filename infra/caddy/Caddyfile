@@ -18,9 +18,12 @@
 
 	encode gzip
 
-	# HSTS un año, sin includeSubDomains ni preload (no afecta otros subdominios). CSP y demas
-	# encabezados: change 28.
+	# HSTS un año, sin includeSubDomains ni preload (no afecta otros subdominios).
 	header Strict-Transport-Security "max-age=31536000"
+
+	# CSP y demas encabezados de seguridad (change 28, D8, D9): el mismo fragmento que usa el
+	# Caddyfile de desarrollo.
+	import /etc/caddy/encabezados.caddy
 
 	# La API va al backend: mismo origen para el navegador, sin CORS (02 §11).
 	handle /api/* {

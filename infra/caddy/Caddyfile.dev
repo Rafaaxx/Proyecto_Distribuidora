@@ -19,6 +19,10 @@ https://{$LAN_IP} {
 
 	encode gzip
 
+	# Los mismos encabezados de seguridad y CSP que produccion (change 28, D8, D9), para que el
+	# telefono de prueba vea lo mismo. Sin HSTS: es solo de produccion.
+	import /etc/caddy/encabezados.caddy
+
 	# La API va al backend: mismo origen para el navegador, sin CORS (`02` §11).
 	handle /api/* {
 		reverse_proxy backend:8000

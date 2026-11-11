@@ -2352,6 +2352,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sistema/consistencia": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consistencia Del Sistema
+         * @description El último resultado de la verificación de consistencia de la organización del token
+         *     (ADR-015, `02` §7.6): momento de la corrida y, si hubo diferencias, el detalle con los nombres
+         *     de cuentas, productos y ubicaciones. Solo lectura: nunca corrige un saldo. Sin ninguna corrida
+         *     todavía, `resultado` y `ejecutada_en` vienen en `null`.
+         */
+        get: operations["consistencia_del_sistema_api_v1_sistema_consistencia_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/stock/ubicaciones": {
         parameters: {
             query?: never;
@@ -4673,6 +4696,19 @@ export interface components {
             modalidad_iva_default: string | null;
         };
         /**
+         * ConsistenciaResponse
+         * @description El último resultado de la verificación de la organización. `resultado` y `ejecutada_en`
+         *     son `null` si todavía no corrió.
+         */
+        ConsistenciaResponse: {
+            /** Ejecutada En */
+            ejecutada_en: string | null;
+            /** Resultado */
+            resultado: string | null;
+            /** Diferencias */
+            diferencias: components["schemas"]["DiferenciaDeConsistenciaResponse"][];
+        };
+        /**
          * ConsumidorFinalConfigurarRequest
          * @description Cuerpo de `POST /clientes/consumidor-final` (D4, ADR-029). Solo el
          *     nombre: la dirección y el contacto son genéricos y el cliente lo crea
@@ -5326,6 +5362,42 @@ export interface components {
             ubicacion_destino_id: string;
             /** Lineas */
             lineas: components["schemas"]["LineaDeDevolucionRequest"][];
+        };
+        /**
+         * DiferenciaDeConsistenciaResponse
+         * @description Una diferencia entre un saldo y su libro (D5). Según el `tipo` (`SALDO_CUENTA`,
+         *     `STOCK_SALDO`, `STOCK_TOTAL`, `PROMEDIO_COSTO`) vienen unos campos y los demás `null`. Los
+         *     importes y los costos, como string (INV-03); las cantidades, enteros en unidad base.
+         */
+        DiferenciaDeConsistenciaResponse: {
+            /** Tipo */
+            tipo: string;
+            /** Cuenta Tipo */
+            cuenta_tipo: string | null;
+            /** Entidad Id */
+            entidad_id: string | null;
+            /** Entidad Nombre */
+            entidad_nombre: string | null;
+            /** Saldo Materializado */
+            saldo_materializado: string | null;
+            /** Suma Del Libro */
+            suma_del_libro: string | null;
+            /** Producto Id */
+            producto_id: string | null;
+            /** Producto Nombre */
+            producto_nombre: string | null;
+            /** Ubicacion Id */
+            ubicacion_id: string | null;
+            /** Ubicacion Nombre */
+            ubicacion_nombre: string | null;
+            /** Materializado */
+            materializado: number | null;
+            /** Esperado */
+            esperado: number | null;
+            /** Promedio Vigente */
+            promedio_vigente: string | null;
+            /** Promedio Historia */
+            promedio_historia: string | null;
         };
         /**
          * DiferenciaDeCostoResponse
@@ -15185,6 +15257,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReporteDeSaldosDeProveedoresResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    consistencia_del_sistema_api_v1_sistema_consistencia_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsistenciaResponse"];
                 };
             };
             /** @description Validation Error */

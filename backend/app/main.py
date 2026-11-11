@@ -124,7 +124,17 @@ def crear_app(settings: Settings) -> FastAPI:
     """
     configurar_logging(settings.log_level)
 
-    app = FastAPI(title="Distribuidora API", version=settings.app_version)
+    # En producción no se publican `/docs`, `/redoc` ni `/openapi.json` (change 28, D8; `02` §18):
+    # Caddy ya no los deja pasar, pero el backend tampoco los sirve (defensa extra). Fuera de
+    # producción siguen: la generación de tipos del cliente lee `openapi.json`.
+    en_produccion = settings.environment == "production"
+    app = FastAPI(
+        title="Distribuidora API",
+        version=settings.app_version,
+        docs_url=None if en_produccion else "/docs",
+        redoc_url=None if en_produccion else "/redoc",
+        openapi_url=None if en_produccion else "/openapi.json",
+    )
 
     engine = crear_engine(settings.database_url)
     session_factory = crear_session_factory(engine)

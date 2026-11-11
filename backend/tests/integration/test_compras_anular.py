@@ -144,13 +144,14 @@ def test_la_anulacion_deja_una_sola_auditoria(entorno: Entorno) -> None:
     entorno.anular(compra_id, operation_id=operation_id)
 
     assert entorno.auditorias(operation_id) == 1
-    # Deuda nominada (D10): el motivo de la anulación sigue sin copiarse a la auditoría.
+    # Change 28, D1: el motivo de la anulación se copia a la auditoría (AUD-02); la observación
+    # solo existe si hubo una ubicación tomada (STK-09).
     filas = entorno.sesion.scalars(
         select(Auditoria).where(
             Auditoria.organizacion_id == entorno.org, Auditoria.operation_id == operation_id
         )
     ).all()
-    assert [(f.motivo_id, f.observacion) for f in filas] == [(None, None)]
+    assert [(f.motivo_id, f.observacion) for f in filas] == [(entorno.motivo_id, None)]
 
 
 # --- reversión del promedio (CMP-06) ---------------------------------------------------

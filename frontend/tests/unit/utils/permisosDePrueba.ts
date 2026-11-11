@@ -62,6 +62,7 @@ export const PERMISOS_POR_ROL: Record<RolDePrueba, CodigoPermiso[]> = {
     'FACTURAR',
     'FACTURAR_ABSORBIENDO_IVA',
     'ANULAR_FACTURA',
+    'VER_CONSISTENCIA',
   ],
   GES: [
     'GESTIONAR_CATALOGO',
@@ -87,6 +88,7 @@ export const PERMISOS_POR_ROL: Record<RolDePrueba, CodigoPermiso[]> = {
     'VER_REPORTES',
     'FACTURAR',
     'ANULAR_FACTURA',
+    'VER_CONSISTENCIA',
   ],
   SUP: [
     'GESTIONAR_DISPOSITIVOS',

@@ -10747,6 +10747,56 @@
         }
       }
     },
+    "/api/v1/sistema/consistencia": {
+      "get": {
+        "tags": [
+          "sistema"
+        ],
+        "summary": "Consistencia Del Sistema",
+        "description": "El último resultado de la verificación de consistencia de la organización del token\n(ADR-015, `02` §7.6): momento de la corrida y, si hubo diferencias, el detalle con los nombres\nde cuentas, productos y ubicaciones. Solo lectura: nunca corrige un saldo. Sin ninguna corrida\ntodavía, `resultado` y `ejecutada_en` vienen en `null`.",
+        "operationId": "consistencia_del_sistema_api_v1_sistema_consistencia_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsistenciaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/stock/ubicaciones": {
       "post": {
         "tags": [
@@ -18060,6 +18110,48 @@
         ],
         "title": "ConfiguracionFiscalResponse"
       },
+      "ConsistenciaResponse": {
+        "properties": {
+          "ejecutada_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ejecutada En"
+          },
+          "resultado": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resultado"
+          },
+          "diferencias": {
+            "items": {
+              "$ref": "#/components/schemas/DiferenciaDeConsistenciaResponse"
+            },
+            "type": "array",
+            "title": "Diferencias"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ejecutada_en",
+          "resultado",
+          "diferencias"
+        ],
+        "title": "ConsistenciaResponse",
+        "description": "El último resultado de la verificación de la organización. `resultado` y `ejecutada_en`\nson `null` si todavía no corrió."
+      },
       "ConsumidorFinalConfigurarRequest": {
         "properties": {
           "nombre": {
@@ -19599,6 +19691,179 @@
         ],
         "title": "DevolucionRequest",
         "description": "El destino (un depósito activo y sin toma) y de 1 a 200 líneas. `extra=\"forbid\"`."
+      },
+      "DiferenciaDeConsistenciaResponse": {
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "cuenta_tipo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cuenta Tipo"
+          },
+          "entidad_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entidad Id"
+          },
+          "entidad_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entidad Nombre"
+          },
+          "saldo_materializado": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Saldo Materializado"
+          },
+          "suma_del_libro": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suma Del Libro"
+          },
+          "producto_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Producto Id"
+          },
+          "producto_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Producto Nombre"
+          },
+          "ubicacion_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ubicacion Id"
+          },
+          "ubicacion_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ubicacion Nombre"
+          },
+          "materializado": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Materializado"
+          },
+          "esperado": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Esperado"
+          },
+          "promedio_vigente": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Promedio Vigente"
+          },
+          "promedio_historia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Promedio Historia"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tipo",
+          "cuenta_tipo",
+          "entidad_id",
+          "entidad_nombre",
+          "saldo_materializado",
+          "suma_del_libro",
+          "producto_id",
+          "producto_nombre",
+          "ubicacion_id",
+          "ubicacion_nombre",
+          "materializado",
+          "esperado",
+          "promedio_vigente",
+          "promedio_historia"
+        ],
+        "title": "DiferenciaDeConsistenciaResponse",
+        "description": "Una diferencia entre un saldo y su libro (D5). Según el `tipo` (`SALDO_CUENTA`,\n`STOCK_SALDO`, `STOCK_TOTAL`, `PROMEDIO_COSTO`) vienen unos campos y los demás `null`. Los\nimportes y los costos, como string (INV-03); las cantidades, enteros en unidad base."
       },
       "DiferenciaDeCostoResponse": {
         "properties": {

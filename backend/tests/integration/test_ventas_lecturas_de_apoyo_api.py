@@ -783,3 +783,23 @@ def test_inv21_los_precios_de_una_version_de_otra_organizacion_responden_404(
     assert por_version.status_code == 404
     assert con_lista_propia.status_code == 404
     assert con_lista_ajena.status_code == 404
+
+
+def test_inv21_la_numeracion_de_una_organizacion_no_cuenta_las_ventas_de_la_otra(
+    cliente_http: TestClient, sesion: Session
+) -> None:
+    """Change 28, tarea 5.1 (INV-21, SEG-07): `GET /ventas/numeracion` no recibe ningún
+    parámetro; la numeración sale del dispositivo de la sesión. Dos organizaciones con login
+    real: la venta de una no mueve el correlativo de la otra."""
+    propia = Sesion(sesion)
+    ajena = Sesion(sesion)
+    headers = propia.entrar(cliente_http)
+    headers_ajena = ajena.entrar(cliente_http)
+
+    vendida = cliente_http.post(URL_VENTAS, json=ajena.cuerpo(), headers=_con_op(headers_ajena))
+    de_la_propia = cliente_http.get(URL_NUMERACION, headers=headers)
+    de_la_ajena = cliente_http.get(URL_NUMERACION, headers=headers_ajena)
+
+    assert vendida.status_code == 201, vendida.text
+    assert de_la_propia.json()["ultimo_correlativo"] == 0
+    assert de_la_ajena.json()["ultimo_correlativo"] == 1

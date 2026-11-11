@@ -9,8 +9,9 @@ on:
 # API generados desde el OpenAPI) quedó documentado como hueco deliberado
 # (`design.md` D3 del change 01b) hasta que existiera un OpenAPI real que
 # generar -- lo cierra el change 03 (tarea 13.1) con el job
-# `tipos-api-actualizados`. La suite de Playwright en la rama principal
-# sigue pendiente (fuera del alcance de este change).
+# `tipos-api-actualizados`. Las pruebas de concurrencia corren desde el change 28
+# (paso propio del trabajo 5). La suite de Playwright en la rama principal
+# corre solo en push a `main` (trabajo `aceptacion-playwright`, change 28, D16).
 
 defaults:
   run:
@@ -156,6 +157,48 @@ jobs:
         # `tests/infra` (change 27a, D17) tambien usa Docker: compose de produccion, Caddy,
         # backups y roles de base.
         run: python -m pytest tests/integration tests/infra
+      - name: pytest concurrencia
+        working-directory: backend
+        # Change 28 (D12): las pruebas de concurrencia detectan carreras reales contra PostgreSQL
+        # real (Testcontainers) y van en su propio paso porque sus `conftest` chocan con los de
+        # `tests/integration` si se juntan en un solo comando. Una falla hace fallar la
+        # verificacion: una prueba intermitente no se ignora, es una carrera.
+        run: python -m pytest tests/concurrency
+
+  aceptacion-playwright:
+    name: "Aceptación: suite de Playwright en la rama principal"
+    # Change 28 (D16, `docs/02-arquitectura.md` §15): solo en push a `main`. En las ramas de change
+    # se corre a mano (`npm run test:e2e`) antes de archivar. Levanta el compose de producción como
+    # un proyecto aparte, siembra el escenario, corre la suite y descarta el entorno.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar dependencias
+        working-directory: frontend
+        run: npm ci
+      - name: Instalar Chromium de Playwright
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Levantar el entorno de aceptación y correr la suite
+        working-directory: frontend
+        run: npm run test:e2e
+      - name: Subir las trazas de las pruebas fallidas
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trazas-de-aceptacion
+          path: |
+            frontend/test-results
+            frontend/playwright-report
+          if-no-files-found: ignore
+          retention-days: 14
 
   build-frontend:
     name: "6. Build de producción del frontend"

@@ -5,6 +5,7 @@ import { CODIGO_DE_EXCESO_AL_SINCRONIZAR, lineasDeAviso, type LineaDeAviso } fro
 import { primeraSeccionPermitida } from '../../features/identidad/secciones'
 import { usePermisos } from '../../features/identidad/usePermisos'
 import { useResumenDePendientes } from '../../features/revision/hooks'
+import { AvisoDeConsistencia } from './AvisoDeConsistencia'
 
 /**
  * Ruta índice de `/admin` (`/admin/inicio`, tarea 7.6, `design.md` D5-A,
@@ -29,6 +30,9 @@ import { useResumenDePendientes } from '../../features/revision/hooks'
  * Change 25 (tarea 15.1, D5, CRE-09): quien tiene `REVISAR_OBSERVACIONES` aterriza en la tarjeta «Para revisar»
  * —avisos, operaciones rechazadas y, aparte, los excesos de crédito detectados al sincronizar— en vez de saltar
  * a una sección; desde el menú llega a todas las demás.
+ *
+ * Change 28 (tarea 3.2, D5): encima de esa tarjeta, el aviso de diferencias de consistencia, solo para quien tiene
+ * `VER_CONSISTENCIA` y mientras la última verificación haya encontrado diferencias.
  */
 const SIN_SECCIONES = 'Tu usuario no tiene secciones de administración disponibles'
 const SIN_AVISOS = 'Sin avisos pendientes.'
@@ -45,7 +49,12 @@ export function AdminInicio() {
   }
 
   if (permisos.tiene('REVISAR_OBSERVACIONES')) {
-    return <ParaRevisar />
+    return (
+      <div className="flex flex-col gap-4">
+        <AvisoDeConsistencia />
+        <ParaRevisar />
+      </div>
+    )
   }
 
   const primera = primeraSeccionPermitida(permisos.tiene)

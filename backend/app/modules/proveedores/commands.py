@@ -33,7 +33,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.commands.auditoria import DatosDeAuditoria, constancia_de_ubicacion_tomada
+from app.commands.auditoria import (
+    DatosDeAuditoria,
+    constancia_de_ubicacion_tomada,
+    observacion_de_ubicacion_tomada,
+)
 from app.commands.catalogo import declarar_tipo
 from app.commands.observaciones import ObservacionProducida
 from app.commands.registro import SesionDeHandler, registrar_handler
@@ -425,7 +429,10 @@ def manejar_compra_anular(
         },
         None,
         observaciones,
-        constancia_de_ubicacion_tomada([resultado.jornada_tomada_id]),
+        DatosDeAuditoria(
+            motivo_id=contenido.motivo_id,
+            observacion=observacion_de_ubicacion_tomada([resultado.jornada_tomada_id]),
+        ),
     )
 
 
@@ -541,10 +548,11 @@ def manejar_pago_proveedor_anular(
     *,
     sesion: SesionDeHandler,
     reloj: Clock,
-) -> ResultadoHandler:
+) -> ResultadoHandlerConAuditoria:
     """Anula un pago a proveedor (D14: `ANULAR_PAGO_PROVEEDOR`). El resultado se guarda y
     se reenvía tal cual ante un doble envío (INV-06): devuelve el id del pago, su estado y
-    el saldo resultante del proveedor, con el importe y el saldo como string (INV-03)."""
+    el saldo resultante del proveedor, con el importe y el saldo como string (INV-03), y le pide al
+    bus que copie el motivo a su fila de auditoría (AUD-02, change 28 D1)."""
     _exigir_permiso(sobre, sesion, PERMISO_ANULAR_PAGO_PROVEEDOR)
     resultado = proveedores_service.anular_pago(
         sobre.organizacion_id,
@@ -565,6 +573,8 @@ def manejar_pago_proveedor_anular(
             "saldo": str(resultado.saldo),
         },
         None,
+        (),
+        DatosDeAuditoria(motivo_id=contenido.motivo_id),
     )
 
 

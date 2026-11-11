@@ -43,14 +43,14 @@ def _insertar_catalogo(engine: Engine) -> None:
             )
 
 
-def test_el_catalogo_contiene_los_40_permisos_de_la_documentacion(
+def test_el_catalogo_contiene_los_41_permisos_de_la_documentacion(
     database_url: str, _engine_de_sesion: Engine
 ) -> None:
     """Escenario "El catálogo contiene los permisos de la documentación"."""
     aplicar_migraciones(database_url)
     codigos = _codigos_en_catalogo(_engine_de_sesion)
 
-    assert len(PERMISOS_DEL_CATALOGO) == 40
+    assert len(PERMISOS_DEL_CATALOGO) == 41
     assert codigos == {permiso.codigo for permiso in PERMISOS_DEL_CATALOGO}
     for codigo in (
         "ADMIN_USUARIOS",
@@ -60,6 +60,7 @@ def test_el_catalogo_contiene_los_40_permisos_de_la_documentacion(
         "AUTORIZAR_DESCUENTO",
         "VER_AUDITORIA",
         "ANULAR_TRANSFERENCIA",
+        "VER_CONSISTENCIA",
     ):
         assert codigo in codigos
 
@@ -98,12 +99,12 @@ def test_ningun_permiso_del_catalogo_tiene_organizacion(_engine_de_sesion: Engin
 def test_sincronizar_el_catalogo_dos_veces_no_lo_duplica(_engine_de_sesion: Engine) -> None:
     """Escenario "Sincronizar el catálogo dos veces no lo duplica"."""
     antes = _contar_permisos(_engine_de_sesion)
-    assert antes == 40
+    assert antes == 41
 
     _insertar_catalogo(_engine_de_sesion)
     _insertar_catalogo(_engine_de_sesion)
 
-    assert _contar_permisos(_engine_de_sesion) == 40
+    assert _contar_permisos(_engine_de_sesion) == 41
     assert _codigos_en_catalogo(_engine_de_sesion) == {p.codigo for p in PERMISOS_DEL_CATALOGO}
 
 

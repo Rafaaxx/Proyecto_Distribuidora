@@ -26,6 +26,25 @@ def test_ci_corre_las_pruebas_de_infra_en_el_trabajo_de_integracion():
     assert re.search(r"pytest\s+tests/integration\s+tests/infra", bloque)
 
 
+def test_ci_corre_las_pruebas_de_concurrencia_en_un_paso_propio():
+    """Change 28, tarea 5.3 (D12; spec `sistema/integracion-continua`, escenario «Las pruebas de
+    concurrencia corren en cada push»): `pytest tests/concurrency` en su propio paso del trabajo
+    de integracion (sus `conftest` chocan con los de integracion si se juntan en un comando)."""
+    texto = CI.read_text(encoding="utf-8")
+    bloque = texto.split("integracion-testcontainers:")[1].split("build-frontend:")[0]
+    pasos = re.findall(r"^\s+run:\s*(python -m pytest .+)$", bloque, re.MULTILINE)
+    assert "python -m pytest tests/concurrency" in pasos
+    for comando in pasos:
+        if "tests/concurrency" in comando:
+            assert "tests/integration" not in comando and "tests/infra" not in comando
+
+
+def test_ci_no_deja_la_concurrencia_como_pendiente_en_el_readme_de_workflows():
+    texto = (RAIZ / ".github" / "workflows" / "README.md").read_text(encoding="utf-8")
+    assert "no se agrega un job de CI para un directorio vacío" not in texto
+    assert "tests/concurrency" in texto
+
+
 def test_readme_enlaza_al_runbook():
     assert "docs/runbook/puesta-en-marcha.md" in README.read_text(encoding="utf-8")
 
@@ -217,8 +236,15 @@ def test_puesta_en_marcha_explica_el_chown_de_windows_para_carpetas_del_27a():
 def test_puesta_en_marcha_trae_la_lista_para_actualizar_desde_el_27a():
     texto = _runbook()
     sec = texto[texto.index("Actualizar desde 0.27") :]
-    for f in ("chown -R 999:999", "BACKUP_DIARIOS", "BACKUP_SEMANALES", "COPIA_", "PRUEBA_",
-              "bajados", "up -d --build"):
+    for f in (
+        "chown -R 999:999",
+        "BACKUP_DIARIOS",
+        "BACKUP_SEMANALES",
+        "COPIA_",
+        "PRUEBA_",
+        "bajados",
+        "up -d --build",
+    ):
         assert f in sec, f
 
 
@@ -239,3 +265,87 @@ def test_ensayo_baja_la_oficina_sin_v_antes_de_levantar_caddy_del_entorno_separa
     assert baja < ens.index("dc2 up -d caddy") < ens.index("dc2 down -v") < ens.index("dc up -d\n")
     assert "172.30.10.0/24" in ens
     assert "uno por línea" in ens
+
+
+def _bloque_de_aceptacion() -> str:
+    texto = CI.read_text(encoding="utf-8")
+    assert "\n  aceptacion-playwright:" in texto, "falta el trabajo de aceptación de Playwright"
+    return texto.split("\n  aceptacion-playwright:")[1].split("\n  build-frontend:")[0]
+
+
+def test_ci_corre_playwright_solo_en_push_a_main():
+    """Change 28, tarea 7.4 (D16; spec `sistema/integracion-continua`, «La suite de aceptación corre
+    en la rama principal»): el trabajo de Playwright se ejecuta solo en push a `main`; los demás
+    trabajos siguen corriendo en cada push y pull request."""
+    bloque = _bloque_de_aceptacion()
+    assert re.search(
+        r"^\s+if:\s*github\.event_name == 'push' && github\.ref == 'refs/heads/main'\s*$",
+        bloque,
+        re.MULTILINE,
+    )
+    assert re.search(r"^\s+push:\s*$", CI.read_text(encoding="utf-8"), re.MULTILINE)
+
+
+def test_ci_levanta_el_entorno_y_corre_la_suite_con_el_script_de_aceptacion():
+    bloque = _bloque_de_aceptacion()
+    assert re.search(r"^\s+run:\s*npm run test:e2e\s*$", bloque, re.MULTILINE)
+    assert "npx playwright install" in bloque and "chromium" in bloque
+
+
+def test_ci_sube_las_trazas_de_las_pruebas_fallidas():
+    bloque = _bloque_de_aceptacion()
+    paso = bloque.split("upload-artifact")[1]
+    assert re.search(r"^\s+if:\s*failure\(\)\s*$", bloque, re.MULTILINE)
+    assert "frontend/test-results" in paso
+    assert "frontend/playwright-report" in paso
+
+
+# --- Runbook del change 28 (tarea 8.1; D2, D3, D5, D6, D14) ---------------------------------
+
+
+@pytest.mark.parametrize(
+    "fragmento",
+    [
+        "CREATE ROLE app_mantenimiento",  # entorno existente: crear el rol ANTES de migrar
+        "APP_MANTENIMIENTO_DB_PASSWORD",
+        "-v clave=",  # contraseña como variable de psql, sin pegarla en el SQL
+        "run --rm tareas ahora",  # verificación a pedido
+        "Verificación de consistencia: sin diferencias",
+        "no corregir a mano",
+        "TAREAS_HORA",
+        "AVISO_TAREAS_URL",
+        "healthchecks.io",
+        "Verificación diaria",
+        "run --rm tareas ahora",
+        "npm run test:e2e",  # suite de aceptación
+        "distribuidora-aceptacion",
+    ],
+)
+def test_runbook_cubre_las_tareas_periodicas_y_la_aceptacion(fragmento):
+    assert fragmento in _runbook()
+
+
+def test_runbook_ya_no_dice_que_tareas_no_puede_avisar_por_internet():
+    # ADR-073: `tareas` tambien esta en la red `salida` y avisa por su propia variable.
+    texto = _runbook()
+    assert "Limitación del aviso externo" not in texto
+    assert "no puede llamar a `AVISO_URL`" not in texto
+
+
+def test_runbook_crea_el_rol_de_mantenimiento_antes_de_migrar():
+    texto = _runbook()
+    seccion = texto[texto.index("### C12") : texto.index("## Si algo no funciona")]
+    assert seccion.index("CREATE ROLE app_mantenimiento") < seccion.index("run --rm migraciones")
+
+
+def test_runbook_explica_la_salud_de_tareas_y_por_que_puede_avisar_por_internet():
+    texto = _runbook()
+    assert "`tareas` pasa a «unhealthy»" in texto
+    # ADR-073: `datos` no sale a internet; `tareas` sale solo por `salida`.
+    assert "`datos` (la de la base, que **no** tiene salida a internet)" in texto
+    assert "la red `salida`" in texto
+
+
+def test_actualizar_menciona_el_rol_de_mantenimiento_antes_de_migrar():
+    seccion = _seccion_actualizar()
+    assert "C12" in seccion

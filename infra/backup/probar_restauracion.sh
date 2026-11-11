@@ -70,12 +70,13 @@ pg_ctl -D "$base/datos" -w -s -l "$base/servidor.log" \
   || fallar "el servidor temporal no arranco: $(tr '\n' ' ' < "$base/servidor.log" | cut -c1-200)"
 
 export PGHOST="$base" PGUSER=postgres
-# Los tres roles de la aplicacion, sin ingreso ni contrasena; la base con el mismo dueno y
+# Los cuatro roles de la aplicacion (el dump trae los GRANT de cada uno), sin ingreso ni contrasena; la base con el mismo dueno y
 # permisos de esquema que deja init-app-roles.sh.
 psql -X -q -v ON_ERROR_STOP=1 -d postgres <<'EOSQL' || fallar "no se pudieron preparar los roles y la base temporal"
 CREATE ROLE app_migrations NOLOGIN;
 CREATE ROLE app_runtime NOLOGIN;
 CREATE ROLE app_backup NOLOGIN;
+CREATE ROLE app_mantenimiento NOLOGIN;
 CREATE DATABASE distribuidora OWNER app_migrations;
 EOSQL
 export PGDATABASE=distribuidora

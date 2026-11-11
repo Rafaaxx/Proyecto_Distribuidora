@@ -439,7 +439,9 @@ Tres índices únicos parciales sobre las jornadas no cerradas (`ABIERTA` o `EN_
 
 ### 7.6 Verificación de consistencia
 
-Una tarea diaria compara cada tabla de saldo con la suma de su libro. Cualquier diferencia se registra como error crítico en el log y se notifica al administrador. Nunca se corrige automáticamente: una diferencia indica un defecto que debe investigarse.
+Una tarea diaria (servicio `tareas`, `TAREAS_HORA`) compara, por organización, `saldo_cuenta` con su libro, `stock_saldo` con su libro, `stock_total` con la suma de los saldos del producto y el promedio vigente con el último `costo_producto_mov`. El resultado se guarda en `verificacion_consistencia`; una diferencia se registra como error crítico en el log, deja no sana la salud del servicio, usa el aviso externo opcional y se muestra en `/admin` a quien tiene `VER_CONSISTENCIA` mientras el último resultado tenga diferencias. Nunca se corrige automáticamente: una diferencia indica un defecto que debe investigarse (ADR-015, ADR-073).
+
+La lectura del resultado pasa por `GET /api/v1/sistema/consistencia` (permiso `VER_CONSISTENCIA`). El servicio `tareas` puede avisar a un servicio externo de «hombre muerto» (`AVISO_TAREAS_URL`, opcional, distinta de `AVISO_URL` de `copia-externa`): tras cada corrida llama a la dirección si no hubo diferencias ni fallos y a `<dirección>/fail` si los hubo; un aviso que no llega no altera la corrida (ADR-073). Las señales locales son el aviso en `/admin`, el registro crítico y la salud no sana.
 
 ### 7.7 Numeración de notas de venta
 
@@ -691,6 +693,9 @@ Reglas:
 - **DEBE:** las pruebas de integración usan PostgreSQL real. No se usa SQLite.
 - **DEBE:** cada invariante de `01` §20 tiene al menos una prueba que lo cite por identificador.
 - **DEBE:** cada escenario de una spec de OpenSpec tiene al menos una prueba.
+- Un ratchet verifica que cada invariante de `01` §20 de la etapa 1 (todos salvo INV-09 e INV-20) esté citado por una prueba que corre la CI (ADR-073).
+- La cobertura de aislamiento asocia cada ruta de negocio con las pruebas que la ejercen; el ratchet falla si una no existe o no cita INV-21 (ADR-073).
+- La suite de Playwright corre contra el compose de producción en un proyecto aparte (`distribuidora-aceptacion`), con la siembra del escenario de aceptación; falla ante cualquier violación de CSP. Registra el service worker con `--ignore-certificate-errors` (certificado interno de Caddy); el tramo de los criterios 5 a 8 corre en un único teléfono sin señal; el criterio 9 lo anula `sup01` desde `/admin`. El criterio 12 lo cubren las pruebas de restauración de `backend/tests/infra` (ADR-073).
 - Las pruebas de integración aíslan con una transacción revertida al final de cada prueba. Las de concurrencia **DEBEN** confirmar sus transacciones y limpiar la base al terminar, porque un rollback externo impediría que las conexiones concurrentes se vean entre sí.
 - La prueba de corte a mitad de venta inyecta una falla después de escribir el movimiento de stock y verifica que no quedó ningún registro de la operación (INV-01).
 - La prueba de aislamiento recorre dinámicamente todas las rutas registradas (INV-21).
@@ -704,7 +709,7 @@ CI en cada push:
 5. Integración y concurrencia con Testcontainers
 6. Build del frontend
 
-El paso 5 también corre `backend/tests/infra` (compose de producción, Caddyfile en los dos modos de `CADDY_TLS`, imagen de backup, roles de base) (ADR-071).
+El paso 5 corre `tests/integration` y `tests/infra` (compose de producción, Caddyfile en los dos modos de `CADDY_TLS`, imágenes de respaldo, roles de base) y, en un paso propio, `tests/concurrency` (ADR-071, ADR-073).
 
 En la rama principal, además: suite de Playwright contra el entorno levantado con Docker Compose.
 
@@ -713,7 +718,7 @@ En la rama principal, además: suite de Playwright contra el entorno levantado c
 ### 16.1 Desarrollo
 
 - `docker compose up` levanta PostgreSQL, backend con recarga automática y frontend con Vite.
-- Datos de ejemplo cargables con un comando (`make seed` o equivalente), que incluyen el escenario de la demo de aceptación.
+- Datos de ejemplo cargables con un comando: `python -m app.seed` (organización inicial) y `python -m app.seed --escenario-aceptacion` (usuarios, ubicaciones y configuración de la demostración de `00` §9; repetible) (ADR-073).
 - Los service workers requieren HTTPS salvo en `localhost`. Para probar desde un teléfono se usa un túnel HTTPS o certificados locales con mkcert.
 
 ### 16.2 Producción (etapa 1)
@@ -730,6 +735,7 @@ Un servidor con Docker Compose:
 | `copia-externa` | Sube cada backup conservado, cifrado en el equipo, a un almacenamiento externo compatible con S3; no replica borrados; misma retención en el destino; sin credenciales de base (ADR-072) |
 | `prueba-restauracion` | Una vez por mes, sin red y sin aviso externo, restaura el último backup en un Postgres temporal propio (en el disco del contenedor, que se borra tras la prueba) y comprueba que los datos coinciden; si falla, queda `unhealthy` (ADR-072) |
 | `restauracion` | A pedido (perfil aparte): restaura un backup solo en una base vacía, como `app_migrations` (ADR-072) |
+| `tareas` | Todos los días a `TAREAS_HORA`: verificación de consistencia por organización y limpieza de `intento_login` de más de 24 horas, con el rol `app_mantenimiento`; a pedido, `tareas ahora`. Redes `datos` y `salida` (solo saliente; sin puertos); variables `TAREAS_HORA`, `TZ`, `AVISO_TAREAS_URL` (opcional) y `APP_MANTENIMIENTO_DB_PASSWORD` (sexto secreto del archivo de entorno) (ADR-073) |
 
 - Archivo `docker-compose.prod.yml`, independiente del de desarrollo; redes `frente` (Caddy y backend) y `datos` (interna: backend, Postgres, migraciones y backup); solo Caddy publica puertos (ADR-071).
 - El mismo compose corre en una PC de la oficina o en un servidor con dominio: `DOMINIO` y `CADDY_TLS` (autoridad propia de Caddy o Let's Encrypt) se fijan en el archivo de entorno (ADR-071).
@@ -743,6 +749,7 @@ Un servidor con Docker Compose:
 - Red `salida` solo para `copia-externa` (salida a internet, sin acceso a la base); `prueba-restauracion` sin red.
 - Los servicios de respaldo corren con un usuario sin privilegios (`${BACKUP_UID:-999}:${BACKUP_GID:-999}`); la carpeta de backups heredada del 27a necesita un `chown` único a ese dueño.
 - Restauración, prueba mensual y mudanza a otro equipo: `docs/runbook/restauracion.md`.
+- `app_mantenimiento` se crea con `30-init-mantenimiento-role.sh` en un volumen nuevo; en un entorno existente se crea **antes** de migrar (runbook C12). `FRENTE_SUBRED` y los puertos de Caddy son variables del compose de producción, para convivir con el entorno de desarrollo (ADR-073).
 - `copia-externa` se configura solo por variables, verifica cada archivo subido con `rclone check --download` y avisa por salud a las 26 horas sin copia nueva o ante un fallo de credenciales o de clave. `prueba-restauracion` avisa por salud a los 35 días sin una prueba buena y guarda su Postgres temporal en el disco del contenedor, no en memoria.
 - **DEBE:** una restauración de backup se prueba en un entorno separado antes de salir a producción (desde la copia externa, con la hoja de recuperación) y luego al menos una vez por mes; la prueba mensual es automática y su salud avisa a los 35 días sin una prueba buena (`00` §9, criterio 12; ADR-072).
 
@@ -761,8 +768,8 @@ Un servidor con Docker Compose:
 - Límite de intentos en login por par escrito (organización y usuario, 5) y por IP (20): cada bloqueo dura 15 minutos desde el último fallo; los intentos durante el bloqueo no cuentan ni lo extienden (ADR-018 enmendado). Nota de despliegue: detrás de Caddy la IP que ve el backend es la del proxy hasta configurar `uvicorn --proxy-headers --forwarded-allow-ips=<IP de Caddy>`, que corrige el límite por IP del login y de «Mi PIN».
 - El servidor exige el permiso de cada comando por cualquier camino (ADR-056).
 - El límite de 5 del login se cuenta por el par (slug de la organización, usuario) tal como se escribió, exista o no (un nombre inexistente se bloquea igual que uno real); todo rechazo de credenciales verifica la contraseña (hash ficticio si no hay usuario utilizable); el 429 del login muestra siempre la hora de `America/Argentina/Buenos_Aires` (ADR-057, enmienda a ADR-018).
-- Encabezados de seguridad, incluida una política CSP restrictiva.
-- El usuario de base de datos de la aplicación no es superusuario ni dueño del esquema; las migraciones usan un usuario distinto, y el backup un tercero de solo lectura (`pg_read_all_data`) (ADR-020, ADR-071).
+- Encabezados en Caddy para toda respuesta (fragmento compartido con el perfil `lan`): CSP `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `Permissions-Policy`, `Cross-Origin-Opener-Policy: same-origin`, `X-Frame-Options: DENY`, sin `Server`. La documentación de la API (`/docs`, `/redoc`, `/openapi.json`) no se publica en producción. Zod 4 se configura con `jitless` (`src/lib/zodSinEval.ts`) para no sondear `new Function` bajo la CSP (ADR-073).
+- El usuario de base de datos de la aplicación no es superusuario ni dueño del esquema; las migraciones usan un usuario distinto, y el backup un tercero de solo lectura (`pg_read_all_data`) (ADR-020, ADR-071) y un cuarto, `app_mantenimiento`, que solo lee saldos y libros, inserta resultados de verificación y borra `intento_login` de más de 24 horas. Una matriz de privilegios por rol y tabla, verificada por prueba, fija todo `GRANT` (ADR-073).
 - HSTS de un año sin `includeSubDomains` ni `preload` desde el 27a (también con la autoridad propia de Caddy); el backend confía en `X-Forwarded-For` solo desde la red del proxy (ADR-018 punto 5, ADR-071).
 - Validación de toda entrada con Pydantic; SQL siempre parametrizado.
 - Dependencias con actualizaciones de seguridad revisadas periódicamente.

@@ -854,7 +854,7 @@ def anular_pago_proveedor(
 
     def _ejecutar_handler(
         sesion_protegida: registro.SesionDeHandler,
-    ) -> sync_service.ResultadoHandler:
+    ) -> sync_service.ResultadoHandlerConAuditoria:
         return proveedores_commands.manejar_pago_proveedor_anular(
             sobre,
             contenido_validado,  # type: ignore[arg-type]

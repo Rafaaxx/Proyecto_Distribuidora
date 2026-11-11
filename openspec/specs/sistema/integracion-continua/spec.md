@@ -9,7 +9,7 @@ Nota de trazabilidad: los escenarios citan `02-arquitectura.md` §15 (estrategia
 ## Requirements
 
 ### Requirement: Verificación automática en cada push
-En cada push el proyecto DEBE ejecutar, y fallar si alguno falla: lint, formato y tipos del backend y del frontend; los límites entre módulos (import-linter); las pruebas unitarias, de propiedades y de cálculo compartido; las pruebas de integración contra PostgreSQL real; y el build de producción del frontend (`02` §15).
+En cada push el proyecto DEBE ejecutar, y fallar si alguno falla: lint, formato y tipos del backend y del frontend; los límites entre módulos (import-linter); las pruebas unitarias, de propiedades y de cálculo compartido; las pruebas de integración, de infraestructura y de concurrencia contra PostgreSQL real; y el build de producción del frontend (`02` §15; `design.md` D12 del 28).
 
 #### Scenario: Un cambio limpio pasa todas las verificaciones
 - **GIVEN** un cambio que respeta lint, formato, tipos y pruebas
@@ -34,6 +34,12 @@ En cada push el proyecto DEBE ejecutar, y fallar si alguno falla: lint, formato 
 - **WHEN** se hace push
 - **THEN** la verificación falla en el paso de build aunque las pruebas hayan pasado
 - **Regla:** `02` §15 (paso 6: build del frontend)
+
+#### Scenario: Las pruebas de concurrencia corren en cada push
+- **GIVEN** la verificación automática configurada
+- **WHEN** se hace push
+- **THEN** corren las pruebas de `tests/concurrency` contra PostgreSQL real, en un paso propio, y una falla hace fallar la verificación
+- **Regla:** `02` §15 (paso 5: integración y concurrencia con Testcontainers)
 
 ### Requirement: Las pruebas de integración usan PostgreSQL real
 Las pruebas de integración DEBEN ejecutarse contra una instancia real de PostgreSQL levantada automáticamente para la corrida, con las migraciones aplicadas. NO DEBE usarse SQLite ni ningún sustituto en memoria (`02` §15).
@@ -64,3 +70,27 @@ Cada invariante de `01` §20 que un change cierra DEBE tener al menos una prueba
 - **WHEN** se ejecuta sobre una base migrada
 - **THEN** corre la prueba que recorre el catálogo de columnas y cita INV-03, y falla si aparece una columna de punto flotante binario
 - **Regla:** INV-03; `02` §15 (cada invariante de `01` §20 tiene al menos una prueba que lo cite por identificador)
+
+### Requirement: La suite de aceptación corre en la rama principal
+En cada push a la rama principal el proyecto DEBE levantar el entorno de aceptación con Docker Compose, correr la suite de Playwright y fallar si alguna prueba falla, conservando las trazas de las pruebas fallidas para revisarlas (`02` §15; `design.md` D16).
+
+#### Scenario: Una prueba de aceptación falla en la principal
+- **GIVEN** un cambio que rompe el criterio 8 de `00` §9
+- **WHEN** se hace push a la rama principal
+- **THEN** el paso de aceptación falla nombrando la prueba y deja su traza como artefacto
+- **Regla:** `02` §15 (en la rama principal, suite de Playwright contra el entorno levantado con Docker Compose)
+
+### Requirement: Cada invariante de la etapa 1 está citado por una prueba que corre en la verificación
+Una verificación automática DEBE recorrer los invariantes de `01` §20 que corresponden a la etapa 1 (todos salvo INV-09 e INV-20, del módulo de facturación según `04` §13) y fallar nombrando el invariante si ninguna prueba de una carpeta que corre la verificación automática lo cita por identificador. La lista de exentos DEBE ser explícita (`02` §15; `04` §12, fila 28; `design.md` D12).
+
+#### Scenario: Un invariante sin prueba hace fallar la verificación
+- **GIVEN** un invariante de la etapa 1 que ninguna prueba cita
+- **WHEN** corre la verificación de cobertura de invariantes
+- **THEN** falla nombrando el invariante
+- **Regla:** `02` §15 (cada invariante de `01` §20 tiene al menos una prueba que lo cite por identificador)
+
+#### Scenario: Los invariantes de facturación quedan exentos por nombre
+- **GIVEN** INV-09 e INV-20 sin pruebas
+- **WHEN** corre la verificación
+- **THEN** no falla por ellos, porque están en la lista explícita de exentos con su razón
+- **Regla:** `04` §13

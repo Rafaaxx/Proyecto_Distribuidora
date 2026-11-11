@@ -45,3 +45,7 @@
 ## Enmienda del change 18a (ADR-054)
 
 El punto 6 dejó para el change 18a cómo costea una venta un producto sin costo promedio. Se resuelve así (ADR-054, D10): con conexión, la venta se rechaza con `PRODUCTO_SIN_COSTO` (409), aun con `PERMITIR_STOCK_NEGATIVO`; sin conexión se acepta con `costo_unitario` y `costo_total` nulos en la línea y una observación `VENTA_SIN_COSTO` por línea. "Sin costo" sigue siendo distinguible de "costo cero". Las columnas de costo de `venta_linea` son nulables juntas; los reportes de utilidad (change 26) deben mostrar esas líneas aparte. Una venta sobre saldo negativo se costea al promedio vigente (ADR-054, D11).
+
+## Enmienda del 2026-11-11 (change 28, ADR-073)
+
+La verificación diaria de consistencia, que este ADR da por supuesta, quedó programada en el servicio `tareas` (ADR-073).

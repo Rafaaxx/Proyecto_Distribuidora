@@ -366,6 +366,39 @@ class IntentoLogin(Base):
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class VerificacionConsistencia(Base):
+    """Resultado de una corrida de la verificación de consistencia (change 28, D5): una fila por
+    organización y corrida, con `diferencias` (identificadores e importes como texto). De solo
+    inserción: la escribe el servicio `tareas` con `app_mantenimiento` (no es una operación de
+    negocio: no la origina un usuario ni tiene `operation_id`); `app_runtime` solo la lee."""
+
+    __tablename__ = "verificacion_consistencia"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organizacion_id"],
+            ["organizacion.id"],
+            name="fk_verificacion_consistencia__organizacion",
+        ),
+        UniqueConstraint("organizacion_id", "id", name="ux_verificacion_consistencia__org_id"),
+        CheckConstraint(
+            "resultado IN ('SIN_DIFERENCIAS', 'CON_DIFERENCIAS')",
+            name="ck_verificacion_consistencia__resultado",
+        ),
+        Index(
+            "ix_verificacion_consistencia__org_ejecutada_en",
+            "organizacion_id",
+            text("ejecutada_en DESC"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=nuevo_id)
+    organizacion_id: Mapped[UUID] = mapped_column(nullable=False)
+    ejecutada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    resultado: Mapped[str] = mapped_column(Text, nullable=False)
+    diferencias: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
+    registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class IntentoPinAutorizacion(Base):
     """Contador de fallos del PIN de autorización verificado en el servidor (`design.md` D3
     revisada, change 18b): una fila por intento fallido (`exito = false`, con `intentante_id`, el

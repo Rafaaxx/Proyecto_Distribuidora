@@ -77,6 +77,9 @@ def test_la_excepcion_del_catalogo_global_es_explicita_y_enumerable() -> None:
         "registrar_intento_login",
         "ultimo_fallo_de_login",
         "contar_fallos_de_login_en_ventana",
+        # Change 28 (tareas periodicas del rol `app_mantenimiento`).
+        "listar_organizaciones_ids",
+        "borrar_intentos_de_login_anteriores_a",
     } == identidad_repository.FUNCIONES_SIN_ORGANIZACION_ID
 
 

@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
+from conftest import cabeza_de_alembic
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.orm import Session
@@ -35,6 +36,7 @@ from test_jornadas_migracion import (
 )
 
 REVISION = "e3a5c7d9f1b2"
+REVISION_HEAD = cabeza_de_alembic()  # un downgrade abortado deja la base en la cabeza actual.
 REVISION_ANTERIOR = "d2f4a6c8e0b1"  # `rendicion_de_jornada`, la previa al change 25.
 MOMENTO = datetime(2026, 11, 5, 12, 0, tzinfo=UTC)
 OTRO_MOMENTO = datetime(2026, 11, 5, 18, 0, tzinfo=UTC)
@@ -740,7 +742,7 @@ def _abortado_con(database_url: str, motor: Engine, fragmento: str) -> None:
 
     assert abortada.returncode != 0
     assert fragmento in abortada.stderr
-    assert _revision_actual(motor) == REVISION
+    assert _revision_actual(motor) == REVISION_HEAD
     assert "comando_rechazado" in _tablas_existentes(motor)
 
 

@@ -61,8 +61,12 @@ def cabeza_de_alembic() -> str:
 # despliegue, no una migración (tarea 1.5, pendiente de confirmación).
 NOMBRE_ROL_MIGRACIONES = "app_migrations"
 NOMBRE_ROL_RUNTIME = "app_runtime"
+# Change 28 (D3): el rol de las tareas periodicas. Sin permisos hasta que la migracion de la
+# tabla `verificacion_consistencia` se los otorga; la migracion FALLA si el rol no existe.
+NOMBRE_ROL_MANTENIMIENTO = "app_mantenimiento"
 _PASSWORD_ROL_MIGRACIONES = "app-migrations-solo-pruebas"  # noqa: S105 (solo test)
 _PASSWORD_ROL_RUNTIME = "app-runtime-solo-pruebas"  # noqa: S105 (solo test)
+_PASSWORD_ROL_MANTENIMIENTO = "app-mantenimiento-solo-pruebas"  # noqa: S105 (solo test)
 
 
 def _motor_de_contenedores_disponible() -> bool:
@@ -114,6 +118,12 @@ def _crear_roles_de_base(database_url: str) -> None:
                         ) THEN
                             CREATE ROLE {NOMBRE_ROL_RUNTIME}
                                 LOGIN PASSWORD '{_PASSWORD_ROL_RUNTIME}';
+                        END IF;
+                        IF NOT EXISTS (
+                            SELECT FROM pg_roles WHERE rolname = '{NOMBRE_ROL_MANTENIMIENTO}'
+                        ) THEN
+                            CREATE ROLE {NOMBRE_ROL_MANTENIMIENTO}
+                                LOGIN PASSWORD '{_PASSWORD_ROL_MANTENIMIENTO}';
                         END IF;
                     END
                     $$;
@@ -207,6 +217,28 @@ def database_url_runtime(database_url: str) -> str:
 @pytest.fixture(scope="session")
 def app_runtime_engine(database_url_runtime: str) -> Engine:
     return crear_engine(database_url_runtime)
+
+
+@pytest.fixture(scope="session")
+def app_mantenimiento_engine(database_url: str, _engine_de_sesion: Engine) -> Iterator[Engine]:
+    """Conexion con el rol `app_mantenimiento` (change 28, D3): el de las tareas periodicas."""
+    engine = crear_engine(
+        _url_con_credenciales(database_url, NOMBRE_ROL_MANTENIMIENTO, _PASSWORD_ROL_MANTENIMIENTO)
+    )
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def app_migrations_engine(database_url: str, _engine_de_sesion: Engine) -> Iterator[Engine]:
+    """Conexion con el rol `app_migrations` (dueño del esquema). Las pruebas de la verificacion
+    de consistencia (change 28) la usan para ALTERAR a mano un saldo y comprobar que la tarea
+    lo informa sin corregirlo; `app_runtime` y `app_mantenimiento` no pueden hacerlo."""
+    engine = crear_engine(
+        _url_con_credenciales(database_url, NOMBRE_ROL_MIGRACIONES, _PASSWORD_ROL_MIGRACIONES)
+    )
+    yield engine
+    engine.dispose()
 
 
 @pytest.fixture

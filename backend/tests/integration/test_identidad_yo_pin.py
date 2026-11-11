@@ -119,8 +119,8 @@ def test_adr011_la_respuesta_no_trae_derivacion_sal_ni_iteraciones(
 def test_seg07_cada_usuario_ve_solo_lo_suyo_y_get_yo_no_cambia(
     cliente: TestClient, sesion: Session
 ) -> None:
-    """El estado sale del token: otro usuario de otra organización con PIN no se refleja. Y
-    `GET /yo` conserva exactamente su forma (decisión del 2026-10-15)."""
+    """INV-21, SEG-07: el estado sale del token: otro usuario de otra organización con PIN no se
+    refleja. Y `GET /yo` conserva exactamente su forma (decisión del 2026-10-15)."""
     _entrar(cliente, sesion, permisos=frozenset({"AUTORIZAR_DESCUENTO"}), con_pin=True)
     headers = _entrar(cliente, sesion, permisos=frozenset({"AUTORIZAR_DESCUENTO"}))
 

@@ -18,6 +18,7 @@ from app.modules.reportes.domain.armado import CifrasDeAjuste, CifrasDeVentas, S
 from app.modules.reportes.domain.paginacion import Sobre
 from app.modules.reportes.domain.periodo import Periodo
 from app.modules.reportes.queries import (
+    ConsistenciaDeSistema,
     DetalleDeJornada,
     FilaDeDiferenciasDeRendicion,
     FilaDeJornada,
@@ -829,4 +830,45 @@ def reporte_de_saldos_de_proveedores_response(
         ),
         total_adeudado=importe_a_texto(reporte.totales.adeudado),
         total_a_favor=importe_a_texto(reporte.totales.a_favor),
+    )
+
+
+class DiferenciaDeConsistenciaResponse(BaseModel):
+    """Una diferencia entre un saldo y su libro (D5). Según el `tipo` (`SALDO_CUENTA`,
+    `STOCK_SALDO`, `STOCK_TOTAL`, `PROMEDIO_COSTO`) vienen unos campos y los demás `null`. Los
+    importes y los costos, como string (INV-03); las cantidades, enteros en unidad base."""
+
+    tipo: str
+    cuenta_tipo: str | None
+    entidad_id: UUID | None
+    entidad_nombre: str | None
+    saldo_materializado: str | None
+    suma_del_libro: str | None
+    producto_id: UUID | None
+    producto_nombre: str | None
+    ubicacion_id: UUID | None
+    ubicacion_nombre: str | None
+    materializado: int | None
+    esperado: int | None
+    promedio_vigente: str | None
+    promedio_historia: str | None
+
+
+class ConsistenciaResponse(BaseModel):
+    """El último resultado de la verificación de la organización. `resultado` y `ejecutada_en`
+    son `null` si todavía no corrió."""
+
+    ejecutada_en: datetime | None
+    resultado: str | None
+    diferencias: list[DiferenciaDeConsistenciaResponse]
+
+
+def consistencia_response(consistencia: ConsistenciaDeSistema) -> ConsistenciaResponse:
+    return ConsistenciaResponse(
+        ejecutada_en=consistencia.ejecutada_en,
+        resultado=consistencia.resultado,
+        diferencias=[
+            DiferenciaDeConsistenciaResponse(**vars(diferencia))
+            for diferencia in consistencia.diferencias
+        ],
     )

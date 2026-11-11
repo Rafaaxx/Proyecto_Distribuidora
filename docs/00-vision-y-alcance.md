@@ -215,6 +215,8 @@ La etapa 1 se considera terminada cuando la siguiente demostración funciona de 
 
 Además, en todo momento: un usuario de otra organización no puede ver ni modificar datos ajenos, y ningún usuario puede ejecutar desde la API una acción que su rol no permite.
 
+**Precisiones de la verificación (change 28, ADR-073).** La suite de Playwright cubre estos criterios contra el compose de producción; el 12 lo cubren las pruebas de restauración de `backend/tests/infra`. En los criterios 1 y 3, importar y publicar listas lo hace `Administrador` (`IMPORTAR_DATOS`, `PUBLICAR_LISTAS`), no Gestión. En el criterio 4, con la jornada abierta no se transfiere al vehículo (STK-09): se carga el stock antes de abrirla. En el criterio 9, la anulación la hace un supervisor (`LIBERAR_UBICACION` por VTA-21). Los criterios 4 a 8 se comprobaron además a mano en un teléfono real con modo avión (2026-11-11).
+
 ## 10. Supuestos y restricciones
 
 - Un solo desarrollador, con desarrollo asistido por IA mediante Spec-Driven Development (OpenSpec).

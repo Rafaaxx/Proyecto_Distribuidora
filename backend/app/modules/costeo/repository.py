@@ -27,11 +27,12 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import select, true, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
+from app.modules.costeo.domain.costo_promedio import DiferenciaDePromedio
 from app.modules.costeo.domain.errores import RecursoNoEncontradoError, StockFueraDeRangoError
 from app.modules.costeo.models import CostoProducto, CostoProductoMov
 
@@ -139,6 +140,45 @@ def obtener_stock_totales(organizacion_id: UUID, sesion: Session) -> dict[UUID, 
         CostoProducto.organizacion_id == organizacion_id
     )
     return {producto_id: total for producto_id, total in sesion.execute(consulta).all()}
+
+
+def diferencias_de_promedio_contra_la_historia(
+    organizacion_id: UUID, sesion: Session
+) -> list[DiferenciaDePromedio]:
+    """Productos de la organización cuyo `costo_promedio` no es el `promedio_nuevo` de su último
+    `costo_producto_mov` (CST-13), comparado con SQL (`IS DISTINCT FROM`: sin historia y sin
+    promedio coinciden). El último es el de mayor `(registered_at, id)`; el id es UUIDv7
+    monótono. Solo lee: no corrige nada (ADR-015)."""
+    ultimo = (
+        select(CostoProductoMov.promedio_nuevo.label("promedio_nuevo"))
+        .where(
+            CostoProductoMov.organizacion_id == CostoProducto.organizacion_id,
+            CostoProductoMov.producto_id == CostoProducto.producto_id,
+        )
+        .order_by(CostoProductoMov.registered_at.desc(), CostoProductoMov.id.desc())
+        .limit(1)
+        .lateral("ultimo")
+    )
+    consulta = (
+        select(
+            CostoProducto.producto_id,
+            CostoProducto.costo_promedio,
+            ultimo.c.promedio_nuevo,
+        )
+        .select_from(CostoProducto)
+        .outerjoin(ultimo, true())
+        .where(
+            CostoProducto.organizacion_id == organizacion_id,
+            CostoProducto.costo_promedio.is_distinct_from(ultimo.c.promedio_nuevo),
+        )
+        .order_by(CostoProducto.producto_id)
+    )
+    return [
+        DiferenciaDePromedio(
+            producto_id=producto_id, promedio_vigente=vigente, promedio_historia=historia
+        )
+        for producto_id, vigente, historia in sesion.execute(consulta).all()
+    ]
 
 
 def aplicar_ingreso_al_costo(

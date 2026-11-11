@@ -14,6 +14,7 @@ import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -30,6 +31,7 @@ CLAVE_SUPER = "super-solo-pruebas"
 CLAVE_MIGRACIONES = "migraciones-solo-pruebas"
 CLAVE_RUNTIME = "runtime-solo-pruebas"
 CLAVE_BACKUP = "backup-solo-pruebas"
+CLAVE_MANTENIMIENTO = "mantenimiento-solo-pruebas"
 ALIAS_BASE = "postgres"
 
 
@@ -40,6 +42,7 @@ class BaseMigrada:
     cliente: object
     red: str
     puerto: int
+    contenedor: Any
 
     def url(self, usuario: str, clave: str) -> URL:
         return URL.create(
@@ -82,6 +85,7 @@ def base_migrada(docker_cliente) -> Iterator[BaseMigrada]:
             "APP_MIGRATIONS_DB_PASSWORD": CLAVE_MIGRACIONES,
             "APP_RUNTIME_DB_PASSWORD": CLAVE_RUNTIME,
             "APP_BACKUP_DB_PASSWORD": CLAVE_BACKUP,
+            "APP_MANTENIMIENTO_DB_PASSWORD": CLAVE_MANTENIMIENTO,
         },
         volumes={
             str(INFRA / "postgres" / "init-app-roles.sh"): {
@@ -90,6 +94,10 @@ def base_migrada(docker_cliente) -> Iterator[BaseMigrada]:
             },
             str(INFRA / "postgres" / "20-init-backup-role.sh"): {
                 "bind": "/docker-entrypoint-initdb.d/20-init-backup-role.sh",
+                "mode": "ro",
+            },
+            str(INFRA / "postgres" / "30-init-mantenimiento-role.sh"): {
+                "bind": "/docker-entrypoint-initdb.d/30-init-mantenimiento-role.sh",
                 "mode": "ro",
             },
         },
@@ -101,7 +109,9 @@ def base_migrada(docker_cliente) -> Iterator[BaseMigrada]:
     red.connect(contenedor, aliases=[ALIAS_BASE])
     try:
         puerto = _esperar_base(docker_cliente, contenedor)
-        base = BaseMigrada(cliente=docker_cliente, red=red.name, puerto=puerto)
+        base = BaseMigrada(
+            cliente=docker_cliente, red=red.name, puerto=puerto, contenedor=contenedor
+        )
         _migrar_y_sembrar(base)
         yield base
     finally:

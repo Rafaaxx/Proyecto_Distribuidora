@@ -1157,6 +1157,13 @@ export const AYUDAS = {
       'Las entradas y salidas de stock que se cargaron como ajuste, agrupadas por motivo, y las diferencias del conteo de las rendiciones. Los ajustes anulados no suman.',
     reglas: ['STK-03', 'RUT-06'],
   },
+  // --- Aviso de consistencia (change 28, ADR-073; texto aprobado el 2026-11-10, sin ejemplo) ---
+  consistenciaDiferencias: {
+    titulo: 'Diferencias de consistencia',
+    texto:
+      'El sistema compara todas las noches los saldos de clientes, proveedores y stock con sus movimientos. Si no coinciden, hay un error del sistema: los saldos no se corrigen solos para no tapar el problema. Avisale a quien da soporte; mientras tanto se puede seguir operando.',
+    reglas: ['ADR-015', 'INV-12', 'INV-13'],
+  },
 } as const satisfies Record<string, EntradaDeAyuda>
 
 export type ClaveDeAyuda = keyof typeof AYUDAS

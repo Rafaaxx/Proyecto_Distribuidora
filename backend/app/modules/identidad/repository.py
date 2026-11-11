@@ -16,7 +16,7 @@ from decimal import Decimal
 from uuid import UUID
 
 import sqlalchemy as sa
-from sqlalchemy import and_, func, select, update
+from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.modules.identidad.models import (
@@ -31,6 +31,7 @@ from app.modules.identidad.models import (
     RolPermiso,
     SesionRefresh,
     Usuario,
+    VerificacionConsistencia,
 )
 
 # Excepción explícita y enumerable (tarea 6.3/6.4, mismo criterio que
@@ -52,6 +53,10 @@ FUNCIONES_SIN_ORGANIZACION_ID = frozenset(
         # D24 (change 18b): mismo motivo, bloqueo desde el último fallo.
         "ultimo_fallo_de_login",
         "contar_fallos_de_login_en_ventana",
+        # Change 28 (tareas periodicas): recorren todas las organizaciones o la tabla global
+        # `intento_login`; las ejecuta el rol `app_mantenimiento`, no una ruta autenticada.
+        "listar_organizaciones_ids",
+        "borrar_intentos_de_login_anteriores_a",
     }
 )
 
@@ -1105,6 +1110,62 @@ def registrar_intento_login(
         ip=ip,
         exito=exito,
         creado_en=momento,
+    )
+    sesion.add(fila)
+    sesion.flush()
+    return fila
+
+
+def borrar_intentos_de_login_anteriores_a(sesion: Session, *, limite: datetime) -> int:
+    """Borra las filas de `intento_login` creadas antes de `limite` (fallos, aciertos y marcas de
+    desbloqueo manual) y devuelve cuántas fueron (ADR-018, D7 del change 28). Solo la ejecuta
+    el rol de mantenimiento: `app_runtime` no tiene `DELETE` (INV-05)."""
+    resultado = sesion.execute(
+        delete(IntentoLogin)
+        .where(IntentoLogin.creado_en < limite)
+        .execution_options(synchronize_session=False)
+    )
+    return int(resultado.rowcount or 0)  # type: ignore[attr-defined]
+
+
+def listar_organizaciones_ids(sesion: Session) -> list[UUID]:
+    """Los identificadores de todas las organizaciones (las tareas periódicas recorren cada
+    una)."""
+    return list(sesion.scalars(select(Organizacion.id).order_by(Organizacion.id)))
+
+
+def ultima_verificacion_de_consistencia(
+    organizacion_id: UUID, sesion: Session
+) -> VerificacionConsistencia | None:
+    """La corrida más reciente de la verificación de la organización, o `None` si nunca corrió
+    (change 28, D5). `app_runtime` solo lee esta tabla."""
+    return sesion.scalars(
+        select(VerificacionConsistencia)
+        .where(VerificacionConsistencia.organizacion_id == organizacion_id)
+        .order_by(VerificacionConsistencia.ejecutada_en.desc(), VerificacionConsistencia.id.desc())
+        .limit(1)
+    ).first()
+
+
+def registrar_verificacion_de_consistencia(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    verificacion_id: UUID,
+    ejecutada_en: datetime,
+    resultado: str,
+    diferencias: list[dict[str, object]],
+    registered_at: datetime,
+) -> VerificacionConsistencia:
+    """Inserta el resultado de una corrida de la verificación de consistencia (D5). De solo
+    inserción: la tabla no se actualiza ni se borra."""
+    fila = VerificacionConsistencia(
+        id=verificacion_id,
+        organizacion_id=organizacion_id,
+        ejecutada_en=ejecutada_en,
+        resultado=resultado,
+        diferencias=diferencias,
+        registered_at=registered_at,
     )
     sesion.add(fila)
     sesion.flush()

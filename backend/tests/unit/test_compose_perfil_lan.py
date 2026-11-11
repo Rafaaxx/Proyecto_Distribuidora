@@ -47,3 +47,17 @@ def test_el_caddyfile_de_desarrollo_usa_tls_interno_en_la_ip_y_no_cachea_el_serv
     assert "reverse_proxy backend:8000" in caddyfile
     assert "/sw.js" in caddyfile and "no-cache" in caddyfile
     assert "try_files {path} /index.html" in caddyfile
+
+
+def test_caddy_de_desarrollo_monta_el_fragmento_de_encabezados_que_importa_el_caddyfile() -> None:
+    # Change 28, D8: Caddyfile.dev importa /etc/caddy/encabezados.caddy; sin montaje no arranca.
+    volumenes = _compose()["services"]["caddy"]["volumes"]
+
+    assert "./infra/caddy/encabezados.caddy:/etc/caddy/encabezados.caddy:ro" in volumenes
+
+
+def test_tareas_de_desarrollo_recibe_el_aviso_propio_y_no_el_de_la_copia() -> None:
+    # ADR-073: AVISO_TAREAS_URL es de las tareas; AVISO_URL es de la copia externa.
+    entorno = _compose()["services"]["tareas"]["environment"]
+    assert entorno["AVISO_TAREAS_URL"] == "${AVISO_TAREAS_URL:-}"
+    assert "AVISO_URL" not in entorno

@@ -21,9 +21,13 @@ def test_gitattributes_fuerza_lf_en_los_caddyfile():
 
 
 def test_ci_corre_las_pruebas_de_infra_en_el_trabajo_de_integracion():
+    """`tests/infra` corre en el trabajo de integración, en su propio paso: su `conftest` choca
+    con el de `tests/integration` si se juntan en un comando (fallaba la colección en la CI)."""
     texto = CI.read_text(encoding="utf-8")
     bloque = texto.split("integracion-testcontainers:")[1].split("build-frontend:")[0]
-    assert re.search(r"pytest\s+tests/integration\s+tests/infra", bloque)
+    pasos = re.findall(r"^\s+run:\s*(python -m pytest .+)$", bloque, re.MULTILINE)
+    assert "python -m pytest tests/infra" in pasos
+    assert "python -m pytest tests/integration" in pasos
 
 
 def test_ci_corre_las_pruebas_de_concurrencia_en_un_paso_propio():

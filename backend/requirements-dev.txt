@@ -24,6 +24,7 @@ pytest==9.1.1
 pywin32==312; sys_platform == "win32"
 requests==2.34.2
 rich==15.0.0
+ruff==0.16.8
 sortedcontainers==2.4.0
 testcontainers[postgres]==4.15.0
 urllib3==2.8.0

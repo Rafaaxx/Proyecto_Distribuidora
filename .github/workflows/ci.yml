@@ -154,9 +154,13 @@ jobs:
         # Sin DATABASE_URL: el conftest levanta el contenedor con
         # Testcontainers (docker ya está disponible en el runner de GitHub
         # Actions). Nunca cae a SQLite (`design.md` D2, `docs/02` §15).
+        run: python -m pytest tests/integration
+      - name: pytest infraestructura
+        working-directory: backend
         # `tests/infra` (change 27a, D17) tambien usa Docker: compose de produccion, Caddy,
-        # backups y roles de base.
-        run: python -m pytest tests/integration tests/infra
+        # backups y roles de base. Va en su propio paso porque su `conftest` choca con el de
+        # `tests/integration` (ambos se importan como `conftest`) si se juntan en un solo comando.
+        run: python -m pytest tests/infra
       - name: pytest concurrencia
         working-directory: backend
         # Change 28 (D12): las pruebas de concurrencia detectan carreras reales contra PostgreSQL

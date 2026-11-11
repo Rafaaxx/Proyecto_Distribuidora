@@ -9,8 +9,9 @@ sección (agregados en el change `01b-dinero-fixtures-ci`):
 2. `import-linter` (límites entre módulos).
 4. `pytest` unitarias + propiedades + fixtures compartidos, y `vitest run`.
 5. `pytest tests/integration` contra PostgreSQL real levantado con
-   Testcontainers (el runner de GitHub Actions trae Docker de fábrica) y, en
-   un paso propio, `pytest tests/concurrency` (change `28`).
+   Testcontainers (el runner de GitHub Actions trae Docker de fábrica) y, cada
+   uno en un paso propio porque sus `conftest` chocan si se juntan,
+   `pytest tests/infra` (change `27a`) y `pytest tests/concurrency` (change `28`).
 6. `npm run build` (build de producción del frontend).
 
 ## Huecos deliberados, documentados y con dueño

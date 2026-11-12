@@ -1,0 +1,147 @@
+# sync/base-local Specification
+
+## Purpose
+Guarda en el teléfono, en la base local (IndexedDB), los datos maestros del bootstrap para que el área de ruta los lea siempre de ahí, con o sin conexión, y define cuándo y cómo se reemplazan sin perder nada que el dispositivo todavía no sincronizó (`02` §13.2, §13.4, ADR-006).
+
+## Requirements
+
+### Requirement: El bootstrap reemplaza los datos maestros en una sola transacción
+
+Aplicar un bootstrap DEBE reemplazar, en una única transacción de la base local, todas las tablas maestras (sesión, configuración, productos, presentaciones, clientes, precios, reglas de descuento, stock, autorizadores y catálogos) por el contenido recibido, y registrar en `meta` la fecha del bootstrap y la jornada. Si algo falla, los datos anteriores DEBEN quedar intactos. El identificador del dispositivo NO DEBE cambiar. Las tablas de operaciones (ventas, cobranzas, movimientos locales y cola, que agrega el change 22a) NO DEBEN tocarse (`design.md` D10).
+
+#### Scenario: Reemplazo completo
+- **GIVEN** una base local con el bootstrap de ayer, que incluye un cliente que hoy está inactivo
+- **WHEN** se aplica el bootstrap de hoy
+- **THEN** el cliente inactivo ya no está, los demás datos son los de hoy y la fecha del bootstrap es la de hoy
+- **Regla:** ADR-006; SYN-11
+
+#### Scenario: Falla a mitad del reemplazo
+- **GIVEN** una base local con el bootstrap de ayer
+- **WHEN** la escritura del bootstrap de hoy falla después de vaciar los productos
+- **THEN** la base local conserva completo el bootstrap de ayer
+- **Regla:** INV-01; `02` §13.4
+
+#### Scenario: El dispositivo conserva su identificador
+- **GIVEN** un dispositivo con su `dispositivo_id` guardado
+- **WHEN** se aplica un bootstrap
+- **THEN** el `dispositivo_id` es el mismo
+- **Regla:** `02` §12.2
+
+#### Scenario: Doble aplicación
+- **WHEN** se aplica dos veces seguidas el mismo bootstrap
+- **THEN** la base local queda igual que tras la primera, sin filas duplicadas
+- **Regla:** ADR-006
+
+### Requirement: El bootstrap se ejecuta al abrir la jornada y a pedido
+
+El dispositivo DEBE pedir y aplicar el bootstrap inmediatamente después de abrir la jornada desde `/ruta`; al iniciar sesión o desbloquear con conexión si la base local no tiene datos de la jornada abierta del usuario en ese dispositivo; y cuando el usuario toca "Actualizar datos" con conexión. Sin conexión, "Actualizar datos" DEBE estar deshabilitado con su motivo. Un bootstrap fallido DEBE mostrarse con la opción de reintentar, sin perder la jornada abierta (`design.md` D11).
+
+#### Scenario: Después de abrir la jornada
+- **GIVEN** `vendedor` sin jornada en `/ruta`, con conexión
+- **WHEN** abre la jornada sobre "Camioneta 1"
+- **THEN** el dispositivo descarga y aplica el bootstrap y el inicio muestra la hora de los datos
+- **Regla:** RUT-03
+
+#### Scenario: Jornada abierta desde administración
+- **GIVEN** `vendedor` con su jornada abierta desde `/admin` en este teléfono y sin datos locales
+- **WHEN** inicia sesión en `/ruta` con conexión
+- **THEN** el dispositivo descarga el bootstrap sin pedir otra apertura
+- **Regla:** RUT-03; `design.md` D11
+
+#### Scenario: Actualizar sin conexión
+- **GIVEN** el teléfono sin señal
+- **WHEN** el vendedor mira "Actualizar datos"
+- **THEN** está deshabilitado y dice que requiere conexión
+- **Regla:** ADR-006
+
+#### Scenario: Bootstrap fallido
+- **GIVEN** la jornada recién abierta
+- **WHEN** el bootstrap responde con un error del servidor
+- **THEN** la jornada sigue abierta, el inicio muestra el error y "Reintentar" vuelve a pedirlo
+- **Regla:** RUT-03; INV-01
+
+### Requirement: Las pantallas de ruta leen siempre de la base local
+
+Toda pantalla de `/ruta` que muestra datos de negocio DEBE leerlos de la base local, con o sin conexión, y DEBE mostrar la fecha y hora del último bootstrap. Sin bootstrap aplicado, DEBE indicar que no hay datos y cómo obtenerlos.
+
+#### Scenario: Sin señal
+- **GIVEN** un bootstrap aplicado y el teléfono sin señal
+- **WHEN** el vendedor abre la lista de clientes
+- **THEN** ve los clientes con su saldo del bootstrap y la hora de los datos
+- **Regla:** `02` §13.1
+
+#### Scenario: Sin datos
+- **GIVEN** una base local sin bootstrap
+- **WHEN** el vendedor abre Productos
+- **THEN** ve un aviso de que no hay datos y que se descargan al abrir la jornada
+- **Regla:** RUT-03
+
+### Requirement: La base local guarda las operaciones del dispositivo
+
+La base local DEBE tener, además de las tablas maestras, las tablas de operaciones: ventas, cobranzas, movimientos locales, cola de comandos e intentos del PIN de supervisor, y guardar en `meta` el último correlativo y la última secuencia usados. Pasar de la versión anterior a esta NO DEBE perder la sesión, el PIN de desbloqueo, el identificador del dispositivo ni los datos maestros (`design.md` D3).
+
+#### Scenario: Actualización de la base
+- **GIVEN** un teléfono con la base de la versión anterior, sesión, PIN y datos del día
+- **WHEN** abre la versión de la aplicación con las tablas de operaciones
+- **THEN** la sesión, el PIN, el `dispositivo_id` y los datos del día siguen y las tablas de operaciones existen vacías
+- **Regla:** `02` §13.2; ADR-062
+
+### Requirement: El bootstrap no toca las operaciones locales
+
+Aplicar un bootstrap NO DEBE escribir, vaciar ni modificar ventas, cobranzas, movimientos locales, cola, intentos del PIN de supervisor, último correlativo ni última secuencia (`02` §13.4).
+
+#### Scenario: Bootstrap con operaciones pendientes
+- **GIVEN** una venta sin enviar con su cobranza, sus movimientos, su comando, un intento fallido de PIN de supervisor y el correlativo 142
+- **WHEN** se aplica un bootstrap
+- **THEN** todas esas filas y los dos contadores quedan exactamente iguales
+- **Regla:** `02` §13.4; SYN-09; INV-01
+
+#### Scenario: Bootstrap que falla con operaciones pendientes
+- **GIVEN** una venta sin enviar
+- **WHEN** un bootstrap falla a mitad del reemplazo
+- **THEN** la venta sigue y los datos maestros son los anteriores
+- **Regla:** INV-01
+
+### Requirement: La base local guarda las anulaciones del dispositivo
+
+La base local DEBE tener una tabla de anulaciones, una por venta, con su `operation_id` único, su jornada y su estado de envío («Sin enviar», «Enviada», «Con observaciones» o «Rechazada»). Pasar de la versión anterior a esta NO DEBE perder la sesión, el PIN de desbloqueo, el identificador del dispositivo, los datos maestros ni las operaciones guardadas. El bootstrap, el cierre de sesión, el inicio de sesión de otro usuario, el bloqueo del PIN y recibir el resultado NO DEBEN borrar anulaciones (`design.md` D6).
+
+#### Scenario: Actualización de la base con ventas guardadas
+- **GIVEN** un teléfono con la base anterior, sesión, PIN, datos del día y dos ventas sin enviar
+- **WHEN** abre la versión de la aplicación con la tabla de anulaciones
+- **THEN** la sesión, el PIN, el `dispositivo_id`, los datos y las dos ventas con su cola siguen, y la tabla de anulaciones existe vacía
+- **Regla:** `02` §13.2; SYN-09
+
+#### Scenario: Bootstrap con una anulación sin enviar
+- **GIVEN** una anulación sin enviar con sus movimientos y su comando
+- **WHEN** se aplica un bootstrap
+- **THEN** la anulación, sus movimientos y su comando quedan exactamente iguales
+- **Regla:** `02` §13.4; SYN-09; INV-05
+
+#### Scenario: Anulación rechazada
+- **GIVEN** una anulación que el servidor rechazó
+- **WHEN** el vendedor cierra sesión y vuelve a entrar
+- **THEN** la anulación sigue en el teléfono, «Rechazada», y no se reenvía sola
+- **Regla:** SYN-09; INV-05
+
+### Requirement: La base local guarda las cobranzas independientes del dispositivo
+
+La tabla de cobranzas de la base local DEBE guardar, además del cobro en el momento de una venta, las cobranzas independientes del dispositivo, con su propio estado de envío, buscables por `operation_id`, cliente, jornada y estado. Pasar a esta versión NO DEBE perder ni modificar la sesión, el PIN de desbloqueo, los datos maestros, las ventas, sus cobros, las anulaciones, los movimientos ni la cola; un cobro guardado antes de esta versión DEBE seguir leyéndose como el cobro de su venta. El bootstrap, el cierre de sesión y el inicio de sesión de otro usuario NO DEBEN tocar las cobranzas (`design.md` D5).
+
+#### Scenario: Actualización de la base
+- **GIVEN** un teléfono con la base anterior, sesión, PIN, datos del día y dos ventas con cobro, una anulación y su cola
+- **WHEN** abre la versión de la aplicación con cobranzas independientes
+- **THEN** todo sigue igual y los dos cobros se leen como cobros de su venta
+- **Regla:** `02` §13.2; INV-05
+
+#### Scenario: Bootstrap con cobranzas pendientes
+- **GIVEN** una cobranza independiente «Sin enviar»
+- **WHEN** se aplica un bootstrap
+- **THEN** la cobranza, su movimiento y su comando quedan exactamente iguales
+- **Regla:** `02` §13.4; SYN-09; INV-01
+
+#### Scenario: Cerrar sesión con una cobranza pendiente
+- **GIVEN** una cobranza independiente «Sin enviar»
+- **WHEN** el vendedor cierra sesión
+- **THEN** la cobranza sigue guardada y se envía cuando vuelve a entrar
+- **Regla:** SYN-09; INV-05

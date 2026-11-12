@@ -31,3 +31,7 @@ Los handlers no bloquean filas directamente; usan funciones de los servicios que
 - Los libros (`stock_movimiento`, `cuenta_movimiento`) son la verdad (INV-12, INV-13). Las tablas de saldo son materializaciones verificables, no la fuente de verdad.
 - El orden global de bloqueo elimina deadlocks entre operaciones concurrentes del mismo tipo. Las pruebas de concurrencia verifican los escenarios críticos.
 - Una diferencia detectada por la verificación diaria indica un defecto de código; no se tapa con una corrección automática.
+
+## Enmienda del 2026-11-11 (change 28, ADR-073)
+
+La verificación diaria quedó programada: el servicio `tareas` compara cada tabla de saldo con su libro por organización, guarda el resultado, avisa en `/admin` y no corrige nada (ADR-073, `02` §7.6).

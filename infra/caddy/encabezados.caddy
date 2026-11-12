@@ -1,0 +1,23 @@
+# Encabezados de seguridad de TODA respuesta (aplicacion y /api/*). Change 28, D8, D9;
+# docs/02 §18; ADR-071. Lo importan el Caddyfile de produccion y Caddyfile.dev (perfil `lan`),
+# asi el telefono de prueba ve lo mismo que produccion.
+#
+# La politica de contenido (CSP) se APLICA (no esta en modo «solo informar»): solo se permite
+# lo que viene del mismo origen. No hay `unsafe-eval` ni `unsafe-inline`: verificado con la
+# compilacion real (pdfmake no usa eval; la aplicacion no inyecta etiquetas <style> ni atributos
+# style en el HTML). `data:` y `blob:` se admiten solo donde hacen falta (imagenes y fuentes
+# incrustadas; los archivos que se descargan o comparten son `blob:` por navegacion, que la CSP
+# no restringe). Si una pantalla nueva necesita algo mas, se ajusta aca con su prueba: no se
+# agrega una excepcion general.
+# El HSTS no esta aca: es solo de produccion (Caddyfile).
+header {
+	Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+	X-Content-Type-Options "nosniff"
+	Referrer-Policy "same-origin"
+	Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+	Cross-Origin-Opener-Policy "same-origin"
+	# Para navegadores viejos; `frame-ancestors 'none'` lo cubre en los nuevos.
+	X-Frame-Options "DENY"
+	# No se anuncia el nombre del servidor (tampoco el del backend en /api).
+	-Server
+}

@@ -1,0 +1,492 @@
+# parametros-de-organizacion Specification
+
+## Purpose
+
+Define qué es una organización en el sistema y qué parámetros configurables gobiernan su operación (moneda, zona horaria, modo impositivo, política de crédito, redondeo, facturación, sesión), de modo que ninguna regla de negocio posterior quede escrita como constante en el código (`01` §4, `03` §4).
+
+## Requirements
+
+### Requirement: La organización define moneda, zona horaria y estado
+El sistema DEBE representar cada organización con su nombre, su moneda en código ISO 4217, su zona horaria IANA y su estado (`ACTIVA` o `SUSPENDIDA`); el CUIT es opcional. La zona horaria de la organización DEBE ser la que determina la fecha de negocio de una operación a partir de su `occurred_at` (TR-04, `03` §4).
+
+#### Scenario: La organización inicial queda configurada con sus valores de referencia
+- **GIVEN** un sistema recién migrado sin organizaciones
+- **WHEN** se siembra la organización inicial
+- **THEN** su moneda es `ARS` y su zona horaria es `America/Argentina/Mendoza`
+- **AND** su estado es `ACTIVA`
+- **Regla:** `01` §4 (columna "Organización inicial": moneda ARS, zona horaria America/Argentina/Mendoza)
+
+#### Scenario: La fecha de negocio se deriva de la zona horaria de la organización
+- **GIVEN** una organización con zona horaria `America/Argentina/Mendoza`
+- **AND** una operación cuyo `occurred_at` es un momento UTC que cae en el día anterior en esa zona
+- **WHEN** se determina la fecha de negocio de la operación
+- **THEN** es la fecha del `occurred_at` convertido a la zona horaria de la organización, no la fecha UTC
+- **Regla:** TR-04 (la fecha de negocio de una operación es su `occurred_at` convertido a la zona horaria de la organización)
+
+#### Scenario: Un estado desconocido se rechaza
+- **GIVEN** una organización existente
+- **WHEN** se intenta dejar su estado en un valor distinto de `ACTIVA` o `SUSPENDIDA`
+- **THEN** la operación falla con un error explícito y el estado no cambia
+- **Regla:** `03` §4 (`estado`: `ACTIVA`, `SUSPENDIDA`)
+
+### Requirement: Cada organización tiene exactamente una fila de configuración
+El sistema DEBE mantener una y solo una fila de configuración por organización, identificada por la propia organización. NO DEBE ser posible crear una segunda fila de configuración para la misma organización ni dejar una organización sin configuración una vez sembrada (`01` §4, `03` §4).
+
+#### Scenario: Una segunda configuración para la misma organización se rechaza
+- **GIVEN** una organización que ya tiene su fila de configuración
+- **WHEN** se intenta crear otra fila de configuración para esa misma organización
+- **THEN** la base rechaza la inserción por clave duplicada
+- **Regla:** `03` §4 (`configuracion_organizacion`: una fila por organización, `organizacion_id` es PK y FK)
+
+#### Scenario: La configuración de una organización no es legible desde otra
+- **GIVEN** la organización A con su configuración y la organización B con la suya
+- **WHEN** se lee la configuración indicando la organización B
+- **THEN** se obtiene únicamente la configuración de B
+- **Regla:** TR-08
+
+### Requirement: Los parámetros de operación viven en la configuración de la organización
+La configuración de una organización DEBE contener los parámetros de `01` §4 con las columnas y dominios de `03` §4: condición frente al IVA (`RESPONSABLE_INSCRIPTO`, `MONOTRIBUTO`, `EXENTO`), modo impositivo (`A`, `B`, `C`), lista de precios por defecto, política de crédito por defecto (`ADVERTIR`, `AUTORIZAR`, `BLOQUEAR`), tolerancia de crédito sin conexión (tipo `IMPORTE` o `PORCENTAJE` y valor), habilitación de descuento manual, obligatoriedad de motivo en descuento manual y al usar lista no vigente, redondeo por defecto (múltiplo y dirección `ARRIBA`, `CERCANO`, `ABAJO`), venta a consumidor final genérico y su cliente, estado de facturación inicial (`NO_REQUIERE`, `PENDIENTE`), modalidad de IVA al facturar (`CLIENTE`, `ABSORBIDO`), intentos de PIN antes de bloquear, versión mínima de la aplicación y desvío máximo de reloj en segundos.
+
+#### Scenario: La organización inicial toma los valores por defecto documentados
+- **GIVEN** un sistema recién migrado
+- **WHEN** se siembra la configuración de la organización inicial
+- **THEN** su condición frente al IVA es `MONOTRIBUTO`
+- **AND** su modo impositivo es `A`
+- **AND** su política de crédito por defecto es `AUTORIZAR`
+- **AND** el descuento manual está habilitado
+- **AND** el motivo es obligatorio al usar una lista no asignada o una versión anterior
+- **AND** el estado de facturación inicial por defecto es `NO_REQUIERE`
+- **AND** los intentos de PIN antes de bloquear son `5`
+- **Regla:** `01` §4 (columna "Organización inicial"); `00` §5; `design.md` D9
+
+#### Scenario: Un parámetro sin valor definido queda explícitamente sin definir
+- **GIVEN** los parámetros que `01` §4 marca como "A definir al configurar" (tolerancia de crédito sin conexión, obligatoriedad de motivo en descuento manual, redondeo por defecto, venta a consumidor final, modalidad de IVA al facturar)
+- **WHEN** se siembra la configuración de la organización inicial
+- **THEN** esos parámetros quedan sin valor, no con un valor inventado por el sistema
+- **AND** el sistema no supone un valor por omisión para ellos
+- **Regla:** `01` §4 (valor "A definir al configurar" / "A definir")
+
+#### Scenario: Un valor fuera del dominio de un parámetro se rechaza
+- **GIVEN** la configuración de una organización
+- **WHEN** se intenta fijar la política de crédito por defecto en un valor distinto de `ADVERTIR`, `AUTORIZAR` o `BLOQUEAR`, o la condición frente al IVA en un valor distinto de `RESPONSABLE_INSCRIPTO`, `MONOTRIBUTO` o `EXENTO`
+- **THEN** la operación falla con un error explícito y la configuración no cambia
+- **Regla:** `03` §4 (`politica_credito_default`, `condicion_iva`)
+
+#### Scenario: Los parámetros monetarios no usan punto flotante
+- **GIVEN** las columnas de tolerancia de crédito sin conexión y de múltiplo de redondeo
+- **WHEN** se recorre el catálogo de columnas de la base
+- **THEN** ambas son numéricas exactas con 2 decimales, no de punto flotante binario
+- **Regla:** INV-03, `03` §4 (`tolerancia_offline_valor` y `redondeo_multiplo`: `numeric(14,2)`)
+
+#### Scenario: Las organizaciones existentes conservan su comportamiento al migrar
+- **GIVEN** una base con una organización creada antes de este change, con costos y compras que descontaron IVA
+- **WHEN** se aplica la migración
+- **THEN** su condición frente al IVA es `RESPONSABLE_INSCRIPTO`
+- **AND** sus costos y compras quedan con `computa_credito_fiscal = true` y el mismo costo base
+- **Regla:** TR-06; `design.md` D3 y D9
+
+### Requirement: Solo un responsable inscripto computa crédito fiscal de IVA en compras
+El sistema DEBE derivar de la condición frente al IVA una única regla, *computa crédito fiscal de IVA en compras*: verdadera solo para `RESPONSABLE_INSCRIPTO` y falsa para `MONOTRIBUTO` y `EXENTO` (CST-06). Toda parte del sistema que necesite saber si el IVA de una compra es costo DEBE usar esta regla, y no la condición directamente. En una organización no inscripta, el modo impositivo DEBE ser `A` y la modalidad de IVA al facturar DEBE quedar sin definir. ADR-009 y FAC-02, FAC-03, FAC-04 y FAC-08 solo se aplican a responsables inscriptos (ADR-045).
+
+#### Scenario: Responsable inscripto computa crédito fiscal
+- **GIVEN** una organización `RESPONSABLE_INSCRIPTO`
+- **WHEN** se resuelve si computa crédito fiscal
+- **THEN** el resultado es verdadero
+- **Regla:** CST-06
+
+#### Scenario: Monotributista y exento no computan crédito fiscal
+- **GIVEN** una organización `MONOTRIBUTO` y otra `EXENTO`
+- **WHEN** se resuelve si computa crédito fiscal en cada una
+- **THEN** en ambas el resultado es falso
+- **Regla:** CST-06; `design.md` D1
+
+#### Scenario: Una organización no inscripta con modalidad de IVA se rechaza
+- **GIVEN** una organización `MONOTRIBUTO`
+- **WHEN** se intenta guardar su configuración con `modalidad_iva_default = ABSORBIDO` o con `modo_impositivo = B`
+- **THEN** la base rechaza la escritura y la configuración no cambia
+- **Regla:** ADR-009 (solo RI); `design.md` D2
+
+### Requirement: La condición frente al IVA se cambia con permiso, auditada y sin efecto retroactivo
+El sistema DEBE cambiar la condición con el comando `ORGANIZACION_CONDICION_IVA_CAMBIAR` (`ONLINE`, permiso `ADMIN_CONFIGURACION`). El cambio y su única auditoría (valor anterior y nuevo) DEBEN ser atómicos. El cambio NO DEBE modificar ningún costo informado, compra ni costo promedio ya registrado: rige para lo que se registre después. NO DEBE pasarse a una condición no inscripta si el modo impositivo no es `A` o hay una modalidad de IVA definida (`MODO_IMPOSITIVO_INCOMPATIBLE`), y cambiar al mismo valor se rechaza con `CONDICION_IVA_SIN_CAMBIO`.
+
+#### Scenario: Monotributista pasa a responsable inscripto
+- **GIVEN** una organización `MONOTRIBUTO` con una compra de Caja x12 a `"21780.00"` cuyo costo base es `"1815.000000"`
+- **WHEN** un usuario con `ADMIN_CONFIGURACION` envía `ORGANIZACION_CONDICION_IVA_CAMBIAR` a `RESPONSABLE_INSCRIPTO`
+- **THEN** el comando queda `ACEPTADO`, la condición es `RESPONSABLE_INSCRIPTO` y hay una sola auditoría con `MONOTRIBUTO` → `RESPONSABLE_INSCRIPTO`
+- **AND** la compra previa conserva costo base `"1815.000000"` y `computa_credito_fiscal = false`
+- **Regla:** CST-06; TR-06; AUD-01; `design.md` D7
+
+#### Scenario: Sin permiso
+- **GIVEN** un usuario sin `ADMIN_CONFIGURACION`
+- **WHEN** envía `ORGANIZACION_CONDICION_IVA_CAMBIAR`
+- **THEN** la respuesta es 403 `PERMISO_REQUERIDO` y la condición no cambia
+- **Regla:** `01` §19 (`ADMIN_CONFIGURACION`)
+
+#### Scenario: Mismo valor
+- **GIVEN** una organización `MONOTRIBUTO`
+- **WHEN** se envía el cambio a `MONOTRIBUTO`
+- **THEN** se rechaza con 409 `CONDICION_IVA_SIN_CAMBIO` y no se audita ningún cambio
+- **Regla:** TR-10; `design.md` D7
+
+#### Scenario: Pasar a no inscripto con modo impositivo incompatible
+- **GIVEN** una organización `RESPONSABLE_INSCRIPTO` con modalidad de IVA por defecto `CLIENTE`
+- **WHEN** se envía el cambio a `MONOTRIBUTO`
+- **THEN** se rechaza con 409 `MODO_IMPOSITIVO_INCOMPATIBLE` y la condición no cambia
+- **Regla:** ADR-009; `design.md` D2 y D7
+
+#### Scenario: Doble envío no duplica el cambio
+- **GIVEN** un `ORGANIZACION_CONDICION_IVA_CAMBIAR` aceptado con `operation_id` X
+- **WHEN** se reenvía con `operation_id` X y el mismo contenido
+- **THEN** se devuelve el resultado original y hay una sola auditoría
+- **Regla:** INV-06; SYN-02
+
+#### Scenario: Valor desconocido
+- **WHEN** se envía el cambio a `CONSUMIDOR_FINAL`
+- **THEN** se rechaza con 422 (validación del cuerpo) y la condición no cambia
+- **Regla:** `03` §4 (`condicion_iva`)
+
+### Requirement: La condición frente al IVA se consulta
+El sistema DEBE exponer `GET /api/v1/configuracion/fiscal`, para cualquier usuario autenticado, con la condición frente al IVA, si computa crédito fiscal, el modo impositivo y la modalidad de IVA por defecto de la organización del token. NO DEBE aceptar una organización tomada del pedido.
+
+#### Scenario: Lectura de la propia organización
+- **GIVEN** una organización `MONOTRIBUTO` y un usuario con solo `REGISTRAR_COMPRA`
+- **WHEN** pide `GET /api/v1/configuracion/fiscal`
+- **THEN** recibe `condicion_iva = MONOTRIBUTO`, `computa_credito_fiscal = false`, `modo_impositivo = A` y `modalidad_iva_default = null`
+- **Regla:** CST-06; `design.md` D8
+
+#### Scenario: Aislamiento entre organizaciones
+- **GIVEN** la organización A `MONOTRIBUTO` y la B `RESPONSABLE_INSCRIPTO`
+- **WHEN** un usuario de A pide la configuración fiscal
+- **THEN** recibe la de A y nunca la de B
+- **Regla:** TR-08; INV-21
+
+### Requirement: La condición frente al IVA se administra desde una pantalla
+La pantalla `/admin/configuracion/fiscal` DEBE mostrar la condición vigente. Con `ADMIN_CONFIGURACION` DEBE permitir cambiarla tras una confirmación que explique que el cambio no recalcula costos ni compras ya registrados e informe cuántos costos informados vigentes se calcularon con la otra regla. Sin ese permiso, la pantalla es de solo lectura.
+
+#### Scenario: Cambio con confirmación
+- **GIVEN** un usuario con `ADMIN_CONFIGURACION` en una organización `MONOTRIBUTO` con 12 costos vigentes calculados sin descontar IVA
+- **WHEN** elige `RESPONSABLE_INSCRIPTO`
+- **THEN** ve una confirmación que dice que el cambio no es retroactivo y que hay 12 costos vigentes para revisar
+- **AND** solo al confirmar se envía el comando
+- **Regla:** TR-06; `design.md` D10
+
+#### Scenario: Usuario sin permiso
+- **GIVEN** un usuario autenticado sin `ADMIN_CONFIGURACION`
+- **WHEN** abre la pantalla
+- **THEN** ve la condición vigente sin la acción de cambiarla
+- **Regla:** ADR-027
+
+### Requirement: La siembra de la organización inicial es idempotente
+La operación que siembra la organización inicial, su configuración y sus catálogos DEBE poder ejecutarse más de una vez sin duplicar filas ni sobrescribir valores que un operador haya cambiado después.
+
+#### Scenario: Sembrar dos veces no duplica ni pisa
+- **GIVEN** un sistema con la organización inicial ya sembrada y su política de crédito cambiada a `BLOQUEAR` por un operador
+- **WHEN** se ejecuta la siembra por segunda vez
+- **THEN** no se crea una segunda organización ni una segunda fila de configuración
+- **AND** la política de crédito sigue siendo `BLOQUEAR`
+- **Regla:** `01` §4, TR-06 (ninguna decisión ya tomada se pisa por una reejecución)
+
+#### Scenario: Sembrar sobre una base sin migrar falla explícitamente
+- **GIVEN** una base sin las tablas de organización
+- **WHEN** se ejecuta la siembra
+- **THEN** falla con un error explícito que indica que faltan migraciones
+- **AND** no crea ninguna tabla
+- **Regla:** `03` §17 (todo cambio de esquema va en una migración de Alembic)
+
+### Requirement: La lista de precios predeterminada se define por comando
+
+La lista de precios por defecto de la organización (`01` §4) DEBE definirse con el comando `LISTA_PRECIO_PREDETERMINADA_DEFINIR` (solo `ONLINE`, con `Operation-Id`, permiso `ADMIN_CONFIGURACION`), que solo admite una lista activa de la organización del token: una lista inactiva DEBE rechazarse con `LISTA_INACTIVA` y una inexistente o de otra organización DEBE responder 404. La base de datos DEBE impedir que la configuración referencie una lista de otra organización o inexistente. El cambio DEBE quedar auditado con el valor anterior y el nuevo (AUD-01) y NO DEBE modificar ninguna versión de lista ni la lista asignada de ningún cliente. La siembra de una organización NO DEBE crear listas de precios: la lista predeterminada queda sin definir hasta que un usuario la define (`design.md` D11 del change 13). La lista predeterminada DEBE poder consultarse con `ADMIN_CONFIGURACION`, `GESTIONAR_LISTAS` o `PUBLICAR_LISTAS`.
+
+#### Scenario: Definir la lista General como predeterminada
+- **GIVEN** la organización A sin lista predeterminada y la lista activa `General`
+- **WHEN** un usuario con `ADMIN_CONFIGURACION` envía `LISTA_PRECIO_PREDETERMINADA_DEFINIR` con `General`
+- **THEN** el comando queda `ACEPTADO`, la lista predeterminada de A es `General` y hay una fila de auditoría con el valor anterior nulo y el nuevo
+- **Regla:** `01` §4 (lista de precios por defecto: General); PRC-20; AUD-01
+
+#### Scenario: Cambiar la lista predeterminada
+- **GIVEN** `General` como predeterminada y la lista activa `Mayorista`
+- **WHEN** se define `Mayorista` como predeterminada
+- **THEN** la predeterminada es `Mayorista`, los clientes con lista asignada conservan la suya y ninguna versión cambia
+- **Regla:** PRC-20; INV-11
+
+#### Scenario: Lista inactiva
+- **WHEN** se envía `LISTA_PRECIO_PREDETERMINADA_DEFINIR` con una lista inactiva
+- **THEN** se rechaza con `LISTA_INACTIVA` y la configuración no cambia
+- **Regla:** PRC-20; `design.md` D11 del change 13
+
+#### Scenario: Lista de otra organización
+- **WHEN** un usuario de A envía el comando con una lista de B
+- **THEN** la respuesta es 404 y la configuración de A no cambia
+- **Regla:** INV-21; SEG-07
+
+#### Scenario: Sin permiso de configuración
+- **WHEN** un usuario con `GESTIONAR_LISTAS` y sin `ADMIN_CONFIGURACION` (rol Administración) envía el comando
+- **THEN** la respuesta es 403 `PERMISO_REQUERIDO` y la configuración no cambia
+- **Regla:** `01` §19 (`ADMIN_CONFIGURACION`); SEG-06
+
+#### Scenario: Doble envío
+- **GIVEN** un `LISTA_PRECIO_PREDETERMINADA_DEFINIR` aceptado con `operation_id` X
+- **WHEN** se reenvía con X y el mismo contenido
+- **THEN** se devuelve el resultado original y hay una sola fila de auditoría
+- **Regla:** INV-06; SYN-02
+
+#### Scenario: La organización recién sembrada no tiene lista predeterminada
+- **WHEN** se siembra una organización nueva
+- **THEN** no tiene ninguna lista de precios y su lista predeterminada queda sin definir
+- **Regla:** `01` §4; `design.md` D11 del change 13
+
+#### Scenario: La base rechaza una lista inexistente escrita por fuera del servicio
+- **WHEN** se intenta escribir directamente en la configuración un identificador de lista que no existe en la organización
+- **THEN** la base rechaza la escritura por la clave foránea compuesta
+- **Regla:** INV-02; `03` §2.4; `03` §4 (`lista_precio_default_id`)
+
+### Requirement: La lista predeterminada se administra desde la pantalla de configuración
+
+El área `/admin` DEBE ofrecer, en Configuración y solo con `ADMIN_CONFIGURACION` (ADR-027), la elección de la lista de precios predeterminada entre las listas activas, mostrando la actual. Mientras la organización no tenga lista predeterminada, la pantalla DEBE advertir que los clientes sin lista asignada no tienen precio.
+
+#### Scenario: Elegir la lista predeterminada
+- **GIVEN** un Administrador y las listas activas `General` y `Mayorista`
+- **WHEN** elige `General` y guarda
+- **THEN** la pantalla muestra `General` como lista predeterminada
+- **Regla:** `01` §4; PRC-20
+
+#### Scenario: Organización sin lista predeterminada
+- **GIVEN** una organización sin lista predeterminada
+- **WHEN** un Administrador abre Configuración
+- **THEN** ve la advertencia de que los clientes sin lista asignada no tienen precio
+- **Regla:** PRC-20; VTA-10
+
+#### Scenario: Sin permiso de configuración
+- **GIVEN** un usuario sin `ADMIN_CONFIGURACION`
+- **WHEN** entra a `/admin`
+- **THEN** no ve la elección de la lista predeterminada
+- **Regla:** ADR-027; SEG-06
+
+### Requirement: La política y la tolerancia de crédito de la organización se definen por comando
+
+Un usuario con `ADMIN_CONFIGURACION` DEBE poder definir, con conexión, la política de crédito por defecto (`ADVERTIR`, `AUTORIZAR`, `BLOQUEAR`) y la tolerancia sin conexión (tipo `IMPORTE` o `PORCENTAJE` y valor no negativo, juntos, o los dos vacíos) mediante un comando con `operation_id`, auditado con el valor anterior y el nuevo. Un tipo sin valor o un valor sin tipo DEBE rechazarse con `TOLERANCIA_OFFLINE_INVALIDA`. Los clientes con política o tolerancia propias NO DEBEN cambiar.
+
+#### Scenario: Cargar la tolerancia de la organización
+
+- **GIVEN** la organización con tolerancia vacía
+- **WHEN** el Administrador define AUTORIZAR y tolerancia `IMPORTE` `"20000.00"`
+- **THEN** la configuración cambia, queda auditada y un cliente sin tolerancia propia hereda $20.000
+- **Regla:** CRE-03; CRE-06; AUD-01
+
+#### Scenario: Tolerancia incompleta
+
+- **WHEN** se envía tipo `PORCENTAJE` sin valor
+- **THEN** se rechaza con `TOLERANCIA_OFFLINE_INVALIDA` y nada cambia
+- **Regla:** CRE-06; ADR-032
+
+#### Scenario: Política fuera del catálogo
+
+- **WHEN** se envía la política `PERMITIR`
+- **THEN** se rechaza como contenido inválido
+- **Regla:** CRE-03
+
+#### Scenario: Sin el permiso
+
+- **WHEN** un usuario sin `ADMIN_CONFIGURACION` envía el comando
+- **THEN** se rechaza con `PERMISO_REQUERIDO`
+- **Regla:** SEG-06
+
+#### Scenario: Doble envío
+
+- **WHEN** se reenvía con el mismo `operation_id` y contenido
+- **THEN** devuelve el resultado original sin otra fila de auditoría
+- **Regla:** INV-06
+
+### Requirement: El descuento manual y el crédito se configuran desde la pantalla de configuración
+
+La pantalla de configuración de `/admin` DEBE mostrar y permitir cambiar, con `ADMIN_CONFIGURACION`, si el descuento manual está habilitado, si exige motivo, la política de crédito por defecto y la tolerancia sin conexión, con su ayuda contextual.
+
+#### Scenario: Cambiar la política por defecto
+
+- **GIVEN** el Administrador en "Configuración"
+- **WHEN** cambia la política por defecto a ADVERTIR y guarda
+- **THEN** la pantalla muestra el valor nuevo y los clientes sin política propia lo heredan en su próxima venta
+- **Regla:** CRE-03
+
+### Requirement: Los parámetros de la nota de venta se definen por comando
+
+Un usuario con `ADMIN_CONFIGURACION` DEBE poder definir, con conexión, si la nota de venta muestra el saldo (por defecto no) y el domicilio y el teléfono de la organización que imprime la nota (opcionales; un texto vacío o solo de espacios queda vacío), mediante el comando `NOTA_VENTA_CONFIGURAR` v1 con `operation_id`, por `POST /api/v1/configuracion/nota-de-venta`, auditado con el valor anterior y el nuevo. Un domicilio de más de 200 caracteres o un teléfono de más de 50 DEBEN rechazarse con `DATO_DE_NOTA_INVALIDO`. Cualquier campo extra DEBE rechazarse como contenido inválido. `GET /api/v1/configuracion/nota-de-venta` DEBE devolver los valores vigentes con el mismo permiso (`design.md` D3, D4, D10).
+
+#### Scenario: Valores iniciales
+- **GIVEN** una organización recién migrada
+- **WHEN** el Administrador lee los parámetros de la nota
+- **THEN** "mostrar saldo" es falso y domicilio y teléfono están vacíos
+- **Regla:** VTA-13
+
+#### Scenario: Activar el saldo y cargar los datos
+- **WHEN** el Administrador envía "mostrar saldo" verdadero, un domicilio y un teléfono
+- **THEN** la configuración cambia, queda una fila de auditoría con el valor anterior y el nuevo, y la próxima nota los muestra
+- **Regla:** VTA-13; AUD-01
+
+#### Scenario: Texto demasiado largo
+- **WHEN** se envía un domicilio de 201 caracteres
+- **THEN** se rechaza con 422 `DATO_DE_NOTA_INVALIDO` y nada cambia
+- **Regla:** VTA-13
+
+#### Scenario: Texto vacío
+- **WHEN** se envía un teléfono de solo espacios
+- **THEN** el teléfono queda vacío y la nota no lo muestra
+- **Regla:** VTA-13
+
+#### Scenario: Sin el permiso
+- **WHEN** el usuario `sup01`, sin `ADMIN_CONFIGURACION`, envía el comando o lee los parámetros
+- **THEN** recibe 403 `PERMISO_REQUERIDO` y nada cambia
+- **Regla:** SEG-06
+
+#### Scenario: Doble envío
+- **WHEN** se reenvía el comando con el mismo `operation_id` y contenido
+- **THEN** devuelve el resultado original sin otra fila de auditoría
+- **Regla:** INV-06
+
+#### Scenario: Aislamiento
+- **WHEN** el Administrador de una organización define los parámetros
+- **THEN** la nota de otra organización no cambia
+- **Regla:** INV-21
+
+### Requirement: El nombre y el CUIT de la organización se definen por comando
+
+Un usuario con `ADMIN_CONFIGURACION` DEBE poder definir, con conexión, el nombre (obligatorio) y el CUIT (opcional) de la organización que imprime el encabezado de la nota, mediante un comando con `operation_id` (`ORGANIZACION_DATOS_CONFIGURAR` v1, `POST /api/v1/configuracion/organizacion`, con su `GET`), auditado con el valor anterior y el nuevo. El valor se normaliza a dígitos (se descartan guiones y espacios; los puntos no se aceptan, como en el CUIT del proveedor); un valor vacío o solo de espacios queda nulo; un valor que tras normalizar no tenga exactamente 11 dígitos DEBE rechazarse con 422 `CUIT_INVALIDO` sin cambiar nada. Sin columna nueva ni migración. El nombre se recorta; uno vacío o de más de 200 caracteres DEBE rechazarse con 422 `NOMBRE_DE_ORGANIZACION_INVALIDO` sin cambiar nada. Se guardan en `organizacion.nombre` y `organizacion.cuit`. El alta de organizaciones no se ofrece. No se valida el dígito verificador del CUIT (`design.md` D15 b).
+
+#### Scenario: Cambiar el nombre
+- **GIVEN** una organización llamada "Distribuidora Demo"
+- **WHEN** el Administrador envía "  Distribuidora Norte  "
+- **THEN** `organizacion.nombre` queda "Distribuidora Norte", hay una fila de auditoría con el nombre anterior y el nuevo, y la próxima nota lo muestra
+- **Regla:** VTA-13; AUD-01
+
+#### Scenario: Nombre inválido
+- **WHEN** se envía un nombre vacío, de solo espacios o de 201 caracteres
+- **THEN** se rechaza con 422 `NOMBRE_DE_ORGANIZACION_INVALIDO` y ni el nombre ni el CUIT cambian
+- **Regla:** VTA-13
+
+#### Scenario: Cargar el CUIT
+- **GIVEN** una organización con `cuit` nulo
+- **WHEN** el Administrador envía `30-71234567-8`
+- **THEN** `organizacion.cuit` queda `30712345678`, hay una fila de auditoría con el valor anterior (nulo) y el nuevo, y la próxima nota lo muestra
+- **Regla:** VTA-13; AUD-01
+
+#### Scenario: Largo inválido
+- **WHEN** se envía `3071234567` (10 dígitos) o `307123456789` (12)
+- **THEN** se rechaza con 422 `CUIT_INVALIDO` y nada cambia
+- **Regla:** VTA-13; CLI-05
+
+#### Scenario: Caracteres inválidos
+- **WHEN** se envía `30.71234567.8` o `30-7123456A-8`
+- **THEN** se rechaza con 422 `CUIT_INVALIDO` y nada cambia
+- **Regla:** VTA-13
+
+#### Scenario: Vaciar el CUIT
+- **GIVEN** una organización con CUIT cargado
+- **WHEN** se envía un texto de solo espacios
+- **THEN** `organizacion.cuit` queda nulo, la auditoría registra el valor anterior y la nota deja de mostrarlo
+- **Regla:** VTA-13; AUD-01
+
+#### Scenario: Sin el permiso
+- **WHEN** el usuario `sup01`, sin `ADMIN_CONFIGURACION`, envía el comando o lee el CUIT
+- **THEN** recibe 403 `PERMISO_REQUERIDO` y nada cambia
+- **Regla:** SEG-06
+
+#### Scenario: Doble envío
+- **WHEN** se reenvía el comando con el mismo `operation_id` y contenido
+- **THEN** devuelve el resultado original sin otra fila de auditoría
+- **Regla:** INV-06
+
+#### Scenario: Aislamiento
+- **WHEN** el Administrador de una organización define su CUIT
+- **THEN** el CUIT de otra organización no cambia
+- **Regla:** INV-21
+
+### Requirement: Los parámetros de la nota se administran desde la pantalla de configuración
+
+La configuración de `/admin` DEBE ofrecer, con `ADMIN_CONFIGURACION`, una sección "Nota de venta" que muestre y permita cambiar "mostrar saldo" y, en "Encabezado de la nota", el domicilio y el teléfono, y una sección propia "Datos de la organización" (`/admin/configuracion/organizacion`) con el nombre y el CUIT, y que muestre los errores del comando junto al campo que corresponde (`design.md` D10, D15). La sección "Datos de la organización" no lleva ayuda contextual (D15 c).
+
+#### Scenario: Guardar desde la pantalla
+- **GIVEN** el usuario `admin` en "Configuración › Nota de venta"
+- **WHEN** activa "mostrar saldo" y guarda
+- **THEN** la pantalla muestra el valor nuevo
+- **Regla:** VTA-13
+
+#### Scenario: Error junto al campo
+- **WHEN** guarda un teléfono de 51 caracteres
+- **THEN** el error aparece junto al teléfono y los demás valores no cambian
+- **Regla:** VTA-13
+
+#### Scenario: Guardar el nombre y el CUIT desde la pantalla
+- **GIVEN** el usuario `admin` en "Configuración › Datos de la organización", con CUIT vacío
+- **WHEN** cambia el nombre, escribe `30-71234567-8` en "CUIT" y guarda
+- **THEN** la pantalla muestra el nombre nuevo y `30712345678`, y la nota de venta imprime ambos en el encabezado
+- **Regla:** VTA-13
+
+#### Scenario: Error junto al campo
+- **WHEN** guarda un CUIT de 10 dígitos o un nombre vacío
+- **THEN** el error aparece junto al campo que corresponde y el otro valor escrito no se pierde
+- **Regla:** VTA-13
+
+### Requirement: El redondeo por defecto se define por comando
+
+El sistema DEBE definir el redondeo por defecto de la organización solo mediante `REDONDEO_POR_DEFECTO_DEFINIR` v1 (`ONLINE`, `ADMIN_CONFIGURACION`), con múltiplo (string decimal) y dirección (`ARRIBA`, `CERCANO`, `ABAJO`), los dos presentes o los dos nulos; los dos nulos lo dejan sin definir. El múltiplo DEBE ser mayor que cero con hasta dos decimales y la dirección de la lista cerrada (`REDONDEO_INVALIDO`, 422; PRC-01, PRC-14). Uno presente y otro nulo DEBE rechazarse con `REDONDEO_INVALIDO`. El comando NO DEBE modificar ninguna lista existente ni ningún precio. DEBE dejar una fila de auditoría con el valor anterior y el nuevo (`design.md` D10, D13).
+
+#### Scenario: Definir el redondeo por defecto
+- **GIVEN** la organización A sin redondeo por defecto (`01` §4: "a definir")
+- **WHEN** un administrador define múltiplo `"100.00"` y dirección `ARRIBA`
+- **THEN** la configuración de A queda con esos valores y la auditoría registra antes nulo y después `100.00` / `ARRIBA`
+- **Regla:** `01` §4; PRC-14; AUD-01
+
+#### Scenario: Las listas existentes no cambian
+- **GIVEN** la lista General de A con redondeo a múltiplo de 100 hacia arriba (`01` §7.2) y su versión vigente
+- **WHEN** se define el redondeo por defecto en múltiplo `"500.00"` y dirección `ABAJO`
+- **THEN** la lista General conserva su redondeo y su versión vigente no cambia
+- **Regla:** PRC-01 (la lista siempre tiene su propio redondeo)
+
+#### Scenario: Quitar el redondeo por defecto
+- **WHEN** se envía múltiplo y dirección nulos
+- **THEN** el redondeo por defecto queda sin definir
+- **Regla:** `design.md` D10
+
+#### Scenario: Valores inválidos
+- **WHEN** se envía múltiplo `"0.00"`, `"10.005"`, dirección `HACIA_ARRIBA`, o múltiplo sin dirección
+- **THEN** se rechaza con `REDONDEO_INVALIDO` (422) y nada cambia
+- **Regla:** PRC-01; INV-01
+
+#### Scenario: Sin permiso, doble envío y modo offline
+- **WHEN** un usuario sin `ADMIN_CONFIGURACION` envía el comando, o un administrador lo envía dos veces con el mismo `operation_id`, o llega en modo `OFFLINE`
+- **THEN** el primero recibe `PERMISO_REQUERIDO`; el segundo deja un solo cambio; el tercero se rechaza como tipo que no admite ese modo
+- **Regla:** SEG-06; INV-06; `02` §6.5
+
+#### Scenario: La base no admite un redondeo a medias
+- **WHEN** se intenta guardar en la base un múltiplo sin dirección o un múltiplo no positivo
+- **THEN** la restricción de la tabla lo rechaza
+- **Regla:** `03` §4; `design.md` D10
+
+### Requirement: El redondeo por defecto se consulta
+
+El sistema DEBE exponer `GET /configuracion/redondeo-por-defecto` a quien tenga `ADMIN_CONFIGURACION` o `GESTIONAR_LISTAS`, con el múltiplo como string y la dirección, o los dos nulos si no está definido, solo de la organización del token (`design.md` D11).
+
+#### Scenario: Lectura con permiso de listas
+- **GIVEN** A con redondeo por defecto `"100.00"` / `ARRIBA`
+- **WHEN** un usuario de Administración (con `GESTIONAR_LISTAS`, sin `ADMIN_CONFIGURACION`) lo lee
+- **THEN** recibe `"100.00"` y `ARRIBA`
+- **Regla:** `01` §19 (`GESTIONAR_LISTAS`); INV-21
+
+#### Scenario: Sin permiso
+- **WHEN** lo lee un vendedor
+- **THEN** responde 403
+- **Regla:** SEG-06
+
+### Requirement: El redondeo por defecto se administra desde la pantalla de configuración
+
+`/admin` DEBE ofrecer, con `ADMIN_CONFIGURACION`, la pestaña "Redondeo por defecto" en Configuración, con múltiplo y dirección, validados con el mismo criterio que el servidor y sin convertir el múltiplo a número para calcular, y un botón para dejarlo sin definir (`design.md` D12).
+
+#### Scenario: Guardar y quitar
+- **WHEN** un administrador guarda `100` y "Hacia arriba", y después usa "Quitar"
+- **THEN** primero queda definido y después sin definir, con un mensaje de confirmación en cada caso
+- **Regla:** `01` §4
+
+#### Scenario: Múltiplo inválido en el formulario
+- **WHEN** carga un múltiplo `0`
+- **THEN** el formulario lo marca inválido y no envía el comando
+- **Regla:** PRC-01; TR-10

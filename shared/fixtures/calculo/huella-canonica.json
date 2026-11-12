@@ -1,0 +1,149 @@
+[
+  {
+    "id": "HUELLA-claves-fuera-de-orden-orden-original",
+    "reglas": ["ADR-012"],
+    "entrada": {
+      "motor": "huella",
+      "contenido": { "tipo": "VENTA_CONFIRMAR", "cliente_id": "c-1", "jornada_id": "j-1" }
+    },
+    "salida_esperada": { "huella": "2098fc979b24076d4643b71b919dfc748eb6dfdcada2de304bd6efad6b5fd122" }
+  },
+  {
+    "id": "HUELLA-claves-fuera-de-orden-orden-alterno",
+    "reglas": ["ADR-012"],
+    "entrada": {
+      "motor": "huella",
+      "contenido": { "jornada_id": "j-1", "tipo": "VENTA_CONFIRMAR", "cliente_id": "c-1" }
+    },
+    "salida_esperada": { "huella": "2098fc979b24076d4643b71b919dfc748eb6dfdcada2de304bd6efad6b5fd122" }
+  },
+  {
+    "id": "HUELLA-acentos-en-texto",
+    "reglas": ["ADR-012"],
+    "entrada": {
+      "motor": "huella",
+      "contenido": { "observacion": "Entrega en Peñón, calle Ñandú, depto 3º" }
+    },
+    "salida_esperada": { "huella": "0171a903bf50eac38fbd8c3853e9887d6b5db00fbbceb89ae574cf2fabc0c2b2" }
+  },
+  {
+    "id": "HUELLA-emoji-en-texto",
+    "reglas": ["ADR-012"],
+    "entrada": {
+      "motor": "huella",
+      "contenido": { "observacion": "Entrega confirmada 🎉📦" }
+    },
+    "salida_esperada": { "huella": "13d9556d8edeee330887d6775d37690232bbeb3cd6049003d70939ce7ef0340c" }
+  },
+  {
+    "id": "HUELLA-texto-nfc",
+    "reglas": ["ADR-012"],
+    "entrada": {
+      "motor": "huella",
+      "contenido": { "nombre": "café" }
+    },
+    "salida_esperada": { "huella": "103f86816c79affc8a121186d9533462790b324731a16dd3d94cb2b942d29fac" }
+  },
+  {
+    "id": "HUELLA-texto-nfd",
+    "reglas": ["ADR-012"],
+    "entrada": {
+      "motor": "huella",
+      "contenido": { "nombre": "café" }
+    },
+    "salida_esperada": { "huella": "103f86816c79affc8a121186d9533462790b324731a16dd3d94cb2b942d29fac" }
+  },
+  {
+    "id": "HUELLA-clave-con-valor-nulo",
+    "reglas": ["ADR-012"],
+    "entrada": {
+      "motor": "huella",
+      "contenido": { "cliente_id": "c-1", "nota": null }
+    },
+    "salida_esperada": { "huella": "e9fcbd67bcb23b5d4ab1bd66554c2f9aede902a58a84f37f5d0fb5c78f8d8a30" }
+  },
+  {
+    "id": "HUELLA-clave-ausente",
+    "reglas": ["ADR-012"],
+    "entrada": {
+      "motor": "huella",
+      "contenido": { "cliente_id": "c-1" }
+    },
+    "salida_esperada": { "huella": "0d4f60e35eff054538b09754e0b2857407cfb37a8a6f3d483da55454f45b61fd" }
+  },
+  {
+    "id": "HUELLA-anidamiento-orden-original",
+    "reglas": ["ADR-012"],
+    "entrada": {
+      "motor": "huella",
+      "contenido": {
+        "cliente": { "id": "c-1", "nombre": "Kiosco Sur" },
+        "items": [
+          { "producto_id": "p-1", "cantidad": 10 },
+          { "producto_id": "p-2", "cantidad": 3 }
+        ]
+      }
+    },
+    "salida_esperada": { "huella": "b9bf14f3ef1148453a38894eccf2073c0306daa70e54385480f76431fd11e7f8" }
+  },
+  {
+    "id": "HUELLA-anidamiento-orden-alterno",
+    "reglas": ["ADR-012"],
+    "entrada": {
+      "motor": "huella",
+      "contenido": {
+        "items": [
+          { "cantidad": 10, "producto_id": "p-1" },
+          { "cantidad": 3, "producto_id": "p-2" }
+        ],
+        "cliente": { "nombre": "Kiosco Sur", "id": "c-1" }
+      }
+    },
+    "salida_esperada": { "huella": "b9bf14f3ef1148453a38894eccf2073c0306daa70e54385480f76431fd11e7f8" }
+  },
+  {
+    "id": "HUELLA-arreglo-orden-importa-original",
+    "reglas": ["ADR-012"],
+    "entrada": {
+      "motor": "huella",
+      "contenido": { "secuencia": [1, 2, 3] }
+    },
+    "salida_esperada": { "huella": "1b723657d9822df03080c9e1828e61a550b245702265d4d37ba32f3f88d0f913" }
+  },
+  {
+    "id": "HUELLA-arreglo-orden-importa-invertido",
+    "reglas": ["ADR-012"],
+    "entrada": {
+      "motor": "huella",
+      "contenido": { "secuencia": [3, 2, 1] }
+    },
+    "salida_esperada": { "huella": "e2cbb994a4ea9d63a944e389fa397c8f65c3919b3d7dc92a9e55253ea6a4ab8a" }
+  },
+  {
+    "id": "HUELLA-decimal-importe-dos-decimales",
+    "reglas": ["ADR-012", "INV-03"],
+    "entrada": {
+      "motor": "huella",
+      "contenido": { "importe_total": { "__decimal__": "31250.00", "escala": 2 } }
+    },
+    "salida_esperada": { "huella": "fb7c70a3fd149df33763d7e7def5eb6ba17670b79149cd9331b770fe34283347" }
+  },
+  {
+    "id": "HUELLA-decimal-importe-un-decimal-normaliza-igual",
+    "reglas": ["ADR-012", "INV-03"],
+    "entrada": {
+      "motor": "huella",
+      "contenido": { "importe_total": { "__decimal__": "31250.0", "escala": 2 } }
+    },
+    "salida_esperada": { "huella": "fb7c70a3fd149df33763d7e7def5eb6ba17670b79149cd9331b770fe34283347" }
+  },
+  {
+    "id": "HUELLA-decimal-costo-seis-decimales",
+    "reglas": ["ADR-012", "INV-03"],
+    "entrada": {
+      "motor": "huella",
+      "contenido": { "descuento_pct": { "__decimal__": "0.21", "escala": 6 } }
+    },
+    "salida_esperada": { "huella": "65a2164bac7b4e52596ab07e7cb3cbb8164f8e21b371bd11111d382266df5c55" }
+  }
+]

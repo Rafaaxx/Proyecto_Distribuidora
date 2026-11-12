@@ -1,0 +1,44 @@
+# ADR-059 — Nota de venta: armado en el dispositivo, lectura única, saldo, marca de anulada y parámetros de la nota
+
+| Campo | Valor |
+| --- | --- |
+| Estado | Vigente |
+| Fecha | 2026-10-27 |
+| Referenciado en | `openspec/changes/20-nota-de-venta/design.md` D0 a D15 y `specs/ventas/nota-de-venta`, `specs/organizacion/parametros-de-organizacion`, `specs/sistema/pipeline-de-comandos`, `specs/sistema/ayuda-contextual`; `01-dominio.md` VTA-13, CRE-02, CAT-08, PRC-22, CLI-03, VTA-22, TR-04, AUD-01; `02-arquitectura.md` §13.6; `03-modelo-de-datos.md` §4; ADR-007, ADR-008, ADR-045, ADR-051, ADR-058 |
+
+**Puntos 1 a 11: aprobados por el usuario el 2026-10-27 (tarea 0.1 del change 20, opción A de D0 a D13). Punto 12: aprobado por el usuario el 2026-10-27 (tarea 0.3, D14): modos A y B; modo C diferido a la etapa 4. Queda *Propuesto* hasta el archivo del change.**
+
+## Contexto
+
+VTA-13 y ADR-008 definen qué muestra la nota de venta y que se genera en el dispositivo con pdfmake, pero `docs/` no dice con qué datos se arma para que el change 22a use la misma función sin conexión, qué "datos de la organización" lleva (la organización solo tiene nombre y CUIT), qué saldo se imprime en una reimpresión ni dónde se configura, ni cómo se ve la nota de una venta anulada (deuda de ADR-058). ADR-045 fija que la organización inicial es monotributista y vende a precio final (modo A), pero el modelo soporta los modos B y C (ADR-009, VTA-04, etapa 4) y la nota no debe quedar atada al monotributo (pedido del usuario, 2026-10-27); VTA-13 no dice cómo se presenta el IVA. ADR-007 y ADR-008 piden validar nombre y leyenda con el contador.
+
+## Decisión (propuesta)
+
+1. **Armado (D1).** Una función pura del frontend arma el contenido de la nota a partir de un tipo neutro de datos de la venta; otra lo convierte en el documento de pdfmake. Cada origen de datos tiene su adaptador: la API en el change 20, Dexie en el 22a.
+2. **Lectura (D2, D13).** `GET /api/v1/ventas/{venta_id}/nota`, con `VENDER` o `ANULAR_VENTA`, devuelve en una llamada los datos de la organización, del cliente, de la venta congelada, de la cobranza con sus medios, el saldo y la anulación. Sin costos ni crédito. 404 entre organizaciones. Sin permiso nuevo.
+3. **Organización (D3).** Nombre y CUIT, más domicilio y teléfono opcionales cargados en la configuración de la nota. Sin condición frente al IVA ni otros datos fiscales.
+4. **Saldo (D4).** Solo si la organización activa "mostrar saldo" (por defecto no). Es el saldo resultante de CRE-02 con el snapshot congelado de la venta (`credito_saldo_considerado + total − cobranza de la venta`), así la reimpresión reproduce la nota original con y sin conexión. No se muestra al consumidor final, en ventas sin snapshot ni en ventas anuladas.
+5. **Venta anulada (D5).** La nota se genera con la marca "ANULADA" en cada página y una línea con fecha, motivo y destino de lo cobrado; sin saldo.
+6. **Reimpresión (D6).** Idéntica al original; no lleva marca de copia.
+7. **Contenido (D7).** A4 vertical; líneas con cantidad en su presentación, producto, precio por presentación (PRC-22), bruto, descuento e importe; subtotal, descuentos y total; las filas de IVA según el modo impositivo congelado en la venta (punto 12); cobranza con medios; leyenda al pie. Sin nombres de reglas, autorizadores, costos ni crédito.
+8. **pdfmake (D8).** Versión exacta en `dependencies`, fuentes Roboto embebidas que trae, carga dinámica al generar. Versión instalada: `pdfmake` 0.3.13 (exacta, sin `^`), más `@types/pdfmake` en `devDependencies` porque la librería no trae tipos; `pdfmake/build/vfs_fonts` se tipa con una declaración local.
+9. **Compartir (D9).** "Compartir nota" con Web Share API solo si el navegador comparte archivos; "Descargar nota" siempre. Archivo `nota-de-venta-{numero}.pdf`.
+10. **Parámetros (D10).** `configuracion_organizacion` suma `nota_venta_muestra_saldo` (por defecto falso), `nota_venta_domicilio` y `nota_venta_telefono`; comando `NOTA_VENTA_CONFIGURAR` v1 (`ONLINE`, `ADMIN_CONFIGURACION`, auditado) por `POST /api/v1/configuracion/nota-de-venta`, con su lectura y su pantalla; texto demasiado largo `DATO_DE_NOTA_INVALIDO` (422).
+11. **Nombre y leyenda (D12).** "Nota de venta" y "Documento no válido como factura", en una constante (aprobados por el usuario, 2026-10-27).
+12. **IVA según el modo congelado (D14, aprobado en 0.3 el 2026-10-27).** La nota usa el `modo_impositivo` congelado en la venta, nunca la condición ni el modo actuales de la organización, y solo valores congelados (`alicuota` e `importe_iva` por línea; `total_neto`, `total_iva`, `total`); la lectura incluye la `alicuota` de cada línea. **Modo A:** sin filas de IVA. **Modo B:** líneas netas; Neto, una fila "IVA {alícuota} %" por alícuota presente, incluida la de 0 % (suma de los IVA de línea de esa alícuota, en orden descendente) y Total; sin columna "IVA %" en la tabla de líneas. **Modo C: diferido a la etapa 4.** La nota de una venta C no se genera: el armado la rechaza con `NOTA_MODO_C_NO_DISPONIBLE` y la pantalla avisa que todavía no está disponible; la lectura no rechaza por modo. Quedan abiertas para la etapa 4 la semántica de las columnas de la línea en modo C y el rótulo y la leyenda del IVA contenido (`design.md` Q1, Q2). Las pruebas de B y del rechazo de C usan ventas fabricadas hasta la etapa 4.
+13. **Nombre y CUIT de la organización (D15, ampliación del 2026-10-28; aprobado por el usuario el mismo día).** Tras la prueba manual se vio que `organizacion.cuit` no tiene cómo cargarse y la nota no lo imprime. Por ampliación del mismo día se edita también el nombre. Se agregan los campos "Nombre" (obligatorio, recortado, hasta 200 caracteres) y "CUIT" (opcional) en Configuración, guardados en `organizacion.nombre` y `organizacion.cuit` (no en `configuracion_organizacion`), con el CUIT normalizado a dígitos, de exactamente 11 dígitos y vacío = nulo, por el bus con `ADMIN_CONFIGURACION`, auditado con el valor anterior y el nuevo, solo con conexión. Sin migración. Decisión: comando propio `ORGANIZACION_DATOS_CONFIGURAR` v1 con nombre y CUIT (otra tabla y otra entidad de auditoría; el nombre no es un dato de la nota) por `POST/GET /api/v1/configuracion/organizacion`, en la sección propia "Datos de la organización" (`/admin/configuracion/organizacion`); el CUIT se valida solo por normalización a dígitos y largo de 11, sin dígito verificador, igual que el del proveedor y el del cliente; errores `CUIT_INVALIDO` y `NOMBRE_DE_ORGANIZACION_INVALIDO` (422) propios de `identidad`; sin ayuda contextual nueva ni cambios en las existentes. El alta autoservicio de organizaciones (`00` §6.4, etapa 4) sigue fuera de alcance.
+
+## Consecuencias
+
+- El 22a genera la nota sin conexión agregando solo el adaptador desde Dexie; el 21 debe bajar en el bootstrap los parámetros de la nota y los datos de la organización, y precargar el fragmento de pdfmake.
+- La nota no se guarda: cada generación sale de los datos congelados.
+- Se cierra la deuda de ADR-058 sobre la marca de la venta anulada.
+- La nota queda lista para el modo B de la etapa 4 sin tocar su armado; la etapa 4 repite la prueba manual con ventas reales de modo B.
+- **Deuda nominada a la etapa 4: nota de las ventas de modo C.** Resolver qué guardan `precio_referencia`, `importe_bruto` e `importe_descuento` en modo C y cómo se obtienen los importes con IVA de la línea (Q1), y el rótulo y la leyenda del IVA contenido, validados con el contador si corresponde (Q2); luego completar el armado y quitar el rechazo `NOTA_MODO_C_NO_DISPONIBLE`. Habilitar el modo C en la confirmación sin saldar esta deuda deja esas ventas sin nota; la prueba del rechazo lo hace visible. Se propone registrarla en `04` §9 (tarea 10.2 del change 20).
+
+## Precisiones del apply
+
+- **pdfmake (punto 8).** `pdfmake` 0.3.13 exacta y `@types/pdfmake` ^0.3.3; `npm run build` lo deja en dos fragmentos aparte del bundle inicial (`pdfmake-*.js`, 769 kB, y `vfs_fonts-*.js`, 855 kB), que solo se piden al generar la nota.
+- **Pantallas (D6, D9, D14).** "Descargar nota" y, solo si el navegador comparte archivos, "Compartir nota" aparecen en "Venta registrada" y en el detalle de la venta, para quien tiene `VENDER` o `ANULAR_VENTA`. Un error de lectura de la nota muestra el aviso y "Reintentar" sin perder la venta; una venta de modo C muestra "La nota de venta todavía no está disponible para ventas con IVA incluido (modo C)." y ningún botón.
+- **Ayuda (D11).** Cuatro claves nuevas en `ayuda/textos.ts` (`ventas.notaDeVenta`, `ventas.notaAnulada`, `configuracion.notaMuestraSaldo`, `configuracion.notaDatosOrganizacion`), sin ejemplos.
+- **Configuración (D10).** Sección "Nota de venta" en `/admin/configuracion/nota-de-venta`, solo con `ADMIN_CONFIGURACION`; `DATO_DE_NOTA_INVALIDO` se muestra junto al campo que nombra el mensaje del servidor.

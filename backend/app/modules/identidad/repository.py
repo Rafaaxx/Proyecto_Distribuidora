@@ -1,0 +1,1369 @@
+"""Acceso a datos de `identidad` (`docs/02-arquitectura.md` §8).
+
+Contrato no negociable: todo método público recibe `organizacion_id` como
+primer parámetro obligatorio, y lo usa para filtrar toda consulta. Para
+`organizacion` (la raíz sin padre) el filtro es sobre su propio `id`: el
+`organizacion_id` de un método de este repositorio siempre identifica la
+organización que la operación puede tocar, sin excepción (`tests/unit/
+test_repositorios_organizacion_obligatoria.py`, tarea 6.3).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Collection
+from datetime import datetime
+from decimal import Decimal
+from uuid import UUID
+
+import sqlalchemy as sa
+from sqlalchemy import and_, delete, func, select, update
+from sqlalchemy.orm import Session
+
+from app.modules.identidad.models import (
+    Auditoria,
+    ConfiguracionOrganizacion,
+    Dispositivo,
+    IntentoLogin,
+    IntentoPinAutorizacion,
+    Organizacion,
+    Permiso,
+    Rol,
+    RolPermiso,
+    SesionRefresh,
+    Usuario,
+    VerificacionConsistencia,
+)
+
+# Excepción explícita y enumerable (tarea 6.3/6.4, mismo criterio que
+# `TABLAS_GLOBALES_EXENTAS` de la tarea 3.1): funciones de este módulo que
+# NO reciben `organizacion_id` como primer parámetro. Dos motivos, ambos
+# porque la función es la fuente del propio filtro, no algo que lo reciba:
+# el catálogo global `permiso` (D7), y la resolución de `organizacion_id`
+# a partir del `slug` en el login (`ADR-021`, tarea 8.3).
+FUNCIONES_SIN_ORGANIZACION_ID = frozenset(
+    {
+        "obtener_permiso_por_codigo",
+        "listar_permisos",
+        "obtener_organizacion_por_slug",
+        "obtener_sesion_refresh_por_token_hash_global",
+        # `intento_login` (grupo 11, `ADR-018`) no tiene `organizacion_id`
+        # (ver docstring de la migración `e5f6a7b8c9d0` y del modelo
+        # `IntentoLogin`): el límite por IP es transversal a organizaciones.
+        "registrar_intento_login",
+        # D24 (change 18b): mismo motivo, bloqueo desde el último fallo.
+        "ultimo_fallo_de_login",
+        "contar_fallos_de_login_en_ventana",
+        # Change 28 (tareas periodicas): recorren todas las organizaciones o la tabla global
+        # `intento_login`; las ejecuta el rol `app_mantenimiento`, no una ruta autenticada.
+        "listar_organizaciones_ids",
+        "borrar_intentos_de_login_anteriores_a",
+    }
+)
+
+
+def crear_organizacion(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    nombre: str,
+    slug: str,
+    cuit: str | None,
+    moneda: str,
+    zona_horaria: str,
+    estado: str,
+    momento: datetime,
+    actualizado_por_id: UUID | None = None,
+) -> Organizacion:
+    """Crea `organizacion`. `organizacion_id` es el `id` que tendrá la
+    organización nueva: es la única operación de este repositorio donde
+    `organizacion_id` nace en vez de acotar una fila existente. `slug`
+    resuelve la organización en el login antes de que exista un token
+    (`ADR-021`); único en toda la base (no por organización: todavía no hay
+    ninguna que la acote)."""
+    organizacion = Organizacion(
+        id=organizacion_id,
+        nombre=nombre,
+        slug=slug,
+        cuit=cuit,
+        moneda=moneda,
+        zona_horaria=zona_horaria,
+        estado=estado,
+        creado_en=momento,
+        actualizado_en=momento,
+        actualizado_por_id=actualizado_por_id,
+    )
+    sesion.add(organizacion)
+    sesion.flush()
+    return organizacion
+
+
+def obtener_organizacion_por_slug(slug: str, sesion: Session) -> Organizacion | None:
+    """Único lookup de `organizacion` sin `organizacion_id` como filtro
+    (`FUNCIONES_SIN_ORGANIZACION_ID`, `ADR-021`): es, por definición, cómo
+    se obtiene ese filtro antes de que exista un token. Se usa exclusivamente
+    para resolver el login (tarea 8.3); nunca dentro de una petición
+    autenticada, que ya tiene `organizacion_id` del token."""
+    consulta = select(Organizacion).where(Organizacion.slug == slug)
+    return sesion.scalars(consulta).one_or_none()
+
+
+def obtener_organizacion_por_id(organizacion_id: UUID, sesion: Session) -> Organizacion | None:
+    return sesion.get(Organizacion, organizacion_id)
+
+
+def obtener_organizacion_bloqueada(organizacion_id: UUID, sesion: Session) -> Organizacion | None:
+    """La fila de `organizacion` con `FOR UPDATE` (change 20, D15): filtra por su propio `id`.
+    Refresca los valores: nunca devuelve un estado en caché."""
+    consulta = (
+        select(Organizacion)
+        .where(Organizacion.id == organizacion_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return sesion.scalars(consulta).one_or_none()
+
+
+def actualizar_datos_de_organizacion(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    nombre: str,
+    cuit: str | None,
+    momento: datetime,
+) -> Organizacion | None:
+    """Fija nombre y CUIT de `organizacion_id` (change 20, D15). `None` sin tocar nada si la
+    organización no existe."""
+    organizacion = sesion.get(Organizacion, organizacion_id)
+    if organizacion is None:
+        return None
+    organizacion.nombre = nombre
+    organizacion.cuit = cuit
+    organizacion.actualizado_en = momento
+    sesion.flush()
+    return organizacion
+
+
+def crear_configuracion(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    condicion_iva: str,
+    modo_impositivo: str,
+    politica_credito_default: str,
+    estado_facturacion_default: str,
+    intentos_pin_max: int,
+    descuento_manual_habilitado: bool,
+    motivo_obligatorio_lista: bool,
+    momento: datetime,
+    lista_precio_default_id: UUID | None = None,
+    tolerancia_offline_tipo: str | None = None,
+    tolerancia_offline_valor: object | None = None,
+    motivo_obligatorio_descuento: bool | None = None,
+    redondeo_multiplo: object | None = None,
+    redondeo_direccion: str | None = None,
+    permite_consumidor_final: bool | None = None,
+    cliente_consumidor_final_id: UUID | None = None,
+    modalidad_iva_default: str | None = None,
+    desvio_reloj_max_segundos: int | None = None,
+    actualizado_por_id: UUID | None = None,
+) -> ConfiguracionOrganizacion:
+    """Crea la única fila de `configuracion_organizacion` de `organizacion_id`.
+
+    La restricción de unicidad la impone la base (PK = `organizacion_id`,
+    tarea 3.4): una segunda llamada para la misma organización falla en el
+    `flush`/`commit` con `IntegrityError`, no se valida en Python.
+    """
+    configuracion = ConfiguracionOrganizacion(
+        organizacion_id=organizacion_id,
+        condicion_iva=condicion_iva,
+        modo_impositivo=modo_impositivo,
+        lista_precio_default_id=lista_precio_default_id,
+        politica_credito_default=politica_credito_default,
+        tolerancia_offline_tipo=tolerancia_offline_tipo,
+        tolerancia_offline_valor=tolerancia_offline_valor,
+        descuento_manual_habilitado=descuento_manual_habilitado,
+        motivo_obligatorio_descuento=motivo_obligatorio_descuento,
+        motivo_obligatorio_lista=motivo_obligatorio_lista,
+        redondeo_multiplo=redondeo_multiplo,
+        redondeo_direccion=redondeo_direccion,
+        permite_consumidor_final=permite_consumidor_final,
+        cliente_consumidor_final_id=cliente_consumidor_final_id,
+        estado_facturacion_default=estado_facturacion_default,
+        modalidad_iva_default=modalidad_iva_default,
+        intentos_pin_max=intentos_pin_max,
+        desvio_reloj_max_segundos=desvio_reloj_max_segundos,
+        creado_en=momento,
+        actualizado_en=momento,
+        actualizado_por_id=actualizado_por_id,
+    )
+    sesion.add(configuracion)
+    sesion.flush()
+    return configuracion
+
+
+def obtener_configuracion(
+    organizacion_id: UUID, sesion: Session
+) -> ConfiguracionOrganizacion | None:
+    return sesion.get(ConfiguracionOrganizacion, organizacion_id)
+
+
+def obtener_configuracion_bloqueada(
+    organizacion_id: UUID, sesion: Session, *, exclusivo: bool
+) -> ConfiguracionOrganizacion | None:
+    """La fila de configuración de `organizacion_id` con bloqueo: `FOR UPDATE` si
+    `exclusivo`, `FOR SHARE` si no (11b, D3: el cambio de condición y los registros que
+    la leen no se cruzan). Refresca los valores: nunca devuelve un estado en caché."""
+    consulta = (
+        select(ConfiguracionOrganizacion)
+        .where(ConfiguracionOrganizacion.organizacion_id == organizacion_id)
+        .with_for_update(read=not exclusivo)
+        .execution_options(populate_existing=True)
+    )
+    return sesion.scalars(consulta).one_or_none()
+
+
+def actualizar_configuracion(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    momento: datetime,
+    actualizado_por_id: UUID | None = None,
+    **campos: object,
+) -> ConfiguracionOrganizacion | None:
+    """Actualiza campos de la configuración de `organizacion_id`. Devuelve
+    `None` sin tocar nada si la organización no tiene fila de configuración
+    (nunca busca ni escribe en la de otra organización)."""
+    configuracion = sesion.get(ConfiguracionOrganizacion, organizacion_id)
+    if configuracion is None:
+        return None
+
+    for campo, valor in campos.items():
+        setattr(configuracion, campo, valor)
+    configuracion.actualizado_en = momento
+    configuracion.actualizado_por_id = actualizado_por_id
+    sesion.flush()
+    return configuracion
+
+
+# --- permiso (catálogo global, D7: excepción explícita sin organizacion_id) -
+
+
+def obtener_permiso_por_codigo(codigo: str, sesion: Session) -> Permiso | None:
+    return sesion.get(Permiso, codigo)
+
+
+def listar_permisos(sesion: Session) -> list[Permiso]:
+    return list(sesion.scalars(select(Permiso).order_by(Permiso.codigo)).all())
+
+
+# --- rol ---------------------------------------------------------------
+
+
+def crear_rol(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    rol_id: UUID,
+    nombre: str,
+    tope_descuento: Decimal,
+    activo: bool,
+    momento: datetime,
+    actualizado_por_id: UUID | None = None,
+) -> Rol:
+    rol = Rol(
+        id=rol_id,
+        organizacion_id=organizacion_id,
+        nombre=nombre,
+        tope_descuento=tope_descuento,
+        activo=activo,
+        creado_en=momento,
+        actualizado_en=momento,
+        actualizado_por_id=actualizado_por_id,
+    )
+    sesion.add(rol)
+    sesion.flush()
+    return rol
+
+
+def obtener_rol_por_id(organizacion_id: UUID, rol_id: UUID, sesion: Session) -> Rol | None:
+    rol = sesion.get(Rol, rol_id)
+    if rol is None or rol.organizacion_id != organizacion_id:
+        return None
+    return rol
+
+
+def obtener_rol_para_actualizar(organizacion_id: UUID, rol_id: UUID, sesion: Session) -> Rol | None:
+    """El rol con `FOR UPDATE` (change 16, tarea 13.1): dos cambios simultáneos del tope del mismo
+    rol se serializan. Refresca los valores: nunca devuelve un estado en caché. `None` si no
+    existe en `organizacion_id` (INV-21)."""
+    consulta = (
+        select(Rol)
+        .where(Rol.organizacion_id == organizacion_id, Rol.id == rol_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return sesion.scalars(consulta).one_or_none()
+
+
+def actualizar_tope_de_rol(
+    organizacion_id: UUID,
+    sesion: Session,
+    rol: Rol,
+    *,
+    tope_descuento: Decimal,
+    momento: datetime,
+    actualizado_por_id: UUID | None,
+) -> Rol:
+    """Cambia SOLO el tope de descuento del rol (más su marca de actualización): ni los permisos
+    ni el tope propio de ningún usuario. `rol` viene de `obtener_rol_para_actualizar`."""
+    assert rol.organizacion_id == organizacion_id  # defensa en profundidad (INV-21)
+    rol.tope_descuento = tope_descuento
+    rol.actualizado_en = momento
+    rol.actualizado_por_id = actualizado_por_id
+    sesion.flush()
+    return rol
+
+
+def obtener_rol_por_nombre(
+    organizacion_id: UUID, nombre: str, sesion: Session, *, excluir_rol_id: UUID | None = None
+) -> Rol | None:
+    """El rol de la organización con ese nombre, sin distinguir mayúsculas y esté de baja o no
+    (change 20b, D10, INV-02: el mismo criterio que el índice `ux_rol__nombre`)."""
+    consulta = select(Rol).where(
+        Rol.organizacion_id == organizacion_id, func.lower(Rol.nombre) == func.lower(nombre)
+    )
+    if excluir_rol_id is not None:
+        consulta = consulta.where(Rol.id != excluir_rol_id)
+    return sesion.scalars(consulta).first()
+
+
+def listar_roles(organizacion_id: UUID, sesion: Session) -> list[Rol]:
+    consulta = select(Rol).where(Rol.organizacion_id == organizacion_id).order_by(Rol.nombre)
+    return list(sesion.scalars(consulta).all())
+
+
+def asignar_permiso_a_rol(
+    organizacion_id: UUID, sesion: Session, *, rol_id: UUID, permiso_codigo: str
+) -> RolPermiso:
+    """Falla con `IntegrityError` si `permiso_codigo` no está en el
+    catálogo global (FK `fk_rol_permiso__permiso`, `03` §4) o si `rol_id` no
+    pertenece a `organizacion_id` (FK compuesta `fk_rol_permiso__rol`)."""
+    fila = RolPermiso(organizacion_id=organizacion_id, rol_id=rol_id, permiso_codigo=permiso_codigo)
+    sesion.add(fila)
+    sesion.flush()
+    return fila
+
+
+def quitar_permiso_de_rol(
+    organizacion_id: UUID, sesion: Session, *, rol_id: UUID, permiso_codigo: str
+) -> None:
+    fila = sesion.get(RolPermiso, (organizacion_id, rol_id, permiso_codigo))
+    if fila is not None:
+        sesion.delete(fila)
+        sesion.flush()
+
+
+def listar_permisos_de_rol(organizacion_id: UUID, rol_id: UUID, sesion: Session) -> list[str]:
+    consulta = select(RolPermiso.permiso_codigo).where(
+        RolPermiso.organizacion_id == organizacion_id, RolPermiso.rol_id == rol_id
+    )
+    return list(sesion.scalars(consulta).all())
+
+
+def listar_vendedores_elegibles(
+    organizacion_id: UUID, permisos_codigos: Collection[str], sesion: Session
+) -> list[tuple[UUID, str]]:
+    """`(id, nombre)` de los usuarios ACTIVOS de la organización, de rol activo, cuyo rol tiene
+    alguno de `permisos_codigos`; ordenados por nombre (change 20b, D15). Un solo SQL."""
+    consulta = (
+        select(Usuario.id, Usuario.nombre)
+        .join(
+            Rol,
+            and_(Rol.organizacion_id == Usuario.organizacion_id, Rol.id == Usuario.rol_id),
+        )
+        .where(
+            Usuario.organizacion_id == organizacion_id,
+            Usuario.estado == "ACTIVO",
+            Rol.activo.is_(True),
+            sa.exists().where(
+                RolPermiso.organizacion_id == Rol.organizacion_id,
+                RolPermiso.rol_id == Rol.id,
+                RolPermiso.permiso_codigo.in_(list(permisos_codigos)),
+            ),
+        )
+        .order_by(func.lower(Usuario.nombre), Usuario.id)
+    )
+    return [(fila[0], fila[1]) for fila in sesion.execute(consulta).all()]
+
+
+def _administradores_de_roles_activos(
+    organizacion_id: UUID, *, permiso_codigo: str
+) -> sa.Select[tuple[Usuario]]:
+    """Usuarios ACTIVOS de roles ACTIVOS de la organización cuyo rol tiene `permiso_codigo`."""
+    return (
+        select(Usuario)
+        .join(Rol, and_(Rol.organizacion_id == Usuario.organizacion_id, Rol.id == Usuario.rol_id))
+        .join(
+            RolPermiso,
+            and_(
+                RolPermiso.organizacion_id == Rol.organizacion_id,
+                RolPermiso.rol_id == Rol.id,
+            ),
+        )
+        .where(
+            Usuario.organizacion_id == organizacion_id,
+            Usuario.estado == "ACTIVO",
+            Rol.activo.is_(True),
+            RolPermiso.permiso_codigo == permiso_codigo,
+        )
+    )
+
+
+def contar_administradores(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    permiso_codigo: str,
+    excluir_usuario_id: UUID | None = None,
+    excluir_rol_id: UUID | None = None,
+    rol_sustituto: tuple[UUID, UUID] | None = None,
+) -> int:
+    """Conteo general de administradores (change 20b, D3, ADR-053): usuarios ACTIVOS de roles
+    ACTIVOS de la organización con `permiso_codigo`, en SQL y filtrado por organización.
+
+    `excluir_usuario_id` saca a un usuario (la baja); `excluir_rol_id`, a todos los de un rol (el
+    cambio de permisos o la baja de un rol); `rol_sustituto=(usuario_id, rol_id)` calcula el
+    estado posterior a un cambio de rol: el usuario deja de contar con su rol actual y cuenta con
+    `rol_id` solo si está ACTIVO y ese rol está activo, tiene el permiso y no está excluido."""
+    base = _administradores_de_roles_activos(organizacion_id, permiso_codigo=permiso_codigo)
+    if excluir_usuario_id is not None:
+        base = base.where(Usuario.id != excluir_usuario_id)
+    if excluir_rol_id is not None:
+        base = base.where(Rol.id != excluir_rol_id)
+    if rol_sustituto is not None:
+        base = base.where(Usuario.id != rol_sustituto[0])
+    total = sesion.scalar(select(func.count()).select_from(base.subquery())) or 0
+    if rol_sustituto is not None:
+        usuario_id, rol_id = rol_sustituto
+        if usuario_id != excluir_usuario_id and rol_id != excluir_rol_id:
+            usuario_activo = sesion.scalar(
+                select(func.count())
+                .select_from(Usuario)
+                .where(
+                    Usuario.organizacion_id == organizacion_id,
+                    Usuario.id == usuario_id,
+                    Usuario.estado == "ACTIVO",
+                )
+            )
+            rol_con_el_permiso = sesion.scalar(
+                select(func.count())
+                .select_from(Rol)
+                .join(
+                    RolPermiso,
+                    and_(
+                        RolPermiso.organizacion_id == Rol.organizacion_id,
+                        RolPermiso.rol_id == Rol.id,
+                    ),
+                )
+                .where(
+                    Rol.organizacion_id == organizacion_id,
+                    Rol.id == rol_id,
+                    Rol.activo.is_(True),
+                    RolPermiso.permiso_codigo == permiso_codigo,
+                )
+            )
+            if (usuario_activo or 0) > 0 and (rol_con_el_permiso or 0) > 0:
+                total += 1
+    return int(total)
+
+
+def es_administrador_activo(
+    organizacion_id: UUID, usuario_id: UUID, sesion: Session, *, permiso_codigo: str
+) -> bool:
+    """`True` si `usuario_id` es hoy un usuario ACTIVO, de un rol ACTIVO que tiene `permiso_codigo`
+    (change 20b, D4: la revalidación de quien ejecuta, ya con el bloqueo tomado). Es un conteo SQL,
+    no una lectura de la entidad: nunca devuelve lo que la sesión tiene en caché."""
+    base = _administradores_de_roles_activos(organizacion_id, permiso_codigo=permiso_codigo).where(
+        Usuario.id == usuario_id
+    )
+    return (sesion.scalar(select(func.count()).select_from(base.subquery())) or 0) > 0
+
+
+def contar_usuarios_activos_del_rol(organizacion_id: UUID, rol_id: UUID, sesion: Session) -> int:
+    consulta = (
+        select(func.count())
+        .select_from(Usuario)
+        .where(
+            Usuario.organizacion_id == organizacion_id,
+            Usuario.rol_id == rol_id,
+            Usuario.estado == "ACTIVO",
+        )
+    )
+    return sesion.scalar(consulta) or 0
+
+
+def contar_usuarios_activos_por_rol(organizacion_id: UUID, sesion: Session) -> dict[UUID, int]:
+    """Usuarios ACTIVOS de cada rol de la organización en una sola consulta (SQL, sin N+1). Un rol
+    sin usuarios activos no figura en el resultado."""
+    consulta = (
+        select(Usuario.rol_id, func.count())
+        .where(Usuario.organizacion_id == organizacion_id, Usuario.estado == "ACTIVO")
+        .group_by(Usuario.rol_id)
+    )
+    return {rol_id: cantidad for rol_id, cantidad in sesion.execute(consulta).all()}
+
+
+def listar_autorizadores_con_pin(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    permisos: Collection[str],
+    excluir_usuario_id: UUID,
+) -> list[tuple[UUID, str, frozenset[str]]]:
+    """Usuarios ACTIVOS de la organización con rol activo, PIN de autorización definido y alguno
+    de `permisos` (change 18b, D15): `(id, nombre, permisos de esos que tiene)`, ordenados por
+    nombre y id. Una sola consulta (sin N+1); nunca trae la derivación del PIN."""
+    consulta = (
+        select(Usuario.id, Usuario.nombre, RolPermiso.permiso_codigo)
+        .join(Rol, and_(Rol.id == Usuario.rol_id, Rol.organizacion_id == Usuario.organizacion_id))
+        .join(
+            RolPermiso,
+            and_(
+                RolPermiso.rol_id == Usuario.rol_id,
+                RolPermiso.organizacion_id == Usuario.organizacion_id,
+            ),
+        )
+        .where(
+            Usuario.organizacion_id == organizacion_id,
+            Usuario.estado == "ACTIVO",
+            Usuario.id != excluir_usuario_id,
+            Usuario.pin_autorizacion_hash.is_not(None),
+            Rol.activo.is_(True),
+            RolPermiso.permiso_codigo.in_(list(permisos)),
+        )
+        .order_by(Usuario.nombre, Usuario.id)
+    )
+    acumulado: dict[UUID, tuple[str, set[str]]] = {}
+    for usuario_id, nombre, permiso in sesion.execute(consulta).all():
+        acumulado.setdefault(usuario_id, (nombre, set()))[1].add(permiso)
+    return [
+        (usuario_id, nombre, frozenset(encontrados))
+        for usuario_id, (nombre, encontrados) in acumulado.items()
+    ]
+
+
+def listar_autorizadores_con_derivacion(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    permisos: Collection[str],
+    excluir_usuario_id: UUID,
+) -> list[tuple[UUID, str, frozenset[str], str, str, int]]:
+    """Como `listar_autorizadores_con_pin`, más la derivación del PIN (change 21, D8):
+    `(id, nombre, permisos de esos que tiene, hash, sal, iteraciones)`, por nombre y id. Una sola
+    consulta. Nunca trae la contraseña ni el PIN: solo su derivación PBKDF2."""
+    consulta = (
+        select(
+            Usuario.id,
+            Usuario.nombre,
+            RolPermiso.permiso_codigo,
+            Usuario.pin_autorizacion_hash,
+            Usuario.pin_autorizacion_sal,
+            Usuario.pin_autorizacion_iteraciones,
+        )
+        .join(Rol, and_(Rol.id == Usuario.rol_id, Rol.organizacion_id == Usuario.organizacion_id))
+        .join(
+            RolPermiso,
+            and_(
+                RolPermiso.rol_id == Usuario.rol_id,
+                RolPermiso.organizacion_id == Usuario.organizacion_id,
+            ),
+        )
+        .where(
+            Usuario.organizacion_id == organizacion_id,
+            Usuario.estado == "ACTIVO",
+            Usuario.id != excluir_usuario_id,
+            Usuario.pin_autorizacion_hash.is_not(None),
+            Usuario.pin_autorizacion_sal.is_not(None),
+            Usuario.pin_autorizacion_iteraciones.is_not(None),
+            Rol.activo.is_(True),
+            RolPermiso.permiso_codigo.in_(list(permisos)),
+        )
+        .order_by(Usuario.nombre, Usuario.id)
+    )
+    acumulado: dict[UUID, tuple[str, set[str], str, str, int]] = {}
+    for usuario_id, nombre, permiso, pin_hash, sal, iteraciones in sesion.execute(consulta).all():
+        acumulado.setdefault(usuario_id, (nombre, set(), pin_hash, sal, iteraciones))[1].add(
+            permiso
+        )
+    return [
+        (usuario_id, nombre, frozenset(encontrados), pin_hash, sal, iteraciones)
+        for usuario_id, (nombre, encontrados, pin_hash, sal, iteraciones) in acumulado.items()
+    ]
+
+
+def listar_permisos_de_todos_los_roles(
+    organizacion_id: UUID, sesion: Session
+) -> dict[UUID, list[str]]:
+    """Los permisos de TODOS los roles de la organización en una sola consulta (sin N+1), cada
+    lista ordenada por código. Un rol sin permisos no figura en el resultado."""
+    consulta = (
+        select(RolPermiso.rol_id, RolPermiso.permiso_codigo)
+        .where(RolPermiso.organizacion_id == organizacion_id)
+        .order_by(RolPermiso.rol_id, RolPermiso.permiso_codigo)
+    )
+    permisos: dict[UUID, list[str]] = {}
+    for rol_id, codigo in sesion.execute(consulta).all():
+        permisos.setdefault(rol_id, []).append(codigo)
+    return permisos
+
+
+# --- usuario -------------------------------------------------------------
+
+
+def crear_usuario(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    usuario_id: UUID,
+    usuario: str,
+    nombre: str,
+    email: str | None,
+    password_hash: str,
+    rol_id: UUID,
+    estado: str,
+    momento: datetime,
+    tope_descuento_override: Decimal | None = None,
+    actualizado_por_id: UUID | None = None,
+) -> Usuario:
+    fila = Usuario(
+        id=usuario_id,
+        organizacion_id=organizacion_id,
+        usuario=usuario,
+        nombre=nombre,
+        email=email,
+        password_hash=password_hash,
+        rol_id=rol_id,
+        tope_descuento_override=tope_descuento_override,
+        estado=estado,
+        creado_en=momento,
+        actualizado_en=momento,
+        actualizado_por_id=actualizado_por_id,
+    )
+    sesion.add(fila)
+    sesion.flush()
+    return fila
+
+
+def obtener_usuario_por_id(
+    organizacion_id: UUID, usuario_id: UUID, sesion: Session
+) -> Usuario | None:
+    fila = sesion.get(Usuario, usuario_id)
+    if fila is None or fila.organizacion_id != organizacion_id:
+        return None
+    return fila
+
+
+def obtener_usuario_con_rol(
+    organizacion_id: UUID, usuario_id: UUID, sesion: Session
+) -> tuple[Usuario, Rol] | None:
+    """Trae `usuario` y su `rol` en una sola consulta (ADR-028, D9,
+    `identidad/service.py::exigir_sesion_habilitada`): evita el viaje extra
+    a la base que costaría pedir cada uno por separado (`design.md` D9,
+    Consequences: "no suma un viaje extra"). Devuelve `None` si el usuario
+    no existe en `organizacion_id` (INV-21). Filtra también `Rol.
+    organizacion_id` como defensa en profundidad, aunque `usuario.rol_id`
+    ya es una FK compuesta que garantiza que el rol es de la misma
+    organización (`03` §4)."""
+    consulta = (
+        select(Usuario, Rol)
+        .join(Rol, Rol.id == Usuario.rol_id)
+        .where(
+            Usuario.organizacion_id == organizacion_id,
+            Usuario.id == usuario_id,
+            Rol.organizacion_id == organizacion_id,
+        )
+    )
+    fila = sesion.execute(consulta).one_or_none()
+    if fila is None:
+        return None
+    usuario, rol = fila
+    return usuario, rol
+
+
+def obtener_usuario_para_actualizar(
+    organizacion_id: UUID, usuario_id: UUID, sesion: Session
+) -> Usuario | None:
+    """El usuario con `FOR NO KEY UPDATE` (change 20b, D4, D20): serializa a quienes lo
+    modifican (baja, cambio de rol, contraseña) sin bloquear a las filas que lo referencian por
+    clave foránea, como el intento fallido de "Mi contraseña" que se confirma en una transacción
+    aparte. Refresca los valores: nunca devuelve un estado en caché. `None` si no existe en
+    `organizacion_id` (INV-21)."""
+    consulta = (
+        select(Usuario)
+        .where(Usuario.organizacion_id == organizacion_id, Usuario.id == usuario_id)
+        .with_for_update(key_share=True)
+        .execution_options(populate_existing=True)
+    )
+    return sesion.scalars(consulta).one_or_none()
+
+
+def listar_usuarios_por_ids(
+    organizacion_id: UUID, usuario_ids: frozenset[UUID], sesion: Session
+) -> list[Usuario]:
+    """Búsqueda por lote (change 06, tarea 14.4): un único `SELECT ... IN`
+    en vez de `N` llamados a `obtener_usuario_por_id`. Filtra siempre por
+    `organizacion_id` (INV-21): un id de otra organización no aparece en el
+    resultado. Con `usuario_ids` vacío no consulta nada."""
+    if not usuario_ids:
+        return []
+    consulta = select(Usuario).where(
+        Usuario.organizacion_id == organizacion_id, Usuario.id.in_(usuario_ids)
+    )
+    return list(sesion.scalars(consulta).all())
+
+
+def obtener_usuario_por_nombre_usuario(
+    organizacion_id: UUID, nombre_usuario: str, sesion: Session
+) -> Usuario | None:
+    consulta = select(Usuario).where(
+        Usuario.organizacion_id == organizacion_id, Usuario.usuario == nombre_usuario
+    )
+    return sesion.scalars(consulta).one_or_none()
+
+
+def listar_usuarios_por_rol(organizacion_id: UUID, rol_id: UUID, sesion: Session) -> list[Usuario]:
+    consulta = select(Usuario).where(
+        Usuario.organizacion_id == organizacion_id, Usuario.rol_id == rol_id
+    )
+    return list(sesion.scalars(consulta).all())
+
+
+def listar_usuarios(organizacion_id: UUID, sesion: Session) -> list[Usuario]:
+    """Lista los usuarios de `organizacion_id` (tarea 10.7, endpoint de
+    lectura usado también por la prueba de la tarea 10.8: ninguna respuesta
+    de lectura de usuario puede contener la contraseña ni su derivación)."""
+    consulta = (
+        select(Usuario).where(Usuario.organizacion_id == organizacion_id).order_by(Usuario.usuario)
+    )
+    return list(sesion.scalars(consulta).all())
+
+
+def listar_usuarios_con_rol(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    estado: str | None = None,
+    rol_id: UUID | None = None,
+    con_tope_propio: bool | None = None,
+) -> list[tuple[Usuario, Rol]]:
+    """Los usuarios de la organización con su rol en una sola consulta (change 20b, D16: nombre y
+    estado del rol sin N+1), ordenados por nombre de inicio de sesión. Filtros combinables (tarea
+    8.6): `estado` (del usuario), `rol_id` y `con_tope_propio` (True: con tope propio definido;
+    False: sin él). Siempre filtra por `organizacion_id` (INV-21): un `rol_id` de otra
+    organización no coincide con ningún usuario."""
+    consulta = (
+        select(Usuario, Rol)
+        .join(Rol, and_(Rol.organizacion_id == Usuario.organizacion_id, Rol.id == Usuario.rol_id))
+        .where(Usuario.organizacion_id == organizacion_id)
+        .order_by(Usuario.usuario)
+    )
+    if estado is not None:
+        consulta = consulta.where(Usuario.estado == estado)
+    if rol_id is not None:
+        consulta = consulta.where(Usuario.rol_id == rol_id)
+    if con_tope_propio is not None:
+        columna = Usuario.tope_descuento_override
+        consulta = consulta.where(columna.is_not(None) if con_tope_propio else columna.is_(None))
+    return [(usuario, rol) for usuario, rol in sesion.execute(consulta).all()]
+
+
+def contar_usuarios_con_tope_propio_por_rol(
+    organizacion_id: UUID, sesion: Session
+) -> dict[UUID, tuple[int, int]]:
+    """Usuarios de cada rol con tope de descuento propio definido, separados en `(activos,
+    inactivos)` (change 20b, D16 y tarea 8.6; el tope se conserva en la baja, D2), en una sola
+    consulta SQL sin N+1. Un rol sin ninguno no figura en el resultado."""
+    activos = func.count().filter(Usuario.estado == "ACTIVO")
+    inactivos = func.count().filter(Usuario.estado != "ACTIVO")
+    consulta = (
+        select(Usuario.rol_id, activos, inactivos)
+        .where(
+            Usuario.organizacion_id == organizacion_id,
+            Usuario.tope_descuento_override.is_not(None),
+        )
+        .group_by(Usuario.rol_id)
+    )
+    return {rol: (a, i) for rol, a, i in sesion.execute(consulta).all()}
+
+
+# --- dispositivo ---------------------------------------------------------
+
+
+def crear_dispositivo(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    dispositivo_id: UUID,
+    nombre: str,
+    prefijo: str,
+    ultimo_correlativo: int,
+    estado: str,
+    momento: datetime,
+    actualizado_por_id: UUID | None = None,
+) -> Dispositivo:
+    fila = Dispositivo(
+        id=dispositivo_id,
+        organizacion_id=organizacion_id,
+        nombre=nombre,
+        prefijo=prefijo,
+        ultimo_correlativo=ultimo_correlativo,
+        estado=estado,
+        creado_en=momento,
+        actualizado_en=momento,
+        actualizado_por_id=actualizado_por_id,
+    )
+    sesion.add(fila)
+    sesion.flush()
+    return fila
+
+
+def obtener_dispositivo_por_id(
+    organizacion_id: UUID, dispositivo_id: UUID, sesion: Session
+) -> Dispositivo | None:
+    """`dispositivo` tiene clave primaria compuesta `(organizacion_id, id)`
+    (`03` §4: `id` lo genera el dispositivo, no es globalmente único): el
+    mismo `dispositivo_id` de otra organización no es la misma fila."""
+    return sesion.get(Dispositivo, (organizacion_id, dispositivo_id))
+
+
+def avanzar_correlativo_al_maximo(
+    organizacion_id: UUID, dispositivo_id: UUID, propuesto: int, sesion: Session
+) -> int | None:
+    """`UPDATE ... SET ultimo_correlativo = GREATEST(ultimo_correlativo, :propuesto)` de la fila
+    del dispositivo, en una sola sentencia (nivel 6 del orden de bloqueo, change 18a D17): el
+    `UPDATE` toma el candado de la fila y el correlativo nunca retrocede. Devuelve el valor
+    resultante, o `None` si el dispositivo no existe en la organización (INV-21)."""
+    resultado = sesion.execute(
+        update(Dispositivo)
+        .where(Dispositivo.organizacion_id == organizacion_id, Dispositivo.id == dispositivo_id)
+        .values(ultimo_correlativo=func.greatest(Dispositivo.ultimo_correlativo, propuesto))
+        .returning(Dispositivo.ultimo_correlativo)
+        .execution_options(synchronize_session="fetch")
+    ).scalar_one_or_none()
+    return None if resultado is None else int(resultado)
+
+
+def obtener_dispositivo_por_prefijo(
+    organizacion_id: UUID, prefijo: str, sesion: Session
+) -> Dispositivo | None:
+    consulta = select(Dispositivo).where(
+        Dispositivo.organizacion_id == organizacion_id, Dispositivo.prefijo == prefijo
+    )
+    return sesion.scalars(consulta).one_or_none()
+
+
+def listar_dispositivos(organizacion_id: UUID, sesion: Session) -> list[Dispositivo]:
+    consulta = (
+        select(Dispositivo)
+        .where(Dispositivo.organizacion_id == organizacion_id)
+        .order_by(Dispositivo.creado_en)
+    )
+    return list(sesion.scalars(consulta).all())
+
+
+# --- sesion_refresh --------------------------------------------------------
+
+
+def crear_sesion_refresh(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    sesion_refresh_id: UUID,
+    usuario_id: UUID,
+    dispositivo_id: UUID,
+    token_hash: str,
+    familia_id: UUID,
+    emitido_en: datetime,
+    expira_en: datetime,
+) -> SesionRefresh:
+    fila = SesionRefresh(
+        id=sesion_refresh_id,
+        organizacion_id=organizacion_id,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        token_hash=token_hash,
+        familia_id=familia_id,
+        emitido_en=emitido_en,
+        expira_en=expira_en,
+    )
+    sesion.add(fila)
+    sesion.flush()
+    return fila
+
+
+def obtener_sesion_refresh_por_token_hash(
+    organizacion_id: UUID, token_hash: str, sesion: Session
+) -> SesionRefresh | None:
+    consulta = select(SesionRefresh).where(
+        SesionRefresh.organizacion_id == organizacion_id,
+        SesionRefresh.token_hash == token_hash,
+    )
+    return sesion.scalars(consulta).one_or_none()
+
+
+def obtener_sesion_refresh_por_token_hash_global(
+    token_hash: str, sesion: Session
+) -> SesionRefresh | None:
+    """Único lookup de `sesion_refresh` sin `organizacion_id` como filtro
+    (`FUNCIONES_SIN_ORGANIZACION_ID`, mismo criterio que `ADR-021`): la
+    cookie de refresh no lleva la organización, así que renovar/cerrar
+    sesión (tareas 8.5-8.8) la obtienen de la fila que encuentran por el
+    hash del token, no al revés. `token_hash` es la derivación de un valor
+    de 256 bits (`core/seguridad.py`): una colisión entre organizaciones es
+    de probabilidad despreciable, no un vector de acceso cruzado real."""
+    consulta = select(SesionRefresh).where(SesionRefresh.token_hash == token_hash)
+    return sesion.scalars(consulta).one_or_none()
+
+
+def revocar_familia_refresh(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    familia_id: UUID,
+    momento: datetime,
+    motivo: str,
+) -> int:
+    """Marca como revocadas todas las sesiones de refresh no revocadas de
+    `familia_id` (tarea 8.6: detección de reuso corta toda la familia)."""
+    consulta = (
+        update(SesionRefresh)
+        .where(
+            SesionRefresh.organizacion_id == organizacion_id,
+            SesionRefresh.familia_id == familia_id,
+            SesionRefresh.revocado_en.is_(None),
+        )
+        .values(revocado_en=momento, motivo_revocacion=motivo)
+    )
+    resultado = sesion.execute(consulta)
+    sesion.flush()
+    return int(resultado.rowcount or 0)  # type: ignore[attr-defined]
+
+
+def revocar_sesiones_refresh_de_usuario(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    usuario_id: UUID,
+    momento: datetime,
+    motivo: str,
+    excepto_dispositivo_ids: Collection[UUID] = (),
+) -> int:
+    """Marca como revocadas todas las sesiones de refresh no revocadas de
+    `usuario_id`, en TODOS sus dispositivos (ADR-028, D9.3-B: `renovar_sesion`
+    la llama cuando el usuario o su rol dejaron de estar activos -- simétrica
+    a `revocar_sesiones_refresh_de_dispositivo`, tarea 8.10, pero por
+    usuario en vez de por dispositivo), salvo las de `excepto_dispositivo_ids`:
+    los dispositivos con una jornada no cerrada (change 15, D18). Devuelve
+    cuántas filas tocó."""
+    consulta = (
+        update(SesionRefresh)
+        .where(
+            SesionRefresh.organizacion_id == organizacion_id,
+            SesionRefresh.usuario_id == usuario_id,
+            SesionRefresh.revocado_en.is_(None),
+        )
+        .values(revocado_en=momento, motivo_revocacion=motivo)
+    )
+    if excepto_dispositivo_ids:
+        consulta = consulta.where(
+            SesionRefresh.dispositivo_id.notin_(list(excepto_dispositivo_ids))
+        )
+    resultado = sesion.execute(consulta)
+    sesion.flush()
+    return int(resultado.rowcount or 0)  # type: ignore[attr-defined]
+
+
+def dispositivos_con_sesion_vigente(
+    organizacion_id: UUID, sesion: Session, *, usuario_id: UUID
+) -> list[UUID]:
+    """Dispositivos donde `usuario_id` tiene alguna sesión de refresh no revocada (change 15,
+    D18: candidatos a la excepción de la revocación en bloque)."""
+    return list(
+        sesion.execute(
+            select(SesionRefresh.dispositivo_id)
+            .where(
+                SesionRefresh.organizacion_id == organizacion_id,
+                SesionRefresh.usuario_id == usuario_id,
+                SesionRefresh.revocado_en.is_(None),
+            )
+            .distinct()
+        )
+        .scalars()
+        .all()
+    )
+
+
+def revocar_sesiones_refresh_de_dispositivo(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    dispositivo_id: UUID,
+    momento: datetime,
+    motivo: str,
+) -> int:
+    """Marca como revocadas todas las sesiones de refresh no revocadas de
+    `dispositivo_id` (tarea 8.10: revocar un dispositivo invalida sus
+    refresh tokens). Devuelve cuántas filas tocó."""
+    consulta = (
+        update(SesionRefresh)
+        .where(
+            SesionRefresh.organizacion_id == organizacion_id,
+            SesionRefresh.dispositivo_id == dispositivo_id,
+            SesionRefresh.revocado_en.is_(None),
+        )
+        .values(revocado_en=momento, motivo_revocacion=motivo)
+    )
+    resultado = sesion.execute(consulta)
+    sesion.flush()
+    return int(resultado.rowcount or 0)  # type: ignore[attr-defined]
+
+
+# --- auditoria (tabla de libro: solo inserción, INV-05) ---------------------
+
+
+def crear_auditoria(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    auditoria_id: UUID,
+    accion: str,
+    entidad: str,
+    occurred_at: datetime,
+    registered_at: datetime,
+    usuario_id: UUID | None = None,
+    dispositivo_id: UUID | None = None,
+    entidad_id: UUID | None = None,
+    antes: dict[str, object] | None = None,
+    despues: dict[str, object] | None = None,
+    motivo_id: UUID | None = None,
+    observacion: str | None = None,
+    autorizador_id: UUID | None = None,
+    operation_id: UUID | None = None,
+    origen: str = "SISTEMA",
+) -> Auditoria:
+    """`origen` (change 04, tarea 10.5, D2): `'COMANDO'` (con
+    `operation_id` obligatorio) para lo que sale del bus de comandos,
+    `'SISTEMA'` (sin `operation_id`) para todo lo demás -- el default
+    coincide con el `server_default` de la columna, pero quien conoce el
+    origen real (`sync/service.py::procesar_comando`, o `identidad/
+    service.py` para login/refresh) lo declara explícito en vez de
+    depender de él en silencio. La base valida la correspondencia con el
+    CHECK `ck_auditoria__operation_id_segun_origen` (migración
+    `f6a7b8c9d0e1`): un valor inconsistente aquí llega a la base y falla
+    ahí, no antes."""
+    fila = Auditoria(
+        id=auditoria_id,
+        organizacion_id=organizacion_id,
+        usuario_id=usuario_id,
+        dispositivo_id=dispositivo_id,
+        accion=accion,
+        entidad=entidad,
+        entidad_id=entidad_id,
+        antes=antes,
+        despues=despues,
+        motivo_id=motivo_id,
+        observacion=observacion,
+        autorizador_id=autorizador_id,
+        operation_id=operation_id,
+        origen=origen,
+        occurred_at=occurred_at,
+        registered_at=registered_at,
+    )
+    sesion.add(fila)
+    sesion.flush()
+    return fila
+
+
+# --- intento_login (grupo 11, ADR-018: rate limit de login) ----------------
+#
+# Sin `organizacion_id` (ver `FUNCIONES_SIN_ORGANIZACION_ID` arriba): tabla
+# de solo inserción (INV-05), `app_runtime` con `SELECT, INSERT` únicamente.
+
+
+def registrar_intento_login(
+    sesion: Session,
+    *,
+    intento_id: UUID,
+    usuario_id: UUID | None,
+    clave_intento: str,
+    ip: str,
+    exito: bool,
+    momento: datetime,
+) -> IntentoLogin:
+    """Inserta un fallo o un marcador. `clave_intento` (ADR-057) es obligatoria: es la que cuenta;
+    `usuario_id` es el rastro de AUD-01 cuando el par resuelve un usuario."""
+    fila = IntentoLogin(
+        id=intento_id,
+        usuario_id=usuario_id,
+        clave_intento=clave_intento,
+        ip=ip,
+        exito=exito,
+        creado_en=momento,
+    )
+    sesion.add(fila)
+    sesion.flush()
+    return fila
+
+
+def borrar_intentos_de_login_anteriores_a(sesion: Session, *, limite: datetime) -> int:
+    """Borra las filas de `intento_login` creadas antes de `limite` (fallos, aciertos y marcas de
+    desbloqueo manual) y devuelve cuántas fueron (ADR-018, D7 del change 28). Solo la ejecuta
+    el rol de mantenimiento: `app_runtime` no tiene `DELETE` (INV-05)."""
+    resultado = sesion.execute(
+        delete(IntentoLogin)
+        .where(IntentoLogin.creado_en < limite)
+        .execution_options(synchronize_session=False)
+    )
+    return int(resultado.rowcount or 0)  # type: ignore[attr-defined]
+
+
+def listar_organizaciones_ids(sesion: Session) -> list[UUID]:
+    """Los identificadores de todas las organizaciones (las tareas periódicas recorren cada
+    una)."""
+    return list(sesion.scalars(select(Organizacion.id).order_by(Organizacion.id)))
+
+
+def ultima_verificacion_de_consistencia(
+    organizacion_id: UUID, sesion: Session
+) -> VerificacionConsistencia | None:
+    """La corrida más reciente de la verificación de la organización, o `None` si nunca corrió
+    (change 28, D5). `app_runtime` solo lee esta tabla."""
+    return sesion.scalars(
+        select(VerificacionConsistencia)
+        .where(VerificacionConsistencia.organizacion_id == organizacion_id)
+        .order_by(VerificacionConsistencia.ejecutada_en.desc(), VerificacionConsistencia.id.desc())
+        .limit(1)
+    ).first()
+
+
+def registrar_verificacion_de_consistencia(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    verificacion_id: UUID,
+    ejecutada_en: datetime,
+    resultado: str,
+    diferencias: list[dict[str, object]],
+    registered_at: datetime,
+) -> VerificacionConsistencia:
+    """Inserta el resultado de una corrida de la verificación de consistencia (D5). De solo
+    inserción: la tabla no se actualiza ni se borra."""
+    fila = VerificacionConsistencia(
+        id=verificacion_id,
+        organizacion_id=organizacion_id,
+        ejecutada_en=ejecutada_en,
+        resultado=resultado,
+        diferencias=diferencias,
+        registered_at=registered_at,
+    )
+    sesion.add(fila)
+    sesion.flush()
+    return fila
+
+
+def _filtro_no_neutralizado_por_desbloqueo_manual(*, clave_intento: str) -> sa.ColumnElement[bool]:
+    """Tarea 11.4 (desbloqueo manual): un desbloqueo se registra como una
+    fila marcador con `exito=True` (único caso en que se inserta con
+    éxito, ver `identidad/service.py::desbloquear_usuario`). Un intento
+    fallido ESTRICTAMENTE anterior o simultáneo al último marcador no
+    cuenta más (`<=`, no una ventana de tiempo): así se "neutraliza" sin
+    `UPDATE`/`DELETE` (tabla de solo inserción, INV-05). El marcador es el último DE LA MISMA
+    CLAVE (ADR-057 punto 6): desbloquear a un usuario no neutraliza los fallos de otro par.
+    Devuelve una condición SQLAlchemy lista para usar en un `.where(...)`."""
+    subconsulta_ultimo_desbloqueo = (
+        select(func.max(IntentoLogin.creado_en))
+        .where(IntentoLogin.clave_intento == clave_intento, IntentoLogin.exito.is_(True))
+        .scalar_subquery()
+    )
+    return sa.or_(
+        subconsulta_ultimo_desbloqueo.is_(None),
+        IntentoLogin.creado_en > subconsulta_ultimo_desbloqueo,
+    )
+
+
+# --- Bloqueo de login desde el último fallo (change 18b, D24, enmienda a ADR-018) ---------------
+#
+# Las usan `iniciar_sesion` (6.9) y "Mi PIN" (`definir_pin_propio`). No tienen `organizacion_id`
+# (`intento_login` no lo tiene): el límite por IP es transversal.
+
+
+def _fallos_de_login(*, clave_intento: str | None, ip: str | None) -> list[sa.ColumnElement[bool]]:
+    """Fallos del par escrito `clave_intento` (posteriores a su último desbloqueo manual, ADR-057)
+    o de `ip`."""
+    condiciones: list[sa.ColumnElement[bool]] = [IntentoLogin.exito.is_(False)]
+    if clave_intento is not None:
+        condiciones.append(IntentoLogin.clave_intento == clave_intento)
+        condiciones.append(
+            _filtro_no_neutralizado_por_desbloqueo_manual(clave_intento=clave_intento)
+        )
+    if ip is not None:
+        condiciones.append(IntentoLogin.ip == ip)
+    return condiciones
+
+
+def ultimo_fallo_de_login(
+    sesion: Session, *, clave_intento: str | None = None, ip: str | None = None
+) -> datetime | None:
+    """El último fallo contado (F de `design.md` D24 punto 1), por par escrito o por IP."""
+    consulta = select(func.max(IntentoLogin.creado_en)).where(
+        *_fallos_de_login(clave_intento=clave_intento, ip=ip)
+    )
+    return sesion.execute(consulta).scalar_one()
+
+
+def contar_fallos_de_login_en_ventana(
+    sesion: Session,
+    *,
+    clave_intento: str | None = None,
+    ip: str | None = None,
+    desde_exclusivo: datetime,
+    hasta_inclusivo: datetime,
+) -> int:
+    """Fallos en `(desde_exclusivo, hasta_inclusivo]`, por par escrito o por IP."""
+    consulta = (
+        select(func.count())
+        .select_from(IntentoLogin)
+        .where(
+            *_fallos_de_login(clave_intento=clave_intento, ip=ip),
+            IntentoLogin.creado_en > desde_exclusivo,
+            IntentoLogin.creado_en <= hasta_inclusivo,
+        )
+    )
+    return int(sesion.execute(consulta).scalar_one())
+
+
+# --- Intentos del PIN de autorización (change 18b, D3 revisada, D21 punto 7) --------------------
+#
+# `intento_pin_autorizacion` es de solo inserción para `app_runtime`: un fallo (`exito = false`,
+# con `intentante_id`) y un marcador (`exito = true`, `intentante_id` nulo) que reinicia los dos
+# contadores del autorizador. Los conteos se calculan en la base (`CLAUDE.md` §4).
+
+
+def tomar_candado_de_pin_del_autorizador(
+    organizacion_id: UUID, sesion: Session, *, autorizador_id: UUID
+) -> None:
+    """Serializa los intentos contra el mismo autorizador (cuenta, decide el bloqueo y escribe sin
+    carreras) con un candado de aviso de transacción. No toca la fila de `usuario`, así no choca
+    con las claves foráneas que la transacción del comando pueda tener."""
+    sesion.execute(
+        sa.text("SELECT pg_advisory_xact_lock(hashtextextended(:clave, 0))"),
+        {"clave": f"pin-autorizacion:{organizacion_id}:{autorizador_id}"},
+    )
+
+
+def registrar_fallo_de_pin(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    intento_id: UUID,
+    autorizador_id: UUID,
+    intentante_id: UUID,
+    momento: datetime,
+) -> IntentoPinAutorizacion:
+    fila = IntentoPinAutorizacion(
+        id=intento_id,
+        organizacion_id=organizacion_id,
+        autorizador_id=autorizador_id,
+        intentante_id=intentante_id,
+        exito=False,
+        creado_en=momento,
+    )
+    sesion.add(fila)
+    sesion.flush()
+    return fila
+
+
+def registrar_marcador_de_pin(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    intento_id: UUID,
+    autorizador_id: UUID,
+    momento: datetime,
+) -> IntentoPinAutorizacion:
+    """La fila marcador de D21 punto 7: reinicia los dos contadores del autorizador."""
+    fila = IntentoPinAutorizacion(
+        id=intento_id,
+        organizacion_id=organizacion_id,
+        autorizador_id=autorizador_id,
+        intentante_id=None,
+        exito=True,
+        creado_en=momento,
+    )
+    sesion.add(fila)
+    sesion.flush()
+    return fila
+
+
+def _fallos_de_pin_vigentes(
+    organizacion_id: UUID, autorizador_id: UUID, intentante_id: UUID | None
+) -> list[sa.ColumnElement[bool]]:
+    """Fallos del autorizador (del par si `intentante_id` viene) posteriores a su último
+    marcador."""
+    ultimo_marcador = (
+        select(func.max(IntentoPinAutorizacion.creado_en))
+        .where(
+            IntentoPinAutorizacion.organizacion_id == organizacion_id,
+            IntentoPinAutorizacion.autorizador_id == autorizador_id,
+            IntentoPinAutorizacion.exito.is_(True),
+        )
+        .scalar_subquery()
+    )
+    condiciones: list[sa.ColumnElement[bool]] = [
+        IntentoPinAutorizacion.organizacion_id == organizacion_id,
+        IntentoPinAutorizacion.autorizador_id == autorizador_id,
+        IntentoPinAutorizacion.exito.is_(False),
+        sa.or_(ultimo_marcador.is_(None), IntentoPinAutorizacion.creado_en > ultimo_marcador),
+    ]
+    if intentante_id is not None:
+        condiciones.append(IntentoPinAutorizacion.intentante_id == intentante_id)
+    return condiciones
+
+
+def ultimo_fallo_de_pin(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    autorizador_id: UUID,
+    intentante_id: UUID | None,
+) -> datetime | None:
+    """El último fallo contado (F de `design.md` D3 punto 4): del par si `intentante_id` viene, o
+    general del autorizador si es `None`."""
+    consulta = select(func.max(IntentoPinAutorizacion.creado_en)).where(
+        *_fallos_de_pin_vigentes(organizacion_id, autorizador_id, intentante_id)
+    )
+    return sesion.execute(consulta).scalar_one()
+
+
+def contar_fallos_de_pin_en_ventana(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    autorizador_id: UUID,
+    intentante_id: UUID | None,
+    desde_exclusivo: datetime,
+    hasta_inclusivo: datetime,
+) -> int:
+    """Fallos contados en `(desde_exclusivo, hasta_inclusivo]` (la ventana de `design.md` D3
+    punto 4), del par o generales del autorizador."""
+    consulta = (
+        select(func.count())
+        .select_from(IntentoPinAutorizacion)
+        .where(
+            *_fallos_de_pin_vigentes(organizacion_id, autorizador_id, intentante_id),
+            IntentoPinAutorizacion.creado_en > desde_exclusivo,
+            IntentoPinAutorizacion.creado_en <= hasta_inclusivo,
+        )
+    )
+    return int(sesion.execute(consulta).scalar_one())

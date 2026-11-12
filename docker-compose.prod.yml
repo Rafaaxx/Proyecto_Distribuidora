@@ -1,0 +1,352 @@
+# Compose de PRODUCCION (change 27a, D3; docs/02 §16.2, ADR-071).
+#
+# Es independiente del docker-compose.yml de desarrollo: no hereda puertos, montajes de codigo
+# ni recarga. Se usa siempre con un archivo de entorno que vive FUERA del repositorio
+# (plantilla: infra/produccion.env.example):
+#
+#   docker compose -f docker-compose.prod.yml --env-file <archivo-de-entorno> up -d --build
+#
+# Solo `caddy` publica puertos (80 y 443). La base y el backend no se ven desde afuera.
+# El servicio `backup` hace un backup diario verificado con el rol de solo lectura `app_backup`
+# y lo deja en una carpeta del equipo (BACKUP_DIR), fuera de los volumenes de Docker.
+
+name: distribuidora
+
+# Rotacion de registros: sin esto el disco se llena (D14).
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      # Superusuario de arranque de la imagen: solo inicializa el volumen y corre
+      # init-app-roles.sh. Ni la aplicacion ni Alembic lo usan (ADR-020).
+      POSTGRES_USER: ${POSTGRES_USER:-distribuidora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en el archivo de entorno}
+      POSTGRES_DB: ${POSTGRES_DB:-distribuidora}
+      APP_MIGRATIONS_DB_PASSWORD: ${APP_MIGRATIONS_DB_PASSWORD:?Falta APP_MIGRATIONS_DB_PASSWORD en el archivo de entorno}
+      APP_RUNTIME_DB_PASSWORD: ${APP_RUNTIME_DB_PASSWORD:?Falta APP_RUNTIME_DB_PASSWORD en el archivo de entorno}
+      APP_BACKUP_DB_PASSWORD: ${APP_BACKUP_DB_PASSWORD:?Falta APP_BACKUP_DB_PASSWORD en el archivo de entorno}
+      APP_MANTENIMIENTO_DB_PASSWORD: ${APP_MANTENIMIENTO_DB_PASSWORD:?Falta APP_MANTENIMIENTO_DB_PASSWORD en el archivo de entorno}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Solo corre la primera vez que se inicializa postgres_data.
+      - ./infra/postgres/init-app-roles.sh:/docker-entrypoint-initdb.d/10-init-app-roles.sh:ro
+      # Rol de solo lectura del backup (D11): se monta solo en produccion.
+      - ./infra/postgres/20-init-backup-role.sh:/docker-entrypoint-initdb.d/20-init-backup-role.sh:ro
+      # Rol de las tareas periodicas (change 28, D3): borra intentos de login viejos y escribe
+      # los resultados de la verificacion de consistencia; nada mas.
+      - ./infra/postgres/30-init-mantenimiento-role.sh:/docker-entrypoint-initdb.d/30-init-mantenimiento-role.sh:ro
+    networks: [datos]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-distribuidora} -d ${POSTGRES_DB:-distribuidora}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    logging: *logging
+
+  # Mismo codigo que `backend` (mismo Dockerfile y contexto, la segunda construccion sale de la
+  # cache), con su propio nombre de imagen: dos servicios no pueden construir el mismo nombre.
+  # Aplica las migraciones con el rol dueño del esquema y termina (D7). El backend no recibe
+  # esta credencial.
+  migraciones:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.produccion
+    image: distribuidora-migraciones:${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    environment:
+      DATABASE_URL_MIGRATIONS: postgresql+psycopg://app_migrations:${APP_MIGRATIONS_DB_PASSWORD:?Falta APP_MIGRATIONS_DB_PASSWORD en el archivo de entorno}@postgres:5432/${POSTGRES_DB:-distribuidora}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [datos]
+    logging: *logging
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.produccion
+    image: distribuidora-backend:${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+    restart: unless-stopped
+    environment:
+      # Rol app_runtime: el unico que usa la aplicacion (INV-05, ADR-020). Sin
+      # DATABASE_URL_MIGRATIONS.
+      DATABASE_URL: postgresql+psycopg://app_runtime:${APP_RUNTIME_DB_PASSWORD:?Falta APP_RUNTIME_DB_PASSWORD en el archivo de entorno}@postgres:5432/${POSTGRES_DB:-distribuidora}
+      ENVIRONMENT: production
+      APP_VERSION: ${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      JWT_SECRET: ${JWT_SECRET:?Falta JWT_SECRET en el archivo de entorno}
+      JWT_KID: ${JWT_KID:-1}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      # Solo se cree en X-Forwarded-For si la conexion viene de la red `frente` (D5): debe
+      # coincidir con la subred declarada abajo.
+      FORWARDED_ALLOW_IPS: ${FRENTE_SUBRED:-172.30.10.0/24}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migraciones:
+        condition: service_completed_successfully
+    networks: [frente, datos]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/salud', timeout=4)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging: *logging
+
+  # Proxy HTTPS + frontend compilado (imagen de dos etapas, D4).
+  caddy:
+    build:
+      context: .
+      dockerfile: infra/caddy/Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+    image: distribuidora-caddy:${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+    restart: unless-stopped
+    environment:
+      # Dominio, IP de la red local o localhost; y quien emite el certificado (D1).
+      DOMINIO: ${DOMINIO:?Falta DOMINIO en el archivo de entorno}
+      CADDY_TLS: ${CADDY_TLS:?Falta CADDY_TLS en el archivo de entorno (internal o un correo)}
+    ports:
+      # Por defecto 80 y 443; el entorno de aceptacion (change 28, D13) usa otros para convivir
+      # con el de desarrollo en la misma PC.
+      - "${CADDY_HTTP_PORT:-80}:80"
+      - "${CADDY_HTTPS_PORT:-443}:443"
+      - "${CADDY_HTTPS_PORT:-443}:443/udp"
+    volumes:
+      # Certificados y autoridad propia de Caddy: si se pierden, se emiten de nuevo (y con
+      # `internal` cada telefono debe volver a confiar en la autoridad).
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [frente]
+    healthcheck:
+      # Punto de administracion local de Caddy (solo dentro del contenedor; escucha en IPv4, por eso
+      # 127.0.0.1 y no localhost).
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging: *logging
+
+  # Backup diario de la base (D10 a D13). Rol de solo lectura, sin salida a internet (red
+  # `datos`) y sin puertos. Deja los archivos en BACKUP_DIR del equipo. Un backup a pedido:
+  #   docker compose -f docker-compose.prod.yml --env-file <archivo> run --rm backup ahora
+  backup:
+    build:
+      context: ./infra/backup
+    image: distribuidora-backup:${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+    restart: unless-stopped
+    # Sin privilegios dentro del contenedor (27b, D11). En Linux la carpeta BACKUP_DIR debe
+    # pertenecer a este usuario (chown 999:999).
+    user: "${BACKUP_UID:-999}:${BACKUP_GID:-999}"
+    environment:
+      PGHOST: postgres
+      PGUSER: app_backup
+      PGPASSWORD: ${APP_BACKUP_DB_PASSWORD:?Falta APP_BACKUP_DB_PASSWORD en el archivo de entorno}
+      PGDATABASE: ${POSTGRES_DB:-distribuidora}
+      BACKUP_DIR: /backups
+      BACKUP_HORA: ${BACKUP_HORA:-03:00}
+      BACKUP_DIARIOS: ${BACKUP_DIARIOS:-14}
+      BACKUP_SEMANALES: ${BACKUP_SEMANALES:-8}
+      TZ: ${TZ:-America/Argentina/Mendoza}
+    volumes:
+      # Carpeta del equipo (debe existir), fuera de los volumenes: sobrevive a `down -v`.
+      - ${BACKUP_DIR:?Falta BACKUP_DIR en el archivo de entorno}:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [datos]
+    healthcheck:
+      # No sano si el ultimo backup valido tiene mas de 26 horas (salud.sh).
+      test: ["CMD", "sh", "/opt/backup/salud.sh"]
+      interval: 5m
+      timeout: 10s
+      retries: 1
+      start_period: 1m
+    logging: *logging
+
+  # Tareas periodicas (change 28, D2, D3, D6): cada dia a TAREAS_HORA verifica que los saldos
+  # coincidan con sus movimientos (nunca corrige nada: avisa) y borra los intentos de inicio de
+  # sesion de mas de 24 horas. Misma imagen que el backend, otra orden. Ve la base (red `datos`,
+  # que no sale a internet) y con su propio rol `app_mantenimiento`: no recibe ninguna otra
+  # contrasena. Sin puertos. Una corrida en el momento (el `entrypoint` recibe `ahora`):
+  #   docker compose -f docker-compose.prod.yml --env-file <archivo> run --rm tareas ahora
+  # Salud: no sano si la ultima corrida encontro diferencias o fallo, o si no hubo corrida en 26
+  # horas. Aviso externo (ADR-073): ademas esta en `salida` (la de copia-externa: tiene internet
+  # pero no ve ni Postgres ni el backend; solo se usa para SALIR) y, si AVISO_TAREAS_URL tiene una
+  # direccion, la llama tras cada corrida (a <direccion>/fail si hubo diferencias o fallo). Es una
+  # variable propia, distinta de AVISO_URL (la de la copia): cada control es independiente.
+  tareas:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.produccion
+    image: distribuidora-tareas:${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+    entrypoint: ["python", "-m", "app.tareas"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://app_mantenimiento:${APP_MANTENIMIENTO_DB_PASSWORD:?Falta APP_MANTENIMIENTO_DB_PASSWORD en el archivo de entorno}@postgres:5432/${POSTGRES_DB:-distribuidora}
+      TAREAS_HORA: ${TAREAS_HORA:-05:00}
+      TZ: ${TZ:-America/Argentina/Mendoza}
+      AVISO_TAREAS_URL: ${AVISO_TAREAS_URL:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migraciones:
+        condition: service_completed_successfully
+    networks: [datos, salida]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.tareas", "salud"]
+      interval: 5m
+      timeout: 30s
+      retries: 1
+      start_period: 1m
+    logging: *logging
+
+  # Copia externa de los backups (27b, D2 a D6, D14). Sube cada hora a un almacenamiento fuera
+  # del equipo los .dump validos, CIFRADOS antes de salir (rclone crypt), y los baja y descifra
+  # a pedido:
+  #   docker compose -f docker-compose.prod.yml --env-file <archivo> run --rm copia-externa ahora
+  #   docker compose -f docker-compose.prod.yml --env-file <archivo> run --rm copia-externa bajar <archivo.dump>
+  # NO recibe ninguna credencial de la base y no esta en la red `datos`: solo en `salida`, que
+  # tiene internet pero no ve ni Postgres ni el backend. Lee los backups en solo lectura; lo
+  # que baja con `bajar` queda en la subcarpeta `bajados` de BACKUP_DIR (la unica con escritura;
+  # en Linux debe existir y pertenecer a BACKUP_UID: mkdir + chown 999:999).
+  copia-externa:
+    build:
+      context: ./infra
+      dockerfile: copia/Dockerfile
+    image: distribuidora-copia:${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+    restart: unless-stopped
+    user: "${BACKUP_UID:-999}:${BACKUP_GID:-999}"
+    environment:
+      BACKUP_DIR: /backups
+      BACKUP_DIARIOS: ${BACKUP_DIARIOS:-14}
+      BACKUP_SEMANALES: ${BACKUP_SEMANALES:-8}
+      TZ: ${TZ:-America/Argentina/Mendoza}
+      COPIA_TIPO: ${COPIA_TIPO:?Falta COPIA_TIPO en el archivo de entorno (s3 o local)}
+      COPIA_RUTA: ${COPIA_RUTA:?Falta COPIA_RUTA en el archivo de entorno}
+      COPIA_S3_PROVEEDOR: ${COPIA_S3_PROVEEDOR:-Other}
+      COPIA_S3_ENDPOINT: ${COPIA_S3_ENDPOINT:-}
+      COPIA_S3_REGION: ${COPIA_S3_REGION:-}
+      COPIA_ACCESS_KEY_ID: ${COPIA_ACCESS_KEY_ID:?Falta COPIA_ACCESS_KEY_ID en el archivo de entorno}
+      COPIA_SECRET_ACCESS_KEY: ${COPIA_SECRET_ACCESS_KEY:?Falta COPIA_SECRET_ACCESS_KEY en el archivo de entorno}
+      COPIA_CLAVE_CIFRADO: ${COPIA_CLAVE_CIFRADO:?Falta COPIA_CLAVE_CIFRADO en el archivo de entorno}
+      COPIA_SAL_CIFRADO: ${COPIA_SAL_CIFRADO:?Falta COPIA_SAL_CIFRADO en el archivo de entorno}
+      AVISO_URL: ${AVISO_URL:-}
+    volumes:
+      - ${BACKUP_DIR:?Falta BACKUP_DIR en el archivo de entorno}:/backups:ro
+      - ${BACKUP_DIR:?Falta BACKUP_DIR en el archivo de entorno}/bajados:/bajados
+      # Destino LOCAL del ensayo (COPIA_TIPO=local, COPIA_RUTA bajo /destino-local): carpeta del
+      # equipo o, por defecto, un volumen. Con un destino S3 no se usa.
+      - ${COPIA_LOCAL_DIR:-copia_local}:/destino-local
+    networks: [salida]
+    healthcheck:
+      # No sano si el backup mas reciente del destino tiene mas de 26 horas o la ultima corrida
+      # fallo por credenciales o clave (salud.sh).
+      test: ["CMD", "sh", "/opt/copia/salud.sh"]
+      interval: 5m
+      timeout: 60s
+      retries: 1
+      start_period: 1m
+    logging: *logging
+
+  # Prueba mensual de restauracion (27b, D10, D11). SIN RED (`network_mode: none`) y sin ninguna
+  # credencial de la base: levanta dentro de su contenedor un Postgres temporal propio, restaura
+  # el backup valido mas reciente, lo comprueba y lo descarta. Lee los backups en solo lectura.
+  # Salud: no sano si la ultima prueba buena tiene mas de 35 dias o si la ultima fallo. A pedido:
+  #   docker compose -f docker-compose.prod.yml --env-file <archivo> run --rm prueba-restauracion ahora [archivo]
+  # Aviso externo (AVISO_URL): este servicio no tiene red, por eso no lo recibe (ver el runbook).
+  prueba-restauracion:
+    build:
+      context: ./infra/backup
+    image: distribuidora-prueba-restauracion:${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+    entrypoint: ["sh", "/opt/backup/programar_prueba.sh"]
+    restart: unless-stopped
+    network_mode: none
+    user: "${BACKUP_UID:-999}:${BACKUP_GID:-999}"
+    environment:
+      BACKUP_DIR: /backups
+      ESTADO_DIR: /estado-prueba
+      PRUEBA_DIA: ${PRUEBA_DIA:-1}
+      PRUEBA_HORA: ${PRUEBA_HORA:-04:00}
+      TZ: ${TZ:-America/Argentina/Mendoza}
+    volumes:
+      - ${BACKUP_DIR:?Falta BACKUP_DIR en el archivo de entorno}:/backups:ro
+      # Unico lugar con escritura: la ultima prueba y la hora de arranque (para la salud).
+      - estado_prueba:/estado-prueba
+    healthcheck:
+      # No sano si la ultima prueba buena tiene mas de 35 dias o si la ultima fallo.
+      test: ["CMD", "sh", "/opt/backup/salud_prueba.sh"]
+      interval: 1h
+      timeout: 10s
+      retries: 1
+      start_period: 1m
+    logging: *logging
+
+  # Restauracion de un backup en una base VACIA (27b, D8). No arranca con `up` (perfil aparte):
+  # solo a pedido, con el backend detenido y la base recien creada y vacia:
+  #   docker compose -f docker-compose.prod.yml --env-file <archivo> --profile restauracion run --rm restauracion <archivo.dump>
+  # Se conecta como `app_migrations` (dueno del esquema, ADR-020), nunca como superusuario. Lee
+  # los backups en solo lectura (tambien la subcarpeta `bajados` con lo que baja la copia externa).
+  restauracion:
+    build:
+      context: ./infra/backup
+    image: distribuidora-restauracion:${APP_VERSION:?Falta APP_VERSION en el archivo de entorno}
+    profiles: [restauracion]
+    entrypoint: ["sh", "/opt/backup/restaurar.sh"]
+    restart: "no"
+    user: "${BACKUP_UID:-999}:${BACKUP_GID:-999}"
+    environment:
+      PGHOST: postgres
+      PGUSER: app_migrations
+      PGPASSWORD: ${APP_MIGRATIONS_DB_PASSWORD:?Falta APP_MIGRATIONS_DB_PASSWORD en el archivo de entorno}
+      PGDATABASE: ${POSTGRES_DB:-distribuidora}
+      BACKUP_DIR: /backups
+      TZ: ${TZ:-America/Argentina/Mendoza}
+    volumes:
+      - ${BACKUP_DIR:?Falta BACKUP_DIR en el archivo de entorno}:/backups:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [datos]
+    logging: *logging
+
+networks:
+  # Caddy <-> backend. Subred fija para poder confiar en el proxy (D5).
+  frente:
+    ipam:
+      config:
+        - subnet: ${FRENTE_SUBRED:-172.30.10.0/24}
+  # Backend, base y migraciones. Sin salida a internet y sin Caddy.
+  datos:
+    internal: true
+  # Solo `copia-externa`: sale a internet, sin acceso a la base ni al backend (27b, D4).
+  salida: {}
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+  # Estado de la salud de la prueba de restauracion (sobrevive a recrear el contenedor).
+  estado_prueba:
+  # Destino local de la copia externa para ensayar sin cuenta (COPIA_LOCAL_DIR lo reemplaza).
+  copia_local:

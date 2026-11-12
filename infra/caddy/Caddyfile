@@ -1,0 +1,46 @@
+# Caddy de PRODUCCION (change 27a, D1, D2, D4; docs/02 §11, §18; ADR-062, ADR-071).
+# Las reglas de ruteo y de cache vienen de Caddyfile.dev (perfil `lan`, change 21).
+#
+# Dos variables del archivo de entorno deciden como se sirve, sin tocar este archivo:
+#   DOMINIO    un dominio, la IP fija de la PC en la red local, o localhost.
+#   CADDY_TLS  quien emite el certificado:
+#                internal       autoridad propia de Caddy (PC de la oficina, ensayo local);
+#                un correo      Let's Encrypt, para un dominio real (renovacion automatica).
+# HTTP se redirige a HTTPS solo (HTTPS automatico de Caddy).
+{
+	# Un navegador que entra por IP no manda el nombre del servidor (SNI) y, como Docker traduce
+	# la direccion, Caddy no puede deducirla: sin esto el saludo TLS falla (igual que en el perfil lan).
+	default_sni {$DOMINIO}
+}
+
+{$DOMINIO} {
+	tls {$CADDY_TLS}
+
+	encode gzip
+
+	# HSTS un año, sin includeSubDomains ni preload (no afecta otros subdominios).
+	header Strict-Transport-Security "max-age=31536000"
+
+	# CSP y demas encabezados de seguridad (change 28, D8, D9): el mismo fragmento que usa el
+	# Caddyfile de desarrollo.
+	import /etc/caddy/encabezados.caddy
+
+	# La API va al backend: mismo origen para el navegador, sin CORS (02 §11).
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# El resto es la compilacion de produccion del frontend (queda en /srv dentro de la imagen).
+	handle {
+		root * /srv
+		# El service worker, el manifiesto y el index nunca se guardan en la cache del navegador:
+		# asi una version nueva se detecta en la siguiente apertura.
+		@sin_cache path /sw.js /registerSW.js /index.html /manifest.webmanifest
+		header @sin_cache Cache-Control "no-cache"
+		# Los archivos de /assets llevan el hash en el nombre: cambian de nombre al cambiar.
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		try_files {path} /index.html
+		file_server
+	}
+}

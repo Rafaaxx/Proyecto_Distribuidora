@@ -11,7 +11,16 @@
 
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+
+
+class Base(DeclarativeBase):
+    """Base declarativa compartida por todos los modelos de `app.modules`.
+
+    Alembic (`alembic/env.py`) usa `Base.metadata` como `target_metadata`
+    para `autogenerate`: cada módulo nuevo solo necesita heredar de esta
+    clase para que su esquema quede comparado contra las migraciones.
+    """
 
 
 def crear_engine(database_url: str) -> Engine:

@@ -1,0 +1,794 @@
+"""Casos de uso de lectura de transferencias y ajustes de stock (change 14, tareas 10.1 y
+10.2; `design.md` D5, D7).
+
+Solo lee: ninguna función escribe ni bloquea. Todas reciben `organizacion_id` primero y lo usan
+para filtrar (INV-21): una transferencia o un ajuste de otra organización es inexistente
+(`RecursoNoEncontradoError`, 404). Los nombres de producto, motivo y usuario se resuelven por el
+`service.py` de su módulo (`CLAUDE.md` §4); el costo de las líneas de un ajuste lo expone
+quien llama solo con `VER_COSTOS` (ADR-036). Las cantidades de líneas se cuentan en la base.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date, datetime
+from decimal import Decimal
+from uuid import UUID
+
+from sqlalchemy.orm import Session
+
+from app.modules.catalogo import service as catalogo_service
+from app.modules.configuracion import service as configuracion_service
+from app.modules.identidad import service as identidad_service
+from app.modules.stock import jornadas_repository, rendicion_repository, repository
+from app.modules.stock import service as stock_service
+from app.modules.stock.domain.errores import RecursoNoEncontradoError
+from app.modules.stock.domain.kardex import limite_efectivo, rango_de_instantes
+from app.modules.stock.models import Jornada
+
+
+@dataclass(frozen=True)
+class TomaDeUbicacion:
+    """Quién tiene tomada una ubicación y desde cuándo (INV-16): su jornada `ABIERTA` o
+    `EN_RENDICION`."""
+
+    jornada_id: UUID
+    usuario_id: UUID
+    usuario_nombre: str | None
+    abierta_en: datetime
+    estado: str
+
+
+@dataclass(frozen=True)
+class JornadaDelListado:
+    id: UUID
+    ubicacion_id: UUID
+    ubicacion_nombre: str
+    usuario_id: UUID
+    usuario_nombre: str | None
+    dispositivo_id: UUID
+    estado: str
+    abierta_en: datetime
+
+
+@dataclass(frozen=True)
+class PaginaDeJornadas:
+    jornadas: list[JornadaDelListado]
+    cursor_siguiente: str | None
+
+
+@dataclass(frozen=True)
+class DetalleDeJornada:
+    """Los datos de apertura, rendición, cierre y liberación de una jornada con los nombres de
+    quienes intervinieron y del motivo (RUT-09)."""
+
+    id: UUID
+    ubicacion_id: UUID
+    ubicacion_nombre: str
+    usuario_id: UUID
+    usuario_nombre: str | None
+    dispositivo_id: UUID
+    estado: str
+    abierta_en: datetime
+    entregada_en: datetime | None
+    rendida_en: datetime | None
+    rendida_por_id: UUID | None
+    rendida_por_nombre: str | None
+    cerrada_en: datetime | None
+    cerrada_por_id: UUID | None
+    cerrada_por_nombre: str | None
+    liberada_en: datetime | None
+    liberada_por_id: UUID | None
+    liberada_por_nombre: str | None
+    motivo_liberacion_id: UUID | None
+    motivo_liberacion_nombre: str | None
+    observacion_liberacion: str | None
+    # Change 25 (D9 = B): rechazos sin conexión sin resolver de la jornada (solo la cantidad).
+    rechazos_pendientes: int
+
+
+@dataclass(frozen=True)
+class AnulacionDeOperacion:
+    """Quién anuló una transferencia o un ajuste, cuándo y con qué motivo."""
+
+    motivo_id: UUID
+    motivo_nombre: str | None
+    momento: datetime
+    usuario_id: UUID
+    usuario_nombre: str | None
+
+
+@dataclass(frozen=True)
+class TransferenciaDelListado:
+    id: UUID
+    estado: str
+    ubicacion_origen_id: UUID
+    ubicacion_origen_nombre: str
+    ubicacion_destino_id: UUID
+    ubicacion_destino_nombre: str
+    observacion: str | None
+    usuario_id: UUID
+    usuario_nombre: str | None
+    occurred_at: datetime
+    cantidad_de_lineas: int
+
+
+@dataclass(frozen=True)
+class PaginaDeTransferencias:
+    transferencias: list[TransferenciaDelListado]
+    cursor_siguiente: str | None
+
+
+@dataclass(frozen=True)
+class LineaDelDetalle:
+    """Una línea de transferencia o de ajuste con el producto y su presentación de referencia
+    (CAT-08). `costo_unitario` solo existe en un ajuste y lo expone quien llama con
+    `VER_COSTOS`."""
+
+    orden: int
+    producto_id: UUID
+    producto_codigo: str | None
+    producto_nombre: str | None
+    cantidad_base: int
+    unidades_referencia: int | None
+    nombre_referencia: str | None
+    costo_unitario: Decimal | None = None
+
+
+@dataclass(frozen=True)
+class DetalleDeTransferencia:
+    id: UUID
+    estado: str
+    ubicacion_origen_id: UUID
+    ubicacion_origen_nombre: str
+    ubicacion_destino_id: UUID
+    ubicacion_destino_nombre: str
+    observacion: str | None
+    usuario_id: UUID
+    usuario_nombre: str | None
+    occurred_at: datetime
+    registered_at: datetime
+    lineas: list[LineaDelDetalle]
+    anulacion: AnulacionDeOperacion | None
+
+
+@dataclass(frozen=True)
+class AjusteDelListado:
+    id: UUID
+    estado: str
+    ubicacion_id: UUID
+    ubicacion_nombre: str
+    motivo_id: UUID
+    motivo_nombre: str | None
+    observacion: str | None
+    usuario_id: UUID
+    usuario_nombre: str | None
+    occurred_at: datetime
+    cantidad_de_lineas: int
+
+
+@dataclass(frozen=True)
+class PaginaDeAjustes:
+    ajustes: list[AjusteDelListado]
+    cursor_siguiente: str | None
+
+
+@dataclass(frozen=True)
+class DetalleDeAjuste:
+    id: UUID
+    estado: str
+    ubicacion_id: UUID
+    ubicacion_nombre: str
+    motivo_id: UUID
+    motivo_nombre: str | None
+    observacion: str | None
+    usuario_id: UUID
+    usuario_nombre: str | None
+    occurred_at: datetime
+    registered_at: datetime
+    lineas: list[LineaDelDetalle]
+    anulacion: AnulacionDeOperacion | None
+
+
+def _rango(
+    organizacion_id: UUID, sesion: Session, desde: date | None, hasta: date | None
+) -> tuple[datetime | None, datetime | None]:
+    """Las fechas de negocio del filtro (TR-04) como instantes `[desde, hasta)` en la zona
+    horaria de la organización; `desde` posterior a `hasta` es `RANGO_DE_FECHAS_INVALIDO`."""
+    organizacion = identidad_service.obtener_organizacion(organizacion_id, sesion)
+    if organizacion is None:
+        raise RecursoNoEncontradoError("La organización no existe.")
+    return rango_de_instantes(desde, hasta, organizacion.zona_horaria)
+
+
+def _nombres_de_usuarios(
+    organizacion_id: UUID, sesion: Session, usuarios: set[UUID]
+) -> dict[UUID, str]:
+    return identidad_service.obtener_nombres_de_usuarios(organizacion_id, usuarios, sesion)
+
+
+def tomas_de_ubicaciones(
+    organizacion_id: UUID, sesion: Session, ubicaciones: set[UUID] | list[UUID]
+) -> dict[UUID, TomaDeUbicacion]:
+    """La toma de cada ubicación pedida que la tiene (las libres no aparecen), de la
+    organización del token (INV-21). Dos lecturas por llamada, sin importar cuántas ubicaciones
+    se pidan: las jornadas no cerradas y los nombres de sus usuarios."""
+    jornadas = jornadas_repository.jornadas_no_cerradas(
+        organizacion_id, sesion, ubicaciones=ubicaciones
+    )
+    nombres = _nombres_de_usuarios(
+        organizacion_id, sesion, {jornada.usuario_id for jornada in jornadas.values()}
+    )
+    return {
+        ubicacion_id: TomaDeUbicacion(
+            jornada_id=jornada.id,
+            usuario_id=jornada.usuario_id,
+            usuario_nombre=nombres.get(jornada.usuario_id),
+            abierta_en=jornada.abierta_en,
+            estado=jornada.estado,
+        )
+        for ubicacion_id, jornada in jornadas.items()
+    }
+
+
+def _nombres_de_motivos(
+    organizacion_id: UUID, sesion: Session, motivos: set[UUID]
+) -> dict[UUID, str]:
+    """Nombre de cada motivo pedido: una lectura por motivo DISTINTO (un puñado por página)."""
+    nombres: dict[UUID, str] = {}
+    for motivo_id in motivos:
+        motivo = configuracion_service.obtener_motivo(organizacion_id, motivo_id, sesion)
+        if motivo is not None:
+            nombres[motivo_id] = motivo.nombre
+    return nombres
+
+
+def _lineas_del_detalle(
+    organizacion_id: UUID,
+    sesion: Session,
+    lineas: list[tuple[int, UUID, int, Decimal | None]],
+) -> list[LineaDelDetalle]:
+    resultado: list[LineaDelDetalle] = []
+    for orden, producto_id, cantidad_base, costo_unitario in lineas:
+        producto = catalogo_service.obtener_producto(organizacion_id, producto_id, sesion)
+        referencia = catalogo_service.obtener_referencia_de_producto(
+            organizacion_id, producto_id, sesion
+        )
+        resultado.append(
+            LineaDelDetalle(
+                orden=orden,
+                producto_id=producto_id,
+                producto_codigo=None if producto is None else producto.codigo,
+                producto_nombre=None if producto is None else producto.nombre,
+                cantidad_base=cantidad_base,
+                unidades_referencia=None if referencia is None else referencia.unidades_base,
+                nombre_referencia=None if referencia is None else referencia.nombre,
+                costo_unitario=costo_unitario,
+            )
+        )
+    return resultado
+
+
+# --- transferencias -----------------------------------------------------------------------
+
+
+def listar_transferencias(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    ubicacion_id: UUID | None = None,
+    desde: date | None = None,
+    hasta: date | None = None,
+    cursor: str | None = None,
+    limite: int | None = None,
+) -> PaginaDeTransferencias:
+    """Transferencias de la organización, más recientes primero, con el estado de cada una.
+    `ubicacion_id` alcanza origen y destino; `desde` y `hasta` son fechas de negocio. Un
+    cursor ilegible es `CURSOR_INVALIDO`; `limite` va de 1 a 200 (la API responde 422 fuera de
+    rango)."""
+    inicio, fin = _rango(organizacion_id, sesion, desde, hasta)
+    filas, cursor_siguiente = repository.listar_transferencias(
+        organizacion_id,
+        sesion,
+        ubicacion_id=ubicacion_id,
+        desde=inicio,
+        hasta=fin,
+        cursor=cursor,
+        limite=limite_efectivo(limite),
+    )
+    usuarios = _nombres_de_usuarios(organizacion_id, sesion, {fila[0].usuario_id for fila in filas})
+    return PaginaDeTransferencias(
+        transferencias=[
+            TransferenciaDelListado(
+                id=t.id,
+                estado=t.estado,
+                ubicacion_origen_id=t.ubicacion_origen_id,
+                ubicacion_origen_nombre=nombre_origen,
+                ubicacion_destino_id=t.ubicacion_destino_id,
+                ubicacion_destino_nombre=nombre_destino,
+                observacion=t.observacion,
+                usuario_id=t.usuario_id,
+                usuario_nombre=usuarios.get(t.usuario_id),
+                occurred_at=t.occurred_at,
+                cantidad_de_lineas=cantidad,
+            )
+            for t, nombre_origen, nombre_destino, cantidad in filas
+        ],
+        cursor_siguiente=cursor_siguiente,
+    )
+
+
+def obtener_detalle_de_transferencia(
+    organizacion_id: UUID, sesion: Session, transferencia_id: UUID
+) -> DetalleDeTransferencia:
+    """La transferencia con sus líneas (código, nombre y unidades de referencia, sin costo) y,
+    si está anulada, el motivo, el usuario y el momento de la anulación. 404 si no existe en
+    la organización (INV-21)."""
+    encontrada = repository.obtener_transferencia(
+        organizacion_id, sesion, transferencia_id=transferencia_id
+    )
+    if encontrada is None:
+        raise RecursoNoEncontradoError("La transferencia no existe en esta organización.")
+    transferencia, nombre_origen, nombre_destino = encontrada
+
+    usuarios_pedidos = {transferencia.usuario_id}
+    if transferencia.anulada_por_id is not None:
+        usuarios_pedidos.add(transferencia.anulada_por_id)
+    usuarios = _nombres_de_usuarios(organizacion_id, sesion, usuarios_pedidos)
+
+    anulacion = None
+    if (
+        transferencia.anulada_en is not None
+        and transferencia.anulacion_motivo_id is not None
+        and transferencia.anulada_por_id is not None
+    ):
+        motivos = _nombres_de_motivos(organizacion_id, sesion, {transferencia.anulacion_motivo_id})
+        anulacion = AnulacionDeOperacion(
+            motivo_id=transferencia.anulacion_motivo_id,
+            motivo_nombre=motivos.get(transferencia.anulacion_motivo_id),
+            momento=transferencia.anulada_en,
+            usuario_id=transferencia.anulada_por_id,
+            usuario_nombre=usuarios.get(transferencia.anulada_por_id),
+        )
+    return DetalleDeTransferencia(
+        id=transferencia.id,
+        estado=transferencia.estado,
+        ubicacion_origen_id=transferencia.ubicacion_origen_id,
+        ubicacion_origen_nombre=nombre_origen,
+        ubicacion_destino_id=transferencia.ubicacion_destino_id,
+        ubicacion_destino_nombre=nombre_destino,
+        observacion=transferencia.observacion,
+        usuario_id=transferencia.usuario_id,
+        usuario_nombre=usuarios.get(transferencia.usuario_id),
+        occurred_at=transferencia.occurred_at,
+        registered_at=transferencia.registered_at,
+        lineas=_lineas_del_detalle(
+            organizacion_id,
+            sesion,
+            [
+                (linea.orden, linea.producto_id, linea.cantidad_base, None)
+                for linea in repository.lineas_de_transferencia(
+                    organizacion_id, sesion, transferencia_id=transferencia_id
+                )
+            ],
+        ),
+        anulacion=anulacion,
+    )
+
+
+# --- ajustes ---------------------------------------------------------------------------------
+
+
+def listar_ajustes(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    ubicacion_id: UUID | None = None,
+    motivo_id: UUID | None = None,
+    desde: date | None = None,
+    hasta: date | None = None,
+    cursor: str | None = None,
+    limite: int | None = None,
+) -> PaginaDeAjustes:
+    """Ajustes de la organización, más recientes primero, con el estado y el motivo de cada
+    uno. Mismo contrato de filtros y paginación que `listar_transferencias`."""
+    inicio, fin = _rango(organizacion_id, sesion, desde, hasta)
+    filas, cursor_siguiente = repository.listar_ajustes(
+        organizacion_id,
+        sesion,
+        ubicacion_id=ubicacion_id,
+        motivo_id=motivo_id,
+        desde=inicio,
+        hasta=fin,
+        cursor=cursor,
+        limite=limite_efectivo(limite),
+    )
+    usuarios = _nombres_de_usuarios(organizacion_id, sesion, {fila[0].usuario_id for fila in filas})
+    motivos = _nombres_de_motivos(organizacion_id, sesion, {fila[0].motivo_id for fila in filas})
+    return PaginaDeAjustes(
+        ajustes=[
+            AjusteDelListado(
+                id=a.id,
+                estado=a.estado,
+                ubicacion_id=a.ubicacion_id,
+                ubicacion_nombre=nombre_ubicacion,
+                motivo_id=a.motivo_id,
+                motivo_nombre=motivos.get(a.motivo_id),
+                observacion=a.observacion,
+                usuario_id=a.usuario_id,
+                usuario_nombre=usuarios.get(a.usuario_id),
+                occurred_at=a.occurred_at,
+                cantidad_de_lineas=cantidad,
+            )
+            for a, nombre_ubicacion, cantidad in filas
+        ],
+        cursor_siguiente=cursor_siguiente,
+    )
+
+
+def obtener_detalle_de_ajuste(
+    organizacion_id: UUID, sesion: Session, ajuste_id: UUID
+) -> DetalleDeAjuste:
+    """El ajuste con su motivo, sus líneas (con el costo con que se valorizó cada una: quien
+    lo expone decide si el usuario tiene `VER_COSTOS`) y, si está anulado, el motivo, el
+    usuario y el momento de la anulación. 404 si no existe en la organización (INV-21)."""
+    encontrado = repository.obtener_ajuste(organizacion_id, sesion, ajuste_id=ajuste_id)
+    if encontrado is None:
+        raise RecursoNoEncontradoError("El ajuste no existe en esta organización.")
+    ajuste, nombre_ubicacion = encontrado
+
+    usuarios_pedidos = {ajuste.usuario_id}
+    motivos_pedidos = {ajuste.motivo_id}
+    if ajuste.anulado_por_id is not None:
+        usuarios_pedidos.add(ajuste.anulado_por_id)
+    if ajuste.anulacion_motivo_id is not None:
+        motivos_pedidos.add(ajuste.anulacion_motivo_id)
+    usuarios = _nombres_de_usuarios(organizacion_id, sesion, usuarios_pedidos)
+    motivos = _nombres_de_motivos(organizacion_id, sesion, motivos_pedidos)
+
+    anulacion = None
+    if (
+        ajuste.anulado_en is not None
+        and ajuste.anulacion_motivo_id is not None
+        and ajuste.anulado_por_id is not None
+    ):
+        anulacion = AnulacionDeOperacion(
+            motivo_id=ajuste.anulacion_motivo_id,
+            motivo_nombre=motivos.get(ajuste.anulacion_motivo_id),
+            momento=ajuste.anulado_en,
+            usuario_id=ajuste.anulado_por_id,
+            usuario_nombre=usuarios.get(ajuste.anulado_por_id),
+        )
+    return DetalleDeAjuste(
+        id=ajuste.id,
+        estado=ajuste.estado,
+        ubicacion_id=ajuste.ubicacion_id,
+        ubicacion_nombre=nombre_ubicacion,
+        motivo_id=ajuste.motivo_id,
+        motivo_nombre=motivos.get(ajuste.motivo_id),
+        observacion=ajuste.observacion,
+        usuario_id=ajuste.usuario_id,
+        usuario_nombre=usuarios.get(ajuste.usuario_id),
+        occurred_at=ajuste.occurred_at,
+        registered_at=ajuste.registered_at,
+        lineas=_lineas_del_detalle(
+            organizacion_id,
+            sesion,
+            [
+                (linea.orden, linea.producto_id, linea.cantidad_base, linea.costo_unitario)
+                for linea in repository.lineas_de_ajuste(
+                    organizacion_id, sesion, ajuste_id=ajuste_id
+                )
+            ],
+        ),
+        anulacion=anulacion,
+    )
+
+
+# --- jornadas (change 15, tarea 10.1, `design.md` D15) ------------------------------------------
+
+
+def listar_jornadas(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    ubicacion_id: UUID | None = None,
+    usuario_id: UUID | None = None,
+    estado: str | None = None,
+    desde: date | None = None,
+    hasta: date | None = None,
+    cursor: str | None = None,
+    limite: int | None = None,
+) -> PaginaDeJornadas:
+    """Jornadas de la organización, las más recientes primero. `desde` y `hasta` son fechas de
+    negocio en la zona de la organización (TR-04): `desde` posterior a `hasta` es
+    `RANGO_DE_FECHAS_INVALIDO`; un cursor ilegible, `CURSOR_INVALIDO`. Los nombres de usuario
+    se resuelven en una sola lectura por página."""
+    inicio, fin = _rango(organizacion_id, sesion, desde, hasta)
+    filas, cursor_siguiente = jornadas_repository.listar_jornadas(
+        organizacion_id,
+        sesion,
+        ubicacion_id=ubicacion_id,
+        usuario_id=usuario_id,
+        estado=estado,
+        desde=inicio,
+        hasta=fin,
+        cursor=cursor,
+        limite=limite_efectivo(limite),
+    )
+    usuarios = _nombres_de_usuarios(
+        organizacion_id, sesion, {jornada.usuario_id for jornada, _ in filas}
+    )
+    return PaginaDeJornadas(
+        jornadas=[
+            JornadaDelListado(
+                id=jornada.id,
+                ubicacion_id=jornada.ubicacion_id,
+                ubicacion_nombre=nombre_ubicacion,
+                usuario_id=jornada.usuario_id,
+                usuario_nombre=usuarios.get(jornada.usuario_id),
+                dispositivo_id=jornada.dispositivo_id,
+                estado=jornada.estado,
+                abierta_en=jornada.abierta_en,
+            )
+            for jornada, nombre_ubicacion in filas
+        ],
+        cursor_siguiente=cursor_siguiente,
+    )
+
+
+def _detalle_de(
+    organizacion_id: UUID, sesion: Session, jornada: Jornada, nombre_ubicacion: str
+) -> DetalleDeJornada:
+    protagonistas = {
+        usuario
+        for usuario in (
+            jornada.usuario_id,
+            jornada.rendida_por_id,
+            jornada.cerrada_por_id,
+            jornada.liberada_por_id,
+        )
+        if usuario is not None
+    }
+    nombres = _nombres_de_usuarios(organizacion_id, sesion, protagonistas)
+    motivos = (
+        {}
+        if jornada.motivo_liberacion_id is None
+        else _nombres_de_motivos(organizacion_id, sesion, {jornada.motivo_liberacion_id})
+    )
+
+    def _nombre(usuario_id: UUID | None) -> str | None:
+        return None if usuario_id is None else nombres.get(usuario_id)
+
+    return DetalleDeJornada(
+        id=jornada.id,
+        ubicacion_id=jornada.ubicacion_id,
+        ubicacion_nombre=nombre_ubicacion,
+        usuario_id=jornada.usuario_id,
+        usuario_nombre=_nombre(jornada.usuario_id),
+        dispositivo_id=jornada.dispositivo_id,
+        estado=jornada.estado,
+        abierta_en=jornada.abierta_en,
+        entregada_en=jornada.entregada_en,
+        rendida_en=jornada.rendida_en,
+        rendida_por_id=jornada.rendida_por_id,
+        rendida_por_nombre=_nombre(jornada.rendida_por_id),
+        cerrada_en=jornada.cerrada_en,
+        cerrada_por_id=jornada.cerrada_por_id,
+        cerrada_por_nombre=_nombre(jornada.cerrada_por_id),
+        liberada_en=jornada.liberada_en,
+        liberada_por_id=jornada.liberada_por_id,
+        liberada_por_nombre=_nombre(jornada.liberada_por_id),
+        motivo_liberacion_id=jornada.motivo_liberacion_id,
+        motivo_liberacion_nombre=(
+            None
+            if jornada.motivo_liberacion_id is None
+            else motivos.get(jornada.motivo_liberacion_id)
+        ),
+        observacion_liberacion=jornada.observacion_liberacion,
+        rechazos_pendientes=stock_service.rechazos_pendientes_de_jornada(
+            organizacion_id, sesion, jornada_id=jornada.id
+        ),
+    )
+
+
+def obtener_detalle_de_jornada(
+    organizacion_id: UUID, sesion: Session, *, jornada_id: UUID
+) -> DetalleDeJornada:
+    """El detalle de una jornada de la organización; una ajena o inexistente es
+    `RecursoNoEncontradoError` (404, INV-21)."""
+    fila = jornadas_repository.obtener_jornada(organizacion_id, sesion, jornada_id=jornada_id)
+    if fila is None:
+        raise RecursoNoEncontradoError(f"La jornada {jornada_id} no existe en esta organización.")
+    return _detalle_de(organizacion_id, sesion, *fila)
+
+
+def obtener_jornada_actual(
+    organizacion_id: UUID, sesion: Session, *, usuario_id: UUID, dispositivo_id: UUID
+) -> DetalleDeJornada:
+    """La jornada `ABIERTA` o `EN_RENDICION` del usuario y del dispositivo del token (RUT-01,
+    ADR-005); 404 si no tiene."""
+    fila = jornadas_repository.jornada_no_cerrada_de(
+        organizacion_id, sesion, usuario_id=usuario_id, dispositivo_id=dispositivo_id
+    )
+    if fila is None:
+        raise RecursoNoEncontradoError(
+            "El usuario no tiene una jornada no cerrada en este dispositivo."
+        )
+    return _detalle_de(organizacion_id, sesion, *fila)
+
+
+# --- El resumen de la jornada (RUT-07, change 24; `design.md` D4, D8) ---------------------
+
+
+@dataclass(frozen=True)
+class LineaDelResumen:
+    """Un producto del resumen, en unidad base (la pantalla lo muestra en cajas y unidades,
+    CAT-08). `esperado = al_abrir + ingresos - ventas + anulaciones + otros` (RUT-07, STK-04).
+    `contado` y `diferencia` son nulos si la jornada no tiene conteo (D8); `valor_diferencia`,
+    solo con `VER_COSTOS` (nulo también si el producto no tenía promedio, CST-12)."""
+
+    producto_id: UUID
+    al_abrir: int
+    ingresos: int
+    ventas: int
+    anulaciones: int
+    otros: int
+    esperado: int
+    contado: int | None
+    diferencia: int | None
+    valor_diferencia: Decimal | None
+
+
+@dataclass(frozen=True)
+class TotalDelResumen:
+    cantidad: int
+    total: Decimal
+
+
+@dataclass(frozen=True)
+class CobranzasDelResumen:
+    """Las cobranzas de un estado: cuántas, su importe y lo cobrado por medio de pago."""
+
+    cantidad: int
+    total: Decimal
+    por_medio: list[stock_service.TotalDeMedio]
+
+
+@dataclass(frozen=True)
+class DineroDeLaJornada:
+    """Ventas vigentes, ventas anuladas, cobranzas confirmadas y cobranzas anuladas (COB-05)."""
+
+    ventas: TotalDelResumen
+    anuladas: TotalDelResumen
+    cobranzas: CobranzasDelResumen
+    cobranzas_anuladas: CobranzasDelResumen
+
+
+@dataclass(frozen=True)
+class ResumenDeJornada:
+    """El resumen de una jornada: stock por producto, dinero y, si ya se rindió, lo registrado
+    después de la rendición aparte (D4). `valor_de_diferencias` es nulo sin `VER_COSTOS` o sin
+    conteo."""
+
+    jornada_id: UUID
+    estado: str
+    con_conteo: bool
+    rendida_en: datetime | None
+    lineas: list[LineaDelResumen]
+    dinero: DineroDeLaJornada
+    despues_de_la_rendicion: DineroDeLaJornada | None
+    valor_de_diferencias: Decimal | None
+
+
+_CERO = Decimal("0.00")
+_SIN_COBRANZAS = stock_service.CobranzasDeJornada(cantidad=0, total=_CERO, por_medio=[])
+
+
+def _dinero(
+    ventas: tuple[stock_service.TotalDeVentas, stock_service.TotalDeVentas],
+    cobranzas: dict[tuple[str, bool], stock_service.CobranzasDeJornada],
+    *,
+    tardia: bool,
+) -> DineroDeLaJornada:
+    confirmadas = cobranzas.get(("CONFIRMADA", tardia), _SIN_COBRANZAS)
+    anuladas = cobranzas.get(("ANULADA", tardia), _SIN_COBRANZAS)
+    return DineroDeLaJornada(
+        ventas=TotalDelResumen(ventas[0].cantidad, ventas[0].total),
+        anuladas=TotalDelResumen(ventas[1].cantidad, ventas[1].total),
+        cobranzas=CobranzasDelResumen(
+            confirmadas.cantidad, confirmadas.total, list(confirmadas.por_medio)
+        ),
+        cobranzas_anuladas=CobranzasDelResumen(
+            anuladas.cantidad, anuladas.total, list(anuladas.por_medio)
+        ),
+    )
+
+
+def obtener_resumen_de_jornada(
+    organizacion_id: UUID, sesion: Session, *, jornada_id: UUID, con_costos: bool
+) -> ResumenDeJornada:
+    """El resumen de la jornada (RUT-07, D4, D8), calculado en la base y sin bloquear.
+
+    Con rendición, el stock sale de las líneas congeladas (no cambia después de rendir) y lo
+    registrado después de ella (ventas, anulaciones y cobranzas) se informa aparte. Sin
+    rendición (una `ABIERTA`, una anterior al change o una `LIBERADA`), el stock se calcula con
+    la misma ventana hasta la rendición, el cierre o la liberación (o hasta ahora si está
+    abierta), sin contado ni diferencias. Las ventas y las cobranzas se leen por el `service.py`
+    de su módulo. El valor de las diferencias solo se informa con `con_costos` (`VER_COSTOS`).
+    Una jornada ajena o inexistente es `RecursoNoEncontradoError` (404, INV-21)."""
+    fila = jornadas_repository.obtener_jornada(organizacion_id, sesion, jornada_id=jornada_id)
+    if fila is None:
+        raise RecursoNoEncontradoError(f"La jornada {jornada_id} no existe en esta organización.")
+    jornada = fila[0]
+    rendicion = rendicion_repository.leer_rendicion(organizacion_id, sesion, jornada_id=jornada_id)
+    corte = None if rendicion is None else rendicion.registered_at
+
+    lineas: list[LineaDelResumen]
+    valor_total: Decimal | None = None
+    if rendicion is not None:
+        lineas = [
+            LineaDelResumen(
+                producto_id=linea.producto_id,
+                al_abrir=linea.al_abrir,
+                ingresos=linea.ingresos,
+                ventas=linea.ventas,
+                anulaciones=linea.anulaciones,
+                otros=linea.otros,
+                esperado=linea.esperado,
+                contado=linea.contado,
+                diferencia=linea.diferencia,
+                valor_diferencia=linea.valor if con_costos else None,
+            )
+            for linea in rendicion_repository.lineas_de_rendicion(
+                organizacion_id, sesion, rendicion_id=rendicion.id
+            )
+        ]
+        if con_costos:
+            valor_total = rendicion_repository.valor_de_las_diferencias(
+                organizacion_id, sesion, rendicion_id=rendicion.id
+            )
+    else:
+        desgloses = rendicion_repository.desglose_por_producto(
+            organizacion_id,
+            sesion,
+            ubicacion_id=jornada.ubicacion_id,
+            abierta_en=jornada.abierta_en,
+            hasta=jornada.rendida_en or jornada.liberada_en,
+        )
+        lineas = [
+            LineaDelResumen(
+                producto_id=producto_id,
+                al_abrir=d.al_abrir,
+                ingresos=d.ingresos,
+                ventas=d.ventas,
+                anulaciones=d.anulaciones,
+                otros=d.otros,
+                esperado=d.esperado,
+                contado=None,
+                diferencia=None,
+                valor_diferencia=None,
+            )
+            for producto_id, d in sorted(desgloses.items(), key=lambda item: str(item[0]))
+        ]
+
+    ventas = stock_service.ventas_de_jornada(
+        organizacion_id, sesion, jornada_id=jornada_id, corte=corte
+    )
+    cobranzas = stock_service.cobranzas_de_jornada(
+        organizacion_id, sesion, jornada_id=jornada_id, corte=corte
+    )
+    return ResumenDeJornada(
+        jornada_id=jornada.id,
+        estado=jornada.estado,
+        con_conteo=rendicion is not None,
+        rendida_en=jornada.rendida_en,
+        lineas=lineas,
+        dinero=_dinero((ventas.vigentes, ventas.anuladas), cobranzas, tardia=False),
+        despues_de_la_rendicion=(
+            None
+            if rendicion is None
+            else _dinero((ventas.vigentes_tardias, ventas.anuladas_tardias), cobranzas, tardia=True)
+        ),
+        valor_de_diferencias=valor_total,
+    )

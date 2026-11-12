@@ -1,0 +1,522 @@
+"""Tarea 12.2 (cierre de INV-21 para el grupo 10.7): cobertura de
+aislamiento de los endpoints de `identidad` que `test_identidad_api_usuarios.py`
+todavía no ejercita con dos organizaciones reales -- listado y revocación de
+dispositivos, listado de usuarios, y alta de usuario con un `rol_id` de otra
+organización.
+
+Mismo arnés HTTP que `test_auth_api.py`/`test_identidad_api_usuarios.py`
+(Postgres real, `cliente` con motor propio, limpieza explícita porque
+confirma transacciones) y mismo criterio: dos organizaciones, cada una con
+su propio usuario autenticado por un login real (nunca un access token
+fabricado a mano) -- `design.md` D1 del change 02, tarea 12.1.
+
+Cita INV-21 y SEG-07 en cada escenario cruzado, como pide la tarea 12.2.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from datetime import UTC, datetime
+from decimal import Decimal
+from uuid import uuid4
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from app.api_v1 import sistema
+from app.core.clock import FixedClock
+from app.core.config import Settings
+from app.core.db import crear_engine, crear_session_factory
+from app.core.ids import nuevo_id
+from app.core.seguridad import hashear_password
+from app.main import crear_app
+from app.modules.identidad import repository
+from app.modules.identidad import service as identidad_service
+from app.modules.identidad.domain.permisos import (
+    ADMINISTRADOR,
+    PLANTILLAS_DE_ROL,
+    VENDEDOR_REPARTIDOR,
+)
+from app.modules.identidad.models import Organizacion
+
+MOMENTO = datetime(2026, 1, 1, tzinfo=UTC)
+PASSWORD = "una-contrasena-larga-123"
+JWT_SECRET = "secreto-de-prueba-aislamiento"
+
+
+@pytest.fixture(autouse=True)
+def _limpiar_datos_confirmados(database_url: str) -> Iterator[None]:
+    yield
+    engine = crear_engine(database_url)
+    with engine.begin() as conexion:
+        conexion.execute(text("TRUNCATE TABLE organizacion CASCADE"))
+    engine.dispose()
+
+
+def _crear_organizacion(
+    sesion: Session, slug: str, *, nombre: str = "Organización de prueba"
+) -> Organizacion:
+    """`nombre` es un parámetro con valor por defecto (tarea 9.1): las
+    pruebas de aislamiento de `/yo` necesitan que las dos organizaciones
+    tengan NOMBRES DISTINTOS, para afirmar que el nombre de A no aparece en
+    la     respuesta de B. Las llamadas existentes no lo pasan y conservan el
+    comportamiento anterior."""
+    organizacion = Organizacion(
+        id=nuevo_id(),
+        nombre=nombre,
+        slug=slug,
+        cuit=None,
+        moneda="ARS",
+        zona_horaria="America/Argentina/Mendoza",
+        estado="ACTIVA",
+        creado_en=MOMENTO,
+        actualizado_en=MOMENTO,
+        actualizado_por_id=None,
+    )
+    sesion.add(organizacion)
+    sesion.flush()
+    return organizacion
+
+
+def _crear_usuario(
+    sesion: Session,
+    organizacion_id,
+    *,
+    permisos: frozenset[str],
+    nombre_usuario: str,
+    nombre_persona: str = "Persona de prueba",
+    nombre_rol: str = "Rol de prueba",
+):
+    """`nombre_persona` y `nombre_rol` son parámetros con valor por defecto
+    (tarea 9.1, mismo motivo que `nombre` en `_crear_organizacion`): las
+    pruebas de aislamiento de `/yo` necesitan nombres distinguibles entre
+    organizaciones. Las llamadas existentes no los pasan."""
+    rol = repository.crear_rol(
+        organizacion_id,
+        sesion,
+        rol_id=nuevo_id(),
+        nombre=nombre_rol,
+        tope_descuento=Decimal("0"),
+        activo=True,
+        momento=MOMENTO,
+    )
+    for codigo in permisos:
+        repository.asignar_permiso_a_rol(
+            organizacion_id, sesion, rol_id=rol.id, permiso_codigo=codigo
+        )
+    usuario = repository.crear_usuario(
+        organizacion_id,
+        sesion,
+        usuario_id=nuevo_id(),
+        usuario=nombre_usuario,
+        nombre=nombre_persona,
+        email=None,
+        password_hash=hashear_password(PASSWORD),
+        rol_id=rol.id,
+        estado="ACTIVO",
+        momento=MOMENTO,
+    )
+    return usuario, rol
+
+
+@pytest.fixture
+def cliente(database_url: str) -> Iterator[TestClient]:
+    """Cierra explícitamente el `Engine` propio de `crear_app` al terminar
+    (recuperado vía `dependency_overrides`): sin esto, el pool de conexiones
+    queda vivo hasta que el recolector de ciclos de CPython lo alcance, y una
+    corrida completa de la suite agota `max_connections` de Postgres antes
+    de eso."""
+    settings = Settings(
+        _env_file=None, database_url=database_url, jwt_secret=JWT_SECRET, jwt_kid="1"
+    )
+    app = crear_app(settings)
+    engine = app.dependency_overrides[sistema._get_engine]()
+    try:
+        yield TestClient(app)
+    finally:
+        engine.dispose()
+
+
+@pytest.fixture
+def sesion(database_url: str, _engine_de_sesion) -> Iterator[Session]:
+    engine = crear_engine(database_url)
+    try:
+        factory = crear_session_factory(engine)
+        with factory() as sesion_real:
+            yield sesion_real
+    finally:
+        engine.dispose()
+
+
+def _login(cliente: TestClient, slug: str, usuario: str) -> str:
+    respuesta = cliente.post(
+        "/api/v1/auth/login",
+        json={
+            "organizacion_slug": slug,
+            "usuario": usuario,
+            "contrasena": PASSWORD,
+            "dispositivo_id": str(uuid4()),
+            "nombre_dispositivo": "PC",
+        },
+    )
+    assert respuesta.status_code == 200
+    return respuesta.json()["access_token"]
+
+
+class TestAislamientoDeDispositivos:
+    """Escenarios "Leer un recurso ajeno responde como inexistente",
+    "Modificar un recurso ajeno no lo cambia" y "Revocar un dispositivo de
+    otra organización no lo encuentra" (spec `dispositivos` y
+    `aislamiento-multiorganizacion`). Regla: INV-21, SEG-07."""
+
+    def test_listar_dispositivos_no_incluye_los_de_otra_organizacion(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        org_a = _crear_organizacion(sesion, "org-iso-1a")
+        org_b = _crear_organizacion(sesion, "org-iso-1b")
+        identidad_service.registrar_dispositivo(
+            org_a.id, sesion, FixedClock(MOMENTO), dispositivo_id=nuevo_id(), nombre="Tablet A"
+        )
+        _crear_usuario(
+            sesion,
+            org_b.id,
+            permisos=frozenset({"GESTIONAR_DISPOSITIVOS"}),
+            nombre_usuario="admin_b",
+        )
+        sesion.commit()
+        # El propio login de `admin_b` registra un dispositivo en `org_b`
+        # (SEG-02, tarea 8.3): la lista de `org_b` no queda vacía, pero debe
+        # excluir "Tablet A" (de `org_a`) por completo.
+        access_token = _login(cliente, "org-iso-1b", "admin_b")
+
+        respuesta = cliente.get(
+            "/api/v1/identidad/dispositivos",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        assert respuesta.status_code == 200
+        nombres = {fila["nombre"] for fila in respuesta.json()}
+        assert "Tablet A" not in nombres
+        assert nombres == {"PC"}
+
+    def test_revocar_un_dispositivo_de_otra_organizacion_no_lo_encuentra(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """SEG-07/INV-21: un dispositivo ajeno responde "no encontrado" y
+        sigue activo -- no un 204 silencioso (spec `dispositivos`, escenario
+        homónimo)."""
+        org_a = _crear_organizacion(sesion, "org-iso-2a")
+        org_b = _crear_organizacion(sesion, "org-iso-2b")
+        dispositivo_a = identidad_service.registrar_dispositivo(
+            org_a.id, sesion, FixedClock(MOMENTO), dispositivo_id=nuevo_id(), nombre="Tablet A"
+        )
+        _crear_usuario(
+            sesion,
+            org_b.id,
+            permisos=frozenset({"GESTIONAR_DISPOSITIVOS"}),
+            nombre_usuario="admin_b",
+        )
+        sesion.commit()
+        access_token = _login(cliente, "org-iso-2b", "admin_b")
+
+        respuesta = cliente.delete(
+            f"/api/v1/identidad/dispositivos/{dispositivo_a.id}",
+            headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
+        )
+
+        assert respuesta.status_code == 404
+        assert respuesta.json()["codigo"] == "RECURSO_NO_ENCONTRADO"
+        sesion.refresh(dispositivo_a)
+        assert dispositivo_a.estado == "ACTIVO"
+
+
+class TestAislamientoDeUsuarios:
+    """Escenarios "Leer un recurso ajeno responde como inexistente" y
+    "Modificar un recurso ajeno no lo cambia" sobre `/identidad/usuarios`.
+    Regla: INV-21, SEG-07."""
+
+    def test_listar_usuarios_no_incluye_los_de_otra_organizacion(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        org_a = _crear_organizacion(sesion, "org-iso-3a")
+        org_b = _crear_organizacion(sesion, "org-iso-3b")
+        _crear_usuario(sesion, org_a.id, permisos=frozenset(), nombre_usuario="vendedor_a")
+        _crear_usuario(
+            sesion, org_b.id, permisos=frozenset({"ADMIN_USUARIOS"}), nombre_usuario="admin_b"
+        )
+        sesion.commit()
+        access_token = _login(cliente, "org-iso-3b", "admin_b")
+
+        respuesta = cliente.get(
+            "/api/v1/identidad/usuarios",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        assert respuesta.status_code == 200
+        nombres = {fila["usuario"] for fila in respuesta.json()}
+        assert nombres == {"admin_b"}
+
+    def test_dar_de_alta_un_usuario_con_un_rol_de_otra_organizacion_no_lo_encuentra(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """Un `rol_id` que pertenece a la organización A, informado por un
+        actor de la organización B: la FK compuesta (`03` §2.4) impediría
+        la escritura en la base, pero la respuesta debe ser "no encontrado"
+        (SEG-07), nunca un error de infraestructura -- mismo criterio que
+        `cambiar_composicion_rol`/`establecer_pin_autorizacion`/
+        `revocar_dispositivo` (tarea 10.7)."""
+        org_a = _crear_organizacion(sesion, "org-iso-4a")
+        org_b = _crear_organizacion(sesion, "org-iso-4b")
+        rol_de_a = repository.crear_rol(
+            org_a.id,
+            sesion,
+            rol_id=nuevo_id(),
+            nombre="Rol de A",
+            tope_descuento=Decimal("0"),
+            activo=True,
+            momento=MOMENTO,
+        )
+        _crear_usuario(
+            sesion, org_b.id, permisos=frozenset({"ADMIN_USUARIOS"}), nombre_usuario="admin_b"
+        )
+        sesion.commit()
+        access_token = _login(cliente, "org-iso-4b", "admin_b")
+
+        respuesta = cliente.post(
+            "/api/v1/identidad/usuarios",
+            json={
+                "usuario": "intruso",
+                "nombre": "Intruso",
+                "email": None,
+                "password": "otra-contrasena-larga-456",
+                "rol_id": str(rol_de_a.id),
+            },
+            headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
+        )
+
+        assert respuesta.status_code == 404
+        assert respuesta.json()["codigo"] == "RECURSO_NO_ENCONTRADO"
+        # No debe quedar creado ningún usuario "intruso" en ninguna organización.
+        assert repository.obtener_usuario_por_nombre_usuario(org_a.id, "intruso", sesion) is None
+        assert repository.obtener_usuario_por_nombre_usuario(org_b.id, "intruso", sesion) is None
+
+
+class TestLaFaltaDePermisoSeDistingueDeUnRecursoAjeno:
+    """Escenario "La falta de permiso se distingue de un recurso ajeno"
+    (tarea 12.3, spec `autorizacion-por-permiso`): la ocultación es por
+    organización (404), no por permiso (403) -- un usuario sin el permiso
+    requerido sobre un recurso de SU PROPIA organización debe enterarse de
+    que le falta el permiso, no creer que el recurso no existe. Regla:
+    SEG-06, SEG-07."""
+
+    def test_sin_permiso_sobre_recurso_propio_es_403_no_404(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        organizacion = _crear_organizacion(sesion, "org-iso-5")
+        usuario_sin_permiso, _ = _crear_usuario(
+            sesion, organizacion.id, permisos=frozenset(), nombre_usuario="vendedor1"
+        )
+        dispositivo_propio = identidad_service.registrar_dispositivo(
+            organizacion.id,
+            sesion,
+            FixedClock(MOMENTO),
+            dispositivo_id=nuevo_id(),
+            nombre="Tablet propia",
+        )
+        sesion.commit()
+        access_token = _login(cliente, "org-iso-5", "vendedor1")
+
+        respuesta = cliente.delete(
+            f"/api/v1/identidad/dispositivos/{dispositivo_propio.id}",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        assert respuesta.status_code == 403
+        assert respuesta.json()["codigo"] == "PERMISO_REQUERIDO"
+        sesion.refresh(dispositivo_propio)
+        assert dispositivo_propio.estado == "ACTIVO"
+
+    def test_con_permiso_sobre_recurso_ajeno_es_404_no_403(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """La mitad simétrica del caso anterior, con el mismo par de
+        organizaciones que estructura la spec: un usuario CON el permiso
+        pero sobre un recurso AJENO también debe ser 404, nunca 403 (la
+        ocultación es por organización, no por permiso)."""
+        org_a = _crear_organizacion(sesion, "org-iso-6a")
+        org_b = _crear_organizacion(sesion, "org-iso-6b")
+        dispositivo_a = identidad_service.registrar_dispositivo(
+            org_a.id, sesion, FixedClock(MOMENTO), dispositivo_id=nuevo_id(), nombre="Tablet A"
+        )
+        _crear_usuario(
+            sesion,
+            org_b.id,
+            permisos=frozenset({"GESTIONAR_DISPOSITIVOS"}),
+            nombre_usuario="admin_b",
+        )
+        sesion.commit()
+        access_token = _login(cliente, "org-iso-6b", "admin_b")
+
+        respuesta = cliente.delete(
+            f"/api/v1/identidad/dispositivos/{dispositivo_a.id}",
+            headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
+        )
+
+        assert respuesta.status_code == 404
+        assert respuesta.json()["codigo"] == "RECURSO_NO_ENCONTRADO"
+
+
+class TestAislamientoDeLaSesion:
+    """Cobertura de aislamiento de `GET /api/v1/yo` (change 06b, tarea 9.1;
+    la 4.6 dejó `test_inv21_ratchet_rutas.py` en rojo a propósito, nombrando
+    exactamente esta ruta, hasta que exista su prueba real).
+
+    A diferencia de las rutas anteriores de este archivo, `/yo` no tiene un
+    "recurso ajeno" que referenciar por id: usuario, organización y rol salen
+    SIEMPRE del access token y la ruta no declara ningún parámetro
+    (`design.md` D1-A; `test_inv21_organizacion_siempre_del_token.py` lo
+    comprueba estructuralmente sobre el esquema OpenAPI, tarea 9.2). El
+    aislamiento de esta ruta se demuestra por el otro lado, el que el ratchet
+    exige: dos organizaciones con login real, y el usuario de B obtiene SU
+    sesión sin ningún identificador, nombre ni permiso de A. Más el caso de
+    "informar los identificadores de A no cambia nada" (spec
+    `permisos-efectivos`, escenarios "Dos organizaciones, cada usuario ve
+    solo lo suyo" y "Una organización o un usuario informados en la petición
+    se ignoran"). Regla: INV-21, SEG-07, ADR-027."""
+
+    def test_yo_del_usuario_de_b_no_trae_nada_de_la_organizacion_a(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """Escenario "Dos organizaciones, cada usuario ve solo lo suyo": la
+        organización A con un Administrador (los 40 permisos de `01` §19) y
+        la B con un Vendedor/Repartidor. Los dos inician sesión por la ruta de
+        login real, y la prueba verifica primero que cada token devuelve lo
+        suyo."""
+        org_a = _crear_organizacion(sesion, "org-iso-yo-1a", nombre="Distribuidora del Sur")
+        org_b = _crear_organizacion(sesion, "org-iso-yo-1b", nombre="Distribuidora del Norte")
+        usuario_a, rol_a = _crear_usuario(
+            sesion,
+            org_a.id,
+            permisos=PLANTILLAS_DE_ROL[ADMINISTRADOR],
+            nombre_usuario="admin_a",
+            nombre_persona="Administrador de la Sur",
+            nombre_rol=ADMINISTRADOR,
+        )
+        usuario_b, rol_b = _crear_usuario(
+            sesion,
+            org_b.id,
+            permisos=PLANTILLAS_DE_ROL[VENDEDOR_REPARTIDOR],
+            nombre_usuario="vendedor_b",
+            nombre_persona="Vendedor de la Norte",
+            nombre_rol=VENDEDOR_REPARTIDOR,
+        )
+        sesion.commit()
+        token_a = _login(cliente, "org-iso-yo-1a", "admin_a")
+        token_b = _login(cliente, "org-iso-yo-1b", "vendedor_b")
+
+        # Las dos sesiones existen y son reales. Sin esto, la prueba podría
+        # pasar por un motivo trivial: que A no tenga ninguna sesión abierta y
+        # por lo tanto no haya nada que filtrar. Con A abierta, lo que se
+        # demuestra es que la respuesta de B no se arma con "la otra sesión".
+        propia_de_a = cliente.get("/api/v1/yo", headers={"Authorization": f"Bearer {token_a}"})
+        assert propia_de_a.status_code == 200
+        assert propia_de_a.json()["organizacion"] == {
+            "id": str(org_a.id),
+            "nombre": "Distribuidora del Sur",
+        }
+        assert propia_de_a.json()["usuario"] == {
+            "id": str(usuario_a.id),
+            "nombre": "Administrador de la Sur",
+        }
+        assert token_a != token_b
+
+        respuesta = cliente.get("/api/v1/yo", headers={"Authorization": f"Bearer {token_b}"})
+
+        assert respuesta.status_code == 200
+        cuerpo = respuesta.json()
+        # La respuesta es exactamente la de B: su usuario, la organización B y
+        # el rol de B, con los permisos de ese rol.
+        assert cuerpo == {
+            "usuario": {"id": str(usuario_b.id), "nombre": "Vendedor de la Norte"},
+            "organizacion": {"id": str(org_b.id), "nombre": "Distribuidora del Norte"},
+            "rol": {"id": str(rol_b.id), "nombre": VENDEDOR_REPARTIDOR},
+            "permisos": sorted(PLANTILLAS_DE_ROL[VENDEDOR_REPARTIDOR]),
+        }
+
+        # Y ningún identificador, nombre ni permiso de A aparece en ella. La
+        # comparación es sobre el cuerpo entero serializado, no campo por
+        # campo: si A se colara por un campo nuevo del contrato, también
+        # tendría que aparecer acá.
+        cuerpo_como_texto = str(cuerpo)
+        assert str(usuario_a.id) not in cuerpo_como_texto
+        assert str(org_a.id) not in cuerpo_como_texto
+        assert str(rol_a.id) not in cuerpo_como_texto
+        assert "Distribuidora del Sur" not in cuerpo_como_texto
+        assert "Administrador de la Sur" not in cuerpo_como_texto
+        assert "admin_a" not in cuerpo_como_texto
+        assert ADMINISTRADOR not in cuerpo_como_texto
+        # Los códigos que el rol de A tiene y el de B no: ninguno puede estar
+        # informado. (No sirve `isdisjoint` sobre las dos plantillas enteras:
+        # la de A contiene a la de B.)
+        codigos_solo_de_a = (
+            PLANTILLAS_DE_ROL[ADMINISTRADOR] - PLANTILLAS_DE_ROL[VENDEDOR_REPARTIDOR]
+        )
+        assert codigos_solo_de_a, "La plantilla de A debe traer códigos que B no tiene."
+        assert not codigos_solo_de_a.intersection(cuerpo["permisos"])
+
+    def test_yo_ignora_la_organizacion_y_el_usuario_de_a_informados(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """Escenario "Una organización o un usuario informados en la petición
+        se ignoran" (`02` §8, INV-21): informar el `organizacion_id` y el
+        `usuario_id` de A, en la consulta y en encabezados, no cambia la
+        respuesta -- la misma que sin esos datos."""
+        org_a = _crear_organizacion(sesion, "org-iso-yo-2a", nombre="Bodega Austral")
+        org_b = _crear_organizacion(sesion, "org-iso-yo-2b", nombre="Bodega Boreal")
+        usuario_a, _rol_a = _crear_usuario(
+            sesion,
+            org_a.id,
+            permisos=PLANTILLAS_DE_ROL[ADMINISTRADOR],
+            nombre_usuario="admin_a",
+            nombre_persona="Administrador Austral",
+        )
+        usuario_b, _rol_b = _crear_usuario(
+            sesion,
+            org_b.id,
+            permisos=PLANTILLAS_DE_ROL[VENDEDOR_REPARTIDOR],
+            nombre_usuario="vendedor_b",
+            nombre_persona="Vendedor Boreal",
+        )
+        sesion.commit()
+        # Las dos sesiones reales, por el mismo motivo que en la prueba
+        # anterior: para que "no cambia" signifique que la ruta ignoró lo
+        # informado y no que no hubiera nada abierto de la otra organización.
+        _login(cliente, "org-iso-yo-2a", "admin_a")
+        token_b = _login(cliente, "org-iso-yo-2b", "vendedor_b")
+
+        sin_datos_de_a = cliente.get("/api/v1/yo", headers={"Authorization": f"Bearer {token_b}"})
+
+        # En la consulta, con los dos nombres que la ruta NO declara; y en
+        # encabezados, con dos nombres distintos para que la prueba no dependa
+        # de cuál se pueda declarar.
+        con_datos_de_a = cliente.get(
+            "/api/v1/yo",
+            params={"organizacion_id": str(org_a.id), "usuario_id": str(usuario_a.id)},
+            headers={
+                "Authorization": f"Bearer {token_b}",
+                "X-Organizacion-Id": str(org_a.id),
+                "X-Usuario-Id": str(usuario_a.id),
+            },
+        )
+
+        assert sin_datos_de_a.status_code == 200
+        assert con_datos_de_a.status_code == 200
+        assert con_datos_de_a.json() == sin_datos_de_a.json()
+        # Explícitamente, lo informado por A: ni su usuario ni su organización.
+        cuerpo = con_datos_de_a.json()
+        assert cuerpo["organizacion"] == {"id": str(org_b.id), "nombre": "Bodega Boreal"}
+        assert cuerpo["usuario"] == {"id": str(usuario_b.id), "nombre": "Vendedor Boreal"}
+        assert str(usuario_a.id) not in str(cuerpo)
+        assert str(org_a.id) not in str(cuerpo)

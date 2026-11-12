@@ -1,0 +1,158 @@
+/**
+ * Presentación de la venta ya registrada y de sus lecturas (change 18a, tareas 12.2 y 12.3;
+ * spec `administracion-de-ventas`; `design.md` D6, D21; SYN-07, STK-05). Lógica pura, sin React;
+ * los importes llegan como string de la API y no pasan por `number` (INV-03).
+ */
+
+import { formatearPorcentaje, parsearImporteDesdeApi } from '../../lib/money'
+import { formatearMonto } from '../cuentas-corrientes/presentacion'
+import { detalleDeObservacion, etiquetaDeObservacion } from '../revision/detalleDeObservacion'
+import type { AmbitoDeMotivo } from '../configuracion/catalogos'
+import { formatearCantidad } from '../stock/cantidades'
+
+export const ETIQUETA_DE_ESTADO_DE_VENTA: Record<string, string> = { CONFIRMADA: 'Confirmada', ANULADA: 'Anulada' }
+
+const ETIQUETAS_DE_FACTURACION: Record<string, string> = {
+  NO_REQUIERE: 'No requiere factura',
+  PENDIENTE: 'Pendiente de facturar',
+  PARCIAL: 'Facturada en parte',
+  FACTURADA: 'Facturada',
+}
+
+const ETIQUETAS_DE_MODO: Record<string, string> = { ONLINE: 'Con conexión', OFFLINE: 'Sin conexión' }
+
+const ETIQUETAS_DE_VERSION: Record<string, string> = {
+  VIGENTE: 'vigente',
+  HISTORICA: 'anterior',
+  PROGRAMADA: 'programada',
+}
+
+/** Ámbito de los motivos para vender con otra lista o con una versión anterior (PRC-21, D6). */
+export const AMBITO_DE_LISTA_ANTERIOR = 'LISTA_ANTERIOR' satisfies AmbitoDeMotivo
+
+/** Ámbito de los motivos del descuento manual (DSC-05). */
+export const AMBITO_DE_DESCUENTO_MANUAL = 'DESCUENTO_MANUAL' satisfies AmbitoDeMotivo
+
+export function etiquetaDeEstadoDeVenta(estado: string): string {
+  return ETIQUETA_DE_ESTADO_DE_VENTA[estado] ?? estado
+}
+
+export function etiquetaDeEstadoDeFacturacion(estado: string): string {
+  return ETIQUETAS_DE_FACTURACION[estado] ?? estado
+}
+
+export function etiquetaDeModoDeConfirmacion(modo: string): string {
+  return ETIQUETAS_DE_MODO[modo] ?? modo
+}
+
+/** `"Versión 2 (vigente)"`, `"Versión 1 (anterior)"`. */
+export function etiquetaDeVersion(numero: number, estado: string): string {
+  return `Versión ${String(numero)} (${ETIQUETAS_DE_VERSION[estado] ?? estado.toLowerCase()})`
+}
+
+export interface CantidadDeLinea {
+  cantidad: number
+  presentacion_nombre: string | null
+  cantidad_base: number
+}
+
+/** La cantidad en su presentación y, entre paréntesis, la equivalencia en unidades (CAT-08). */
+export function textoDeCantidadDeLinea(linea: CantidadDeLinea): string {
+  const presentacion = linea.presentacion_nombre ?? 'Presentación'
+  return `${String(linea.cantidad)} × ${presentacion} (${formatearCantidad(linea.cantidad_base, null)})`
+}
+
+// --- Observaciones de sincronización (SYN-07) --------------------------------------------
+
+export interface ObservacionDeVenta {
+  codigo: string
+  estado: string
+  detalle: { [clave: string]: unknown } | null
+  // Change 25 (D11, SYN-08): la resolución, solo lectura.
+  resuelto_por_nombre?: string | null
+  resuelto_en?: string | null
+  comentario?: string | null
+}
+
+export function etiquetaDeObservacionDeVenta(codigo: string): string {
+  return etiquetaDeObservacion(codigo)
+}
+
+function lineaDe(observacion: ObservacionDeVenta): string | null {
+  const id = observacion.detalle?.linea_id
+  return typeof id === 'string' && id !== '' ? id : null
+}
+
+/** Las observaciones que apuntan a la línea `lineaId` (el detalle trae su `linea_id`). */
+export function observacionesDeLineaDeVenta(
+  observaciones: readonly ObservacionDeVenta[],
+  lineaId: string,
+): ObservacionDeVenta[] {
+  return observaciones.filter((observacion) => lineaDe(observacion) === lineaId)
+}
+
+/** Las que no son de una línea (o no dicen cuál): nunca se esconden. */
+export function observacionesGeneralesDeVenta(observaciones: readonly ObservacionDeVenta[]): ObservacionDeVenta[] {
+  return observaciones.filter((observacion) => lineaDe(observacion) === null)
+}
+
+/**
+ * Texto de apoyo de una observación en una sola línea (las líneas de `detalleDeObservacion`, unidas con « · »);
+ * `null` si el código no tiene detalle que mostrar.
+ */
+export function detalleDeObservacionDeVenta(observacion: ObservacionDeVenta): string | null {
+  const lineas = detalleDeObservacion(observacion.codigo, observacion.detalle)
+  return lineas.length === 0 ? null : lineas.join(' · ')
+}
+
+// --- Descuentos y crédito congelados (change 18b, D20; DSC-08, CRE-10) -----------------------
+
+export interface DescuentoCongelado {
+  origen: string
+  regla_nombre: string | null
+  porcentaje: string | null
+  importe: string
+  motivo_nombre: string | null
+  autorizador_nombre: string | null
+}
+
+/**
+ * Un descuento de la línea en palabras: `"Descuento automático «Volumen» 5 %: −$ 1.562,50"` o
+ * `"Descuento manual 10 % (motivo: Cliente frecuente; autorizó Marta): −$ 3.125,00"`.
+ */
+export function textoDeDescuentoCongelado(descuento: DescuentoCongelado): string {
+  const porcentaje =
+    descuento.porcentaje === null ? '' : ` ${formatearPorcentaje(parsearImporteDesdeApi(descuento.porcentaje))}`
+  const importe = `−${formatearMonto(descuento.importe)}`
+  if (descuento.origen === 'AUTOMATICO') {
+    const regla = descuento.regla_nombre === null ? '' : ` «${descuento.regla_nombre}»`
+    return `Descuento automático${regla}${porcentaje}: ${importe}`
+  }
+  const detalles = [
+    descuento.motivo_nombre === null ? null : `motivo: ${descuento.motivo_nombre}`,
+    descuento.autorizador_nombre === null ? null : `autorizó ${descuento.autorizador_nombre}`,
+  ].filter((detalle): detalle is string => detalle !== null)
+  return `Descuento manual${porcentaje}${detalles.length === 0 ? '' : ` (${detalles.join('; ')})`}: ${importe}`
+}
+
+const ETIQUETAS_DE_RESOLUCION_DE_CREDITO: Record<string, string> = {
+  SIN_EXCESO: 'Sin exceso',
+  ADVERTENCIA_ACEPTADA: 'Exceso aceptado tras el aviso',
+  PERMISO_PROPIO: 'Autorizado con su propio permiso',
+  PIN_SUPERVISOR: 'Autorizado con el PIN de un supervisor',
+  TOLERANCIA_OFFLINE: 'Dentro de la tolerancia sin señal',
+}
+
+export function etiquetaDeResolucionDeCredito(resolucion: string): string {
+  return ETIQUETAS_DE_RESOLUCION_DE_CREDITO[resolucion] ?? resolucion
+}
+
+const ETIQUETAS_DE_POLITICA_DE_CREDITO: Record<string, string> = {
+  ADVERTIR: 'Advertir',
+  AUTORIZAR: 'Autorizar',
+  BLOQUEAR: 'Bloquear',
+}
+
+export function etiquetaDePoliticaDeCredito(politica: string): string {
+  return ETIQUETAS_DE_POLITICA_DE_CREDITO[politica] ?? politica
+}

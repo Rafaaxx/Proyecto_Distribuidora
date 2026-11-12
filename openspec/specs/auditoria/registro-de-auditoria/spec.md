@@ -1,0 +1,220 @@
+# Auditoría - Registro de Auditoría
+
+## Purpose
+
+Define el libro de auditoría del sistema: qué eventos se registran, con qué campos, y la garantía de que una vez escrito un registro no se modifica ni se borra, ni siquiera por error de la aplicación (AUD-01 a AUD-03, INV-05, `03` §2.5).
+
+## Requirements
+
+### Requirement: La auditoría es un libro de solo agregado
+
+El registro de auditoría DEBE ser de solo inserción. El sistema NO DEBE modificar ni eliminar un registro de auditoría existente, y esa garantía DEBE estar en la base de datos, no solo en la aplicación: el usuario con el que la aplicación se conecta NO DEBE tener permiso de modificación ni de borrado sobre las tablas de libro (AUD-03, INV-05, `03` §2.5, `02` §18).
+
+#### Scenario: La aplicación no puede modificar un registro de auditoría
+
+- **GIVEN** un registro de auditoría existente y la conexión con la que opera la aplicación
+- **WHEN** se intenta modificarlo
+- **THEN** la base rechaza la operación por falta de permisos
+- **AND** el registro queda intacto
+- **Regla:** INV-05 (ningún registro de auditoría confirmado se borra), `03` §15 (permisos del usuario de aplicación sobre tablas de libro)
+
+#### Scenario: La aplicación no puede borrar un registro de auditoría
+
+- **GIVEN** un registro de auditoría existente y la conexión con la que opera la aplicación
+- **WHEN** se intenta borrarlo
+- **THEN** la base rechaza la operación por falta de permisos
+- **AND** el registro queda intacto
+- **Regla:** INV-05, AUD-03 (la auditoría es de solo agregado)
+
+#### Scenario: La aplicación sí puede insertar y leer
+
+- **GIVEN** la conexión con la que opera la aplicación
+- **WHEN** inserta un registro de auditoría y lo vuelve a leer
+- **THEN** ambas operaciones se aceptan
+- **Regla:** AUD-01 (se auditan los eventos listados), INV-05
+
+#### Scenario: Toda tabla de libro tiene sus permisos restringidos
+
+- **GIVEN** el conjunto de tablas declaradas como libro de la base migrada
+- **WHEN** se recorren los permisos del usuario de aplicación sobre cada una
+- **THEN** ninguna le concede modificación ni borrado
+- **AND** la verificación falla nombrando la tabla y el permiso sobrante, o la tabla que no tiene permisos declarados
+- **Regla:** INV-05, `03` §2.5 (las tablas de libro son de solo inserción y una prueba lo verifica)
+
+#### Scenario: La aplicación no es dueña del esquema
+
+- **GIVEN** la conexión con la que opera la aplicación
+- **WHEN** se intenta alterar la estructura de una tabla
+- **THEN** la base rechaza la operación
+- **Regla:** `02` §18 (el usuario de base de datos de la aplicación no es superusuario ni dueño del esquema; las migraciones usan un usuario distinto)
+
+### Requirement: Cada registro de auditoría guarda el contexto completo del evento
+
+Un registro de auditoría DEBE guardar usuario, dispositivo, acción, entidad, identificador de la entidad, el valor anterior y el nuevo cuando aplique, motivo, autorizador, el momento en que ocurrió, el momento en que el servidor lo registró y el identificador de la operación que lo originó (AUD-02, `03` §13, TR-05, TR-07).
+
+#### Scenario: Un evento auditado registra sus dos momentos
+
+- **GIVEN** una operación auditable ejecutada
+- **WHEN** se consulta su registro de auditoría
+- **THEN** tiene tanto el momento en que ocurrió como el momento en que el servidor lo registró
+- **AND** ambos son momentos con zona horaria
+- **Regla:** TR-05 (toda operación registra `occurred_at` y `registered_at`), TR-04
+
+#### Scenario: Un cambio de valor registra el antes y el después
+
+- **GIVEN** un dispositivo activo que se revoca
+- **WHEN** se consulta el registro de auditoría de esa revocación
+- **THEN** el valor anterior indica el estado `ACTIVO` y el nuevo indica `REVOCADO`
+- **Regla:** AUD-02 (valor anterior y nuevo cuando aplica)
+
+#### Scenario: Un evento sin cambio de valor no inventa uno
+
+- **GIVEN** un inicio de sesión exitoso
+- **WHEN** se consulta su registro de auditoría
+- **THEN** tiene usuario, dispositivo, acción y momentos, y no tiene valor anterior ni nuevo
+- **Regla:** AUD-02 ("cuando aplica")
+
+#### Scenario: Un registro de auditoría no contiene secretos
+
+- **GIVEN** los registros de auditoría de un inicio de sesión, una rotación de PIN y un cambio de contraseña
+- **WHEN** se inspecciona su contenido
+- **THEN** ninguno contiene la contraseña, el PIN, sus derivaciones ni un token
+- **Regla:** `02` §17 (nunca se registran contraseñas, PIN ni tokens)
+
+#### Scenario: Un registro de auditoría pertenece a una organización
+
+- **GIVEN** un evento auditado en la organización A
+- **WHEN** un usuario de la organización B consulta la auditoría
+- **THEN** ese registro no aparece
+- **Regla:** INV-02, INV-21, TR-08
+
+### Requirement: Los eventos de identidad de esta etapa quedan auditados
+
+El sistema DEBE registrar en auditoría, como mínimo, los eventos de identidad que AUD-01 enumera: el inicio de sesión y los cambios de usuarios, roles, permisos y dispositivos (AUD-01).
+
+#### Scenario: El inicio de sesión queda auditado
+
+- **GIVEN** un inicio de sesión exitoso
+- **WHEN** se consulta la auditoría
+- **THEN** hay un registro con el usuario, el dispositivo y el momento
+- **Regla:** AUD-01 (se audita el inicio de sesión)
+
+#### Scenario: Un inicio de sesión fallido también queda auditado
+
+- **GIVEN** un intento de inicio de sesión con contraseña incorrecta
+- **WHEN** se consulta la auditoría
+- **THEN** hay un registro del intento fallido
+- **AND** no contiene la contraseña intentada
+- **Regla:** AUD-01, `02` §17
+
+#### Scenario: Un cambio de composición de rol queda auditado
+
+- **GIVEN** un rol al que se le quita un permiso
+- **WHEN** se consulta la auditoría
+- **THEN** hay un registro con quién lo cambió, sobre qué rol y qué permiso quedó antes y después
+- **Regla:** AUD-01 (se auditan los cambios de usuarios, roles, permisos y dispositivos), AUD-02
+
+#### Scenario: Un alta de usuario queda auditada
+
+- **GIVEN** un usuario recién creado
+- **WHEN** se consulta la auditoría
+- **THEN** hay un registro del alta con quién la hizo y sobre qué usuario
+- **AND** no contiene la contraseña del usuario creado
+- **Regla:** AUD-01, `02` §17
+
+#### Scenario: Si la operación auditada falla, no queda registro de auditoría
+
+- **GIVEN** una revocación de dispositivo que falla por una violación de restricción
+- **WHEN** se consulta la auditoría
+- **THEN** no hay ningún registro de esa revocación
+- **Regla:** INV-01 (una operación de negocio se registra completa o no se registra)
+
+### Requirement: Un registro de auditoría originado en un comando lleva su identificador de operación
+
+Todo registro de auditoría producido por un comando DEBE llevar el `operation_id` de ese comando, y la base DEBE impedir que se registre sin él. Un evento auditable que no se origina en un comando —el inicio de sesión, la renovación y el cierre de sesión, que ocurren fuera del bus por definición— DEBE quedar auditado igualmente, declarando su origen, y NO DEBE llevar un identificador de operación inventado (AUD-01, AUD-02, TR-07, ADR-012).
+
+#### Scenario: La auditoría de un comando referencia su identificador de operación
+
+- **GIVEN** un comando aceptado que produce un cambio auditable
+- **WHEN** se consulta su registro de auditoría
+- **THEN** lleva el mismo identificador de operación que el comando
+- **Regla:** AUD-02, TR-07
+
+#### Scenario: Un registro de origen comando sin identificador de operación no llega a la base
+
+- **GIVEN** un intento de registrar auditoría declarada de origen comando sin identificador de operación
+- **WHEN** se intenta insertar
+- **THEN** la base rechaza la inserción
+- **Regla:** AUD-02, INV-06
+
+#### Scenario: El inicio de sesión sigue auditado y sin identificador de operación
+
+- **GIVEN** un inicio de sesión exitoso
+- **WHEN** se consulta su registro de auditoría
+- **THEN** existe, declara origen distinto de comando y no tiene identificador de operación
+- **Regla:** AUD-01 (el inicio de sesión se audita), ADR-012 (los endpoints de sesión quedan fuera del bus)
+
+#### Scenario: Los registros de auditoría anteriores al bus no se pierden
+
+- **GIVEN** registros de auditoría existentes sin identificador de operación
+- **WHEN** se aplica la migración que impone la obligatoriedad
+- **THEN** la migración sube limpia y ninguno de esos registros se borra ni se modifica en sus datos de evento
+- **Regla:** INV-05 (la auditoría no se modifica ni se borra), TR-06
+
+### Requirement: El descuento manual y la autorización de crédito de una venta quedan auditados
+
+Además de la fila del comando, una venta con descuento manual DEBE dejar una fila de auditoría del descuento manual (porcentaje máximo, tope aplicado, resolución, motivo y autorizador), y una venta cuya resolución de crédito no es `SIN_EXCESO` DEBE dejar una fila de autorización de crédito (el snapshot y el autorizador), las dos con el `operation_id` de la venta. Ninguna fila DEBE contener el PIN. Una venta rechazada NO DEBE dejar ninguna de las dos.
+
+#### Scenario: Venta con descuento y crédito autorizados por personas distintas
+
+- **GIVEN** una venta con 10 % autorizado por Marta y exceso autorizado por Luis
+- **WHEN** se confirma
+- **THEN** quedan una fila de descuento manual con Marta y una de autorización de crédito con Luis, con el mismo `operation_id`
+- **Regla:** AUD-01; AUD-02; DSC-06; CRE-05
+
+#### Scenario: Venta sin descuento manual ni exceso
+
+- **WHEN** se confirma una venta sin descuento manual y sin exceso
+- **THEN** solo queda la fila del comando
+- **Regla:** AUD-01
+
+#### Scenario: Venta sin conexión
+
+- **GIVEN** una venta sin conexión con descuento manual y exceso de crédito autorizados por Marta
+- **WHEN** se sincroniza
+- **THEN** quedan las mismas filas de descuento manual y de autorización de crédito, con `modo = OFFLINE` en el dato posterior, la resolución que declaró el dispositivo y el tope vigente al sincronizar
+- **Regla:** AUD-01; AUD-02; SYN-05
+
+#### Scenario: Venta rechazada
+
+- **WHEN** una venta se rechaza por `AUTORIZACION_REQUERIDA`
+- **THEN** no queda ninguna fila de descuento manual ni de crédito
+- **Regla:** AUD-01; INV-01
+
+### Requirement: Las anulaciones de compra y de pago a proveedor guardan su motivo en la auditoría
+
+El registro de auditoría de `COMPRA_ANULAR` y de `PAGO_PROVEEDOR_ANULAR` aceptados DEBE guardar el motivo elegido en la anulación, igual que los comandos de stock que ya lo copian. Un comando rechazado NO DEBE dejar motivo (AUD-02; deuda del change 14, parte 1; ADR-070, deuda 2; `design.md` D1).
+
+#### Scenario: Anulación de compra con motivo
+- **GIVEN** una compra confirmada y un motivo activo de la organización
+- **WHEN** se anula la compra con ese motivo
+- **THEN** el registro de auditoría de `COMPRA_ANULAR` tiene ese motivo
+- **Regla:** AUD-02
+
+#### Scenario: Anulación de pago con motivo
+- **GIVEN** un pago a proveedor confirmado y un motivo activo
+- **WHEN** se anula el pago con ese motivo
+- **THEN** el registro de auditoría de `PAGO_PROVEEDOR_ANULAR` tiene ese motivo
+- **Regla:** AUD-02
+
+#### Scenario: Una anulación rechazada no deja motivo
+- **GIVEN** una compra ya anulada
+- **WHEN** se intenta anularla de nuevo con un motivo
+- **THEN** el comando se rechaza y ningún registro de auditoría aceptado de esa compra lleva el motivo del intento
+- **Regla:** AUD-02; INV-01
+
+#### Scenario: Doble envío de la anulación
+- **GIVEN** una anulación de pago aceptada
+- **WHEN** se reenvía con el mismo `operation_id`
+- **THEN** se devuelve el resultado original y existe un solo registro de auditoría con el motivo
+- **Regla:** INV-06

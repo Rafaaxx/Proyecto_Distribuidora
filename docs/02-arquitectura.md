@@ -68,6 +68,7 @@ Las versiones se fijan al iniciar el proyecto en `backend/requirements.txt`, `ba
 | Driver | psycopg 3 | |
 | Migraciones | Alembic | Única vía para cambiar el esquema |
 | Hash de contraseñas | Argon2id | |
+| Cuerpo `multipart/form-data` | python-multipart | Recepción de planillas en la importación (ADR-041) |
 | Gestión de dependencias | pip con `requirements.txt` y `requirements-dev.txt` | Configuración de herramientas (Ruff, mypy, pytest) en `pyproject.toml` |
 | Calidad | Ruff (lint y formato), mypy o pyright, import-linter | import-linter valida límites entre módulos |
 | Pruebas | pytest, Testcontainers, Hypothesis | Ver §15 |
@@ -167,7 +168,8 @@ Monorepo:
 │   │   ├── domain/            # motor de cálculo TS (§10.4)
 │   │   ├── sync/              # base local, cola, bootstrap, motor de sincronización
 │   │   ├── lib/               # dinero, cliente API, fechas, ids
-│   │   └── components/ui/
+│   │   ├── ayuda/             # archivo único de textos de ayuda y páginas "Ver más" (ADR-051)
+│   │   └── components/ui/     # incluye Ayuda, el botón "(?)"
 │   └── tests/
 │       ├── unit/
 │       └── e2e/
@@ -182,8 +184,8 @@ Monorepo:
 
 | Módulo | Responsabilidad | Reglas |
 | --- | --- | --- |
-| identidad | Organizaciones, usuarios, roles, permisos, dispositivos, autenticación, PIN | SEG |
-| configuracion | Parámetros de organización, catálogos configurables | §4 de `01` |
+| identidad | Organización, configuración de la organización, usuarios, roles, permisos, dispositivos, autenticación, PIN | SEG |
+| configuracion | Catálogos configurables: alícuotas de IVA, medios de pago, motivos | §4 de `01` |
 | catalogo | Productos, presentaciones, categorías, marcas, alícuotas | CAT |
 | proveedores | Proveedores, costos informados, compras, pagos | CST-01..05, CMP, PAG |
 | costeo | Costo promedio y costo de venta | CST-10..15 |
@@ -198,6 +200,7 @@ Monorepo:
 | auditoria | Registro de auditoría | AUD |
 | reportes | Consultas de solo lectura | REP |
 | facturacion | Facturas y efecto fiscal | FAC |
+| importacion | Lectura de planillas (CSV y `.xlsx`), conversión exacta de valores, informe de errores por fila, comando `IMPORTACION_REGISTRAR`, historial de importaciones y un importador por tipo sobre los servicios de los demás módulos | IMP, TR-10 |
 
 ### 5.2 Capas dentro de cada módulo
 
@@ -224,17 +227,29 @@ Reglas:
 ### 5.3 Dependencias permitidas entre módulos
 
 ```
-ventas ──► precios, descuentos, clientes, stock, costeo, cuentas_corrientes, cobranzas, catalogo
-proveedores ──► catalogo, stock, costeo, cuentas_corrientes
-cobranzas ──► cuentas_corrientes
-clientes ──► cuentas_corrientes
-precios ──► catalogo, proveedores (costos informados)
-stock ──► catalogo, costeo
+ventas ──► precios, descuentos, clientes, stock, costeo, cuentas_corrientes, cobranzas, catalogo, configuracion (motivos), identidad (configuración, dispositivo y permisos) — solo por service.py; ventas/domain alcanza precios.domain (bruto de línea) y descuentos.domain (motor) como código puro con dos ignore_imports (ADR-054)
+proveedores ──► catalogo, stock, costeo, cuentas_corrientes, configuracion (compras y pagos de contado, solo por service.py, ADR-043)
+cobranzas ──► cuentas_corrientes, clientes, configuracion (medios y motivos; la validación de medios es compartida con proveedores), stock (jornada), identidad (permisos) — solo por service.py, ADR-052
+clientes ──► cuentas_corrientes, precios (lista asignada, solo por service.py, ADR-047)
+precios ──► catalogo, proveedores (costos informados), identidad (configuración y permisos)
+stock ──► catalogo, costeo, configuracion (motivos, solo por service.py, ADR-048)
+descuentos ──► catalogo, identidad (alcances, configuración del descuento manual, permisos y tope; solo por service.py, ADR-050)
+catalogo ──► costeo (solo lectura del costo promedio de un producto, ADR-036)
 facturacion ──► ventas (lectura), cuentas_corrientes, costeo
 sync ──► todos los módulos con comandos
+importacion ──► catalogo, proveedores, clientes, stock, cuentas_corrientes, configuracion, identidad (solo por service.py; nadie depende de importacion, ADR-042)
+reportes ──► lectura de las tablas de todos los módulos con SQLAlchemy Core (solo sus `models`, excepción de §5.2) y stock (resumen de la jornada, por service.py); nadie depende de reportes; sin comandos (ADR-070)
 auditoria, configuracion, identidad ◄── todos
-cuentas_corrientes, costeo, catalogo ──► (sin dependencias de negocio)
+cuentas_corrientes, costeo ──► (sin dependencias de negocio)
 ```
+
+Nota: `precios` no depende de `clientes`: este registra en `precios` un verificador de uso de listas (patrón de ADR-023) y no hay ciclo.
+
+Nota: `catalogo` e `identidad` no importan `descuentos`; `ventas` consume el motor y la evaluación del descuento manual solo por `descuentos/service.py`.
+
+Nota: `configuracion/commands.py` no importa otros módulos de negocio; el permiso `ADMIN_CONFIGURACION` de los comandos de medios se comprueba con `configuracion/service.py::exigir_permiso_de_medios_pago`, único archivo del módulo que alcanza a `identidad`.
+
+Nota: `catalogo` no depende de `stock`: este registra en `catalogo` un verificador de stock (`registrar_verificador_de_stock`, patrón de ADR-023 y ADR-025, que falla cerrado) para que un producto con stock no se desactive, y no hay ciclo. El contrato de import-linter `stock-solo-por-service-ajeno` permite a `stock` alcanzar `configuracion` solo por su `service.py`, y `catalogo-solo-por-service-ajeno` prohíbe a `catalogo` importar `stock` (ADR-048).
 
 No se permiten ciclos. Si aparece la necesidad de uno, se resuelve moviendo la lógica al módulo que orquesta (normalmente `ventas`) o registrando un ADR.
 
@@ -270,13 +285,15 @@ Ambos construyen un sobre y llaman al mismo bus. No existe una segunda implement
 
 Dentro de una transacción:
 
-1. **Dispositivo.** Si está revocado, el comando se guarda en cuarentena en una transacción aparte y se responde RECHAZADO (SYN-06).
+1. **Dispositivo.** Si está revocado, el comando se guarda en cuarentena en una transacción aparte y se responde RECHAZADO (SYN-06). **En el lote, todo comando `OFFLINE` de un dispositivo activo que termina RECHAZADO se guarda después, también en una transacción aparte, en `comando_rechazado` (contenido y código; nunca credenciales); si eso falla por un error transitorio, el ítem es un error transitorio y corta el lote (ADR-069).**
+
+   **1b. Jornada del sobre.** Si el sobre trae `jornada_id`, se comprueba, antes de reservar, que existe en la organización (por `stock/service.py`). Si no existe o es de otra organización, se responde RECHAZADO con `JORNADA_INEXISTENTE` (SYN-06): en el lote el ítem queda rechazado sin fila de `comando` y el lote sigue; por REST la respuesta es 404. El bus no valida que la jornada sea del usuario ni su estado: es regla de cada comando. La clave foránea compuesta de `comando.jornada_id` queda como respaldo.
 2. **Reserva de idempotencia.** `INSERT INTO comando (organizacion_id, operation_id, tipo, huella, estado) VALUES (…, 'PROCESANDO') ON CONFLICT DO NOTHING`.
    - Si se insertó, continúa.
    - Si hubo conflicto, se lee el existente. Misma huella: se devuelve el resultado guardado. Distinta huella: RECHAZADO con código `COMANDO_INCONSISTENTE` (SYN-02).
    - Si otra transacción está procesando el mismo `operation_id`, PostgreSQL bloquea el `INSERT` hasta que esa transacción termine; no hace falta lógica adicional.
 3. **Validación estructural** del contenido con el esquema Pydantic de su tipo y versión.
-4. **Permisos.** En `ONLINE`, un permiso faltante rechaza. En `OFFLINE`, se valida contra los permisos vigentes al abrir la jornada y, si fueron revocados después, se acepta con observación (SYN-10).
+4. **Permisos.** Todo tipo declara en el catálogo los permisos que exige (alguno de ellos basta). El bus los compara con los permisos actuales del usuario (inactivo = sin permisos) para todo comando, llegue por REST o por el lote: en `ONLINE`, si falta, rechaza con `PERMISO_REQUERIDO` antes del handler; en `OFFLINE`, acepta con `PERMISO_REVOCADO` (SYN-10). La ruta REST además lo exige antes de tocar la base. En el lote el permiso se evalúa antes de validar el contenido: quien no lo tiene recibe solo `PERMISO_REQUERIDO`, nunca el detalle de la validación (ADR-056). Antes de reservar, un comando `OFFLINE` sin jornada se rechaza con `JORNADA_REQUERIDA` y uno con la jornada de otro usuario o dispositivo con `JORNADA_AJENA`; una jornada `LIBERADA` se acepta con `JORNADA_LIBERADA` (RUT-09) (ADR-052).
 5. **Handler.** Ejecuta la operación usando los servicios de los módulos. En `ONLINE`, una regla de negocio incumplida lanza un error de dominio. En `OFFLINE`, las reglas que no pueden rechazar (SYN-05) producen observaciones.
 6. **Resultado.** Se actualiza el registro del comando con estado final, resultado y observaciones; se registra la auditoría.
 7. **Commit.**
@@ -288,8 +305,8 @@ Errores transitorios de PostgreSQL (serialización `40001`, deadlock `40P01`) se
 ### 6.4 Lote de sincronización
 
 - El dispositivo envía hasta 50 comandos por lote, ordenados por `secuencia`.
-- El servidor los procesa en orden y responde un resultado por comando.
-- Un resultado ACEPTADO, ACEPTADO_CON_OBSERVACIONES o RECHAZADO no detiene el lote.
+- El servidor los procesa en orden y responde un resultado por comando: `operation_id`, `estado`, `resultado`, `error_codigo` y la lista `observaciones` (código, tipo e id de la operación y detalle; vacía si no hay), también al reenviar un comando ya procesado (ADR-065). Una venta o cobranza sin conexión nunca se rechaza por una regla de negocio de SYN-05 (INV-17): se acepta con observaciones.
+- Un resultado ACEPTADO, ACEPTADO_CON_OBSERVACIONES o RECHAZADO no detiene el lote. **Un RECHAZADO sin conexión queda en el registro de rechazos para que administración lo revise (SYN-06, ADR-069).**
 - Un error transitorio detiene el lote en ese comando: los siguientes no se procesan, para preservar el orden (SYN-03).
 - La cola pertenece al usuario que generó los comandos. Solo ese usuario, autenticado en ese dispositivo, puede sincronizarla.
 
@@ -299,31 +316,76 @@ Errores transitorios de PostgreSQL (serialización `40001`, deadlock `40P01`) se
 | --- | :-: | :-: |
 | `JORNADA_ABRIR`, `JORNADA_RENDIR`, `JORNADA_CERRAR`, `JORNADA_LIBERAR` | ✓ | |
 | `VENTA_CONFIRMAR` | ✓ | ✓ |
-| `VENTA_ANULAR` | ✓ | ✓ (VTA-24) |
+| `VENTA_ANULAR` | ✓ | ✓ (solo por el lote; VTA-24, ADR-066) |
 | `COBRANZA_REGISTRAR` | ✓ | ✓ |
 | `COBRANZA_ANULAR` | ✓ | |
 | `COMPRA_CONFIRMAR`, `COMPRA_ANULAR` | ✓ | |
 | `PAGO_PROVEEDOR_REGISTRAR`, `PAGO_PROVEEDOR_ANULAR` | ✓ | |
 | `STOCK_TRANSFERIR`, `STOCK_AJUSTAR`, `STOCK_INICIAL_REGISTRAR` | ✓ | |
+| `STOCK_TRANSFERENCIA_ANULAR`, `STOCK_AJUSTE_ANULAR` | ✓ | |
 | `COSTO_INFORMAR` | ✓ | |
-| `LISTA_GENERAR_BORRADOR`, `LISTA_PUBLICAR`, `LISTA_ANULAR_VERSION` | ✓ | |
+| `LISTA_PRECIO_CREAR`, `LISTA_PRECIO_MODIFICAR`, `REGLA_MARGEN_CREAR`, `REGLA_MARGEN_MODIFICAR`, `REDONDEO_CATEGORIA_DEFINIR` (con `GESTIONAR_LISTAS`) | ✓ | |
+| `LISTA_GENERAR_BORRADOR`, `LISTA_BORRADOR_PRECIO_FIJAR` (con `GESTIONAR_LISTAS`) | ✓ | |
+| `LISTA_PUBLICAR`, `LISTA_ANULAR_VERSION` (con `PUBLICAR_LISTAS`) | ✓ | |
+| `LISTA_PRECIO_PREDETERMINADA_DEFINIR` (con `ADMIN_CONFIGURACION`) | ✓ | |
+| `REGLA_DESCUENTO_CREAR`, `REGLA_DESCUENTO_MODIFICAR`, `REGLA_DESCUENTO_ACTIVAR`, `REGLA_DESCUENTO_PAUSAR` (con `GESTIONAR_DESCUENTOS`) | ✓ | |
+| `ROL_TOPE_DESCUENTO_DEFINIR` (con `ADMIN_USUARIOS`) | ✓ | |
+| `ROL_PERMISOS_CAMBIAR` (con `ADMIN_USUARIOS`; rechaza `IDENTIDAD_SIN_ADMINISTRADOR`, 409, ADR-053) | ✓ | |
+| `MOTIVO_CREAR`, `MOTIVO_MODIFICAR` (con `ADMIN_CONFIGURACION`; `NOMBRE_INVALIDO` y `AMBITO_INVALIDO` 422, `NOMBRE_DUPLICADO` y `ULTIMO_MOTIVO_ACTIVO` 409, ADR-061) | ✓ | |
+| `ALICUOTA_CREAR`, `ALICUOTA_MODIFICAR` (con `ADMIN_CONFIGURACION`; `NOMBRE_INVALIDO`, `CONFIGURACION_VALOR_ALICUOTA_INVALIDO` y `VALOR_NO_MODIFICABLE` 422, `NOMBRE_DUPLICADO`, `VALOR_DUPLICADO`, `ALICUOTA_EN_USO` (informa en `productos` la cantidad de productos activos que la usan) y `ULTIMA_ALICUOTA_ACTIVA` 409, ADR-061) | ✓ | |
+| `REDONDEO_POR_DEFECTO_DEFINIR` (con `ADMIN_CONFIGURACION`; `REDONDEO_INVALIDO` 422, ADR-061) | ✓ | |
+| `DESCUENTO_MANUAL_CONFIGURAR`, `CREDITO_ORGANIZACION_CONFIGURAR` (con `ADMIN_CONFIGURACION`; `TOLERANCIA_OFFLINE_INVALIDA` 422, ADR-055) | ✓ | |
+| `PIN_AUTORIZACION_PROPIO_DEFINIR` (con algún permiso de autorización de excepciones; confirma la contraseña: `IDENTIDAD_CONTRASENA_INCORRECTA`, 403, y el límite de intentos del login, `IDENTIDAD_LOGIN_BLOQUEADO_POR_INTENTOS`, 429, ADR-018) | ✓ | |
+| `USUARIO_MODIFICAR`, `USUARIO_BAJA`, `USUARIO_REACTIVAR`, `USUARIO_ROL_CAMBIAR`, `USUARIO_TOPE_DESCUENTO_DEFINIR` (con `ADMIN_USUARIOS`; `IDENTIDAD_NOMBRE_DE_USUARIO_INVALIDO` 422, `IDENTIDAD_AUTOBAJA`, `IDENTIDAD_SIN_ADMINISTRADOR`, `IDENTIDAD_ROL_INACTIVO` y `IDENTIDAD_TRANSICION_ESTADO_USUARIO_INVALIDA` 409, `IDENTIDAD_TOPE_DESCUENTO_FUERA_DE_RANGO`, ADR-060) | ✓ | |
+| `USUARIO_CONTRASENA_RESTABLECER` (con `ADMIN_USUARIOS`; `IDENTIDAD_CONTRASENA_INVALIDA` 422; contraseña fuera del contenido, ADR-056) | ✓ | |
+| `ROL_CREAR`, `ROL_RENOMBRAR`, `ROL_BAJA`, `ROL_REACTIVAR` (con `ADMIN_USUARIOS`; `IDENTIDAD_NOMBRE_DE_ROL_INVALIDO` 422, `IDENTIDAD_NOMBRE_DE_ROL_DUPLICADO`, `IDENTIDAD_ROL_CON_USUARIOS_ACTIVOS` y `IDENTIDAD_SIN_ADMINISTRADOR` 409, ADR-060) | ✓ | |
+| `CLIENTE_VENDEDOR_ASIGNAR` (con `GESTIONAR_CLIENTES`; de 1 a 500 clientes y un vendedor o `null`; `VENDEDOR_INVALIDO` y `CLIENTE_CONSUMIDOR_FINAL_SIN_VENDEDOR` 409, ADR-060) | ✓ | |
+| `CONTRASENA_PROPIA_CAMBIAR` (sin permiso: cualquier usuario autenticado y activo, solo la propia; actual y nueva fuera del contenido; `IDENTIDAD_CONTRASENA_INCORRECTA` 403 con el límite de intentos del login, `IDENTIDAD_LOGIN_BLOQUEADO_POR_INTENTOS` 429, `IDENTIDAD_CONTRASENA_INVALIDA` y `IDENTIDAD_CONTRASENA_NUEVA_IGUAL_A_ACTUAL` 422, ADR-018, ADR-060) | ✓ | |
 | `SALDO_INICIAL_REGISTRAR` | ✓ | |
-| `OBSERVACION_RESOLVER` | ✓ | |
+| `OBSERVACION_RESOLVER`, `RECHAZO_RESOLVER` (con `REVISAR_OBSERVACIONES`; `OBSERVACIONES_INVALIDAS`, `COMENTARIO_INVALIDO` y `VINCULO_INVALIDO` 422, `OBSERVACION_YA_RESUELTA` y `RECHAZO_YA_RESUELTO` 409, ADR-069) | ✓ | |
+| `IMPORTACION_REGISTRAR` (permiso `IMPORTAR_DATOS`) | ✓ | |
 | Altas y modificaciones de maestros (productos, clientes, proveedores, reglas, configuración) | ✓ | |
 
 Las altas y modificaciones de maestros también llevan `operation_id` y pasan por el bus, aunque no generen movimientos.
 
+Un handler puede devolver, además del resultado, observaciones de negocio (SYN-04, SYN-07): el comando queda `ACEPTADO_CON_OBSERVACIONES` y las observaciones se registran con la operación afectada. `COMPRA_ANULAR` lleva `devuelve_pago` (obligatorio en compras de contado, prohibido en las de crédito) y emite `ANULACION_COMPRA_SIN_RECALCULO` y `STOCK_NEGATIVO` (ADR-043, ADR-044). Las lecturas de compras exigen `REGISTRAR_COMPRA` o `ANULAR_COMPRA`; el formulario de compra también lee productos, alícuotas, proveedores y ubicaciones con `REGISTRAR_COMPRA` (ADR-043).
+
+`PAGO_PROVEEDOR_REGISTRAR` lleva proveedor, fecha, importe, de 1 a 20 medios y una observación opcional, y exige `REGISTRAR_PAGO_PROVEEDOR`; `PAGO_PROVEEDOR_ANULAR` lleva el pago y un motivo del ámbito `ANULACION_PAGO`, y exige `ANULAR_PAGO_PROVEEDOR`. Los errores propios son `MEDIOS_INVALIDOS` (422), `PAGO_YA_ANULADO` y `PAGO_DE_COMPRA_VIGENTE` (409). Las lecturas son `GET /pagos-proveedores` (filtros de proveedor, estado, origen y fechas, con cursor), `GET /pagos-proveedores/{id}` (ambos con `REGISTRAR_PAGO_PROVEEDOR` o `ANULAR_PAGO_PROVEEDOR`) y `GET /proveedores/{id}/saldo` (con `GESTIONAR_PROVEEDORES`, `REGISTRAR_PAGO_PROVEEDOR` o `REGISTRAR_COMPRA`); `GET /proveedores/opciones` también se abre, solo en lectura, a `REGISTRAR_PAGO_PROVEEDOR` (ADR-046).
+
+`COBRANZA_REGISTRAR` (`REGISTRAR_COBRANZA`; `ONLINE` y `OFFLINE`) lleva el identificador de la cobranza, cliente, importe, de 1 a 20 medios y una observación opcional; `COBRANZA_ANULAR` (`ANULAR_COBRANZA`, solo `ONLINE`) lleva la cobranza (en la ruta), un motivo del ámbito `ANULACION_COBRANZA` y una observación opcional, y deja el motivo en su fila de auditoría. Con conexión, un medio inactivo o una referencia faltante se rechazan (`MEDIO_PAGO_INACTIVO`, `REFERENCIA_OBLIGATORIA`), igual que en los pagos; sin conexión, `COBRANZA_REGISTRAR` los acepta con `MEDIO_INACTIVO` y `REFERENCIA_FALTANTE` por línea, y con `CLIENTE_NO_HABILITADO` la cobranza al consumidor final (SYN-05, SYN-07). Los errores propios son `COBRANZA_DUPLICADA`, `COBRANZA_YA_ANULADA`, `COBRANZA_DE_VENTA`, `CONSUMIDOR_FINAL_SIN_CUENTA` y `JORNADA_AJENA` (409) y `JORNADA_REQUERIDA` (422). Las rutas son `POST /api/v1/cobranzas` y `POST /api/v1/cobranzas/{id}/anulacion`; las lecturas, `GET /api/v1/cobranzas` (filtros de cliente, estado, usuario, jornada y fechas, con cursor), `GET /api/v1/cobranzas/{id}`, `GET /api/v1/clientes/opciones` y `GET /api/v1/clientes/{id}/saldo` (ADR-052). Un tipo de comando con handler registrado pero sin declarar en el catálogo de tipos no tiene modo permitido: el lote lo rechaza en `ONLINE` y en `OFFLINE` (aprobado 2026-10-16, ADR-052). Un handler que intenta `commit`, `rollback` o `close` sobre la sesión del bus es un error de programación: aborta el lote y no se informa como `RECHAZADO` de ese ítem (ADR-052).
+
+`STOCK_TRANSFERIR` lleva origen, destino distinto y de 1 a 200 líneas de producto y cantidad base positiva, y exige `TRANSFERIR_STOCK`; `STOCK_AJUSTAR` lleva una ubicación, un motivo del ámbito `AJUSTE_STOCK` y de 1 a 200 líneas con cantidad con signo, y exige `AJUSTAR_STOCK`; ambos admiten una observación de hasta 500 caracteres. `STOCK_TRANSFERENCIA_ANULAR` y `STOCK_AJUSTE_ANULAR` llevan la operación (en la ruta) y un motivo de los ámbitos `ANULACION_TRANSFERENCIA` y `ANULACION_AJUSTE`; anulan todas las líneas, una sola vez, con movimientos inversos al costo original; la primera exige `TRANSFERIR_STOCK` y, si la transferencia es de otro usuario, además `ANULAR_TRANSFERENCIA`, y la segunda `AJUSTAR_STOCK`. Emiten `STOCK_NEGATIVO` cuando el usuario con `PERMITIR_STOCK_NEGATIVO` deja un saldo bajo cero. Los errores propios son `UBICACIONES_IGUALES`, `OBSERVACION_INVALIDA` y `MOTIVO_INVALIDO` (422) y `PRODUCTO_SIN_COSTO`, `PRODUCTO_CON_STOCK`, `TRANSFERENCIA_YA_ANULADA` y `AJUSTE_YA_ANULADO` (409). Las lecturas son `GET /stock/transferencias` y `/{id}` (con `TRANSFERIR_STOCK`) y `GET /stock/ajustes` y `/{id}` (con `AJUSTAR_STOCK`, costos con `VER_COSTOS`), con cursor y límite; el kardex agrega el motivo, la operación de origen y su estado. Los cuatro comandos son solo online. El bus copia el motivo a su fila de auditoría únicamente en `STOCK_AJUSTAR`, `STOCK_TRANSFERENCIA_ANULAR` y `STOCK_AJUSTE_ANULAR` (ADR-022, ADR-048).
+
+`JORNADA_ABRIR` (`ABRIR_JORNADA`) lleva solo la ubicación: el usuario y el dispositivo salen de la sesión, nunca del contenido. `JORNADA_RENDIR` **v2** y `JORNADA_CERRAR` (`RENDIR_JORNADA`) llevan la jornada (en la ruta); **la rendición lleva además las líneas del conteo (producto, cantidad contada, esperado visto) y una observación opcional, y exige la entrega; el cierre v2, una devolución opcional (destino y líneas; con `TRANSFERIR_STOCK`). `JORNADA_RENDIR` v1 no se acepta más (`VERSION_DE_COMANDO_SIN_HANDLER`, tampoco al reenviar uno ya aceptado: el bus resuelve el handler antes de la idempotencia). `JORNADA_ENTREGAR` v1 (`ABRIR_JORNADA`) solo por el lote en modo `OFFLINE`, con el contenido vacío y la jornada del sobre; `JORNADA_CERRAR` v1 sigue registrada.** `JORNADA_LIBERAR` (`LIBERAR_UBICACION`) lleva la jornada, un motivo del ámbito `LIBERACION_JORNADA` y una observación opcional de hasta 500 caracteres. Los **cuatro de `/admin`** son solo online, con `Operation-Id`; la fila de auditoría del bus de `JORNADA_LIBERAR` lleva el motivo (ADR-049). Los errores propios son `UBICACION_TOMADA`, `USUARIO_CON_JORNADA`, `DISPOSITIVO_CON_JORNADA`, `UBICACION_SIN_TOMA` y `JORNADA_ESTADO_INVALIDO` (409), `MOTIVO_INVALIDO` y `OBSERVACION_INVALIDA` (422) y `JORNADA_INEXISTENTE` (404); **errores nuevos: `JORNADA_SIN_ENTREGA`, `JORNADA_YA_ENTREGADA`, `ESPERADO_DIFIERE` y `UBICACION_CON_TOMA` (409), `CONTEO_INCOMPLETO` (422); `RECHAZOS_PENDIENTES` (409, con la cantidad) en la rendición, comprobado con la jornada tomada por un puerto que `stock/service.py` declara y `sync/service.py` registra (ADR-069); `CANTIDAD_INVALIDA`, `PRODUCTO_REPETIDO` y `OBSERVACION_INVALIDA` (422) en el conteo. Lecturas nuevas: `GET /api/v1/stock/jornadas/{id}/resumen`; `GET /api/v1/stock/jornadas/{id}` devuelve además `entregada_en` y `rechazos_pendientes` (solo la cantidad, ADR-069); `GET /api/v1/catalogo/productos` se abre, solo en lectura, a `RENDIR_JORNADA`. Los lectores de ventas y cobranzas del resumen se registran como puertos en `stock/service.py` (límite entre módulos, ADR-025) (ADR-068);** una jornada ajena o inexistente es 404. Las rutas son `POST /api/v1/stock/jornadas` y `POST /api/v1/stock/jornadas/{id}/rendicion`, `/cierre` y `/liberacion`. Las lecturas son `GET /api/v1/stock/jornadas` (filtros de ubicación, usuario, estado y fechas de negocio, con cursor), `GET /api/v1/stock/jornadas/{id}` y `GET /api/v1/stock/jornadas/actual`, con cualquiera de `ABRIR_JORNADA`, `RENDIR_JORNADA` o `LIBERAR_UBICACION` (la última, con `ABRIR_JORNADA`). Todo comando que mueve stock sobre una ubicación tomada responde `UBICACION_TOMADA` salvo que sea de la jornada o de quien tiene `LIBERAR_UBICACION` (STK-09).
+
+`VENTA_CONFIRMAR` (`VENDER`; `ONLINE` y `OFFLINE`) lleva el identificador de la venta, su número, cliente, ubicación (con conexión, si no hay jornada abierta), lista o versión elegidas con su motivo, de 1 a 200 líneas (identificador, producto, presentación, cantidad y los valores esperados: versión, precio y unidades de referencia, bruto), el total esperado y la cobranza opcional (identificador, de 1 a 20 medios, observación) y, desde el change 18b y todos opcionales, el porcentaje manual general y el propio de cada línea, los descuentos esperados de cada línea (origen, regla, porcentaje, importe), el motivo y el autorizador del descuento y el objeto `credito` (aceptación del exceso, autorizador y, sin conexión, la evaluación del dispositivo: límite, saldo considerado, política y resolución; sin conexión es obligatorio). Los errores propios son `VENTA_SIN_LINEAS`, `LINEAS_INVALIDAS`, `LINEA_DUPLICADA`, `NUMERO_INVALIDO`, `MOMENTO_FUERA_DE_RANGO`, `CONSUMIDOR_FINAL_CONTADO` y `MOTIVO_INVALIDO` y `UBICACION_REQUERIDA` (422) y `VENTA_DUPLICADA`, `NUMERO_DUPLICADO`, `PRECIO_DIFIERE`, `PRODUCTO_SIN_PRECIO`, `PRODUCTO_SIN_COSTO`, `PRESENTACION_NO_VENDIBLE`, `VERSION_NO_PERMITIDA`, `CLIENTE_SUSPENDIDO`, `CLIENTE_INACTIVO`, `MODO_IMPOSITIVO_NO_SOPORTADO`, `JORNADA_AJENA`, `STOCK_INSUFICIENTE`, `UBICACION_INACTIVA` y `UBICACION_TOMADA` (409); sin conexión, `TOTALES_INCONSISTENTES` y `CREDITO_INCONSISTENTE` (SYN-06). El 18b suma `DESCUENTO_DIFIERE`, `DESCUENTO_MANUAL_DESHABILITADO`, `EXCESO_CREDITO_SIN_ACEPTAR` y `CREDITO_EXCEDIDO` (409), `MOTIVO_REQUERIDO` (422), `AUTORIZACION_REQUERIDA`, `AUTORIZACION_CREDITO_REQUERIDA`, `AUTORIZADOR_SIN_PERMISO` y `PIN_INCORRECTO` (403) y `PIN_BLOQUEADO` (429) (ADR-055). Emite, solo sin conexión, `STOCK_NEGATIVO`, `CLIENTE_NO_HABILITADO`, `CONSUMIDOR_FINAL_CON_DEUDA`, `LISTA_NO_VIGENTE`, `VENTA_SIN_COSTO`, `UBICACION_TOMADA_AL_SINCRONIZAR`, y sobre la cobranza `MEDIO_INACTIVO` y `REFERENCIA_FALTANTE`; `STOCK_NEGATIVO` también con conexión si el usuario tiene `PERMITIR_STOCK_NEGATIVO`. El 18b suma, solo sin conexión, `DESCUENTO_DIFIERE`, `EXCESO_CREDITO_AUTORIZADO_OFFLINE`, `EXCESO_CREDITO_DETECTADO_SYNC` y `AUTORIZACION_OFFLINE`, y con conexión y sin ella, `EXCESO_CREDITO_ADVERTIDO` (CRE-04). La fila de auditoría del bus lleva el motivo de la lista y la constancia de ubicación tomada cuando corresponden; además se auditan `DESCUENTO_MANUAL` y `AUTORIZACION_CREDITO` (AUD-01), sin PIN. Ruta `POST /api/v1/ventas`; lecturas `GET /api/v1/ventas`, `/{id}`, `/precios`, `/versiones`, `/numeracion` (ADR-054), `/contexto` (tope, motivos y autorizadores), `/credito?cliente_id=` y `/descuentos-aplicables` (todas con `VENDER`, ADR-055).
+
+`POST /api/v1/ventas` admite, fuera del contenido, `credenciales` (autorizador y PIN) que el bus entrega al handler sin persistirlas ni incluirlas en la huella; el lote de sincronización no las admite. `POST /api/v1/yo/pin-autorizacion` lleva el PIN nuevo y la contraseña actual del mismo modo, con el contenido del comando vacío; `GET /api/v1/yo/pin-autorizacion` informa `puede_definir` y `tiene_pin_autorizacion` (ADR-055).
+
+`VENTA_ANULAR` (`ANULAR_VENTA`; v1 en los dos modos: por REST `POST /api/v1/ventas/{venta_id}/anulacion` solo `ONLINE`, por el lote de sincronización también `OFFLINE`) lleva la venta (`venta_id`, el identificador que generó el dispositivo), un motivo del ámbito `ANULACION_VENTA`, una observación opcional de hasta 500 caracteres y `devuelve_dinero` (booleano estricto: obligatorio si la venta tiene su cobranza confirmada y omitido si no). Errores propios: `VENTA_YA_ANULADA` y `CONSUMIDOR_FINAL_SIN_DEVOLUCION` (409) y `DEVOLUCION_INVALIDA` (422); además `MOTIVO_INVALIDO`, `OBSERVACION_INVALIDA`, `UBICACION_TOMADA` y `UBICACION_INACTIVA`. **Sin conexión, la venta debe ser de la jornada del sobre (`JORNADA_AJENA`) y una venta inexistente o de otra organización es `VENTA_INEXISTENTE`; se rechazan `VENTA_YA_ANULADA`, `DEVOLUCION_INVALIDA`, `CONSUMIDOR_FINAL_SIN_DEVOLUCION`, `OBSERVACION_INVALIDA`, `MOTIVO_INVALIDO` (de otra organización o de otro ámbito) y `UBICACION_INACTIVA`; se aceptan un motivo dado de baja después del bootstrap (sin observación), el permiso revocado (`PERMISO_REVOCADO`), la jornada liberada (`JORNADA_LIBERADA`) y la ubicación tomada al sincronizar (`UBICACION_TOMADA_AL_SINCRONIZAR`), todas sobre la venta. `venta_anulacion.jornada_id` es la jornada del sobre; el reingreso la lleva solo si la ubicación es de esa jornada y está `ABIERTA`. El orden de bloqueo no cambia.** Con conexión no emite observaciones de SYN-07: el reingreso nunca deja stock negativo. Una fila de auditoría por comando, con el motivo y, en su observación, la cobranza anulada y la constancia de la ubicación tomada (AUD-01, AUD-02, ADR-058, ADR-066).
+
+Cada tipo declara sus permisos en el catálogo (`permisos`, reemplaza a `permiso_offline`) y, si siempre recibe un secreto (contraseña o PIN), `exige_credenciales_efimeras`: el secreto viaja fuera del contenido y de la huella, y el lote rechaza ese tipo en cualquier modo con `MODO_NO_ADMITIDO_PARA_TIPO` (`USUARIO_CREAR`, `PIN_AUTORIZACION_ROTAR`, `PIN_AUTORIZACION_PROPIO_DEFINIR`, `USUARIO_CONTRASENA_RESTABLECER`, `CONTRASENA_PROPIA_CAMBIAR`); desde un dispositivo revocado se responde `DISPOSITIVO_REVOCADO` y no se guarda en cuarentena. Ningún error de validación devuelve el valor recibido (ADR-055, ADR-056).
+
+Los comandos de listas son solo online. Los errores propios son `MARGEN_INVALIDO`, `ALCANCE_INVALIDO`, `REDONDEO_INVALIDO`, `IMPORTE_INVALIDO`, `PRECIO_NO_POSITIVO`, `VIGENCIA_INVALIDA`, `VERSION_SIN_PRECIOS` (422) y `NOMBRE_DUPLICADO`, `REGLA_DUPLICADA`, `LISTA_INACTIVA`, `LISTA_EN_USO`, `VERSION_NO_ES_BORRADOR`, `VERSION_NO_PUBLICADA`, `VERSION_YA_VIGENTE`, `VIGENCIA_DUPLICADA`, `SIN_LISTA_APLICABLE`, `LISTA_SIN_VERSION_VIGENTE` (409). Las lecturas cuelgan de `/api/v1/precios/…` (listas, reglas, borrador, versiones, precios de una versión paginados por cursor, `vigente?momento=` y `lista-predeterminada`); `CLIENTE_CREAR` y `CLIENTE_MODIFICAR` aceptan `lista_precio_id` (ADR-047).
+
+`REGLA_DESCUENTO_CREAR` lleva nombre, tipo, medida, operador, umbral, acción (tipo y valor, el valor como cadena: fracción de seis decimales para el porcentaje o importe de dos decimales), prioridad entera desde 1, acumulable, los alcances (identificadores de productos, categorías o marcas) y, opcionalmente, la vigencia desde y hasta; la regla nace en `BORRADOR`. `REGLA_DESCUENTO_MODIFICAR` reemplaza un borrador con los mismos campos; en una regla activada o pausada solo admite la vigencia hasta (`REGLA_NO_ES_BORRADOR`, 409, en cualquier otro caso). `REGLA_DESCUENTO_ACTIVAR` (desde `BORRADOR` o `PAUSADA`) y `REGLA_DESCUENTO_PAUSAR` (desde `ACTIVA`) llevan solo la regla; una transición que no corresponde responde `REGLA_ESTADO_INVALIDO` (409). Los errores propios son `UMBRAL_INVALIDO`, `ACCION_INVALIDA`, `PRIORIDAD_INVALIDA`, `NOMBRE_INVALIDO`, `ALCANCE_INVALIDO`, `VIGENCIA_INVALIDA`, `REGLA_DESCUENTO_INVALIDA` (422) y `REGLA_ESTADO_INVALIDO`, `REGLA_NO_ES_BORRADOR` (409). Las rutas cuelgan de `/api/v1/descuentos/reglas` (alta, edición, `/{id}/activacion`, `/{id}/pausa`) y las lecturas, `GET /api/v1/descuentos/reglas` (filtro de estado, que admite `VENCIDA`, y cursor) y `GET /api/v1/descuentos/reglas/{id}`, todas con `GESTIONAR_DESCUENTOS`. `ROL_TOPE_DESCUENTO_DEFINIR` lleva el rol y el tope como cadena (fracción de hasta seis decimales entre 0 y 1; `IDENTIDAD_TOPE_DESCUENTO_FUERA_DE_RANGO`, 422), cambia solo `rol.tope_descuento`, deja una fila de auditoría con el valor anterior y el nuevo y se expone en `PUT /api/v1/identidad/roles/{rol_id}/tope-descuento`; `GET /api/v1/identidad/roles` devuelve los roles con su tope y sus permisos (`ADMIN_USUARIOS`); la pantalla "Topes por rol" exige `GESTIONAR_DESCUENTOS` y `ADMIN_USUARIOS`, y el tope no se expone en `GET /yo` ni en el token (el usuario ve el suyo recién en el 18b, con el bootstrap, SYN-11). La evaluación del descuento manual no es un comando: la consulta la venta por `descuentos/service.py` y devuelve `DESCUENTO_MANUAL_DESHABILITADO` (409), `MOTIVO_REQUERIDO` (422), `AUTORIZACION_REQUERIDA` y `AUTORIZADOR_SIN_PERMISO` (403) cuando corresponde.
+
+`MEDIO_PAGO_CREAR` y `MEDIO_PAGO_MODIFICAR` (ADR-053) son solo `ONLINE`. Cada uno deja dos filas de auditoría con el mismo `operation_id`: la genérica del bus (`entidad = 'comando'`, ADR-022) y la de la entidad (`entidad = 'medio_pago'`) con `despues` en el alta y `antes` y `despues` en la modificación (AUD-01), igual que la condición de IVA y la modificación de crédito. El diseño (D11) describía una sola fila; el usuario aprobó mantener las dos para no romper el patrón establecido. Los comandos de motivos, alícuotas y redondeo por defecto (ADR-061) dejan las mismas dos filas, con la entidad `motivo`, `alicuota_iva` o `configuracion_organizacion`.
+
+Una importación es un comando por archivo: todo o nada, con savepoints por fila dentro del handler (ADR-040).
+
 ### 6.6 Compatibilidad de versiones
 
 - Un dispositivo puede tener comandos encolados generados por una versión anterior de la aplicación. **DEBE:** el servidor conserva los handlers de toda versión de comando que pueda estar en colas activas.
-- El servidor publica la versión mínima de la aplicación. Una aplicación por debajo de la mínima puede sincronizar su cola pero no confirmar operaciones nuevas hasta actualizarse.
+- El servidor publica la versión mínima de la aplicación (`GET /api/v1/version`, `app_version_minima`). Una aplicación por debajo de la mínima puede sincronizar su cola pero no confirmar operaciones nuevas hasta actualizarse.
+- La compilación del frontend lleva su versión (`APP_VERSION`, formato `X.Y.Z`; por omisión `dev`). El teléfono guarda en `meta` la última mínima conocida cada vez que sincroniza y compara por números, no por texto. Por debajo de la mínima, «Vender» y **«Cobrar»** quedan deshabilitados en el inicio y en la ficha del cliente, y «Confirmar venta» **y «Confirmar cobranza»** no confirman (con un carrito o un formulario de cobro abierto, los datos siguen y se muestra el aviso); la cola se sigue enviando. Sin señal vale la última mínima conocida. Si la versión de la compilación o la mínima no tienen formato `X.Y.Z`, no se restringe nada. La compilación de producción debe definir `APP_VERSION` (ADR-064, ADR-067).
 - Retirar una versión de comando requiere verificar que no queden comandos pendientes de esa versión.
 
 ## 7. Transacciones y concurrencia
 
 ### 7.1 Nivel de aislamiento
 
-READ COMMITTED con bloqueos explícitos de fila. No se usa SERIALIZABLE por defecto.
+READ COMMITTED con bloqueos explícitos de fila. No se usa SERIALIZABLE por defecto. Excepción de solo lectura: el bootstrap (§13.4) se lee en una transacción `REPEATABLE READ READ ONLY` para que todas sus secciones sean del mismo instante (ADR-062).
 
 ### 7.2 Tablas de saldo
 
@@ -344,33 +406,50 @@ Los libros son la verdad (INV-12, INV-13). Las tablas de saldo son una materiali
 **DEBE:** toda transacción que bloquee varias filas lo hace en este orden, y dentro de cada nivel ordenando por clave:
 
 1. `saldo_cuenta` (cliente o proveedor de la operación)
-2. `costo_producto` (por `producto_id` ascendente)
-3. `stock_saldo` (por `producto_id` y `ubicacion_id` ascendentes)
-4. `jornada` (si la operación la valida)
+2. `producto` (`FOR SHARE`, por `producto_id` ascendente; todo movimiento de stock lo toma, y la desactivación de un producto lo toma `FOR UPDATE`)
+3. `costo_producto` (por `producto_id` ascendente)
+4. `stock_saldo` (por `producto_id` y `ubicacion_id` ascendentes)
+5. `jornada` (`FOR SHARE`, por `ubicacion_id` ascendente: todo movimiento lee la jornada no cerrada de cada una de sus ubicaciones antes de decidir; `FOR UPDATE` en las transiciones de la propia jornada)
+
+Las filas de la propia operación que el comando corrige o anula se toman **antes** del nivel 1, en este orden: la compra (`FOR UPDATE`) y después su pago (`FOR UPDATE`); o la venta (`FOR UPDATE`) y después su cobranza (`FOR UPDATE`); o la transferencia o el ajuste (`FOR UPDATE`), que se anula una sola vez. `COMPRA_ANULAR` y `PAGO_PROVEEDOR_ANULAR` usan el mismo orden (compra, pago, `saldo_cuenta`), así que anular una compra y anular su pago a la vez no se interbloquean y dejan una sola `ANULACION_PAGO`. `PAGO_PROVEEDOR_REGISTRAR` parte del nivel 1 (`saldo_cuenta` del proveedor) (ADR-043 punto 15, ADR-046). Las ubicaciones se toman `FOR SHARE` al comienzo del movimiento, como hasta ahora (ADR-038); `JORNADA_ABRIR` toma la ubicación `FOR UPDATE` en ese mismo paso, así que una apertura y un movimiento sobre la misma ubicación se esperan: o el movimiento termina antes de la toma, o ve la ubicación tomada. `JORNADA_LIBERAR` **y `JORNADA_ENTREGAR` toman** su jornada `FOR UPDATE`, revalidan el estado y no tocan stock ni saldos, por lo que no pueden cerrar un ciclo; una liberación espera a los movimientos en curso de esa jornada y al revés (ADR-049). **`JORNADA_RENDIR` y `JORNADA_CERRAR` toman primero la ubicación de la jornada `FOR UPDATE` (en el mismo paso en que los movimientos la toman `FOR SHARE`, como `JORNADA_ABRIR`), después la jornada `FOR NO KEY UPDATE` (no choca con el bloqueo de clave que toma la fila de `comando` de una operación sin conexión al referenciar la jornada, y sí con el `FOR SHARE` de los movimientos), leen los saldos y llaman una sola vez a `registrar_movimientos` (niveles 2 a 5; el nivel 5 es la misma jornada, ya tomada). No toman `saldo_cuenta`: una venta o una cobranza que lo tiene y espera la ubicación o la jornada no cierra ciclo (ADR-068).** Con el producto como nivel previo a `costo_producto`, un movimiento y la desactivación del mismo producto se esperan: o el movimiento ve el producto inactivo, o la desactivación ve el saldo (`PRODUCTO_CON_STOCK`) (ADR-048). `COBRANZA_ANULAR` toma la cobranza `FOR UPDATE` antes de `saldo_cuenta`; `COBRANZA_REGISTRAR` parte del nivel 1 y lee la jornada `FOR SHARE` en el nivel 5 (ADR-052). `VENTA_ANULAR` toma la venta y después su cobranza de origen `VENTA`, antes de `saldo_cuenta` (nivel 1), y luego un ingreso por línea por el mismo `registrar_movimientos` (niveles 2 a 5); anular una venta y `COBRANZA_ANULAR` sobre su cobranza a la vez no se interbloquean y dejan una sola anulación de la cobranza. Precedencia de rechazos de `VENTA_ANULAR`: contenido, venta (404 y `VENTA_YA_ANULADA`), motivo, dinero cobrado (`DEVOLUCION_INVALIDA`, `CONSUMIDOR_FINAL_SIN_DEVOLUCION`), ubicación (`UBICACION_INACTIVA`, `UBICACION_TOMADA`) (ADR-058).
+
+`ROL_PERMISOS_CAMBIAR`: solo cuando el cambio quita `ADMIN_USUARIOS` bloquea `FOR UPDATE` la fila de configuración de la organización y recién entonces cuenta, en SQL, los usuarios activos con rol activo que conservan el permiso; el resto de los cambios de permisos no paga el bloqueo (ADR-053). `MEDIO_PAGO_MODIFICAR`: bloquea los medios de la organización `FOR UPDATE` antes de contar los activos. `MOTIVO_MODIFICAR` (baja): bloquea `FOR UPDATE` los motivos del ámbito de la organización antes de contar los activos. `ALICUOTA_MODIFICAR` (baja): bloquea `FOR UPDATE` las alícuotas activas de la organización antes de contar las activas y los productos activos que la usan; el alta y la modificación de un producto leen su alícuota `FOR SHARE` (ADR-061).
+
+**Identidad (ADR-060).** `USUARIO_CREAR`, `USUARIO_BAJA`, `USUARIO_REACTIVAR`, `USUARIO_ROL_CAMBIAR`, `ROL_CREAR`, `ROL_RENOMBRAR`, `ROL_BAJA`, `ROL_REACTIVAR` y `ROL_PERMISOS_CAMBIAR` (cuando quita `ADMIN_USUARIOS`) toman **primero** `configuracion_organizacion FOR UPDATE` (el mismo candado de ADR-053), después el rol o los roles involucrados `FOR UPDATE` y el usuario objetivo `FOR UPDATE`, y recién entonces `sesion_refresh`: configuración → rol → usuario → `sesion_refresh`. Con el candado tomado revalidan que quien ejecuta sigue `ACTIVO`, con rol activo y con `ADMIN_USUARIOS` (si no, `PERMISO_REQUERIDO`, sin cambios) y cuentan los administradores restantes en SQL. Ningún comando de otro módulo toma después un usuario o un rol, así que no hay ciclo. "Mi contraseña" (`CONTRASENA_PROPIA_CAMBIAR`) solo toca al propio usuario y a sus familias de refresh y no toma el candado de la organización.
 
 Un orden único impide deadlocks entre operaciones concurrentes. Los handlers no bloquean filas directamente: usan funciones de los servicios que respetan este orden, y la venta reúne todos los productos antes de pedir bloqueos.
 
+La fila de `lista_precio` es el candado de la lista y no entra en el orden de arriba: todo comando que escribe versiones o precios de una lista la toma `FOR UPDATE` primero, revalida el estado de la versión y recién escribe; quien asigna una lista a un cliente la lee `FOR SHARE`, de modo que desactivarla y asignarla no se cruzan. Ningún comando de `precios` toca `saldo_cuenta`, `costo_producto` ni `stock_saldo` (ADR-047 punto 19).
+
+La venta lee la lista `FOR SHARE` (candado propio de la lista, fuera del orden) antes del nivel 1; toma `saldo_cuenta` del cliente (nivel 1) y los productos `FOR SHARE` (nivel 2) **antes** de leer las presentaciones (`FOR KEY SHARE`), así una `PRESENTACION_MODIFICAR` simultánea, que toma el producto `FOR UPDATE`, espera o se ve (INV-18). **Nivel 6:** la fila del `dispositivo` que actualiza el último correlativo, al final de la transacción; solo la toman la venta y la revocación del dispositivo, que no toma otras filas (ADR-054).
+
+Dentro de `VENTA_CONFIRMAR` no hay bloqueos nuevos: cliente y lista, `saldo_cuenta` (nivel 1), productos, motor de descuentos y comparación (precio, descuento, total), evaluación del descuento manual, evaluación de crédito con el saldo bloqueado, verificación de los PIN necesarios (permiso del autorizador, bloqueo vigente, PIN; el contador de fallos va en una transacción aparte), stock, escrituras y dispositivo. Precedencia de rechazos: contenido, cliente, precio, descuento, tope y motivo, crédito, PIN, stock, número (ADR-054 enmendado, ADR-055).
+
 ### 7.4 Stock
 
-- Todo movimiento de un producto bloquea su fila de `costo_producto` y la de `stock_saldo`. Esto serializa las operaciones concurrentes por producto; con el volumen esperado no es un cuello de botella.
-- **ONLINE:** `UPDATE stock_saldo SET cantidad = cantidad - :q WHERE … AND cantidad >= :q`. Si no afecta filas y el usuario no tiene `PERMITIR_STOCK_NEGATIVO`, se rechaza (STK-05).
+- Todo movimiento de un producto bloquea su fila de `costo_producto` y la de `stock_saldo`, y toma el producto `FOR SHARE` antes de ambas. Esto serializa las operaciones concurrentes por producto; con el volumen esperado no es un cuello de botella.
+- **ONLINE:** `UPDATE stock_saldo SET cantidad = cantidad - :q WHERE … AND cantidad >= :q`. Si no afecta filas y el usuario no tiene `PERMITIR_STOCK_NEGATIVO`, se rechaza (STK-05). Con el permiso se admite solo para la salida de una transferencia, la anulación de una compra, la de una transferencia y la de un ajuste; **nunca** para un ajuste ni para la corrección de un stock inicial, que se rechazan con `STOCK_INSUFICIENTE` tenga o no el permiso (ADR-044 punto 4 enmendado por ADR-048).
 - **OFFLINE:** se descuenta sin condición y, si el resultado es negativo, se agrega la observación STOCK_NEGATIVO (STK-06).
-- Una ubicación con toma se valida contra la jornada abierta dentro de la misma transacción (STK-09).
+- Una ubicación tomada se valida dentro de la misma transacción: después de bloquear los saldos, `registrar_movimientos` lee la jornada no cerrada de cada ubicación (`FOR SHARE`, nivel 5) y decide por ubicación con STK-09 (libre, de la jornada o por excepción de `LIBERAR_UBICACION`; cualquier otro caso es `UBICACION_TOMADA` y no escribe nada). El permiso de excepción llega como dato, como `permitir_negativo`, y falla cerrado (ADR-049).
+- El ingreso `ANULACION_VENTA` se acepta con el producto inactivo, como `ANULACION_COMPRA` (ADR-044 punto 5 enmendado por ADR-058); una ubicación inactiva lo rechaza siempre.
 
 ### 7.5 Jornadas
 
-Índice único parcial: una sola jornada no cerrada por ubicación (INV-16). El intento de abrir una segunda falla por la restricción, no por una verificación previa en código.
+Tres índices únicos parciales sobre las jornadas no cerradas (`ABIERTA` o `EN_RENDICION`): una por ubicación (INV-16), una por dispositivo y una por usuario. El intento de abrir una segunda falla por la restricción, no por una verificación previa en código; la violación se traduce a `UBICACION_TOMADA`, `DISPOSITIVO_CON_JORNADA` o `USUARIO_CON_JORNADA`. La apertura toma la ubicación `FOR UPDATE` (§7.3).
 
 ### 7.6 Verificación de consistencia
 
-Una tarea diaria compara cada tabla de saldo con la suma de su libro. Cualquier diferencia se registra como error crítico en el log y se notifica al administrador. Nunca se corrige automáticamente: una diferencia indica un defecto que debe investigarse.
+Una tarea diaria (servicio `tareas`, `TAREAS_HORA`) compara, por organización, `saldo_cuenta` con su libro, `stock_saldo` con su libro, `stock_total` con la suma de los saldos del producto y el promedio vigente con el último `costo_producto_mov`. El resultado se guarda en `verificacion_consistencia`; una diferencia se registra como error crítico en el log, deja no sana la salud del servicio, usa el aviso externo opcional y se muestra en `/admin` a quien tiene `VER_CONSISTENCIA` mientras el último resultado tenga diferencias. Nunca se corrige automáticamente: una diferencia indica un defecto que debe investigarse (ADR-015, ADR-073).
+
+La lectura del resultado pasa por `GET /api/v1/sistema/consistencia` (permiso `VER_CONSISTENCIA`). El servicio `tareas` puede avisar a un servicio externo de «hombre muerto» (`AVISO_TAREAS_URL`, opcional, distinta de `AVISO_URL` de `copia-externa`): tras cada corrida llama a la dirección si no hubo diferencias ni fallos y a `<dirección>/fail` si los hubo; un aviso que no llega no altera la corrida (ADR-073). Las señales locales son el aviso en `/admin`, el registro crítico y la salud no sana.
 
 ### 7.7 Numeración de notas de venta
 
 - Cada dispositivo tiene un prefijo único asignado por el servidor al registrarse (SEG-02).
-- El dispositivo lleva el correlativo local y lo incrementa al confirmar.
+- El dispositivo lleva el correlativo local en Dexie (`meta.ultimo_correlativo`, sin `localStorage`) y asigna el número dentro de la misma transacción que confirma la venta: el siguiente es el mayor entre el del bootstrap y el local, más uno. Un carrito descartado no consume número (ADR-063).
 - El bootstrap devuelve el último correlativo registrado en el servidor para ese dispositivo; el dispositivo usa el mayor entre ese y el local. Esto evita repetir números si se borran los datos del navegador.
 - Restricción única (organización, número). Una colisión en sync indica un defecto y se trata como error de consistencia.
+- Hasta el bootstrap (change 21), el último correlativo se lee con `GET /api/v1/ventas/numeracion`; el cliente usa el mayor entre ese y el guardado localmente. El servidor no exige que el correlativo supere al último: solo que el número sea del dispositivo y no esté usado; el último pasa al mayor de los dos (ADR-054).
 - Los dispositivos de PC siguen el mismo mecanismo.
 
 ## 8. Aislamiento por organización
@@ -388,7 +467,7 @@ Una tarea diaria compara cada tabla de saldo con la suma de su libro. Cualquier 
 - Ventas, líneas, cobranzas, anulaciones y comandos generados en el dispositivo reciben su UUID en el dispositivo. El resto, en el servidor.
 - En la etapa 1 no se crean clientes ni productos sin conexión.
 - Los timestamps se almacenan como `timestamptz` (TR-04).
-- `occurred_at` proviene del dispositivo y puede ser inexacto. El servidor guarda también `registered_at` y registra una advertencia si la diferencia es mayor que un umbral configurable hacia el futuro.
+- `occurred_at` proviene del dispositivo y puede ser inexacto. El servidor guarda también `registered_at` y registra una advertencia si la diferencia es mayor que un umbral configurable hacia el futuro. El umbral es `desvio_reloj_max_segundos` (300 por defecto si es nulo). Con conexión, una venta cuyo `occurred_at` se aleja del reloj del servidor más que ese margen, en cualquier sentido, se rechaza con `MOMENTO_FUERA_DE_RANGO` (422); sin conexión no se valida, porque el momento es el de la entrega (ADR-054).
 - El backend obtiene la hora de un componente de reloj inyectable, para poder fijarla en pruebas.
 
 ## 10. Dinero y cálculo compartido
@@ -397,7 +476,7 @@ Una tarea diaria compara cada tabla de saldo con la suma de su libro. Cualquier 
 
 - **DEBE:** tipo `Decimal` en todo el dominio; nunca `float`.
 - **DEBE:** un único módulo `core/money.py` con las funciones de redondeo (`redondear_importe`, `redondear_costo`), configuradas con `ROUND_HALF_UP` de forma explícita. El contexto decimal por defecto de Python redondea al par y no debe usarse para cuantizar.
-- Columnas `NUMERIC(14,2)` para importes, `NUMERIC(18,6)` para costos por unidad base y porcentajes.
+- Columnas `NUMERIC(14,2)` para importes, `NUMERIC(18,6)` para costos por unidad base, `NUMERIC(9,6)` para porcentajes y alícuotas.
 
 ### 10.2 API
 
@@ -413,8 +492,7 @@ Una tarea diaria compara cada tabla de saldo con la suma de su libro. Cualquier 
 
 El dispositivo necesita calcular sin conexión: bruto de línea (PRC-22), descuentos (DSC-05), totales (VTA-04) y evaluación de crédito (CRE-01 a CRE-08). Esa lógica existe en dos implementaciones:
 
-- `backend/app/modules/ventas/domain/calculo.py` (y los módulos de dominio que use)
-- `frontend/src/domain/calculo.ts`
+- `backend/app/modules/precios/domain/bruto_de_linea.py` (PRC-22) y `frontend/src/domain/precios/brutoDeLinea.ts`; el motor de descuentos (DSC-03 a DSC-07), en `backend/app/modules/descuentos/domain/` y `frontend/src/domain/descuentos/`, expuesto por `descuentos/service.py`; el motor de venta —bruto, descuentos y totales— vive en `ventas/domain/calculo.py` y `frontend/src/domain/calculo.ts` desde el change 18a, como orquestadores que consumen las funciones de `precios` y `descuentos` por sus `service.py` (ADR-050); la evaluación de crédito (CRE-01 a CRE-08) vive en `clientes/domain/credito.py` y `frontend/src/domain/credito/`, expuesta por `clientes/service.py` (ADR-016 enmendado, ADR-055).
 
 Para que no diverjan:
 
@@ -423,55 +501,68 @@ Para que no diverjan:
 - **DEBE:** todo cambio en una regla de cálculo agrega o modifica casos compartidos antes de modificar el código.
 - **DEBE:** CI falla si cualquiera de las dos suites falla.
 
-Formato de un caso:
+Los casos de PRC-22 están en `shared/fixtures/calculo/prc-22-bruto-de-linea.json` (`"motor": "prc22"`). Los del motor de descuentos están en `shared/fixtures/calculo/dsc-05-descuentos.json` (`"motor": "dsc05"`: condición, acciones, orden de resolución y descuento manual general y propio, con `porcentaje_manual_maximo`) y los de la evaluación del tope y la autorización, en `shared/fixtures/calculo/dsc-06-descuento-manual.json` (`"motor": "dsc06"`). Los casos de totales (VTA-04) están en `shared/fixtures/calculo/vta-04-totales.json` (`"motor": "vta04"`: líneas con precio, unidades de referencia, cantidad base, alícuota y reglas; salida con descuentos, neto e IVA por línea y `total_neto`, `total_iva`, `total`; modos B y C rechazados con `MODO_IMPOSITIVO_NO_SOPORTADO`). Los de crédito están en `shared/fixtures/calculo/cre-01-credito.json` (`"motor": "cre01"`), y `vta-04-totales.json` suma los casos de descuento manual (ADR-055). El cálculo de costo de referencia, margen y redondeo (PRC-11, PRC-12, PRC-14) corre solo en el servidor y no tiene gemela (ADR-047 punto 11, matiza ADR-016).
+
+Formato de un caso (el de descuentos, con el descuento manual en dos niveles):
 
 ```json
 {
-  "id": "PRC-22-caja-y-sueltas",
-  "reglas": ["PRC-22"],
+  "id": "DSC05-res-manual-sin-automaticos",
+  "reglas": ["DSC-05", "PRC-22"],
+  "comentario": "Sin reglas: 5% de 31250.00 = 1562.50; neto 29687.50. Maximo 0.050000.",
   "entrada": {
-    "modo_impositivo": "A",
+    "motor": "dsc05",
     "lineas": [
-      { "producto_id": "p1", "precio_referencia": "12500.00", "unidades_referencia": 6, "cantidad_base": 15, "alicuota": "0.210000" }
+      { "id": "l-vino", "bruto": "31250.00", "cantidad_base": 15, "unidades_referencia": 6,
+        "producto_id": "prod-vino", "categoria_id": "cat-vinos", "marca_id": "marca-bodega-norte",
+        "descuento_manual": null }
     ],
     "reglas_descuento": [],
-    "descuento_manual": null
+    "descuento_manual_general": "0.050000"
   },
   "salida_esperada": {
-    "lineas": [ { "bruto": "31250.00", "descuentos": "0.00", "neto": "31250.00", "iva": "0.00" } ],
-    "total": "31250.00"
+    "lineas": [
+      { "id": "l-vino",
+        "descuentos": [ { "origen": "MANUAL", "regla_id": null, "porcentaje": "0.050000", "importe": "1562.50" } ],
+        "descuento_total": "1562.50", "neto": "29687.50" }
+    ],
+    "porcentaje_manual_maximo": "0.050000"
   }
 }
 ```
+
+El caso completo de venta con IVA y total (`modo_impositivo`, `alicuota`, `iva`, `total`) lo introduce el change 18a sobre este mismo formato; el `descuento_manual` único de nivel venta que traía el ejemplo anterior pasa a `descuento_manual_general` más el `descuento_manual` propio de cada línea.
 
 ## 11. API
 
 - REST con JSON bajo `/api/v1`.
 - El OpenAPI generado por FastAPI es el contrato. El front genera sus tipos con openapi-typescript en cada cambio; CI verifica que los tipos generados estén actualizados.
 - Errores en formato Problem Details (RFC 9457) con un campo `codigo` de dominio estable (`STOCK_INSUFICIENTE`, `CREDITO_EXCEDIDO`, `PERMISO_REQUERIDO`, `COMANDO_INCONSISTENTE`).
-- Los listados usan paginación por cursor y un límite máximo por página.
+- **Códigos de error nuevos**: `IDENTIDAD_AUTOBAJA`, `IDENTIDAD_ROL_INACTIVO`, `IDENTIDAD_USUARIO_DUPLICADO`, `IDENTIDAD_NOMBRE_DE_USUARIO_INVALIDO`, `IDENTIDAD_NOMBRE_DE_ROL_INVALIDO`, `IDENTIDAD_NOMBRE_DE_ROL_DUPLICADO`, `IDENTIDAD_ROL_CON_USUARIOS_ACTIVOS`, `IDENTIDAD_CONTRASENA_INVALIDA`, `IDENTIDAD_CONTRASENA_NUEVA_IGUAL_A_ACTUAL`, `VENDEDOR_INVALIDO` y `CLIENTE_CONSUMIDOR_FINAL_SIN_VENDEDOR`. **Rutas nuevas:** `GET /identidad/usuarios` (filtros `estado`, `rol_id`, `con_tope_propio`), `GET/PUT /identidad/usuarios/{id}`, `POST .../baja`, `POST .../reactivacion`, `PUT .../rol`, `POST .../contrasena`, `PUT .../tope-descuento`, `POST /identidad/roles`, `PUT /identidad/roles/{id}/nombre`, `POST .../baja`, `POST .../reactivacion`, `POST /yo/contrasena`, `POST /clientes/vendedor`, `GET /clientes/vendedores` (`GESTIONAR_CLIENTES`; vendedores elegibles, `id` y `nombre`), y `GET /clientes/opciones?alcance=todos`, `GET /clientes?vendedor_id=&sin_vendedor=`.
+- Los listados usan paginación por cursor y un límite máximo por página. **Excepción: las listas de los reportes («Por día», «Por producto», anuladas, jornadas y saldos) se paginan por número de página de a 50 filas, con `total_filas` y `paginas`, y los totales del reporte se calculan sobre todo el período y los filtros (ADR-070).**
 - Las fechas viajan en ISO 8601 con zona horaria.
+- **Ruta nueva del change 21:** `GET /api/v1/sync/bootstrap` (jornada `ABIERTA` propia en el dispositivo; 409 `JORNADA_REQUERIDA` sin ella; `since` aceptado e ignorado).
 
 Agrupación de endpoints de la etapa 1:
 
 | Grupo | Ejemplos |
 | --- | --- |
 | Autenticación | `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout` |
-| Identidad | usuarios, roles, dispositivos, PIN |
-| Configuración | parámetros, medios de pago, motivos, alícuotas |
+| Identidad | usuarios, roles (con su tope de descuento y sus permisos), catálogo de permisos (`GET /identidad/permisos`), dispositivos, PIN |
+| Configuración | parámetros, medios de pago (alta y modificación por `POST`/`PUT /configuracion/medios-pago`; activos con cualquier sesión y todos con `GET /configuracion/medios-pago/todos` y `ADMIN_CONFIGURACION`), motivos, alícuotas |
 | Catálogo | productos, presentaciones, categorías, marcas |
 | Proveedores | proveedores, costos informados, compras, pagos |
 | Precios | listas, versiones, reglas de margen, redondeo, generación de borrador, publicación |
 | Stock | ubicaciones, saldos, kardex, transferencias, ajustes |
 | Jornadas | apertura, rendición, cierre, liberación |
 | Clientes | clientes, estado de cuenta |
-| Descuentos | reglas |
+| Descuentos | reglas (alta, edición del borrador, activación, pausa, consulta) |
 | Ventas | confirmación, anulación, consulta |
 | Cobranzas | registro, anulación, consulta |
 | Sync | `GET /sync/bootstrap`, `POST /sync/comandos` |
-| Observaciones | listado, resolución |
-| Importación | carga de planillas, puesta en marcha |
-| Reportes | ventas por período, rendición, saldos |
+| Observaciones | `GET /observaciones` (por operación, con filtros y cursor), `GET /observaciones/resumen`, `POST /observaciones/resolucion`, `GET /observaciones/rechazos`, `GET /observaciones/rechazos/{id}`, `POST /observaciones/rechazos/{id}/resolucion`, todas con `REVISAR_OBSERVACIONES`; los detalles de venta, cobranza, compra, transferencia y ajuste informan la resolución de sus observaciones (ADR-069) |
+| Importación | carga de planillas, puesta en marcha: `POST /api/v1/importaciones/{tipo}` (multipart, `Operation-Id` obligatorio), `GET /api/v1/importaciones` (historial paginado por cursor) y `GET /api/v1/importaciones/plantillas/{tipo}` (CSV con solo el encabezado), todas con `IMPORTAR_DATOS` |
+| Reportes | `GET /reportes/ventas`, `GET /reportes/rendiciones`, `GET /reportes/rendiciones/{jornada_id}`, `GET /reportes/saldos/clientes`, `GET /reportes/saldos/proveedores`, `GET /reportes/observaciones`, `GET /reportes/ajustes`, todas con `VER_REPORTES` (saldos de proveedores, además `GESTIONAR_PROVEEDORES`, `REGISTRAR_PAGO_PROVEEDOR` o `VER_UTILIDAD`); período por fechas de negocio; listas largas paginadas por número de a 50 (`pagina`; en ventas, `pagina_por_dia`, `pagina_por_producto` y `pagina_anuladas`) (ADR-070) |
 | Auditoría | consulta |
 | Sistema | `GET /salud`, `GET /version` |
 
@@ -482,7 +573,10 @@ Agrupación de endpoints de la etapa 1:
 - **Access token:** JWT firmado con vida de 15 minutos. Contiene usuario, organización y dispositivo. Se guarda solo en memoria.
 - **Refresh token:** opaco, rotativo en cada uso, guardado en base como hash, vinculado a usuario y dispositivo, con vencimiento deslizante de 30 días. Se envía en cookie `HttpOnly`, `Secure`, `SameSite=Strict`, restringida a `/api/v1/auth`.
 - Reutilizar un refresh token ya rotado revoca toda la familia de tokens de ese dispositivo.
+- **DEBE:** en `/ruta`, la renovación del access token con el refresh token se serializa entre las pestañas del navegador con un Web Lock (`distribuidora:renovacion`): el refresh token rota en cada uso, así que dos pestañas que renuevan a la vez presentarían el mismo refresh token y la segunda revocaría la familia. La cookie se lee dentro del candado, por lo que la pestaña que espera envía la que dejó la anterior. Un reuso real de un refresh token ya rotado sigue revocando la familia. Sin Web Locks queda una renovación en vuelo por pestaña. No hay cambios en el servidor (ADR-064).
 - **DEBE:** los permisos no viajan en el token. Se cargan por petición (con caché breve en memoria del proceso), para que una revocación tenga efecto inmediato con conexión.
+- **Permisos para la interfaz (ADR-027):** `/admin` los obtiene de `GET /api/v1/yo`, que se vuelve a consultar en cada renovación del access token; `/ruta` usa los del bootstrap (SYN-10, SYN-11). Ocultar una acción nunca reemplaza la validación del servidor (SEG-06).
+- **Sesión habilitada (ADR-028):** toda petición autenticada que no sea el lote de sincronización se rechaza si el usuario está `INACTIVO` o su rol tiene `activo = false`, en la petición siguiente y sin esperar al vencimiento del access token. `GET /api/v1/yo` rechaza en vez de devolver una lista vacía. La renovación (`refresh`) revoca las familias de refresh del usuario y deja auditoría antes de rechazar, para que la sesión revocada no pueda revivir con una reactivación. **Excepción (ADR-028 D9.3-B, ADR-049):** si el usuario o su rol están inactivos pero el dispositivo que renueva tiene una jornada `ABIERTA` o `EN_RENDICION` de ese usuario, la renovación se acepta, rota el refresh, no revoca las familias y deja una fila de auditoría `RENOVAR_SESION_CON_JORNADA_PENDIENTE` por cada renovación; el token resultante solo abre el lote de sincronización. Cuando la jornada se cierra o se libera, la renovación siguiente se rechaza. Si el mismo usuario intenta renovar desde otro dispositivo sin jornada, se rechaza y se revocan sus familias menos la del dispositivo con jornada no cerrada. El inicio de sesión sigue rechazando al inactivo. `identidad` consulta la jornada por un puerto que registra `stock` al importarse; sin puerto registrado, la excepción no existe.
 
 ### 12.2 Dispositivos
 
@@ -492,7 +586,7 @@ Agrupación de endpoints de la etapa 1:
 
 ### 12.3 Sesión sin conexión
 
-- El PIN de desbloqueo se define con conexión y se guarda en el dispositivo como derivación PBKDF2 (Web Crypto) con sal e iteraciones altas.
+- El PIN de desbloqueo (6 dígitos, sin triviales) se define con conexión y se guarda en el dispositivo como derivación PBKDF2-SHA256 (Web Crypto) con sal de 32 bytes y 600 000 iteraciones; nunca viaja al servidor. Los fallos se cuentan en la base local; con 10 fallos (constante del código) se borra la derivación (ADR-062).
 - El PIN protege el uso casual de la aplicación. No es una barrera frente a alguien con acceso técnico al dispositivo: los datos de IndexedDB no están cifrados en la etapa 1. La mitigación es minimizar datos sensibles en el bootstrap (SYN-11) y poder revocar el dispositivo.
 - Al volver la conexión, la aplicación usa el refresh token. Si venció, pide login; la cola se conserva y se sincroniza cuando inicia sesión el mismo usuario.
 
@@ -500,7 +594,8 @@ Agrupación de endpoints de la etapa 1:
 
 - Cada supervisor tiene un **PIN de autorización** distinto del de desbloqueo, de al menos 6 dígitos.
 - El bootstrap incluye, para los supervisores de la organización, la derivación PBKDF2 de ese PIN con su sal.
-- **Riesgo aceptado:** una derivación de un PIN numérico puede atacarse por fuerza bruta con acceso técnico al dispositivo. Mitigaciones: longitud mínima, rotación desde administración, límite de intentos en la interfaz, y toda autorización offline queda con observación y auditoría.
+- **Riesgo aceptado:** una derivación de un PIN numérico puede atacarse por fuerza bruta con acceso técnico al dispositivo. Mitigaciones: longitud mínima, rotación desde administración, límite de intentos en la interfaz, y toda autorización offline queda con observación y auditoría. El límite local cuenta los fallos por par (usuario, supervisor) en la tabla `intentos_pin`; al llegar a `intentos_pin_max` el PIN de ese supervisor queda bloqueado en el teléfono hasta el próximo bootstrap, sin guardar horas (ADR-063). **DEBE:** el límite vale entre pestañas: la verificación completa de un par (lectura del estado, derivación y escritura del fallo) corre bajo un Web Lock por par (`distribuidora:pin:{usuario}:{supervisor}`) y dentro de una transacción de lectura y escritura de Dexie, y el bloqueo se vuelve a leer antes de responder; así, intentos simultáneos desde dos pestañas no superan `intentos_pin_max` en total y ninguna derivación de más pasa como correcta después del bloqueo. Dos supervisores distintos no se esperan entre sí. Sin Web Locks rigen la transacción atómica y la nueva lectura. Esto cierra el contador de la interfaz y no cambia el riesgo aceptado de arriba (ADR-064).
+- Con conexión, el PIN viaja fuera del contenido del comando y el servidor lo verifica contra la derivación guardada; los fallos se cuentan por usuario que intenta y supervisor en una transacción aparte: al llegar a `intentos_pin_max` ese usuario no puede usar ese PIN, y con 20 fallos sumando todos los usuarios el PIN se bloquea para todos (`PIN_BLOQUEADO`); cada bloqueo dura 15 minutos desde el último fallo y los intentos durante el bloqueo no cuentan; toda definición del PIN reinicia la cuenta. El servidor rechaza PIN triviales: todos los dígitos iguales o una escalera de paso 1, ascendente o descendente (ADR-019, ADR-055). Cada supervisor puede definir su propio PIN confirmando su contraseña («Mi PIN»); las contraseñas incorrectas cuentan para el límite del login (ADR-018).
 
 ## 13. Frontend
 
@@ -514,53 +609,64 @@ Agrupación de endpoints de la etapa 1:
 - Las áreas se cargan de forma diferida: el teléfono no descarga el código de administración.
 - React Context se usa solo para sesión, permisos, conectividad y tema.
 - Las pantallas del área de ruta leen siempre de Dexie, con o sin conexión.
+- **Ayuda contextual (ADR-051):** el componente `Ayuda` ("(?)") abre un panel no modal con clic, tap o teclado y cierra con Escape o clic afuera. Todos sus textos viven en `frontend/src/ayuda/textos.ts`, por clave, con los IDs de regla que citan; no piden nada a la red ni dependen de permisos, así que también sirven sin conexión. Las páginas "Ver más" están en `/admin/ayuda/:tema` y en `/ruta/ayuda/:tema`; dentro de `/ruta` y de la aplicación instalada el "Ver más" navega dentro de la aplicación (no abre otra pestaña), de modo que funciona sin conexión (ADR-062 punto 21). Una prueba de Vitest verifica que toda clave usada exista y que todo ID citado exista en `01-dominio.md` o en `docs/adr/`.
 
 ### 13.2 Base local (Dexie)
 
 | Tabla | Contenido |
 | --- | --- |
-| `meta` | Versión de esquema local, dispositivo, último correlativo, fecha de bootstrap |
-| `sesion` | Usuario, permisos, topes, derivación del PIN, jornada abierta |
+| `meta` | Versión de esquema local, dispositivo, último correlativo y última secuencia, fecha de bootstrap, **los rechazos resueltos del último bootstrap (sin versión nueva de la base local, ADR-069)** |
+| `sesion` | Usuario, permisos, topes, derivación del PIN, jornada abierta y la **secuencia procesada** del último bootstrap (nula si faltó) |
 | `configuracion` | Parámetros de la organización |
 | `productos`, `presentaciones` | Catálogo activo |
 | `clientes` | Clientes con datos de crédito |
-| `saldos_clientes` | Saldo al bootstrap |
 | `precios` | Versiones de lista disponibles y sus precios |
 | `reglas_descuento` | Reglas activas |
 | `stock` | Stock de la ubicación tomada |
 | `autorizadores` | Derivaciones de PIN de supervisores |
-| `ventas`, `cobranzas` | Operaciones locales con estado de sincronización |
-| `movimientos_locales` | Efectos locales sobre stock y saldos, para calcular disponibles |
-| `cola` | Comandos pendientes ordenados por secuencia |
+| `ventas`, `cobranzas` | Operaciones locales con estado de envío (`PENDIENTE`, `ACEPTADA`, `CON_OBSERVACIONES`, `RECHAZADA`; solo cambia con el resultado del servidor) y los datos congelados de la nota. **`cobranzas` guarda dos orígenes: `VENTA` (el cobro en el momento de una venta, con `venta_id`; sigue la suerte de su venta y no tiene estado de envío propio) e `INDEPENDIENTE` (la cobranza suelta del vendedor, con `venta_id` nulo, `cliente_id`, `jornada_id`, `operation_id`, observación, los nombres congelados del cliente, de los medios y del vendedor y su propio `estado_envio`, que cambia solo con el resultado del servidor). Una fila sin `origen` es de una venta** |
+| `anulaciones` | Una por venta anulada en el dispositivo (`venta_id` clave, `operation_id` único, `jornada_id`, `estado_envio`): motivo, observación, `devuelve_dinero`, momento y nombre del motivo (para la nota). Su estado de envío cambia solo con el resultado del servidor y es independiente del de la venta |
+| `movimientos_locales` | Efectos locales sobre stock y saldos (`VENTA_STOCK`, `VENTA_DEBITO`, `COBRANZA_CREDITO` y, de la anulación, `ANULACION_STOCK`, `ANULACION_CREDITO`, `ANULACION_COBRANZA_DEBITO`, con el `operation_id` de la anulación), para calcular disponibles. Su `estado_operacion` queda sin uso: qué movimientos cuentan lo decide la secuencia procesada y la secuencia de la operación en `cola` (CRE-08) |
+| `cola` | Comandos ordenados por secuencia; `operation_id` único. `estado` es `PENDIENTE` hasta el resultado y luego `ACEPTADO`, `ACEPTADO_CON_OBSERVACIONES` o `RECHAZADO`, con el código de error, el momento del resultado y las **observaciones** recibidas (se escriben en la misma transacción que el resultado). Nada se borra; se envían solo los `PENDIENTE` del usuario y del dispositivo de la sesión (ADR-064, ADR-065) |
+| `intentos_pin` | Fallos del PIN de supervisor por par (usuario, supervisor) y su bloqueo |
+
+Las tablas de operaciones (versión 5 de Dexie, change 23) no las toca el bootstrap; **la versión 5 solo agrega a `cobranzas` los índices `operation_id`, `cliente_id`, `jornada_id` y `estado_envio` (la 4 agregó `anulaciones`) y no modifica filas ni otras tablas (ADR-066, ADR-067)**. Confirmar una venta local escribe venta, cobranza, movimientos, comando y los dos contadores en **una sola transacción**: todo o nada; **anular una venta local escribe la anulación, sus movimientos, el comando `VENTA_ANULAR` `OFFLINE` y la última secuencia en una sola transacción, y reconfirmar la anulación de la misma venta devuelve la existente**. **Registrar una cobranza local escribe la cobranza, su movimiento `COBRANZA_CREDITO` (con el `operation_id` de la cobranza), el comando `COBRANZA_REGISTRAR` `OFFLINE` y la última secuencia en una sola transacción; reconfirmar el mismo `cobranza_id` devuelve la existente.** Reconfirmar con el mismo `operation_id` no encola otra venta (ADR-063). `meta` guarda además `jornada_no_abierta` (jornada, estado —`LIBERADA`, `EN_RENDICION`, `CERRADA` o «desconocido»— y momento en que el teléfono se enteró), que se ignora si la jornada de la sesión es otra y se borra al aplicar el bootstrap de otra jornada (RUT-09).
 
 **DEBE:** confirmar una venta local es una transacción Dexie que escribe la venta, los movimientos locales y el comando en la cola, todo o nada.
+En la versión 2 de Dexie (change 21) el saldo viaja dentro de `clientes` (no hay `saldos_clientes`) y las tablas maestras son las que reemplaza el bootstrap; `meta` guarda también el usuario local, la jornada, la fecha del bootstrap y la derivación del PIN con su contador de fallos (`pin_hash`, `pin_sal`, `pin_iteraciones`, `pin_intentos`). El bootstrap reemplaza las tablas maestras en una sola transacción sobre una lista explícita; `ventas`, `cobranzas`, `movimientos_locales` y `cola` las agrega la versión 3 (change 22a) y el bootstrap no las toca (ADR-062). `meta` guarda además el estado de la sincronización: `ultima_sincronizacion` (momento del último ciclo exitoso), `ultimo_error_sync` (tipo, código y momento del último corte, que un éxito posterior borra) y `app_version_minima` (última mínima conocida, §6.6). No hay versión nueva de Dexie: el índice `estado` de `cola` ya existía (ADR-064).
 
 ### 13.3 Motor de sincronización
 
 - Se ejecuta en el hilo principal de la aplicación, no en el service worker: la sincronización en segundo plano no está disponible en todos los navegadores móviles.
-- Se dispara al abrir la aplicación, en el evento `online`, después de cada operación local si hay conexión, cada 2 minutos mientras la aplicación está abierta y con el botón "Sincronizar".
-- **DEBE:** una sola sincronización a la vez, garantizada con Web Locks API, incluso con varias pestañas abiertas.
-- Envía lotes en orden (§6.4), aplica los resultados a la base local y reintenta errores transitorios con espera exponencial.
-- Muestra en todo momento: estado de conexión, cantidad de pendientes, última sincronización exitosa y operaciones con observaciones o rechazadas.
-- Al iniciar, solicita almacenamiento persistente (`navigator.storage.persist()`) y muestra una advertencia si el navegador lo niega.
+- Se dispara al abrir la aplicación (al desbloquear o terminar el login), en el evento `online`, **al volver la aplicación a primer plano** (`visibilitychange` a `visible`), después de cada operación local si hay conexión, cada 2 minutos mientras la aplicación está abierta y con el botón "Sincronizar". Todos los disparadores valen solo con la sesión local desbloqueada; con la sesión bloqueada o cerrada no hay ninguno. «Sincronizar», `online` y la vuelta a primer plano ponen la espera exponencial en cero y envían en el momento (D6 = B); la venta y el periodo respetan la espera vigente.
+- **DEBE:** una sola sincronización a la vez, garantizada con Web Locks API (`distribuidora:sync`, `ifAvailable`), incluso con varias pestañas abiertas: la pestaña que no obtiene el candado no espera ni envía y muestra «Sincronizando en otra pestaña». Si llegan disparadores durante un envío propio, se hace a lo sumo una vuelta más al terminar. Sin Web Locks hay un candado dentro de la pestaña; dos pestañas podrían entrar a la vez y es seguro porque el servidor no duplica (INV-06).
+- Usa una cola propia: envía en lotes de hasta 50, en orden de secuencia, solo los `PENDIENTE` del usuario y del dispositivo de la sesión (de cualquier jornada); un `RECHAZADO` no se reenvía solo. Aplica los resultados por `operation_id` en una sola transacción Dexie por lote (INV-01); el resultado de una anulación cambia el estado de la fila de `anulaciones` y de su comando, no el de la venta; **el resultado de una cobranza cambia el estado de la fila de `cobranzas` (origen `INDEPENDIENTE`) y de su comando, no el de ninguna venta; sus observaciones se guardan en el comando y una `JORNADA_LIBERADA` marca la jornada como no abierta (ADR-067)**.
+- Clasifica los cortes: transitorios (sin red, 5xx, 429, `ERROR_TRANSITORIO` de un ítem) se reintentan con espera exponencial de 5, 10, 20, 40, 80 y luego 120 s fijos (±20 %); la sesión vencida (401 tras la renovación) no reintenta y pide iniciar sesión con señal; un error del pedido (403, 422) no reintenta solo y se muestra con su código.
+- **Al empezar cada ciclo de sincronización (todos los disparadores, también con la cola vacía), junto a la versión mínima, consulta `GET /api/v1/stock/jornadas/{id}` de la jornada de la sesión; si no está `ABIERTA`, lo guarda en `meta.jornada_no_abierta` (RUT-09). Sin conexión, con 403 (el usuario no tiene `ABRIR_JORNADA`), 404 o cualquier error, no cambia nada y la sincronización sigue. Además lo aprenden `JORNADA_REQUERIDA` de «Actualizar datos» o del bootstrap, la consulta al entrar sin jornada abierta y una `JORNADA_LIBERADA` en los resultados del lote. La cola se sigue enviando con la jornada no abierta (ADR-066).**
+- Muestra en todo momento, en la cabecera de `/ruta`, el estado de conexión y «N sin enviar» (o «Todo enviado»), con un aviso si hay ventas rechazadas; el inicio y la pantalla «Sincronización» muestran además la última sincronización exitosa, el último error con su texto y código, el botón «Sincronizar» y las ventas «Con observaciones» y «Rechazadas» **y las anulaciones con problemas («Anulación de {número}»)** **y las cobranzas con problemas («Cobranza a {cliente}», con su texto y acceso al detalle)** (ADR-064). **Lo pendiente se dice uniendo las partes que no son cero: «N ventas, M anulaciones y K cobranzas sin enviar» («2 ventas, 1 anulación y 1 cobranza sin enviar»; solo cobranzas: «3 cobranzas sin enviar»), también en los avisos de cierre de sesión y de pendientes de otro usuario («Hay 3 cobranzas sin enviar de {vendedor}.») (ADR-067).** Los textos de los rechazos y las observaciones de la cobranza salen de `rechazos_de_cobranza` y `observaciones_de_cobranza` del fixture `codigos-de-sincronizacion.json`, elegidos por el tipo de operación. Cada venta «Con observaciones» o «Rechazada» muestra, en la pantalla «Sincronización» (resumen) y en el detalle de la venta (explicación), el texto de cada observación o el motivo del rechazo, traducidos con una tabla cerrada de códigos (`shared/fixtures/sync/codigos-de-sincronizacion.json`, validada por el servidor y por el teléfono); un código desconocido muestra un texto general y el código. Los nombres (producto, medio, autorizador) salen de la base local; si ya no están se dice «un producto». Una venta enviada antes del 22c, sin observaciones guardadas, lo dice (ADR-065).
+- Pide almacenamiento persistente (`navigator.storage.persist()`) tras el primer bootstrap y en cada arranque hasta que se conceda, y muestra una advertencia si el navegador lo niega (ADR-062 punto 18).
+- **«Terminar el día» encola `JORNADA_ENTREGAR` `OFFLINE` con la siguiente secuencia y guarda en `meta` la marca de la jornada con el estado local `ENTREGADA`, en una sola transacción; corta «Vender», «Anular venta» y «Cobrar» como la jornada no abierta (ADR-066), también sin señal y después de recargar, y «Sincronización» muestra «Entrega del día» y su resultado, y la excluye de los pendientes. Sin versión nueva de Dexie (ADR-068).**
 
 ### 13.4 Bootstrap
 
-- `GET /api/v1/sync/bootstrap` se ejecuta al abrir la jornada (RUT-03) y devuelve el contenido de SYN-11.
+- `GET /api/v1/sync/bootstrap` se ejecuta al abrir la jornada, al iniciar sesión o desbloquear con conexión si faltan los datos de la jornada abierta, y con "Actualizar datos" (RUT-03); devuelve el contenido de SYN-11 en una sola foto (§7.1). Lo compone el módulo `sync` por el `service.py` de cada módulo (ADR-062).
 - El contrato acepta un parámetro `since` para descargas incrementales; en la etapa 1 se ignora y siempre devuelve el conjunto completo (ADR-006).
-- El bootstrap reemplaza los datos maestros locales, pero **DEBE NO** tocar `ventas`, `cobranzas`, `movimientos_locales` ni `cola`.
+- El bootstrap reemplaza los datos maestros locales y guarda la **secuencia procesada** en `sesion`, pero **DEBE NO** tocar `ventas`, `cobranzas`, `movimientos_locales` ni `cola`: los movimientos de las operaciones que el bootstrap ya incluye dejan de contarse por la regla de CRE-08, no porque se borren (ADR-065). Stock, Productos y la ficha del cliente muestran los disponibles locales con la leyenda «Incluye tus ventas desde la última actualización» cuando hay ventas que cuentan.
 
 ### 13.5 Service worker
 
 - Precachea el shell de la aplicación para abrirla sin conexión.
 - **DEBE NO** cachear respuestas de la API: los datos offline viven en Dexie.
-- Una nueva versión se instala en segundo plano y se aplica con aviso al usuario. **DEBE NO** recargar automáticamente la aplicación mientras hay un carrito abierto.
+- Una nueva versión se instala en segundo plano y se aplica con aviso al usuario. **DEBE NO** recargar automáticamente la aplicación mientras hay un carrito abierto: con líneas cargadas el aviso dice «Hay una versión nueva: se instala al terminar la venta» y no ofrece «Actualizar» hasta confirmar o descartar la venta. Con líneas cargadas, toda salida de la venta pide confirmar «¿Descartar la venta?»: el menú inferior, «Cancelar», cualquier enlace del cuerpo (por ejemplo «Ver más» de una ayuda) y el botón atrás del navegador; recargar o cerrar la pestaña pide el aviso propio del navegador (`beforeunload`). Confirmar la venta no pregunta. La aplicación usa el enrutador de datos de React Router (`createBrowserRouter`), que admite `useBlocker`; la guarda vive en la pantalla de venta (`useBlocker` y `beforeunload` con el carrito ocupado), y una referencia `salidaLibre` se enciende antes de las salidas propias de la pantalla (confirmar o descartar a pedido) para que no pregunte por ellas (ADR-063, ADR-064).
+- Se implementa con `vite-plugin-pwa` (`generateSW`, `registerType: 'prompt'`); precachea el shell, `/ruta`, la ayuda y pdfmake, no el código de `/admin`; el manifiesto abre en `/ruta` (ADR-062).
+- Si falla la carga de una pantalla diferida (por ejemplo tras un despliegue nuevo, cuando desaparecieron los archivos con hash viejo), el área muestra «Hay una versión nueva del sistema» con un botón «Recargar» en lugar de la pantalla de error por defecto del enrutador (change 27a, D19).
 
 ### 13.6 Nota de venta
 
-- Se genera en el dispositivo con pdfmake, con fuentes embebidas, a partir de los datos locales de la venta (VTA-13).
-- Se comparte con Web Share API (archivos) cuando está disponible; si no, se descarga.
-- La misma función genera la nota desde administración para reimpresión.
+- El contenido de la nota lo arma una función pura (`domain/ventas/notaDeVenta.ts`) a partir de un tipo neutro con los valores congelados de la venta; otra función lo convierte en la definición del documento (`lib/nota/documento.ts`, A4 vertical). Cada origen de datos tiene su adaptador: la API en administración (`GET /api/v1/ventas/{id}/nota`, con `VENDER` o `ANULAR_VENTA`) y, en `/ruta`, Dexie: la venta local congela los datos de la nota al confirmar (`domain/ventas/notaDesdeLocal.ts`) y el adaptador llama a la misma función de armado, sin señal (ADR-063). Nada del armado conoce pdfmake ni React.
+- El PDF se genera en el dispositivo con pdfmake (versión exacta) y sus fuentes embebidas, cargados con `import()` dinámico solo al generar la nota: no pesan en el bundle inicial.
+- Se comparte con Web Share API (archivos) solo si el navegador comparte archivos (`navigator.canShare`); la descarga está siempre. Archivo `nota-de-venta-{numero}.pdf`.
+- La nota no se guarda: cada generación sale de los datos congelados. La misma función sirve al original y a la reimpresión.
 
 ## 14. Datos
 
@@ -587,6 +693,9 @@ Reglas:
 - **DEBE:** las pruebas de integración usan PostgreSQL real. No se usa SQLite.
 - **DEBE:** cada invariante de `01` §20 tiene al menos una prueba que lo cite por identificador.
 - **DEBE:** cada escenario de una spec de OpenSpec tiene al menos una prueba.
+- Un ratchet verifica que cada invariante de `01` §20 de la etapa 1 (todos salvo INV-09 e INV-20) esté citado por una prueba que corre la CI (ADR-073).
+- La cobertura de aislamiento asocia cada ruta de negocio con las pruebas que la ejercen; el ratchet falla si una no existe o no cita INV-21 (ADR-073).
+- La suite de Playwright corre contra el compose de producción en un proyecto aparte (`distribuidora-aceptacion`), con la siembra del escenario de aceptación; falla ante cualquier violación de CSP. Registra el service worker con `--ignore-certificate-errors` (certificado interno de Caddy); el tramo de los criterios 5 a 8 corre en un único teléfono sin señal; el criterio 9 lo anula `sup01` desde `/admin`. El criterio 12 lo cubren las pruebas de restauración de `backend/tests/infra` (ADR-073).
 - Las pruebas de integración aíslan con una transacción revertida al final de cada prueba. Las de concurrencia **DEBEN** confirmar sus transacciones y limpiar la base al terminar, porque un rollback externo impediría que las conexiones concurrentes se vean entre sí.
 - La prueba de corte a mitad de venta inyecta una falla después de escribir el movimiento de stock y verifica que no quedó ningún registro de la operación (INV-01).
 - La prueba de aislamiento recorre dinámicamente todas las rutas registradas (INV-21).
@@ -600,6 +709,8 @@ CI en cada push:
 5. Integración y concurrencia con Testcontainers
 6. Build del frontend
 
+El paso 5 corre `tests/integration` y `tests/infra` (compose de producción, Caddyfile en los dos modos de `CADDY_TLS`, imágenes de respaldo, roles de base) y, en un paso propio, `tests/concurrency` (ADR-071, ADR-073).
+
 En la rama principal, además: suite de Playwright contra el entorno levantado con Docker Compose.
 
 ## 16. Entornos y despliegue
@@ -607,7 +718,7 @@ En la rama principal, además: suite de Playwright contra el entorno levantado c
 ### 16.1 Desarrollo
 
 - `docker compose up` levanta PostgreSQL, backend con recarga automática y frontend con Vite.
-- Datos de ejemplo cargables con un comando (`make seed` o equivalente), que incluyen el escenario de la demo de aceptación.
+- Datos de ejemplo cargables con un comando: `python -m app.seed` (organización inicial) y `python -m app.seed --escenario-aceptacion` (usuarios, ubicaciones y configuración de la demostración de `00` §9; repetible) (ADR-073).
 - Los service workers requieren HTTPS salvo en `localhost`. Para probar desde un teléfono se usa un túnel HTTPS o certificados locales con mkcert.
 
 ### 16.2 Producción (etapa 1)
@@ -619,29 +730,53 @@ Un servidor con Docker Compose:
 | `caddy` | TLS automático, sirve el build del frontend, proxy de `/api` al backend |
 | `backend` | FastAPI con varios workers |
 | `postgres` | Volumen persistente, puerto no expuesto |
-| `backup` | `pg_dump` diario comprimido, retención de 14 diarios y 8 semanales, copia a almacenamiento externo |
+| `migraciones` | De una sola vez: `alembic upgrade head` con `app_migrations` antes de iniciar el backend |
+| `backup` | `pg_dump` diario comprimido con un rol de solo lectura, verificado al generarse; retención del más reciente de cada uno de los 14 días y de cada una de las 8 semanas con backup (ADR-072) |
+| `copia-externa` | Sube cada backup conservado, cifrado en el equipo, a un almacenamiento externo compatible con S3; no replica borrados; misma retención en el destino; sin credenciales de base (ADR-072) |
+| `prueba-restauracion` | Una vez por mes, sin red y sin aviso externo, restaura el último backup en un Postgres temporal propio (en el disco del contenedor, que se borra tras la prueba) y comprueba que los datos coinciden; si falla, queda `unhealthy` (ADR-072) |
+| `restauracion` | A pedido (perfil aparte): restaura un backup solo en una base vacía, como `app_migrations` (ADR-072) |
+| `tareas` | Todos los días a `TAREAS_HORA`: verificación de consistencia por organización y limpieza de `intento_login` de más de 24 horas, con el rol `app_mantenimiento`; a pedido, `tareas ahora`. Redes `datos` y `salida` (solo saliente; sin puertos); variables `TAREAS_HORA`, `TZ`, `AVISO_TAREAS_URL` (opcional) y `APP_MANTENIMIENTO_DB_PASSWORD` (sexto secreto del archivo de entorno) (ADR-073) |
 
-- Los secretos se cargan desde un archivo de entorno fuera del repositorio.
-- El despliegue ejecuta las migraciones antes de iniciar la nueva versión del backend.
-- **DEBE:** una restauración de backup se prueba en un entorno separado antes de salir a producción y luego al menos una vez por mes (`00` §9, criterio 12).
+- Archivo `docker-compose.prod.yml`, independiente del de desarrollo; redes `frente` (Caddy y backend) y `datos` (interna: backend, Postgres, migraciones y backup); solo Caddy publica puertos (ADR-071).
+- El mismo compose corre en una PC de la oficina o en un servidor con dominio: `DOMINIO` y `CADDY_TLS` (autoridad propia de Caddy o Let's Encrypt) se fijan en el archivo de entorno (ADR-071).
+- Los secretos se cargan desde un archivo de entorno fuera del repositorio (`infra/produccion.env.example` es la plantilla, sin valores).
+- El despliegue ejecuta las migraciones antes de iniciar la nueva versión del backend (servicio `migraciones`); el backend no recibe la credencial de migraciones.
+- Los backups se escriben en un directorio del equipo, fuera de los volúmenes de Docker.
+- Primera puesta en marcha y actualización: `docs/runbook/puesta-en-marcha.md`.
+- Agregar al compose de producción: imágenes propias `distribuidora-backend`, `distribuidora-migraciones`, `distribuidora-caddy` y `distribuidora-backup`, todas etiquetadas con `APP_VERSION`; `backend` y `migraciones` comparten `Dockerfile.produccion` pero llevan nombres de imagen distintos.
+- La configuración del backend se valida al arrancar en producción (`JWT_SECRET` de al menos 32 caracteres, `APP_VERSION` con forma `X.Y.Z`): el contenedor sale con código 1 y nombra la variable, nunca su valor (`python -m app.core.verificar_config`).
+- Backups: archivos `distribuidora-AAAAMMDD-HHMMSS.dump`, verificados con `pg_restore --list` (las cuatro tablas de libro); un archivo ilegible pasa a `.dump.fallido`; la salud del servicio `backup` falla si el último backup válido tiene más de 26 horas.
+- Red `salida` solo para `copia-externa` (salida a internet, sin acceso a la base); `prueba-restauracion` sin red.
+- Los servicios de respaldo corren con un usuario sin privilegios (`${BACKUP_UID:-999}:${BACKUP_GID:-999}`); la carpeta de backups heredada del 27a necesita un `chown` único a ese dueño.
+- Restauración, prueba mensual y mudanza a otro equipo: `docs/runbook/restauracion.md`.
+- `app_mantenimiento` se crea con `30-init-mantenimiento-role.sh` en un volumen nuevo; en un entorno existente se crea **antes** de migrar (runbook C12). `FRENTE_SUBRED` y los puertos de Caddy son variables del compose de producción, para convivir con el entorno de desarrollo (ADR-073).
+- `copia-externa` se configura solo por variables, verifica cada archivo subido con `rclone check --download` y avisa por salud a las 26 horas sin copia nueva o ante un fallo de credenciales o de clave. `prueba-restauracion` avisa por salud a los 35 días sin una prueba buena y guarda su Postgres temporal en el disco del contenedor, no en memoria.
+- **DEBE:** una restauración de backup se prueba en un entorno separado antes de salir a producción (desde la copia externa, con la hoja de recuperación) y luego al menos una vez por mes; la prueba mensual es automática y su salud avisa a los 35 días sin una prueba buena (`00` §9, criterio 12; ADR-072).
 
 ## 17. Observabilidad
 
 - Logs estructurados en JSON con `request_id`, `operation_id`, organización, usuario y dispositivo.
 - Nunca se registran contraseñas, PIN, tokens ni contenido completo de comandos con datos personales en nivel INFO.
 - `GET /api/v1/salud` verifica la conexión con la base.
-- Métricas mínimas en logs: duración por comando, comandos por resultado, reintentos transitorios, tamaño de lotes de sync.
+- Métricas mínimas en logs: duración por comando, comandos por resultado, reintentos transitorios, tamaño de lotes de sync. Cada lote termina con un registro «Lote de sincronización cerrado» con `lote_tamano`, `lote_procesados`, `lote_aceptados`, `lote_con_observaciones`, `lote_rechazados`, `lote_cortado` (hubo corte por error transitorio) y `lote_duracion_ms`; nunca el contenido de los comandos ni el detalle de las observaciones. Un reenvío del mismo lote registra su propio cierre (ADR-065).
 - Seguimiento de errores con una herramienta externa es opcional en la etapa 1.
 
 ## 18. Seguridad
 
 - HTTPS obligatorio, HSTS.
 - Frontend y API en el mismo origen: sin CORS abierto.
-- Límite de intentos en login por usuario y por IP.
-- Encabezados de seguridad, incluida una política CSP restrictiva.
-- El usuario de base de datos de la aplicación no es superusuario ni dueño del esquema; las migraciones usan un usuario distinto.
+- Límite de intentos en login por par escrito (organización y usuario, 5) y por IP (20): cada bloqueo dura 15 minutos desde el último fallo; los intentos durante el bloqueo no cuentan ni lo extienden (ADR-018 enmendado). Nota de despliegue: detrás de Caddy la IP que ve el backend es la del proxy hasta configurar `uvicorn --proxy-headers --forwarded-allow-ips=<IP de Caddy>`, que corrige el límite por IP del login y de «Mi PIN».
+- El servidor exige el permiso de cada comando por cualquier camino (ADR-056).
+- El límite de 5 del login se cuenta por el par (slug de la organización, usuario) tal como se escribió, exista o no (un nombre inexistente se bloquea igual que uno real); todo rechazo de credenciales verifica la contraseña (hash ficticio si no hay usuario utilizable); el 429 del login muestra siempre la hora de `America/Argentina/Buenos_Aires` (ADR-057, enmienda a ADR-018).
+- Encabezados en Caddy para toda respuesta (fragmento compartido con el perfil `lan`): CSP `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `Permissions-Policy`, `Cross-Origin-Opener-Policy: same-origin`, `X-Frame-Options: DENY`, sin `Server`. La documentación de la API (`/docs`, `/redoc`, `/openapi.json`) no se publica en producción. Zod 4 se configura con `jitless` (`src/lib/zodSinEval.ts`) para no sondear `new Function` bajo la CSP (ADR-073).
+- El usuario de base de datos de la aplicación no es superusuario ni dueño del esquema; las migraciones usan un usuario distinto, y el backup un tercero de solo lectura (`pg_read_all_data`) (ADR-020, ADR-071) y un cuarto, `app_mantenimiento`, que solo lee saldos y libros, inserta resultados de verificación y borra `intento_login` de más de 24 horas. Una matriz de privilegios por rol y tabla, verificada por prueba, fija todo `GRANT` (ADR-073).
+- HSTS de un año sin `includeSubDomains` ni `preload` desde el 27a (también con la autoridad propia de Caddy); el backend confía en `X-Forwarded-For` solo desde la red del proxy (ADR-018 punto 5, ADR-071).
 - Validación de toda entrada con Pydantic; SQL siempre parametrizado.
 - Dependencias con actualizaciones de seguridad revisadas periódicamente.
+- El frontend recorta los espacios de los extremos de organización y usuario en el login (no de la contraseña); el servidor sigue comparando tal cual (ADR-057, enmienda 2026-11-08).
+- Limitación conocida del entorno en Docker Desktop para Windows: todos los clientes llegan con la misma IP al backend, así que el límite de 20 fallos de login por IP cuenta a toda la oficina; con servidor Linux se ve la IP real de cada cliente (ADR-071).
+- Las copias externas de los backups se cifran en el equipo antes de salir; la clave son dos valores (`COPIA_CLAVE_CIFRADO` y `COPIA_SAL_CIFRADO`, ofuscados con `rclone obscure`), nunca se guardan en el almacenamiento externo, y una copia queda en custodia del dueño fuera del equipo (ADR-072).
+- Los contenedores de respaldo no corren como root; el que sube copias a internet no tiene credenciales de la base (ADR-072).
 
 ## 19. Decisiones de este documento
 

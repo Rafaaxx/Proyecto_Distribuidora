@@ -1,0 +1,340 @@
+"""INV-03: ningún importe, costo o porcentaje se representa con punto
+flotante binario (`docs/01-dominio.md` §20; `docs/03-modelo-de-datos.md`
+§2.2; `docs/04-roadmap-changes.md` §5).
+
+Recorre `information_schema.columns` de la base migrada y falla si aparece
+`real`, `double precision`, `float4`/`float8` o `money` en cualquier columna
+del esquema de la aplicación, nombrando tabla y columna.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+
+import pytest
+from conftest import aplicar_migraciones
+from sqlalchemy import Engine, text
+
+from app.core.db import crear_engine
+
+TIPOS_PROHIBIDOS = ("real", "double precision", "money")
+
+_CONSULTA_CATALOGO = text(
+    """
+    SELECT table_name, column_name, data_type
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+    ORDER BY table_name, column_name
+    """
+)
+
+
+def _columnas_de_punto_flotante(engine: Engine) -> list[tuple[str, str, str]]:
+    with engine.connect() as conexion:
+        filas = conexion.execute(_CONSULTA_CATALOGO).all()
+
+    return [
+        (tabla, columna, tipo) for tabla, columna, tipo in filas if tipo.lower() in TIPOS_PROHIBIDOS
+    ]
+
+
+def test_inv03_la_base_migrada_no_tiene_columnas_de_punto_flotante_binario(
+    database_url: str,
+) -> None:
+    """INV-03: recorre el catálogo de columnas de una base con todas las
+    migraciones aplicadas y falla si aparece `real`, `double precision` o
+    `money` en cualquier columna de negocio."""
+    aplicar_migraciones(database_url)
+    engine = crear_engine(database_url)
+
+    infractoras = _columnas_de_punto_flotante(engine)
+
+    assert infractoras == [], (
+        f"INV-03: columnas con punto flotante binario o `money` en el esquema: {infractoras}"
+    )
+
+
+COLUMNAS_NUMERIC_DE_COMPRAS = {
+    ("compra", "total_neto"),
+    ("compra", "total_factura"),
+    ("compra_linea", "valor_presentacion"),
+    ("compra_linea", "bonificacion"),
+    ("compra_linea", "alicuota_aplicada"),
+    ("compra_linea", "costo_base"),
+    ("compra_linea", "importe_neto"),
+    ("pago_proveedor", "importe"),
+    ("pago_proveedor_medio", "importe"),
+}
+
+
+def test_inv03_el_catalogo_incluye_los_importes_y_costos_de_compras_como_numeric(
+    _engine_de_sesion: Engine,
+) -> None:
+    """Change 11: la regla no queda vacía para las tablas de compras y pagos; todo
+    importe, costo, bonificación y alícuota es `numeric`."""
+    with _engine_de_sesion.connect() as conexion:
+        tipos = {
+            (tabla, columna): tipo
+            for tabla, columna, tipo in conexion.execute(_CONSULTA_CATALOGO).all()
+        }
+
+    assert {tipos.get(columna) for columna in COLUMNAS_NUMERIC_DE_COMPRAS} == {"numeric"}
+
+
+def test_inv03_el_costo_de_la_linea_del_ajuste_es_numeric(_engine_de_sesion: Engine) -> None:
+    """Change 14 (`design.md` D3, D8): `ajuste_stock_linea.costo_unitario` es `numeric`
+    exacto (INV-03), igual que el costo de `stock_movimiento`."""
+    with _engine_de_sesion.connect() as conexion:
+        tipos = {
+            (tabla, columna): tipo
+            for tabla, columna, tipo in conexion.execute(_CONSULTA_CATALOGO).all()
+        }
+
+    assert tipos[("ajuste_stock_linea", "costo_unitario")] == "numeric"
+    assert tipos[("stock_movimiento", "costo_unitario")] == "numeric"
+
+
+COLUMNAS_DE_CONDICION_IVA = {
+    ("configuracion_organizacion", "condicion_iva"): "text",
+    ("costo_informado", "computa_credito_fiscal"): "boolean",
+    ("compra_linea", "computa_credito_fiscal"): "boolean",
+}
+
+
+def test_inv03_el_catalogo_incluye_la_condicion_de_iva_y_la_regla_congelada_sin_punto_flotante(
+    _engine_de_sesion: Engine,
+) -> None:
+    """Change 11b: la condición frente al IVA y la regla congelada (`computa_credito_fiscal`)
+    existen con el tipo esperado, y el costo base y el valor que dependen de ellas siguen siendo
+    `numeric` exacto: la regla nueva no introduce punto flotante ni `money`."""
+    with _engine_de_sesion.connect() as conexion:
+        tipos = {
+            (tabla, columna): tipo
+            for tabla, columna, tipo in conexion.execute(_CONSULTA_CATALOGO).all()
+        }
+
+    for columna, esperado in COLUMNAS_DE_CONDICION_IVA.items():
+        assert tipos.get(columna) == esperado, columna
+    for columna in (
+        ("costo_informado", "valor"),
+        ("costo_informado", "costo_base"),
+        ("compra_linea", "costo_base"),
+        ("compra_linea", "valor_presentacion"),
+    ):
+        assert tipos.get(columna) == "numeric", columna
+    assert [c for c, tipo in tipos.items() if tipo.lower() in TIPOS_PROHIBIDOS] == []
+
+
+COLUMNAS_NUMERIC_DE_PRECIOS = {
+    ("lista_precio", "redondeo_multiplo"),
+    ("regla_margen", "valor"),
+    ("redondeo_categoria", "multiplo"),
+    ("precio_item", "costo_referencia"),
+    ("precio_item", "valor_margen"),
+    ("precio_item", "precio_calculado"),
+    ("precio_item", "precio_final"),
+}
+
+
+def test_inv03_el_catalogo_incluye_los_importes_costos_y_porcentajes_de_precios_como_numeric(
+    _engine_de_sesion: Engine,
+) -> None:
+    """Change 13: toda columna de importe, costo o porcentaje de las listas de precios
+    (múltiplos de redondeo, valor de la regla, costo de referencia, margen, precio calculado y
+    final) es `numeric` exacto; las unidades de referencia son `integer` (cantidades base)."""
+    with _engine_de_sesion.connect() as conexion:
+        tipos = {
+            (tabla, columna): tipo
+            for tabla, columna, tipo in conexion.execute(_CONSULTA_CATALOGO).all()
+        }
+
+    assert {columna: tipos.get(columna) for columna in COLUMNAS_NUMERIC_DE_PRECIOS} == {
+        columna: "numeric" for columna in COLUMNAS_NUMERIC_DE_PRECIOS
+    }
+    assert tipos.get(("precio_item", "unidades_referencia")) == "integer"
+    assert [c for c, tipo in tipos.items() if tipo.lower() in TIPOS_PROHIBIDOS] == []
+
+
+COLUMNAS_NUMERIC_DE_DESCUENTOS = {
+    ("regla_descuento", "umbral"),
+    ("regla_descuento", "accion_porcentaje"),
+    ("regla_descuento", "accion_importe"),
+}
+
+
+def test_inv03_el_catalogo_incluye_umbral_y_accion_de_las_reglas_de_descuento_como_numeric(
+    _engine_de_sesion: Engine,
+) -> None:
+    """Change 16, tarea 5.4: el umbral, el porcentaje y el importe fijo de una regla de
+    descuento son `numeric` exacto (D17: dos columnas de acción, no un `accion_valor` único);
+    la prioridad es `integer`."""
+    with _engine_de_sesion.connect() as conexion:
+        tipos = {
+            (tabla, columna): tipo
+            for tabla, columna, tipo in conexion.execute(_CONSULTA_CATALOGO).all()
+        }
+
+    assert {columna: tipos.get(columna) for columna in COLUMNAS_NUMERIC_DE_DESCUENTOS} == {
+        columna: "numeric" for columna in COLUMNAS_NUMERIC_DE_DESCUENTOS
+    }
+    assert tipos.get(("regla_descuento", "prioridad")) == "integer"
+    assert ("regla_descuento", "accion_valor") not in tipos
+    assert [c for c, tipo in tipos.items() if tipo.lower() in TIPOS_PROHIBIDOS] == []
+
+
+@pytest.fixture
+def _tabla_temporal_con_columna_flotante(database_url: str) -> Iterator[Engine]:
+    """Crea una tabla temporal con una columna `double precision`, para
+    verificar en negativo que la prueba de INV-03 detecta la infracción
+    (tarea 6.3: la migración de prueba no persiste, se limpia al final)."""
+    aplicar_migraciones(database_url)
+    engine = crear_engine(database_url)
+
+    with engine.connect() as conexion:
+        conexion.execute(
+            text(
+                "CREATE TABLE inv03_negativo_prueba "
+                "(id integer PRIMARY KEY, importe_mal_tipado double precision)"
+            )
+        )
+        conexion.commit()
+
+    try:
+        yield engine
+    finally:
+        with engine.connect() as conexion:
+            conexion.execute(text("DROP TABLE IF EXISTS inv03_negativo_prueba"))
+            conexion.commit()
+
+
+def test_inv03_detecta_una_columna_double_precision_introducida_por_error(
+    _tabla_temporal_con_columna_flotante: Engine,
+) -> None:
+    """Verificación en negativo (tarea 6.3): si una migración introdujera
+    una columna de punto flotante, esta prueba debe identificarla."""
+    infractoras = _columnas_de_punto_flotante(_tabla_temporal_con_columna_flotante)
+
+    assert ("inv03_negativo_prueba", "importe_mal_tipado", "double precision") in infractoras
+
+
+COLUMNAS_DE_JORNADA = {
+    "id": "uuid",
+    "organizacion_id": "uuid",
+    "usuario_id": "uuid",
+    "dispositivo_id": "uuid",
+    "ubicacion_id": "uuid",
+    "estado": "text",
+    "operation_id": "uuid",
+    "occurred_at": "timestamp with time zone",
+    "registered_at": "timestamp with time zone",
+    "creado_en": "timestamp with time zone",
+    "abierta_en": "timestamp with time zone",
+    "rendida_en": "timestamp with time zone",
+    "rendida_por_id": "uuid",
+    "cerrada_en": "timestamp with time zone",
+    "cerrada_por_id": "uuid",
+    "liberada_en": "timestamp with time zone",
+    "liberada_por_id": "uuid",
+    "motivo_liberacion_id": "uuid",
+    "observacion_liberacion": "text",
+    # Change 24: la entrega del día.
+    "entregada_en": "timestamp with time zone",
+    "entrega_occurred_at": "timestamp with time zone",
+    "entrega_secuencia": "integer",
+}
+
+
+def test_inv03_el_catalogo_incluye_la_jornada_sin_punto_flotante(
+    _engine_de_sesion: Engine,
+) -> None:
+    """Change 15, tarea 1.6: la jornada no tiene importes ni costos; sus columnas existen
+    con el tipo esperado (identificadores `uuid`, momentos `timestamptz`) y ninguna es de
+    punto flotante ni `money`."""
+    with _engine_de_sesion.connect() as conexion:
+        tipos = {
+            columna: tipo
+            for tabla, columna, tipo in conexion.execute(_CONSULTA_CATALOGO).all()
+            if tabla == "jornada"
+        }
+
+    assert tipos == COLUMNAS_DE_JORNADA
+    assert not {tipo.lower() for tipo in tipos.values()} & set(TIPOS_PROHIBIDOS)
+
+
+COLUMNAS_DE_COBRANZAS = {
+    ("cobranza", "importe"): "numeric",
+    ("cobranza_medio", "importe"): "numeric",
+    ("cobranza", "occurred_at"): "timestamp with time zone",
+    ("cobranza", "registered_at"): "timestamp with time zone",
+    ("cobranza_anulacion", "occurred_at"): "timestamp with time zone",
+    ("cobranza_medio", "orden"): "integer",
+}
+
+
+def test_inv03_el_catalogo_incluye_las_cobranzas_sin_punto_flotante(
+    _engine_de_sesion: Engine,
+) -> None:
+    """Change 17, tarea 3.4: el importe de la cobranza y el de cada medio son `numeric` exacto
+    (INV-03), los momentos `timestamptz`, y ninguna columna de las tres tablas es de punto
+    flotante ni `money`."""
+    with _engine_de_sesion.connect() as conexion:
+        filas = conexion.execute(_CONSULTA_CATALOGO).all()
+    tipos = {(tabla, columna): tipo for tabla, columna, tipo in filas}
+    de_cobranzas = {tipo.lower() for tabla, _, tipo in filas if tabla.startswith("cobranza")}
+
+    for columna, esperado in COLUMNAS_DE_COBRANZAS.items():
+        assert tipos.get(columna) == esperado, columna
+    assert not de_cobranzas & set(TIPOS_PROHIBIDOS)
+
+
+COLUMNAS_DE_VENTAS_18B = {
+    ("venta", "credito_limite"): "numeric",
+    ("venta", "credito_saldo_considerado"): "numeric",
+    ("venta", "credito_disponible"): "numeric",
+    ("venta", "credito_exceso"): "numeric",
+    ("venta_linea_descuento", "importe"): "numeric",
+    ("venta_linea_descuento", "porcentaje"): "numeric",
+    ("venta_linea_descuento", "orden"): "integer",
+    ("intento_pin_autorizacion", "autorizador_id"): "uuid",
+    ("intento_pin_autorizacion", "intentante_id"): "uuid",
+    ("intento_pin_autorizacion", "exito"): "boolean",
+    ("intento_pin_autorizacion", "creado_en"): "timestamp with time zone",
+}
+
+
+def test_inv03_el_catalogo_incluye_el_credito_y_los_descuentos_de_la_venta_sin_punto_flotante(
+    _engine_de_sesion: Engine,
+) -> None:
+    """Change 18b, tarea 3.5 (CRE-10, DSC-08): el snapshot de crédito y los descuentos por línea
+    son `numeric` exacto, y ninguna columna de `venta_linea_descuento` ni
+    `intento_pin_autorizacion` es de punto flotante ni `money`."""
+    with _engine_de_sesion.connect() as conexion:
+        filas = conexion.execute(_CONSULTA_CATALOGO).all()
+    tipos = {(tabla, columna): tipo for tabla, columna, tipo in filas}
+    de_las_tablas_nuevas = {
+        tipo.lower()
+        for tabla, _, tipo in filas
+        if tabla in {"venta_linea_descuento", "intento_pin_autorizacion"}
+    }
+
+    for columna, esperado in COLUMNAS_DE_VENTAS_18B.items():
+        assert tipos.get(columna) == esperado, columna
+    assert not de_las_tablas_nuevas & set(TIPOS_PROHIBIDOS)
+
+
+def test_inv03_el_costo_de_la_linea_de_rendicion_es_numeric_y_las_cantidades_integer(
+    _engine_de_sesion: Engine,
+) -> None:
+    """Change 24 (`design.md` D4, D5): el costo con que se valorizó la diferencia es `numeric`
+    exacto; el resto de la línea son cantidades en unidad base (`integer`)."""
+    with _engine_de_sesion.connect() as conexion:
+        tipos = {
+            columna: tipo
+            for tabla, columna, tipo in conexion.execute(_CONSULTA_CATALOGO).all()
+            if tabla == "rendicion_linea"
+        }
+
+    assert tipos["costo_unitario"] == "numeric"
+    for columna in ("stock_al_abrir", "ingresos", "ventas", "anulaciones", "otros"):
+        assert tipos[columna] == "integer"
+    assert not {tipo.lower() for tipo in tipos.values()} & set(TIPOS_PROHIBIDOS)

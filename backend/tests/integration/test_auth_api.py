@@ -1,0 +1,906 @@
+"""Endpoints `/auth` (tarea 10.6) y de dispositivos (tarea 10.7), sobre
+Postgres real. Ejercita la dependencia de autenticación y permisos (tareas
+10.1, 10.2, 10.4, 10.5) end-to-end vía HTTP.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from datetime import UTC, datetime
+from decimal import Decimal
+from uuid import UUID, uuid4
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import func, select, text
+from sqlalchemy.orm import Session
+
+from app.api_v1 import sistema
+from app.core.clock import FixedClock
+from app.core.config import Settings
+from app.core.db import crear_engine, crear_session_factory
+from app.core.ids import nuevo_id
+from app.core.seguridad import hashear_password
+from app.main import crear_app
+from app.modules.identidad import repository
+from app.modules.identidad import service as identidad_service
+from app.modules.identidad.models import Auditoria, IntentoLogin, Organizacion, SesionRefresh
+
+MOMENTO = datetime(2026, 1, 1, tzinfo=UTC)
+PASSWORD = "una-contrasena-larga-123"
+JWT_SECRET = "secreto-de-prueba-http"
+
+
+@pytest.fixture(autouse=True)
+def _limpiar_datos_confirmados(database_url: str) -> Iterator[None]:
+    """Estas pruebas confirman transacciones reales contra `database_url`
+    (necesario para que el motor propio de `crear_app` las vea, ver fixture
+    `sesion`), así que son responsables de su propia limpieza explícita
+    (convención documentada en `conftest.py`, docstring del módulo): sin
+    esto, las filas quedan confirmadas en la base compartida de la sesión de
+    pytest y contaminan otras pruebas que asumen una tabla `organizacion`
+    vacía (por ejemplo `test_seed.py`, que usa "existe alguna fila" como
+    señal de "ya sembrado"). `TRUNCATE ... CASCADE` alcanza a toda tabla con
+    una FK (directa o transitiva) hacia `organizacion`.
+
+    Deuda nominada (change 04-pipeline-comandos, tarea 15.3, re-nominada de la
+    tarea 14.6.c del change 03): este engine propio produce un error de
+    teardown intermitente cuando estas pruebas corren aisladas fuera del
+    archivo completo (probable carrera con el ciclo de vida del contenedor de
+    Testcontainers). Corriendo el archivo completo o la suite entera siempre
+    da verde. El fix real requiere tocar `conftest.py` (ciclo de vida del
+    engine/contenedor compartido); se deja para el próximo change que toque
+    el arnés de integración."""
+    yield
+    engine = crear_engine(database_url)
+    with engine.begin() as conexion:
+        conexion.execute(text("TRUNCATE TABLE organizacion CASCADE"))
+    engine.dispose()
+
+
+def _crear_organizacion(sesion: Session, slug: str) -> Organizacion:
+    organizacion = Organizacion(
+        id=nuevo_id(),
+        nombre="Organización de prueba",
+        slug=slug,
+        cuit=None,
+        moneda="ARS",
+        zona_horaria="America/Argentina/Mendoza",
+        estado="ACTIVA",
+        creado_en=MOMENTO,
+        actualizado_en=MOMENTO,
+        actualizado_por_id=None,
+    )
+    sesion.add(organizacion)
+    sesion.flush()
+    return organizacion
+
+
+def _crear_usuario(
+    sesion: Session, organizacion_id, *, permisos: frozenset[str], nombre_usuario: str
+):
+    rol = repository.crear_rol(
+        organizacion_id,
+        sesion,
+        rol_id=nuevo_id(),
+        nombre="Rol de prueba",
+        tope_descuento=Decimal("0"),
+        activo=True,
+        momento=MOMENTO,
+    )
+    for codigo in permisos:
+        repository.asignar_permiso_a_rol(
+            organizacion_id, sesion, rol_id=rol.id, permiso_codigo=codigo
+        )
+    return repository.crear_usuario(
+        organizacion_id,
+        sesion,
+        usuario_id=nuevo_id(),
+        usuario=nombre_usuario,
+        nombre="Persona de prueba",
+        email=None,
+        password_hash=hashear_password(PASSWORD),
+        rol_id=rol.id,
+        estado="ACTIVO",
+        momento=MOMENTO,
+    )
+
+
+@pytest.fixture
+def cliente(database_url: str) -> Iterator[TestClient]:
+    """Cada prueba arma su propia app (`crear_app` crea un `Engine` propio,
+    sin `dispose` automático). Si no se libera acá, el pool de conexiones
+    queda vivo hasta que el recolector de ciclos de CPython lo alcance --
+    indeterminado -- y una corrida completa de la suite (cientos de estas
+    fixtures) agota `max_connections` de Postgres antes de eso. Se recupera
+    el `Engine` ya inyectado vía `dependency_overrides` (no se crea uno
+    aparte) para poder cerrarlo explícitamente al terminar la prueba."""
+    settings = Settings(
+        _env_file=None, database_url=database_url, jwt_secret=JWT_SECRET, jwt_kid="1"
+    )
+    app = crear_app(settings)
+    engine = app.dependency_overrides[sistema._get_engine]()
+    try:
+        yield TestClient(app)
+    finally:
+        engine.dispose()
+
+
+@pytest.fixture
+def sesion(database_url: str, _engine_de_sesion) -> Iterator[Session]:
+    """Sesión con `commit` real (no la transaccional `db_session`): los
+    datos deben quedar visibles para el motor propio que arma la app
+    (`crear_app` construye su propio `Engine`/`sessionmaker` a partir de
+    `database_url`, distinto del de `db_session`) -- una fila que solo
+    vive en un SAVEPOINT de `db_session` nunca sería visible ahí. Depende
+    de `_engine_de_sesion` únicamente para que las migraciones ya hayan
+    corrido (no usa ese motor: abre el suyo propio, que cierra explícitamente
+    al final -- ver `cliente` arriba)."""
+    engine = crear_engine(database_url)
+    try:
+        factory = crear_session_factory(engine)
+        with factory() as sesion_real:
+            yield sesion_real
+    finally:
+        engine.dispose()
+
+
+def test_login_devuelve_access_token_y_cookie_de_refresh(
+    cliente: TestClient, sesion: Session
+) -> None:
+    """Escenarios "Inicio de sesión con credenciales correctas" y "El
+    refresh token no es legible desde la aplicación" (cookie HttpOnly)."""
+    organizacion = _crear_organizacion(sesion, "org-http-1")
+    _crear_usuario(sesion, organizacion.id, permisos=frozenset(), nombre_usuario="vendedor1")
+    sesion.commit()
+
+    respuesta = cliente.post(
+        "/api/v1/auth/login",
+        json={
+            "organizacion_slug": "org-http-1",
+            "usuario": "vendedor1",
+            "contrasena": PASSWORD,
+            "dispositivo_id": str(uuid4()),
+            "nombre_dispositivo": "Tablet",
+        },
+    )
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert "access_token" in cuerpo
+    assert "refresh_token" not in cuerpo  # nunca en el cuerpo (ADR-017).
+
+    cookie_cruda = respuesta.headers.get("set-cookie", "")
+    assert "refresh_token=" in cookie_cruda
+    assert "HttpOnly" in cookie_cruda
+    assert "Secure" in cookie_cruda
+    assert "SameSite=strict" in cookie_cruda.lower().replace("samesite=strict", "SameSite=strict")
+    assert "/api/v1/auth" in cookie_cruda
+
+
+def test_login_con_credenciales_incorrectas_responde_401_con_codigo_estable(
+    cliente: TestClient, sesion: Session
+) -> None:
+    organizacion = _crear_organizacion(sesion, "org-http-2")
+    _crear_usuario(sesion, organizacion.id, permisos=frozenset(), nombre_usuario="vendedor1")
+    sesion.commit()
+
+    respuesta = cliente.post(
+        "/api/v1/auth/login",
+        json={
+            "organizacion_slug": "org-http-2",
+            "usuario": "vendedor1",
+            "contrasena": "mal",
+            "dispositivo_id": str(uuid4()),
+            "nombre_dispositivo": "Tablet",
+        },
+    )
+
+    assert respuesta.status_code == 401
+    cuerpo = respuesta.json()
+    assert cuerpo["codigo"] == "IDENTIDAD_CREDENCIALES_INVALIDAS"
+
+    # Grupo 11 (`ADR-018`): el intento fallido tiene que quedar confirmado
+    # de verdad -- no alcanza con que `iniciar_sesion` lo agregue a la
+    # sesión, porque el endpoint de login sólo hace `commit()` en el camino
+    # feliz (`auth.py::login`); si el error se propaga antes de esa línea,
+    # `get_session` cierra la sesión sin confirmar nada y la fila se pierde.
+    intentos = sesion.execute(select(IntentoLogin)).scalars().all()
+    assert len(intentos) == 1, "el intento fallido debe quedar confirmado aunque el login falle"
+
+
+def test_refresh_rota_el_token_y_logout_revoca_la_cookie(
+    cliente: TestClient, sesion: Session
+) -> None:
+    """Tarea 10.6: endpoints `/auth/refresh` y `/auth/logout` sobre el
+    servicio del grupo 8. Escenarios "Renovar la sesión rota el refresh
+    token" y "Después de cerrar sesión no se puede renovar", ejercidos acá a
+    nivel HTTP (ya cubiertos a nivel de servicio en 8.5/8.8)."""
+    organizacion = _crear_organizacion(sesion, "org-http-7")
+    _crear_usuario(sesion, organizacion.id, permisos=frozenset(), nombre_usuario="vendedor1")
+    sesion.commit()
+    dispositivo_id = str(uuid4())
+
+    login = cliente.post(
+        "/api/v1/auth/login",
+        json={
+            "organizacion_slug": "org-http-7",
+            "usuario": "vendedor1",
+            "contrasena": PASSWORD,
+            "dispositivo_id": dispositivo_id,
+            "nombre_dispositivo": "Tablet",
+        },
+    )
+    assert login.status_code == 200
+    cookie_refresh_original = login.cookies["refresh_token"]
+
+    renovada = cliente.post(
+        "/api/v1/auth/refresh",
+        json={"dispositivo_id": dispositivo_id},
+        cookies={"refresh_token": cookie_refresh_original},
+    )
+    assert renovada.status_code == 200
+    assert renovada.json()["access_token"]  # el endpoint emite uno nuevo (no reusa el anterior)
+    cookie_refresh_rotada = renovada.cookies["refresh_token"]
+    # El refresh token SÍ debe rotar siempre (es el contrato de seguridad de
+    # 8.5/8.6): a diferencia del access token -- cuyo contenido puede
+    # coincidir byte a byte si login y refresh caen en el mismo segundo,
+    # porque sus claims no incluyen un nonce -- el refresh es aleatorio
+    # (`generar_refresh_token`, entropía de 32 bytes) y nunca se repite.
+    assert cookie_refresh_rotada != cookie_refresh_original
+
+    cierre = cliente.post("/api/v1/auth/logout", cookies={"refresh_token": cookie_refresh_rotada})
+    assert cierre.status_code == 204
+
+    renovar_tras_cierre = cliente.post(
+        "/api/v1/auth/refresh",
+        json={"dispositivo_id": dispositivo_id},
+        cookies={"refresh_token": cookie_refresh_rotada},
+    )
+    assert renovar_tras_cierre.status_code == 401
+
+
+def test_el_reuso_de_un_refresh_token_revoca_la_familia_de_verdad(
+    cliente: TestClient, sesion: Session
+) -> None:
+    """Escenario "Reusar un refresh token corta toda su familia" (tarea 8.6):
+    igual que el intento fallido de login, la revocación que dispara la
+    detección de reuso ocurre justo antes de lanzar `RefreshTokenInvalidoError`
+    -- sin el `commit` en el camino de error de `auth.py::refresh`, esa
+    revocación se perdía (mismo bug que el de login, corregido en la misma
+    sesión)."""
+    organizacion = _crear_organizacion(sesion, "org-http-8")
+    _crear_usuario(sesion, organizacion.id, permisos=frozenset(), nombre_usuario="vendedor1")
+    sesion.commit()
+    dispositivo_id = str(uuid4())
+
+    login = cliente.post(
+        "/api/v1/auth/login",
+        json={
+            "organizacion_slug": "org-http-8",
+            "usuario": "vendedor1",
+            "contrasena": PASSWORD,
+            "dispositivo_id": dispositivo_id,
+            "nombre_dispositivo": "Tablet",
+        },
+    )
+    cookie_original = login.cookies["refresh_token"]
+
+    primera_renovacion = cliente.post(
+        "/api/v1/auth/refresh",
+        json={"dispositivo_id": dispositivo_id},
+        cookies={"refresh_token": cookie_original},
+    )
+    assert primera_renovacion.status_code == 200
+
+    # Reuso: se presenta de nuevo el token YA rotado por la línea anterior.
+    reuso = cliente.post(
+        "/api/v1/auth/refresh",
+        json={"dispositivo_id": dispositivo_id},
+        cookies={"refresh_token": cookie_original},
+    )
+    assert reuso.status_code == 401
+
+    sesion.expire_all()
+    familia_revocada = sesion.execute(
+        select(func.count())
+        .select_from(SesionRefresh)
+        .where(
+            SesionRefresh.organizacion_id == organizacion.id,
+            SesionRefresh.motivo_revocacion == "REUSO_DETECTADO",
+        )
+    ).scalar_one()
+    assert familia_revocada > 0, "la familia debe quedar revocada de verdad, no solo en memoria"
+
+    auditoria_reuso = (
+        sesion.execute(
+            select(Auditoria).where(
+                Auditoria.organizacion_id == organizacion.id,
+                Auditoria.accion == "REVOCAR_FAMILIA_REFRESH",
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(auditoria_reuso) == 1
+
+    # Con la familia revocada, ni siquiera el token recién rotado sirve.
+    tercer_intento = cliente.post(
+        "/api/v1/auth/refresh",
+        json={"dispositivo_id": dispositivo_id},
+        cookies={"refresh_token": primera_renovacion.cookies["refresh_token"]},
+    )
+    assert tercer_intento.status_code == 401
+
+
+class TestDependenciaDePermisos:
+    def test_una_peticion_sin_token_no_llega_al_negocio(self, cliente: TestClient) -> None:
+        """Escenario "Una petición sin token no llega al negocio"."""
+        respuesta = cliente.get("/api/v1/identidad/dispositivos")
+        assert respuesta.status_code == 401
+        assert respuesta.json()["codigo"] == "IDENTIDAD_ACCESS_TOKEN_AUSENTE"
+
+    def test_un_access_token_vencido_no_da_acceso(self, cliente: TestClient) -> None:
+        """Escenario "Un access token vencido no da acceso" (tarea 10.1): la
+        dependencia deja propagar `AccessTokenExpiradoError` (`core/seguridad.py`)
+        sin atraparla, y el manejador genérico de `DomainError` la traduce a
+        401 con su código estable."""
+        from app.core.seguridad import emitir_access_token
+
+        token_vencido = emitir_access_token(
+            usuario_id=uuid4(),
+            organizacion_id=uuid4(),
+            dispositivo_id=uuid4(),
+            secreto=JWT_SECRET,
+            kid="1",
+            emitido_en=datetime(2020, 1, 1, tzinfo=UTC),
+        )
+
+        respuesta = cliente.get(
+            "/api/v1/identidad/dispositivos",
+            headers={"Authorization": f"Bearer {token_vencido}"},
+        )
+
+        assert respuesta.status_code == 401
+        assert respuesta.json()["codigo"] == "IDENTIDAD_ACCESS_TOKEN_EXPIRADO"
+
+    def test_un_access_token_con_firma_alterada_no_da_acceso(self, cliente: TestClient) -> None:
+        """Escenario "Un access token con firma alterada no da acceso"
+        (tarea 10.1). `emitido_en` sale de `FixedClock` (`core/clock.py`),
+        nunca de una fecha suelta: esta prueba ejercita la verificación de
+        FIRMA, no de vencimiento (`verificar_access_token` valida la firma
+        antes de comparar `exp`), así que un `MOMENTO` fijo que envejece
+        respecto del reloj real del sistema no debería importarle -- pero
+        una fecha suelta sin pasar por el reloj inyectable es, igual, el
+        mismo patrón frágil que el resto de la suite evita (`CLAUDE.md` §4:
+        "el backend obtiene la hora desde un componente de reloj
+        inyectable")."""
+        from app.core.seguridad import emitir_access_token
+
+        token_valido = emitir_access_token(
+            usuario_id=uuid4(),
+            organizacion_id=uuid4(),
+            dispositivo_id=uuid4(),
+            secreto=JWT_SECRET,
+            kid="1",
+            emitido_en=FixedClock(MOMENTO).now(),
+        )
+        # Se altera el PRIMER carácter de la firma (no el último: el último de una firma HS256 en
+        # base64url solo aporta 4 bits útiles y cambiarlo a veces no altera los bytes decodificados,
+        # lo que volvía intermitente esta prueba).
+        encabezado, carga, firma = token_valido.split(".")
+        firma_alterada = ("A" if firma[0] != "A" else "B") + firma[1:]
+        token_con_firma_alterada = ".".join((encabezado, carga, firma_alterada))
+
+        respuesta = cliente.get(
+            "/api/v1/identidad/dispositivos",
+            headers={"Authorization": f"Bearer {token_con_firma_alterada}"},
+        )
+
+        assert respuesta.status_code == 401
+        assert respuesta.json()["codigo"] == "IDENTIDAD_ACCESS_TOKEN_INVALIDO"
+
+    def test_con_el_permiso_la_operacion_procede(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """Escenario "Con el permiso, la operación procede"."""
+        organizacion = _crear_organizacion(sesion, "org-http-3")
+        _crear_usuario(
+            sesion,
+            organizacion.id,
+            permisos=frozenset({"GESTIONAR_DISPOSITIVOS"}),
+            nombre_usuario="admin1",
+        )
+        sesion.commit()
+        login = cliente.post(
+            "/api/v1/auth/login",
+            json={
+                "organizacion_slug": "org-http-3",
+                "usuario": "admin1",
+                "contrasena": PASSWORD,
+                "dispositivo_id": str(uuid4()),
+                "nombre_dispositivo": "PC",
+            },
+        )
+        access_token = login.json()["access_token"]
+
+        respuesta = cliente.get(
+            "/api/v1/identidad/dispositivos",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        assert respuesta.status_code == 200
+        assert isinstance(respuesta.json(), list)
+
+    def test_sin_el_permiso_se_rechaza_con_codigo_estable(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """Escenario "Sin el permiso, la operación se rechaza con un código
+        estable"."""
+        organizacion = _crear_organizacion(sesion, "org-http-4")
+        _crear_usuario(sesion, organizacion.id, permisos=frozenset(), nombre_usuario="vendedor1")
+        sesion.commit()
+        login = cliente.post(
+            "/api/v1/auth/login",
+            json={
+                "organizacion_slug": "org-http-4",
+                "usuario": "vendedor1",
+                "contrasena": PASSWORD,
+                "dispositivo_id": str(uuid4()),
+                "nombre_dispositivo": "Tablet",
+            },
+        )
+        access_token = login.json()["access_token"]
+
+        respuesta = cliente.get(
+            "/api/v1/identidad/dispositivos",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        assert respuesta.status_code == 403
+        assert respuesta.json()["codigo"] == "PERMISO_REQUERIDO"
+
+    def test_la_revocacion_de_un_permiso_corta_el_acceso_en_la_peticion_siguiente(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """Escenario "Quitar un permiso corta el acceso en la petición
+        siguiente" (tarea 10.5, `design.md` D5: sin caché)."""
+        organizacion = _crear_organizacion(sesion, "org-http-5")
+        rol = repository.crear_rol(
+            organizacion.id,
+            sesion,
+            rol_id=nuevo_id(),
+            nombre="Rol de prueba",
+            tope_descuento=Decimal("0"),
+            activo=True,
+            momento=MOMENTO,
+        )
+        repository.asignar_permiso_a_rol(
+            organizacion.id, sesion, rol_id=rol.id, permiso_codigo="GESTIONAR_DISPOSITIVOS"
+        )
+        usuario = repository.crear_usuario(
+            organizacion.id,
+            sesion,
+            usuario_id=nuevo_id(),
+            usuario="admin1",
+            nombre="Admin",
+            email=None,
+            password_hash=hashear_password(PASSWORD),
+            rol_id=rol.id,
+            estado="ACTIVO",
+            momento=MOMENTO,
+        )
+        sesion.commit()
+        login = cliente.post(
+            "/api/v1/auth/login",
+            json={
+                "organizacion_slug": "org-http-5",
+                "usuario": "admin1",
+                "contrasena": PASSWORD,
+                "dispositivo_id": str(uuid4()),
+                "nombre_dispositivo": "PC",
+            },
+        )
+        access_token = login.json()["access_token"]
+
+        primera = cliente.get(
+            "/api/v1/identidad/dispositivos",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert primera.status_code == 200
+
+        # Quita el permiso, en una sesión/transacción aparte, ya confirmada.
+        identidad_service.cambiar_composicion_rol(
+            organizacion.id,
+            sesion,
+            FixedClock(MOMENTO),
+            rol_id=rol.id,
+            permisos_nuevos=frozenset(),
+            actor_id=usuario.id,
+        )
+        sesion.commit()
+
+        segunda = cliente.get(
+            "/api/v1/identidad/dispositivos",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert segunda.status_code == 403
+
+    def test_agregar_un_permiso_habilita_en_la_peticion_siguiente(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """Escenario "Agregar un permiso habilita en la petición siguiente"
+        (tarea 10.5, `design.md` D5: sin caché) -- la mitad simétrica del
+        caso anterior."""
+        organizacion = _crear_organizacion(sesion, "org-http-8")
+        rol = repository.crear_rol(
+            organizacion.id,
+            sesion,
+            rol_id=nuevo_id(),
+            nombre="Rol de prueba",
+            tope_descuento=Decimal("0"),
+            activo=True,
+            momento=MOMENTO,
+        )
+        usuario = repository.crear_usuario(
+            organizacion.id,
+            sesion,
+            usuario_id=nuevo_id(),
+            usuario="admin1",
+            nombre="Admin",
+            email=None,
+            password_hash=hashear_password(PASSWORD),
+            rol_id=rol.id,
+            estado="ACTIVO",
+            momento=MOMENTO,
+        )
+        sesion.commit()
+        login = cliente.post(
+            "/api/v1/auth/login",
+            json={
+                "organizacion_slug": "org-http-8",
+                "usuario": "admin1",
+                "contrasena": PASSWORD,
+                "dispositivo_id": str(uuid4()),
+                "nombre_dispositivo": "PC",
+            },
+        )
+        access_token = login.json()["access_token"]
+
+        primera = cliente.get(
+            "/api/v1/identidad/dispositivos",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert primera.status_code == 403
+
+        identidad_service.cambiar_composicion_rol(
+            organizacion.id,
+            sesion,
+            FixedClock(MOMENTO),
+            rol_id=rol.id,
+            permisos_nuevos=frozenset({"GESTIONAR_DISPOSITIVOS"}),
+            actor_id=usuario.id,
+        )
+        sesion.commit()
+
+        segunda = cliente.get(
+            "/api/v1/identidad/dispositivos",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert segunda.status_code == 200
+
+
+def test_el_dispositivo_del_contexto_es_el_del_token(cliente: TestClient, sesion: Session) -> None:
+    """Escenario "El dispositivo del contexto es el del token" (tarea 10.4,
+    spec `autorizacion-por-permiso`): revocar un dispositivo audita el
+    dispositivo desde el que el actor está autenticado (D1, el del access
+    token), nunca uno declarado en la petición (D2, informado en la
+    consulta -- mismo patrón que
+    `test_ninguna_organizacion_informada_en_la_peticion_se_usa`: el endpoint
+    ni siquiera declara ese parámetro, así que informarlo no tiene efecto).
+    """
+    organizacion = _crear_organizacion(sesion, "org-http-9")
+    _crear_usuario(
+        sesion,
+        organizacion.id,
+        permisos=frozenset({"GESTIONAR_DISPOSITIVOS"}),
+        nombre_usuario="admin1",
+    )
+    sesion.commit()
+
+    dispositivo_actor_id = str(uuid4())  # D1: el dispositivo del login, el del token.
+    login = cliente.post(
+        "/api/v1/auth/login",
+        json={
+            "organizacion_slug": "org-http-9",
+            "usuario": "admin1",
+            "contrasena": PASSWORD,
+            "dispositivo_id": dispositivo_actor_id,
+            "nombre_dispositivo": "PC del admin",
+        },
+    )
+    assert login.status_code == 200
+    access_token = login.json()["access_token"]
+
+    dispositivo_objetivo = identidad_service.registrar_dispositivo(
+        organizacion.id,
+        sesion,
+        FixedClock(MOMENTO),
+        dispositivo_id=nuevo_id(),
+        nombre="Tablet del vendedor",
+    )
+    sesion.commit()
+
+    dispositivo_declarado_en_la_peticion = str(uuid4())  # D2: ajeno, se informa y debe ignorarse.
+    respuesta = cliente.delete(
+        f"/api/v1/identidad/dispositivos/{dispositivo_objetivo.id}"
+        f"?dispositivo_id={dispositivo_declarado_en_la_peticion}",
+        headers={"Authorization": f"Bearer {access_token}", "Operation-Id": str(uuid4())},
+    )
+    assert respuesta.status_code == 204
+
+    # Change 04 (grupo 11, ADR-022): la revocación pasa a auditarse desde el
+    # bus con `accion=sobre.tipo` ("DISPOSITIVO_REVOCAR"), no con el nombre
+    # interno del servicio ("REVOCAR_DISPOSITIVO") -- una sola fila, la del
+    # bus; la interna quedó desactivada con `auditar=False`.
+    fila_auditoria = sesion.execute(
+        select(Auditoria).where(
+            Auditoria.organizacion_id == organizacion.id,
+            Auditoria.accion == "DISPOSITIVO_REVOCAR",
+        )
+    ).scalar_one()
+    assert str(fila_auditoria.dispositivo_id) == dispositivo_actor_id
+    assert str(fila_auditoria.dispositivo_id) != dispositivo_declarado_en_la_peticion
+
+
+def test_ninguna_organizacion_informada_en_la_peticion_se_usa(
+    cliente: TestClient, sesion: Session
+) -> None:
+    """Escenario "Una organización informada en la petición se ignora":
+    ninguna ruta de negocio recibe `organizacion_id` como parámetro de
+    consulta o encabezado -- la única fuente es el token (tarea 10.4). Este
+    endpoint (`listar_dispositivos`) ni siquiera declara ese parámetro,
+    así que informarlo en la query no tiene ningún efecto."""
+    organizacion = _crear_organizacion(sesion, "org-http-6")
+    _crear_usuario(
+        sesion,
+        organizacion.id,
+        permisos=frozenset({"GESTIONAR_DISPOSITIVOS"}),
+        nombre_usuario="admin1",
+    )
+    sesion.commit()
+    login = cliente.post(
+        "/api/v1/auth/login",
+        json={
+            "organizacion_slug": "org-http-6",
+            "usuario": "admin1",
+            "contrasena": PASSWORD,
+            "dispositivo_id": str(uuid4()),
+            "nombre_dispositivo": "PC",
+        },
+    )
+    access_token = login.json()["access_token"]
+
+    respuesta = cliente.get(
+        f"/api/v1/identidad/dispositivos?organizacion_id={uuid4()}",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    assert respuesta.status_code == 200
+
+
+class TestLoginConRolInactivo:
+    """ADR-028 D9.1 último punto (grupo 2, `tasks.md` 2.6): un usuario
+    `ACTIVO` con rol `activo = false` recibe el mismo rechazo genérico que un
+    usuario inactivo, sin revelar la causa (SEG-01)."""
+
+    def test_login_con_rol_inactivo_da_el_mismo_rechazo_generico(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        organizacion = _crear_organizacion(sesion, "org-login-rol-inactivo-1")
+        usuario = _crear_usuario(
+            sesion, organizacion.id, permisos=frozenset(), nombre_usuario="vendedor-rol-1"
+        )
+        sesion.execute(
+            text("UPDATE rol SET activo = false WHERE id = :id"), {"id": str(usuario.rol_id)}
+        )
+        sesion.commit()
+
+        respuesta = cliente.post(
+            "/api/v1/auth/login",
+            json={
+                "organizacion_slug": "org-login-rol-inactivo-1",
+                "usuario": "vendedor-rol-1",
+                "contrasena": PASSWORD,
+                "dispositivo_id": str(uuid4()),
+                "nombre_dispositivo": "Tablet",
+            },
+        )
+
+        assert respuesta.status_code == 401
+        assert respuesta.json()["codigo"] == "IDENTIDAD_CREDENCIALES_INVALIDAS"
+
+        auditoria = (
+            sesion.execute(
+                select(Auditoria).where(
+                    Auditoria.organizacion_id == organizacion.id,
+                    Auditoria.accion == "INICIO_SESION_FALLIDO",
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(auditoria) == 1
+        assert auditoria[0].usuario_id == usuario.id
+
+    def test_login_con_rol_inactivo_y_contrasena_incorrecta_da_el_mismo_mensaje(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        """Triangulación: el mismo código y mensaje, sea cual sea la otra
+        condición que también hubiera fallado -- nunca se distingue la
+        causa (SEG-01).
+
+        Nota de la sesión de verificación del grupo 10 (tarea 10.1): esta
+        prueba afirma el código y el mensaje, pero no el motivo concreto
+        (`ROL_INACTIVO`); el motivo vive en `sesion_refresh.motivo_revocacion`
+        y lo cubre `TestRenovacionDeUnUsuarioORolInactivo` de
+        `test_identidad_refresh_service.py`. Es lo que la spec pide: el mismo
+        rechazo genérico, sin revelar la causa."""
+        organizacion = _crear_organizacion(sesion, "org-login-rol-inactivo-2")
+        usuario = _crear_usuario(
+            sesion, organizacion.id, permisos=frozenset(), nombre_usuario="vendedor-rol-2"
+        )
+        sesion.execute(
+            text("UPDATE rol SET activo = false WHERE id = :id"), {"id": str(usuario.rol_id)}
+        )
+        sesion.commit()
+
+        respuesta = cliente.post(
+            "/api/v1/auth/login",
+            json={
+                "organizacion_slug": "org-login-rol-inactivo-2",
+                "usuario": "vendedor-rol-2",
+                "contrasena": "una-incorrecta-cualquiera",
+                "dispositivo_id": str(uuid4()),
+                "nombre_dispositivo": "Tablet",
+            },
+        )
+
+        assert respuesta.status_code == 401
+        assert respuesta.json()["codigo"] == "IDENTIDAD_CREDENCIALES_INVALIDAS"
+
+
+class TestRenovacionConSesionDeshabilitada:
+    """Spec `identidad/autenticacion-y-sesion`, escenario "Un usuario dado de
+    baja no puede renovar su sesión" (ADR-028 D9.2-A / D9.4-A), y el requisito
+    "La revocación DEBE persistir aunque la respuesta sea un error".
+
+    Lo que faltaba y esta clase cierra (tarea 10.1 del grupo 10): hasta acá
+    el comportamiento estaba cubierto solo en la capa de servicio
+    (`test_identidad_refresh_service.py::TestRenovacionDeUsuarioORolInactivo`),
+    leyendo la revocación desde la *misma* sesión de la prueba -- lo que no
+    distingue "quedó confirmada" de "quedó en la transacción de la petición".
+    La cláusula "persiste aunque la respuesta sea un error" es justamente
+    sobre ese borde: `POST /auth/refresh` responde 401 y aun así la revocación
+    y la auditoría tienen que haber quedado confirmadas.
+
+    Por eso estas pruebas leen con `sesion.expire_all()`: la fixture `sesion`
+    abre su propio `Engine` contra `database_url`, distinto del que la app
+    usa para atender la petición, así que lo que se lee después de expirar es
+    lo confirmado, no el estado sucio de la petición que acaba de fallar. Es
+    el mismo truco que usa `test_refresh_reuso_persiste_la_revocacion_de_la_familia`
+    (más arriba en este archivo), y por eso el `commit` de `auth.py` en el
+    `except DomainError` es observable y no accidental.
+    """
+
+    def _login(
+        self, cliente: TestClient, slug: str, nombre_usuario: str, dispositivo_id: str
+    ) -> str:
+        login = cliente.post(
+            "/api/v1/auth/login",
+            json={
+                "organizacion_slug": slug,
+                "usuario": nombre_usuario,
+                "contrasena": PASSWORD,
+                "dispositivo_id": dispositivo_id,
+                "nombre_dispositivo": "Tablet",
+            },
+        )
+        assert login.status_code == 200
+        return str(login.cookies["refresh_token"])
+
+    def test_el_401_persiste_la_revocacion_de_todas_las_familias_del_usuario(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        organizacion = _crear_organizacion(sesion, "org-refresh-inactivo-1")
+        usuario = _crear_usuario(
+            sesion, organizacion.id, permisos=frozenset(), nombre_usuario="vendedor-baja-1"
+        )
+        sesion.commit()
+
+        # Dos dispositivos: la revocación es de TODAS las familias del
+        # usuario, no solo de la que emite este token.
+        dispositivo_1 = str(uuid4())
+        dispositivo_2 = str(uuid4())
+        token_1 = self._login(cliente, "org-refresh-inactivo-1", "vendedor-baja-1", dispositivo_1)
+        token_2 = self._login(cliente, "org-refresh-inactivo-1", "vendedor-baja-1", dispositivo_2)
+
+        sesion.execute(
+            text("UPDATE usuario SET estado = 'INACTIVO' WHERE id = :id"), {"id": str(usuario.id)}
+        )
+        sesion.commit()
+
+        respuesta = cliente.post(
+            "/api/v1/auth/refresh",
+            json={"dispositivo_id": dispositivo_1},
+            cookies={"refresh_token": token_1},
+        )
+
+        assert respuesta.status_code == 401
+        assert respuesta.json()["codigo"] == "IDENTIDAD_REFRESH_TOKEN_INVALIDO"
+
+        # Sesión nueva: lo que se lee acá está confirmado, no en vuelo.
+        sesion.expire_all()
+        motivos = sesion.execute(
+            select(SesionRefresh.motivo_revocacion, SesionRefresh.revocado_en).where(
+                SesionRefresh.organizacion_id == organizacion.id,
+            )
+        ).all()
+        assert motivos, "el login tiene que haber dejado al menos un refresh"
+        assert all(motivo == "USUARIO_INACTIVO" for motivo, _ in motivos), motivos
+        assert all(revocado is not None for _, revocado in motivos), motivos
+
+        # Y el token del otro dispositivo tampoco sirve más: la baja se
+        # propaga a todas las familias, no solo a la que se presentó.
+        segundo_intento = cliente.post(
+            "/api/v1/auth/refresh",
+            json={"dispositivo_id": dispositivo_2},
+            cookies={"refresh_token": token_2},
+        )
+        assert segundo_intento.status_code == 401
+
+    def test_el_401_deja_una_auditoria_con_usuario_dispositivo_y_motivo(
+        self, cliente: TestClient, sesion: Session
+    ) -> None:
+        organizacion = _crear_organizacion(sesion, "org-refresh-rol-inactivo-1")
+        usuario = _crear_usuario(
+            sesion, organizacion.id, permisos=frozenset(), nombre_usuario="vendedor-baja-2"
+        )
+        sesion.commit()
+
+        # El login tiene que funcionar con el rol activo (ADR-028 D9.1 solo
+        # rechaza el *login* con rol inactivo); la baja del rol ocurre
+        # después, sobre una sesión ya emitida.
+        dispositivo_id = str(uuid4())
+        token = self._login(
+            cliente, "org-refresh-rol-inactivo-1", "vendedor-baja-2", dispositivo_id
+        )
+
+        sesion.execute(
+            text("UPDATE rol SET activo = false WHERE id = :id"), {"id": str(usuario.rol_id)}
+        )
+        sesion.commit()
+
+        respuesta = cliente.post(
+            "/api/v1/auth/refresh",
+            json={"dispositivo_id": dispositivo_id},
+            cookies={"refresh_token": token},
+        )
+        assert respuesta.status_code == 401
+
+        sesion.expire_all()
+        filas = (
+            sesion.execute(
+                select(Auditoria).where(
+                    Auditoria.organizacion_id == organizacion.id,
+                    Auditoria.accion == "REVOCAR_SESIONES_REFRESH_USUARIO",
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(filas) == 1
+        assert filas[0].usuario_id == usuario.id
+        assert filas[0].dispositivo_id == UUID(dispositivo_id)
+        assert filas[0].observacion is not None
+        assert "ROL_INACTIVO" in filas[0].observacion

@@ -1,0 +1,110 @@
+[
+  {
+    "id": "PRC22-dos-cajas-y-tres-unidades-quince-base",
+    "reglas": ["PRC-22", "TR-03"],
+    "entrada": {
+      "motor": "prc22",
+      "operacion": "calcular_bruto_de_linea",
+      "precio_referencia": "12500.00",
+      "unidades_referencia": 6,
+      "cantidad_base": 15
+    },
+    "salida_esperada": { "bruto": "31250.00" }
+  },
+  {
+    "id": "PRC22-tres-unidades-de-una-caja-x6",
+    "reglas": ["PRC-22", "TR-03"],
+    "entrada": {
+      "motor": "prc22",
+      "operacion": "calcular_bruto_de_linea",
+      "precio_referencia": "8600.00",
+      "unidades_referencia": 6,
+      "cantidad_base": 3
+    },
+    "salida_esperada": { "bruto": "4300.00" }
+  },
+  {
+    "id": "PRC22-una-unidad-de-una-caja-x6",
+    "reglas": ["PRC-22", "TR-03"],
+    "entrada": {
+      "motor": "prc22",
+      "operacion": "calcular_bruto_de_linea",
+      "precio_referencia": "8600.00",
+      "unidades_referencia": 6,
+      "cantidad_base": 1
+    },
+    "salida_esperada": { "bruto": "1433.33" }
+  },
+  {
+    "id": "PRC22-cinco-unidades-redondea-hacia-arriba-una-sola-vez",
+    "reglas": ["PRC-22", "TR-03"],
+    "entrada": {
+      "motor": "prc22",
+      "operacion": "calcular_bruto_de_linea",
+      "precio_referencia": "8600.00",
+      "unidades_referencia": 6,
+      "cantidad_base": 5
+    },
+    "salida_esperada": { "bruto": "7166.67" }
+  },
+  {
+    "id": "PRC22-medio-exacto-sube",
+    "reglas": ["PRC-22", "TR-03"],
+    "entrada": {
+      "motor": "prc22",
+      "operacion": "calcular_bruto_de_linea",
+      "precio_referencia": "5.00",
+      "unidades_referencia": 8,
+      "cantidad_base": 1
+    },
+    "salida_esperada": { "bruto": "0.63" }
+  },
+  {
+    "id": "PRC22-referencia-de-una-unidad",
+    "reglas": ["PRC-22"],
+    "entrada": {
+      "motor": "prc22",
+      "operacion": "calcular_bruto_de_linea",
+      "precio_referencia": "950.50",
+      "unidades_referencia": 1,
+      "cantidad_base": 7
+    },
+    "salida_esperada": { "bruto": "6653.50" }
+  },
+  {
+    "id": "PRC22-cantidad-base-cero-es-invalida",
+    "reglas": ["PRC-22", "INV-04"],
+    "entrada": {
+      "motor": "prc22",
+      "operacion": "calcular_bruto_de_linea",
+      "precio_referencia": "8600.00",
+      "unidades_referencia": 6,
+      "cantidad_base": 0
+    },
+    "salida_esperada": { "error": "CANTIDAD_BASE_INVALIDA" }
+  },
+  {
+    "id": "PRC22-cantidad-base-negativa-es-invalida",
+    "reglas": ["PRC-22", "INV-04"],
+    "entrada": {
+      "motor": "prc22",
+      "operacion": "calcular_bruto_de_linea",
+      "precio_referencia": "8600.00",
+      "unidades_referencia": 6,
+      "cantidad_base": -3
+    },
+    "salida_esperada": { "error": "CANTIDAD_BASE_INVALIDA" }
+  },
+  {
+    "id": "PRC22-unidades-de-referencia-cero-es-invalido",
+    "reglas": ["PRC-22", "INV-04"],
+    "entrada": {
+      "motor": "prc22",
+      "operacion": "calcular_bruto_de_linea",
+      "precio_referencia": "8600.00",
+      "unidades_referencia": 0,
+      "cantidad_base": 3
+    },
+    "salida_esperada": { "error": "UNIDADES_REFERENCIA_INVALIDAS" }
+  }
+]

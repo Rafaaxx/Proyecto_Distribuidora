@@ -1,0 +1,115 @@
+import type { CodigoPermiso } from '../../domain/identidad/permisos'
+
+/**
+ * Secciones del menú de `/admin` (tarea 7.1, `design.md` D5-A, **B3**).
+ *
+ * Es la **única** lista de secciones: el menú (`AdminLayout`) y la ruta
+ * índice `/admin/inicio` (`AdminInicio`) la consultan, así que agregar una
+ * pantalla de administración en el change 07 se declara en un solo lugar
+ * y el menú y el aterrizaje no pueden desincronizarse.
+ *
+ * - El **orden** es el del menú y decide a dónde lleva `/admin/inicio`:
+ *   Catálogo, Proveedores, Dispositivos (D5-A: "la primera sección
+ *   permitida, en el orden del menú").
+ * - `permiso` es el que el usuario tiene que tener en la consulta de
+ *   sesión (`GET /api/v1/yo`) para ver la sección, según `01-dominio.md`
+ *   §19.
+ * - `otrosPermisos` (opcional): permisos alternativos; la sección se ofrece con `permiso`
+ *   **o** con cualquiera de ellos (Compras: `REGISTRAR_COMPRA` o `ANULAR_COMPRA`, change 11
+ *   D14; Pagos a proveedores: `REGISTRAR_PAGO_PROVEEDOR` o `ANULAR_PAGO_PROVEEDOR`, change 12 D7;
+ *   Listas de precios: `GESTIONAR_LISTAS` o `PUBLICAR_LISTAS`, change 13 D12; Cobranzas:
+ *   `REGISTRAR_COBRANZA` o `ANULAR_COBRANZA`, change 17 D14; Ventas: `VENDER` o `ANULAR_VENTA`,
+ *   change 18a D19, D21).
+ *   Descuentos (change 16, grupo 15): solo `GESTIONAR_DESCUENTOS`; "Topes por rol" es una entrada
+ *   de la sección que además pide `ADMIN_USUARIOS` (`areas/admin/descuentos/DescuentosArea.tsx`).
+ * - `ruta` es **absoluta** (`/admin/...`), nunca relativa: la tarea 10.8
+ *   del change 05 fijo que un `to` relativo se resolvía contra el
+ *   segmento en el que estaba parado quien navega
+ *   (`/admin/dispositivos/catalogo` en vez de `/admin/catalogo`).
+ *
+ * Ocultar una sección es una comodidad de la interfaz: el servidor sigue
+ * validando cada petición (SEG-06, ADR-027).
+ */
+export interface SeccionAdmin {
+  ruta: string
+  etiqueta: string
+  permiso: CodigoPermiso
+  otrosPermisos?: readonly CodigoPermiso[]
+}
+
+export const SECCIONES: readonly SeccionAdmin[] = [
+  { ruta: '/admin/catalogo', etiqueta: 'Catálogo', permiso: 'GESTIONAR_CATALOGO' },
+  { ruta: '/admin/proveedores', etiqueta: 'Proveedores', permiso: 'GESTIONAR_PROVEEDORES' },
+  {
+    ruta: '/admin/compras',
+    etiqueta: 'Compras',
+    permiso: 'REGISTRAR_COMPRA',
+    otrosPermisos: ['ANULAR_COMPRA'],
+  },
+  {
+    ruta: '/admin/pagos-proveedores',
+    etiqueta: 'Pagos a proveedores',
+    permiso: 'REGISTRAR_PAGO_PROVEEDOR',
+    otrosPermisos: ['ANULAR_PAGO_PROVEEDOR'],
+  },
+  { ruta: '/admin/clientes', etiqueta: 'Clientes', permiso: 'GESTIONAR_CLIENTES' },
+  {
+    ruta: '/admin/ventas',
+    etiqueta: 'Ventas',
+    permiso: 'VENDER',
+    otrosPermisos: ['ANULAR_VENTA'],
+  },
+  {
+    ruta: '/admin/cobranzas',
+    etiqueta: 'Cobranzas',
+    permiso: 'REGISTRAR_COBRANZA',
+    otrosPermisos: ['ANULAR_COBRANZA'],
+  },
+  {
+    ruta: '/admin/precios',
+    etiqueta: 'Listas de precios',
+    permiso: 'GESTIONAR_LISTAS',
+    otrosPermisos: ['PUBLICAR_LISTAS'],
+  },
+  { ruta: '/admin/descuentos', etiqueta: 'Descuentos', permiso: 'GESTIONAR_DESCUENTOS' },
+  { ruta: '/admin/stock', etiqueta: 'Stock', permiso: 'TRANSFERIR_STOCK' },
+  // Change 25 (D5, D11): bandeja de observaciones y rechazadas; el menú le suma el total pendiente.
+  { ruta: '/admin/revision', etiqueta: 'Revisión', permiso: 'REVISAR_OBSERVACIONES' },
+  // Change 26 (D11): seis reportes de solo lectura en una sola sección; la pestaña de saldos de proveedores
+  // tiene además su regla compuesta (`domain/reportes/permisos.ts`, D8 = B).
+  { ruta: '/admin/reportes', etiqueta: 'Reportes', permiso: 'VER_REPORTES' },
+  { ruta: '/admin/importacion', etiqueta: 'Importación', permiso: 'IMPORTAR_DATOS' },
+  {
+    ruta: '/admin/configuracion',
+    etiqueta: 'Configuración',
+    permiso: 'ADMIN_CONFIGURACION',
+    otrosPermisos: ['GESTIONAR_LISTAS', 'PUBLICAR_LISTAS'],
+  },
+  { ruta: '/admin/usuarios', etiqueta: 'Usuarios', permiso: 'ADMIN_USUARIOS' },
+  { ruta: '/admin/roles', etiqueta: 'Roles y permisos', permiso: 'ADMIN_USUARIOS' },
+  { ruta: '/admin/dispositivos', etiqueta: 'Dispositivos', permiso: 'GESTIONAR_DISPOSITIVOS' },
+]
+
+/** Predicado de permiso de `usePermisos().tiene`. */
+export type TienePermiso = (permiso: CodigoPermiso) => boolean
+
+/**
+ * Secciones que el usuario puede usar, en el orden de `SECCIONES`.
+ * Falla cerrada sin trabajo extra: `tiene` ya devuelve `false` mientras
+ * `/yo` está pendiente y ante un error (`design.md` D3-A, B1), así que
+ * con la consulta pendiente o fallida esta lista viene vacía y no
+ * aparece ninguna sección protegida.
+ */
+export function seccionesPermitidas(tiene: TienePermiso): SeccionAdmin[] {
+  return SECCIONES.filter(
+    (seccion) => tiene(seccion.permiso) || (seccion.otrosPermisos ?? []).some((permiso) => tiene(permiso)),
+  )
+}
+
+/**
+ * Primera sección permitida, la que muestra `/admin/inicio` (**B3**).
+ * `undefined` cuando el usuario no tiene ninguna.
+ */
+export function primeraSeccionPermitida(tiene: TienePermiso): SeccionAdmin | undefined {
+  return seccionesPermitidas(tiene)[0]
+}

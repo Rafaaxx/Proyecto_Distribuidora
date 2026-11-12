@@ -1,0 +1,363 @@
+# sync/cola-local Specification
+
+## Purpose
+Confirma en el teléfono una venta de `/ruta` como una operación completa e indivisible: la venta, su cobranza, sus efectos locales sobre stock y saldo y el comando que el motor de sincronización enviará después, con número y orden asignados sin huecos ni repeticiones (`02` §13.2, §6.2, §7.7; INV-01).
+
+## Requirements
+
+### Requirement: Confirmar una venta local es una sola transacción
+
+Confirmar una venta en `/ruta` DEBE escribir, en una única transacción de la base local, la venta con sus líneas calculadas, su cobranza si existe, los movimientos locales de stock y de cuenta, el comando `VENTA_CONFIRMAR` en la cola y los contadores de número y de secuencia del dispositivo. Si cualquier escritura falla, NO DEBE quedar ninguna de ellas y el carrito DEBE seguir abierto con un aviso de error. El cálculo de la venta y la verificación de credenciales DEBEN completarse antes de iniciar la transacción (`design.md` D4).
+
+#### Scenario: Confirmación completa
+- **GIVEN** `vendedor` con su jornada abierta y un carrito de 2 cajas y 3 botellas de Vino A (caja x6 a $12.500) para un cliente, con $20.000 cobrados en efectivo
+- **WHEN** confirma la venta
+- **THEN** la base local tiene la venta por $31.250,00, su cobranza de $20.000,00, un movimiento de stock de −15 botellas, un débito de $31.250,00 y un crédito de $20.000,00 en la cuenta local del cliente, y un comando en la cola, todos con el mismo `operation_id`
+- **Regla:** INV-01; VTA-12; PRC-22; RUT-04
+
+#### Scenario: Falla a mitad de la confirmación
+- **GIVEN** un carrito listo para confirmar
+- **WHEN** la escritura del comando en la cola falla después de escribir la venta
+- **THEN** no queda la venta, ni la cobranza, ni ningún movimiento local, ni el comando; el número y la secuencia no avanzan; el carrito sigue abierto con un aviso de error
+- **Regla:** INV-01
+
+#### Scenario: Doble toque en confirmar
+- **GIVEN** un carrito ya confirmado
+- **WHEN** la confirmación se repite con el mismo carrito (doble toque o reintento tras un error)
+- **THEN** hay una sola venta y un solo comando en la cola con ese `operation_id`
+- **Regla:** INV-06; SYN-02
+
+#### Scenario: Cantidades e importes exactos
+- **WHEN** se confirma cualquier venta local
+- **THEN** los importes quedan guardados como texto con dos decimales y las cantidades como enteros en unidad base
+- **Regla:** INV-03; INV-04
+
+### Requirement: El número de la venta lo asigna el teléfono al confirmar
+
+El número DEBE ser el prefijo del dispositivo seguido del correlativo de seis dígitos siguiente al mayor entre el último del bootstrap y el último usado en el teléfono, y DEBE asignarse dentro de la transacción de confirmación. Un carrito descartado NO DEBE consumir número (`design.md` D4; `02` §7.7).
+
+#### Scenario: Primera venta tras el bootstrap
+- **GIVEN** un dispositivo con prefijo V03, último correlativo 141 en el bootstrap y ninguno usado en el teléfono
+- **WHEN** se confirma una venta
+- **THEN** su número es V03-000142
+- **Regla:** VTA-06
+
+#### Scenario: El teléfono va adelante del servidor
+- **GIVEN** el teléfono ya usó V03-000145 y el bootstrap informa 141
+- **WHEN** se confirma una venta
+- **THEN** su número es V03-000146
+- **Regla:** VTA-06; `02` §7.7
+
+#### Scenario: Carrito descartado
+- **GIVEN** la última venta fue V03-000142
+- **WHEN** el vendedor descarta un carrito y confirma otro
+- **THEN** el confirmado es V03-000143
+- **Regla:** VTA-06
+
+### Requirement: La cola guarda el comando completo y en orden
+
+Cada comando de la cola DEBE tener una secuencia del dispositivo estrictamente creciente y DEBE guardar el sobre completo del lote: `operation_id` UUIDv7 generado en el teléfono, tipo `VENTA_CONFIRMAR`, versión, modo `OFFLINE`, usuario y dispositivo de la sesión local, jornada del bootstrap, `occurred_at` del momento de confirmar, secuencia, versión de la aplicación y contenido. El contenido NO DEBE llevar PIN ni credenciales y DEBE llevar el objeto de crédito con límite, saldo considerado, política y resolución. El sobre armado por el teléfono DEBE ser aceptado por el lote de sincronización del servidor (`design.md` D1, D2, D9).
+
+#### Scenario: Orden de la cola
+- **GIVEN** la cola con su última secuencia en 7
+- **WHEN** se confirman dos ventas seguidas
+- **THEN** sus comandos tienen las secuencias 8 y 9 en el orden en que se confirmaron
+- **Regla:** SYN-03; `02` §6.4
+
+#### Scenario: Sin credenciales en la cola
+- **GIVEN** una venta con descuento autorizado por `sup01` con su PIN
+- **WHEN** se encola
+- **THEN** el comando lleva el autorizador y ningún PIN, derivación ni credencial
+- **Regla:** ADR-056; SEG-05
+
+#### Scenario: Contrato con el servidor
+- **GIVEN** el sobre que arma el teléfono para una venta con cobranza, descuento manual y exceso de crédito por tolerancia
+- **WHEN** se envía tal cual al lote de sincronización del servidor
+- **THEN** el servidor lo acepta (`ACEPTADO` o `ACEPTADO_CON_OBSERVACIONES`), no como malformado
+- **Regla:** SYN-01; SYN-05; CRE-09
+
+#### Scenario: Doble envío del mismo sobre
+- **GIVEN** el sobre de contrato ya aceptado por el lote
+- **WHEN** se envía otra vez con el mismo `operation_id` y el mismo contenido
+- **THEN** el servidor devuelve el resultado original y no registra otra venta
+- **Regla:** INV-06; SYN-02
+
+### Requirement: El saldo y el stock locales suman lo que hizo el teléfono
+
+Para vender y para las pantallas de consulta, el teléfono DEBE usar como saldo del cliente el del bootstrap más los débitos y menos las cobranzas de las operaciones locales de la jornada del bootstrap que el bootstrap todavía no incluye, y como stock disponible el del bootstrap menos lo vendido en esas mismas operaciones. Una operación local está incluida en el bootstrap cuando su secuencia es menor o igual que la secuencia procesada que informó ese bootstrap; esas NO DEBEN contarse. Las demás DEBEN contarse tengan o no resultado del servidor. Una venta «Rechazada» DEBE seguir contando en su jornada, cualquiera sea su secuencia. Un bootstrap sin secuencia procesada DEBE tratarse como si no incluyera ninguna operación local. Las operaciones de otra jornada NO DEBEN contarse. El bootstrap NO DEBE modificar los movimientos locales (`design.md` D1 y D2; D5 del 22a; D4 del 22b).
+
+#### Scenario: Segunda venta al mismo cliente
+- **GIVEN** un cliente con límite $200.000 y saldo $100.000 en el bootstrap, y una venta local de la jornada por $70.000 con $20.000 cobrados que el bootstrap no incluye
+- **WHEN** el vendedor arma otra venta para ese cliente
+- **THEN** el saldo considerado es $150.000 y el disponible $50.000
+- **Regla:** CRE-08; COB-04
+
+#### Scenario: Stock después de vender
+- **GIVEN** 63 botellas de Vino A en el bootstrap y una venta local de 15
+- **WHEN** el vendedor abre el producto en otra venta
+- **THEN** el disponible es 48 botellas
+- **Regla:** RUT-04; STK-04
+
+#### Scenario: Ventas de otra jornada
+- **GIVEN** ventas locales sin enviar de una jornada anterior en el mismo teléfono
+- **WHEN** se calcula el stock de la jornada actual
+- **THEN** esas ventas no cuentan
+- **Regla:** RUT-04
+
+#### Scenario: Venta ya enviada
+- **GIVEN** 63 botellas de Vino A en el bootstrap y una venta local de 15 que el servidor ya aceptó
+- **WHEN** el vendedor abre el producto en otra venta, sin haber actualizado los datos
+- **THEN** el disponible sigue siendo 48 botellas
+- **Regla:** RUT-04; CRE-08
+
+#### Scenario: Venta ya enviada, después de actualizar los datos
+- **GIVEN** una venta local de 15 botellas de Vino A con secuencia 7 que el servidor aceptó, y un bootstrap posterior con 48 botellas y secuencia procesada 7
+- **WHEN** el vendedor abre el producto en otra venta
+- **THEN** el disponible es 48 botellas, no 33
+- **Regla:** RUT-04; CRE-08; SYN-11
+
+#### Scenario: Respuesta del lote perdida
+- **GIVEN** una venta local de 15 botellas con secuencia 7 que el servidor procesó pero cuya respuesta no llegó, de modo que en el teléfono sigue «Sin enviar»
+- **WHEN** llega un bootstrap con 48 botellas y secuencia procesada 7
+- **THEN** el disponible es 48 botellas y la venta sigue «Sin enviar» hasta el reenvío
+- **Regla:** CRE-08; INV-06
+
+#### Scenario: Venta posterior a la foto
+- **GIVEN** un bootstrap con secuencia procesada 7 y dos ventas locales de la jornada con secuencias 7 y 8
+- **WHEN** se calcula el saldo del cliente
+- **THEN** solo cuenta la de secuencia 8
+- **Regla:** CRE-08
+
+#### Scenario: Venta rechazada
+- **GIVEN** una venta local de 15 botellas con secuencia 7 que el servidor rechazó, y un bootstrap con secuencia procesada 9
+- **WHEN** se calcula el stock de la jornada
+- **THEN** la venta rechazada sigue descontando sus 15 botellas
+- **Regla:** RUT-04; SYN-06; SYN-09
+
+#### Scenario: Bootstrap sin secuencia procesada
+- **GIVEN** un bootstrap descargado antes de este cambio, sin secuencia procesada, y una venta aceptada de la jornada
+- **WHEN** se calcula el stock
+- **THEN** la venta cuenta, como antes
+- **Regla:** CRE-08
+
+#### Scenario: Doble sincronización
+- **GIVEN** una venta aceptada e incluida en el bootstrap
+- **WHEN** se sincroniza otra vez y el servidor devuelve el mismo resultado
+- **THEN** el saldo y el stock locales no cambian
+- **Regla:** INV-06; SYN-02
+
+#### Scenario: El bootstrap no toca los movimientos
+- **GIVEN** tres movimientos locales de la jornada
+- **WHEN** se aplica un bootstrap con secuencia procesada
+- **THEN** los tres movimientos siguen igual en el teléfono
+- **Regla:** SYN-09; `02` §13.4
+
+### Requirement: Las operaciones locales no se borran hasta su resultado
+
+Una venta local, su cobranza, sus movimientos y su comando NO DEBEN borrarse por un bootstrap, por cerrar sesión, por el login de otro usuario, por el bloqueo del PIN de desbloqueo ni por recibir su resultado del servidor. Cada venta local DEBE tener un estado de envío: al confirmarla es «Sin enviar» y cambia a «Enviada», «Con observaciones» o «Rechazada» solo con el resultado del servidor; una venta «Rechazada» DEBE seguir visible en el teléfono (`design.md` D13 del 22a; `design.md` D3 del 22b).
+
+#### Scenario: Bootstrap con ventas sin enviar
+- **GIVEN** dos ventas sin enviar
+- **WHEN** el vendedor actualiza los datos
+- **THEN** las dos ventas, sus movimientos y sus comandos siguen igual
+- **Regla:** SYN-09; `02` §13.4
+
+#### Scenario: Bloqueo del PIN de desbloqueo
+- **GIVEN** una venta sin enviar
+- **WHEN** se superan los fallos del PIN de desbloqueo y la sesión local se bloquea
+- **THEN** la venta y su comando siguen en el teléfono
+- **Regla:** SEG-04
+
+#### Scenario: Resultado recibido
+- **GIVEN** una venta sin enviar con su cobranza
+- **WHEN** el servidor la acepta
+- **THEN** la venta queda «Enviada» y la venta, su cobranza, sus movimientos y su comando siguen en el teléfono
+- **Regla:** SYN-09
+
+#### Scenario: Venta rechazada visible
+- **GIVEN** una venta que el servidor rechazó
+- **WHEN** el vendedor abre «Ventas de hoy»
+- **THEN** la venta aparece como «Rechazada»
+- **Regla:** SYN-09; SYN-06
+
+### Requirement: Anular una venta local es una sola transacción
+
+Anular una venta en el teléfono DEBE escribir, en una sola transacción de la base local, la anulación (venta, motivo, observación, devolución, jornada, momento y `operation_id` propio), sus movimientos locales inversos y el comando `VENTA_ANULAR` en modo `OFFLINE` con la siguiente secuencia de la cola, y avanzar la última secuencia; si algo falla no DEBE quedar nada y la secuencia NO DEBE avanzar. Los movimientos inversos DEBEN ser: el ingreso de cada línea al stock en unidad base, el crédito del total en la cuenta del cliente y, si se devuelve lo cobrado, el débito del importe cobrado. Anular otra vez la misma venta NO DEBE crear otra anulación ni otro comando (`design.md` D4, D6).
+
+#### Scenario: Anulación local
+- **GIVEN** la venta V03-000142 a Kiosco La Esquina por $80.000 con 15 botellas de Vino A, sin cobro, confirmada en el teléfono con secuencia 7
+- **WHEN** el vendedor la anula con el motivo "Error de carga"
+- **THEN** quedan la anulación, un ingreso de 15 botellas, un crédito de $80.000 y el comando `VENTA_ANULAR` con secuencia 8, todo con el `operation_id` de la anulación
+- **Regla:** VTA-24; INV-01; SYN-01
+
+#### Scenario: Falla a mitad de la anulación
+- **GIVEN** una venta local de la jornada
+- **WHEN** la escritura del comando falla después de escribir los movimientos
+- **THEN** no queda la anulación, ningún movimiento ni el comando, y la última secuencia no avanza
+- **Regla:** INV-01
+
+#### Scenario: Doble toque
+- **GIVEN** una venta ya anulada en el teléfono
+- **WHEN** se confirma otra vez su anulación
+- **THEN** no se escribe nada nuevo y se muestra la anulación existente
+- **Regla:** INV-06; SYN-02
+
+#### Scenario: Anulación de una venta sin enviar
+- **GIVEN** una venta «Sin enviar» con secuencia 7
+- **WHEN** el vendedor la anula
+- **THEN** la anulación queda con secuencia 8, detrás de la venta, y las dos se envían en ese orden
+- **Regla:** SYN-03
+
+### Requirement: La anulación local cuenta en el saldo y el stock locales
+
+Los movimientos de una anulación local DEBEN contar en el saldo y el stock locales por la misma regla que una venta: desde que se confirma y hasta que un bootstrap con secuencia procesada mayor o igual que la suya la incluya. Una anulación «Rechazada» NO DEBE contar, salvo que su venta también esté «Rechazada»: entonces cuentan las dos y se compensan. Con devolución, el stock y el saldo locales DEBEN quedar como antes de la venta; sin devolución, el saldo DEBE diferir solo en lo cobrado (`design.md` D7).
+
+#### Scenario: Stock después de anular
+- **GIVEN** 63 botellas de Vino A en el bootstrap, una venta local de 15 y su anulación local
+- **WHEN** el vendedor abre el producto en otra venta
+- **THEN** el disponible es 63 botellas
+- **Regla:** RUT-04; INV-19; VTA-21
+
+#### Scenario: Crédito después de anular con devolución
+- **GIVEN** un cliente con límite $200.000 y saldo $100.000 en el bootstrap, una venta local de $70.000 con $20.000 cobrados y su anulación con devolución
+- **WHEN** se calcula su crédito
+- **THEN** el saldo considerado es $100.000 y el disponible $100.000
+- **Regla:** CRE-08; VTA-22; INV-19
+
+#### Scenario: Crédito después de anular sin devolución
+- **GIVEN** el mismo cliente y la misma venta, anulada sin devolución
+- **WHEN** se calcula su crédito
+- **THEN** el saldo considerado es $80.000: los $20.000 cobrados quedan a favor
+- **Regla:** CRE-08; VTA-22; INV-19
+
+#### Scenario: Venta incluida en el bootstrap y anulación pendiente
+- **GIVEN** una venta de 15 botellas con secuencia 7 aceptada, un bootstrap con 48 botellas y secuencia procesada 7, y su anulación local con secuencia 8 sin enviar
+- **WHEN** se calcula el stock
+- **THEN** el disponible es 63 botellas
+- **Regla:** CRE-08; RUT-04; SYN-11
+
+#### Scenario: Anulación incluida en el bootstrap
+- **GIVEN** la venta (secuencia 7) y su anulación (secuencia 8) aceptadas, y un bootstrap con 63 botellas y secuencia procesada 8
+- **WHEN** se calcula el stock
+- **THEN** el disponible es 63 botellas, no 78
+- **Regla:** CRE-08; INV-06
+
+#### Scenario: Anulación rechazada
+- **GIVEN** una venta aceptada de 15 botellas y su anulación rechazada con `VENTA_YA_ANULADA`, con 63 botellas en el bootstrap que ya incluye la venta y la anulación de administración
+- **WHEN** se calcula el stock
+- **THEN** la anulación rechazada no cuenta y el disponible es 63 botellas
+- **Regla:** SYN-06; CRE-08
+
+#### Scenario: Venta y anulación rechazadas
+- **GIVEN** una venta de 15 botellas rechazada y su anulación rechazada con `VENTA_INEXISTENTE`
+- **WHEN** se calcula el stock
+- **THEN** cuentan las dos y se compensan: el disponible es el del bootstrap
+- **Regla:** SYN-06; SYN-09; RUT-04
+
+#### Scenario: Doble sincronización
+- **GIVEN** una anulación aceptada e incluida en el bootstrap
+- **WHEN** se sincroniza otra vez y el servidor devuelve el mismo resultado
+- **THEN** el saldo y el stock locales no cambian
+- **Regla:** INV-06; SYN-02
+
+### Requirement: Registrar una cobranza local es una sola transacción
+
+Registrar una cobranza en el teléfono DEBE escribir, en una sola transacción de la base local, la cobranza (identificador, cliente, importe, medios, observación, jornada, momento, origen `INDEPENDIENTE`, estado «Sin enviar» y `operation_id` propio), un movimiento local de crédito por el importe en la cuenta del cliente y el comando `COBRANZA_REGISTRAR` en modo `OFFLINE` con la siguiente secuencia de la cola, y avanzar la última secuencia; si algo falla NO DEBE quedar nada y la secuencia NO DEBE avanzar. Confirmar otra vez la misma cobranza NO DEBE crear otra cobranza ni otro comando (`design.md` D1, D5).
+
+#### Scenario: Cobranza local
+- **GIVEN** Kiosco La Esquina en los datos del día y la última secuencia 7
+- **WHEN** el vendedor registra una cobranza de $50.000 con $30.000 en efectivo y $20.000 por transferencia n.º 0042
+- **THEN** quedan la cobranza «Sin enviar», un crédito de $50.000 al cliente y el comando `COBRANZA_REGISTRAR` con secuencia 8, todo con el `operation_id` de la cobranza
+- **Regla:** COB-01; COB-04; INV-01; SYN-01
+
+#### Scenario: Falla a mitad de la cobranza
+- **WHEN** la escritura del comando falla después de escribir la cobranza y el movimiento
+- **THEN** no queda la cobranza, ni el movimiento, ni el comando, y la última secuencia no avanza
+- **Regla:** INV-01
+
+#### Scenario: Doble toque
+- **GIVEN** una cobranza ya registrada en el teléfono
+- **WHEN** se confirma otra vez el mismo formulario
+- **THEN** no se escribe nada nuevo y se muestra la cobranza existente
+- **Regla:** INV-06; SYN-02
+
+#### Scenario: Cobranza después de una venta sin enviar
+- **GIVEN** una venta «Sin enviar» con secuencia 7
+- **WHEN** el vendedor cobra al mismo cliente
+- **THEN** la cobranza queda con secuencia 8 y las dos se envían en ese orden
+- **Regla:** SYN-03
+
+### Requirement: La cobranza local cuenta en el saldo local
+
+El crédito de una cobranza local DEBE contar en el saldo local del cliente por la misma regla que una venta: desde que se confirma y hasta que un bootstrap con secuencia procesada mayor o igual que la suya la incluya. Una cobranza independiente «Rechazada» NO DEBE contar. El cobro en el momento de una venta DEBE seguir la regla de su venta, sin cambios (`design.md` D6).
+
+#### Scenario: Crédito después de cobrar
+- **GIVEN** Kiosco La Esquina con límite $200.000 y saldo $150.000 en el bootstrap
+- **WHEN** el vendedor le cobra $50.000 en el teléfono
+- **THEN** el saldo considerado es $100.000 y el disponible $100.000
+- **Regla:** CRE-08; CRE-01; COB-04
+
+#### Scenario: Cobranza incluida en el bootstrap
+- **GIVEN** la cobranza de $50.000 con secuencia 8 aceptada y un bootstrap con saldo $100.000 y secuencia procesada 8
+- **WHEN** se calcula el saldo
+- **THEN** el saldo considerado es $100.000, no $50.000
+- **Regla:** CRE-08; INV-06; SYN-11
+
+#### Scenario: Cobranza pendiente después de actualizar los datos
+- **GIVEN** un bootstrap con saldo $150.000 y secuencia procesada 7, y la cobranza de $50.000 con secuencia 8 sin enviar
+- **WHEN** se calcula el saldo
+- **THEN** el saldo considerado es $100.000
+- **Regla:** CRE-08; SYN-11
+
+#### Scenario: Cobranza rechazada
+- **GIVEN** la cobranza de $50.000 rechazada por el servidor y el saldo del bootstrap en $150.000
+- **WHEN** se calcula el saldo
+- **THEN** la cobranza no cuenta y el saldo considerado es $150.000
+- **Regla:** CRE-08; SYN-06; SYN-09
+
+#### Scenario: El cobro de una venta rechazada sigue con su venta
+- **GIVEN** una venta rechazada con su cobro en el momento
+- **WHEN** se calcula el saldo
+- **THEN** la venta y su cobro siguen contando completos, como hasta ahora
+- **Regla:** CRE-08; ADR-065
+
+#### Scenario: Saldo a favor
+- **GIVEN** Kiosco La Esquina debe $150.000 en el bootstrap
+- **WHEN** el vendedor le cobra $160.000
+- **THEN** el saldo considerado es −$10.000: $10.000 a favor del cliente
+- **Regla:** COB-01; CC-04
+
+#### Scenario: Doble sincronización
+- **GIVEN** una cobranza aceptada e incluida en el bootstrap
+- **WHEN** se sincroniza otra vez y el servidor devuelve el mismo resultado
+- **THEN** el saldo local no cambia
+- **Regla:** INV-06
+
+### Requirement: La venta rechazada resuelta deja de contar en lo local
+
+Una venta «Rechazada» sigue contando completa en el stock y el saldo locales (CRE-08) hasta que termina la jornada o hasta que un bootstrap posterior trae su `operation_id` en `rechazos_resueltos`; desde entonces NO DEBE contar más (ni su stock, ni su débito, ni su cobro en el momento). La operación local NO DEBE borrarse: solo deja de contar (SYN-09). El teléfono NO DEBE ofrecer anular una venta «Rechazada» (ADR-066), resuelta o no (`design.md` D8).
+
+#### Scenario: Corrección cargada en la oficina
+- **GIVEN** la venta rechazada de Juan de 12 latas, que el teléfono descuenta del stock local
+- **AND** la Supervisora cargó la venta con conexión y resolvió el rechazo
+- **WHEN** el teléfono actualiza los datos
+- **THEN** el stock local muestra lo que trae el bootstrap, sin restar otra vez las 12 latas
+- **AND** la venta sigue guardada como «Rechazada»
+- **Regla:** CRE-08; SYN-09; RUT-04
+
+#### Scenario: Rechazo todavía pendiente
+- **GIVEN** la venta rechazada sin resolver
+- **WHEN** el teléfono actualiza los datos
+- **THEN** la sigue contando completa
+- **Regla:** CRE-08
+
+#### Scenario: Falla al aplicar el bootstrap
+- **GIVEN** que aplicar el bootstrap falla a mitad de camino
+- **WHEN** se revierte
+- **THEN** la lista de rechazos resueltos anterior y los datos anteriores siguen iguales
+- **Regla:** INV-01
+
+#### Scenario: Doble actualización
+- **WHEN** el teléfono actualiza los datos dos veces con el mismo rechazo resuelto
+- **THEN** la venta deja de contar una sola vez
+- **Regla:** INV-06; CRE-08

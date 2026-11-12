@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 | --- | --- |
-| Estado | Vigente |
+| Estado | Vigente (matizado por ADR-039, 2026-09-30: el promedio es nulo hasta el primer ingreso con costo) |
 | Fecha | 2026-09-16 |
 | Referenciado en | `docs/00` §12, `docs/01` §6.2, `docs/03` §7 |
 

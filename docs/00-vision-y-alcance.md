@@ -80,12 +80,13 @@ Estos valores son **configuración de la primera organización**, no reglas del 
 
 | Tema | Organización inicial | El sistema debe soportar además |
 | --- | --- | --- |
-| IVA en precios | Listas sin IVA; la venta se registra a precio neto (modo A) | Modo B (neto + IVA en la venta) y modo C (precios con IVA incluido) |
-| IVA al facturar | Elegible por factura: a cargo del cliente o absorbido, con valor por defecto por organización y cliente | — |
+| Condición frente al IVA | Monotributo: no recupera el IVA de compra, así que el IVA pagado es costo (CST-06, ADR-045) | Responsable inscripto (computa crédito fiscal) y exento |
+| IVA en precios | Ventas a precio final, sin IVA discriminado (modo A); Factura C al facturar | Modo B (neto + IVA en la venta) y modo C (precios con IVA incluido), solo para un responsable inscripto |
+| IVA al facturar | No aplica: un monotributista no discrimina IVA y no elige modalidad | Elegible por factura (a cargo del cliente o absorbido, con valor por defecto por organización y cliente), solo para un responsable inscripto (ADR-009, ADR-045) |
 | Impuestos internos | No aplica | Queda fuera del alcance hasta que otra organización lo requiera |
 | Facturación fiscal | Módulo separado; hoy la venta genera una nota de venta sin validez fiscal | Integración fiscal electrónica en una etapa posterior |
 | Precio de unidad suelta | Proporcional al precio de la caja | — |
-| Carga de costo | Por caja o por unidad, según cómo informe cada proveedor | Cualquier presentación de compra |
+| Carga de costo | Por caja o por unidad, según cómo informe cada proveedor; el valor cargado es el pagado (con IVA incluido, que es costo) | Cualquier presentación de compra; un responsable inscripto puede indicar que el valor incluye IVA y el sistema lo descuenta |
 | Proveedores por producto | Uno | Modelo con proveedor principal; múltiples proveedores como evolución |
 | Costeo | Promedio ponderado móvil (ADR-002) | FIFO como estrategia futura desde fecha de corte |
 | Cuenta corriente | General: la cobranza reduce el saldo global | Imputación por operación (etapa de producto comercial) |
@@ -109,19 +110,19 @@ Etapa 1 — Ruta sin papel ─────────┬──> Etapa 2 — Cir
 | Capacidad | Incluye | No incluye (etapa posterior) |
 | --- | --- | --- |
 | Base técnica | Repositorio, entornos, Docker, CI, migraciones, logging estructurado, backups automáticos con restauración probada, HTTPS | Monitoreo avanzado |
-| Organización y seguridad | Organización con configuración, usuarios, roles estándar, permisos granulares, auditoría de operaciones sensibles, dispositivos registrados y revocables, desbloqueo local con PIN | Onboarding de nuevas organizaciones, roles personalizados desde UI |
+| Organización y seguridad | Organización con configuración, usuarios, roles estándar, permisos granulares, auditoría de operaciones sensibles, dispositivos registrados y revocables, desbloqueo local con PIN; administración de usuarios desde la interfaz (alta, edición, baja y reactivación, cambio de rol, contraseña y tope de descuento propio), roles personalizados (crear, renombrar, dar de baja y reactivar) y asignación de clientes a vendedores (change 20b, ADR-060) | Onboarding de nuevas organizaciones |
 | Pipeline de comandos | Comandos idempotentes con UUID generado en cliente, usado tanto online como offline | — |
 | Catálogo | Productos, categorías, marcas, presentaciones con unidades por caja, presentaciones de compra y de venta, alícuota de IVA por producto, proveedor del producto | Códigos de barras, fotos, catálogo para clientes |
 | Clientes | Ficha, lista asignada, límite y política de crédito (ADR-003), estado | Segmentos para promociones, agenda de visitas |
 | Proveedores | Ficha, cuenta corriente, compras a crédito y pagos | Vencimientos, notas de crédito/débito de proveedor |
-| Importación inicial | Productos, clientes, proveedores y listas desde planillas (CSV/Excel) | Importadores genéricos para otras organizaciones |
+| Importación inicial | Productos, clientes, proveedores, costos, stock y saldos iniciales (change 10) desde planillas (CSV/Excel); las listas de precios se importan desde el change 13 | Importadores genéricos para otras organizaciones |
 | Puesta en marcha | Stock inicial valorizado por ubicación, saldos iniciales de clientes y proveedores | — |
 | Costos | Carga de costo del proveedor por caja o unidad con vigencia; conversión a unidad base; costo promedio ponderado actualizado por compras | FIFO, fletes capitalizables |
 | Compras | Registro de compra, ingreso de stock, actualización de costo promedio, deuda con proveedor, anulación por reversión | Órdenes de compra, recepción parcial |
 | Precios | Listas múltiples versionadas con vigencia, margen (markup o margen bruto) con precedencia, redondeo configurable, generación de versión borrador desde nuevos costos, publicación, uso de lista anterior con permiso | Programación masiva, duplicación de listas con reglas porcentuales |
 | Stock | Stock por ubicación en unidad base, visualización en cajas + unidades, transferencias, ajustes con motivo, kardex | Recuento físico guiado, alertas de stock bajo |
 | Ruta | Carga del vehículo, toma de ubicación por jornada, rendición con conteo, diferencias como ajustes auditados, cierre y liberación | Rendición de caja completa, rutas y geolocalización |
-| Venta | Pedido en cajas y unidades, precio desde lista, descuento manual controlado por permiso y tope, una o dos reglas de descuento por volumen, control de crédito, pago total/parcial/cuenta corriente con varios medios, confirmación atómica, costo congelado, anulación por reversión | Fidelización por historial, devoluciones parciales, bonificación en unidades |
+| Venta | Pedido en cajas y unidades, precio desde lista, descuento manual controlado por permiso y tope (un porcentaje general de la venta y, opcionalmente, uno propio por línea), reglas de descuento por volumen (cajas equivalentes, unidades base o importe bruto) sobre toda la venta o sobre productos, categorías o marcas, con prioridad, acumulables y vigencia, control de crédito, pago total/parcial/cuenta corriente con varios medios, confirmación atómica, costo congelado, anulación por reversión | Fidelización por historial, promociones por cliente o segmento, precio especial, bonificación en unidades, devoluciones parciales |
 | Offline | Bootstrap completo al abrir jornada, base local, cola de comandos, venta y cobranza sin señal, sincronización idempotente, marcas de revisión y pantalla de conflictos | Bootstrap incremental (queda previsto en el contrato) |
 | Nota de venta | Comprobante interno sin validez fiscal, numeración por dispositivo, generación en el teléfono, compartir con Web Share API y descarga como respaldo | Plantillas personalizables por organización |
 | Cuenta corriente y cobranzas | Libro de movimientos del cliente, cobranzas independientes con varios medios, estado de cuenta en pantalla | Estado de cuenta en PDF, antigüedad de deuda, imputación por operación |
@@ -131,7 +132,7 @@ Etapa 1 — Ruta sin papel ─────────┬──> Etapa 2 — Cir
 
 - Devoluciones totales y parciales con reingreso de stock según estado.
 - Notas de crédito y débito de clientes; ajustes de cuenta corriente con permiso y motivo.
-- Fidelización por historial de compras y ampliación del motor de descuentos (reglas por categoría, marca, cliente, promociones temporales, acumulabilidad completa).
+- Fidelización por historial de compras y ampliación del motor de descuentos (reglas por cliente o segmento, promociones por cliente, precio especial, bonificación en unidades, margen mínimo, tramos escalonados y combinaciones de condiciones). Las reglas por categoría y marca, la vigencia y la acumulabilidad ya son de la etapa 1 (`01` DSC-02 a DSC-05).
 - Autorización remota de excepciones (crédito, descuentos).
 - Antigüedad de deuda y política de bloqueo por deuda vencida.
 - Vencimientos y calendario de pagos a proveedores; notas de crédito y débito de proveedor.
@@ -158,12 +159,11 @@ Hasta que este módulo esté en producción, la organización inicial factura po
 - Alta y onboarding de nuevas organizaciones; configuración de negocio desde la interfaz.
 - Modos impositivos B y C operativos (el modelo existe desde la etapa 1).
 - Imputación de cobranzas por operación como alternativa configurable.
-- Roles personalizados desde la interfaz.
 - Importadores genéricos y migración de saldos.
-- Bootstrap incremental y filtrado de datos offline por vendedor o zona.
+- Bootstrap incremental y filtrado de datos offline por zona.
 - Estrategia de costeo FIFO seleccionable desde fecha de corte.
 - Múltiples proveedores por producto.
-- Documentación de usuario y ayuda contextual.
+- Documentación de usuario completa (manual, guías de tareas, búsqueda). La **ayuda contextual** —el botón "(?)" junto a los campos con reglas no obvias y las páginas "Ver más" de temas puntuales— se adelantó a la etapa 1 con el change 16b, y cada change que trae funcionalidad no obvia suma la suya (ADR-051).
 
 ### 6.5 Evolución (sin etapa asignada)
 
@@ -214,6 +214,8 @@ La etapa 1 se considera terminada cuando la siguiente demostración funciona de 
 12. Se restaura un backup en un entorno separado y los datos coinciden.
 
 Además, en todo momento: un usuario de otra organización no puede ver ni modificar datos ajenos, y ningún usuario puede ejecutar desde la API una acción que su rol no permite.
+
+**Precisiones de la verificación (change 28, ADR-073).** La suite de Playwright cubre estos criterios contra el compose de producción; el 12 lo cubren las pruebas de restauración de `backend/tests/infra`. En los criterios 1 y 3, importar y publicar listas lo hace `Administrador` (`IMPORTAR_DATOS`, `PUBLICAR_LISTAS`), no Gestión. En el criterio 4, con la jornada abierta no se transfiere al vehículo (STK-09): se carga el stock antes de abrirla. En el criterio 9, la anulación la hace un supervisor (`LIBERAR_UBICACION` por VTA-21). Los criterios 4 a 8 se comprobaron además a mano en un teléfono real con modo avión (2026-11-11).
 
 ## 10. Supuestos y restricciones
 

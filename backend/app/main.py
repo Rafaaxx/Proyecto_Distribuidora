@@ -1,15 +1,119 @@
 """Punto de entrada de la aplicación FastAPI (`docs/02-arquitectura.md` §11)."""
 
-from fastapi import FastAPI
+import os
+from typing import Any
+
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from app.api_v1 import dependencias, sistema
 from app.api_v1 import router as api_v1_router
-from app.api_v1 import sistema
 from app.core.access_log_middleware import AccessLogMiddleware
 from app.core.config import Settings
-from app.core.db import crear_engine
+from app.core.db import crear_engine, crear_session_factory
+from app.core.errors import DomainError
 from app.core.logging import configurar_logging
 from app.core.request_id_middleware import RequestIdMiddleware
+
+# Registro de comandos. Desde la enmienda de D9 (2026-09-29) `clientes/api.py`
+# también importa `clientes.commands` (mismo criterio que `catalogo`/
+# `proveedores`, cada una con su ruta de escritura dedicada); este import
+# queda igual de explícito para que `Base.metadata`/el registro de tipos no
+# dependan de que exista un `api.py` (mismo criterio que las líneas de abajo).
+from app.modules.clientes import commands as clientes_commands  # noqa: F401
+
+# Registro de modelos. Lo importa `clientes/api.py` al armar el router de
+# `app.api_v1`, pero se deja explícito para que `Base.metadata` conozca la
+# tabla sin depender de que exista un `api.py` (mismo criterio que
+# `catalogo/api.py` y `proveedores/api.py` con los suyos).
+from app.modules.clientes import models as clientes_models  # noqa: F401
+
+# Registro de comandos y de modelos de `cobranzas` (change 17): explícito para que el handler
+# `COBRANZA_REGISTRAR` quede registrado y `Base.metadata` conozca las tablas sin depender de que
+# se cree la aplicación por el router.
+from app.modules.cobranzas import commands as cobranzas_commands  # noqa: F401
+from app.modules.cobranzas import models as cobranzas_models  # noqa: F401
+
+# Registro de comandos de `configuracion` (change 17b): `MEDIO_PAGO_CREAR` y
+# `MEDIO_PAGO_MODIFICAR` quedan registrados aunque se cree la aplicación sin pasar por el router.
+from app.modules.configuracion import commands as configuracion_commands  # noqa: F401
+
+# Registro de modelos de `costeo` y `stock` (change 09): explícito para que
+# `Base.metadata` conozca las tablas sin depender de que existan sus `api.py`
+# (grupo 7) ni sus comandos (grupo 6).
+from app.modules.costeo import models as costeo_models  # noqa: F401
+
+# Registro de comandos y de modelos de `cuentas_corrientes` (change 08): mismo
+# criterio que `clientes` arriba, explícito para no depender de que exista un
+# `api.py` (grupo 6).
+from app.modules.cuentas_corrientes import commands as cuentas_corrientes_commands  # noqa: F401
+from app.modules.cuentas_corrientes import models as cuentas_corrientes_models  # noqa: F401
+
+# Registro de comandos y de modelos de `descuentos` (change 16): explícito para que los handlers
+# `REGLA_DESCUENTO_*` queden registrados aunque se cree la aplicación sin pasar por el router.
+from app.modules.descuentos import commands as descuentos_commands  # noqa: F401
+from app.modules.descuentos import models as descuentos_models  # noqa: F401
+
+# Registro de comandos y de modelos de `importacion` (change 10): explícito para que
+# `Base.metadata` y el registro de tipos no dependan de que exista su `api.py`.
+from app.modules.importacion import commands as importacion_commands  # noqa: F401
+from app.modules.importacion import models as importacion_models  # noqa: F401
+
+# Registro de modelos de `precios` (change 13): `cliente` y `configuracion_organizacion`
+# tienen una FK compuesta a `lista_precio`, así que `Base.metadata` tiene que conocer la
+# tabla aunque todavía no exista un `api.py` de `precios`.
+from app.modules.precios import commands as precios_commands  # noqa: F401
+from app.modules.precios import models as precios_models  # noqa: F401
+from app.modules.stock import commands as stock_commands  # noqa: F401
+from app.modules.stock import jornadas_commands as stock_jornadas_commands  # noqa: F401
+from app.modules.stock import models as stock_models  # noqa: F401
+from app.modules.stock import rendicion_commands as stock_rendicion_commands  # noqa: F401
+
+# Registro de modelos, del verificador de uso de presentaciones de `ventas` (change 18a, D18:
+# importar `ventas.service` registra `venta_linea` en el puerto del catalogo, INV-18) y del
+# handler `VENTA_CONFIRMAR` (grupo 7).
+from app.modules.ventas import commands as ventas_commands  # noqa: F401
+from app.modules.ventas import models as ventas_models  # noqa: F401
+from app.modules.ventas import service as ventas_service  # noqa: F401
+
+
+def _domain_error_a_problem_details(request: Request, exc: Exception) -> JSONResponse:
+    """Traduce cualquier `DomainError` a Problem Details (RFC 9457, `02`
+    §11): `codigo` es el campo de dominio estable (`PERMISO_REQUERIDO`,
+    etc.); nunca se filtra el detalle interno de la excepción más allá del
+    mensaje ya pensado para el usuario (`02` §17/§18: ni contraseñas, ni
+    PIN, ni tokens aparecen en un mensaje de error)."""
+    assert isinstance(exc, DomainError)
+    content: dict[str, Any] = {
+        "type": "about:blank",
+        "title": exc.mensaje,
+        "status": exc.status_http,
+        "codigo": exc.codigo,
+        "instance": str(request.url.path),
+    }
+    # contrato-api.md P9 (aprobado 2026-09-24): errores puntuales de fila
+    # (p.ej. `COSTO_INFORMAR`) agregan `fila` vía `DomainError.extension`.
+    if exc.extension:
+        content.update(exc.extension)
+    return JSONResponse(
+        status_code=exc.status_http,
+        media_type="application/problem+json",
+        content=content,
+    )
+
+
+def _validacion_a_422_sin_valores(request: Request, exc: Exception) -> JSONResponse:
+    """422 de FastAPI sin `input` ni `ctx` (change 18b, `design.md` D2 punto 2, `02` §17): un
+    cuerpo inválido nunca devuelve el valor recibido (PIN, contraseña, etc.). Conserva la forma
+    `detail: [{type, loc, msg}]` que ya consume el frontend."""
+    assert isinstance(exc, RequestValidationError)
+    detalle = [
+        {"type": error["type"], "loc": list(error["loc"]), "msg": error["msg"]}
+        for error in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": detalle})
 
 
 def crear_app(settings: Settings) -> FastAPI:
@@ -20,11 +124,27 @@ def crear_app(settings: Settings) -> FastAPI:
     """
     configurar_logging(settings.log_level)
 
-    app = FastAPI(title="Distribuidora API", version=settings.app_version)
+    # En producción no se publican `/docs`, `/redoc` ni `/openapi.json` (change 28, D8; `02` §18):
+    # Caddy ya no los deja pasar, pero el backend tampoco los sirve (defensa extra). Fuera de
+    # producción siguen: la generación de tipos del cliente lee `openapi.json`.
+    en_produccion = settings.environment == "production"
+    app = FastAPI(
+        title="Distribuidora API",
+        version=settings.app_version,
+        docs_url=None if en_produccion else "/docs",
+        redoc_url=None if en_produccion else "/redoc",
+        openapi_url=None if en_produccion else "/openapi.json",
+    )
 
     engine = crear_engine(settings.database_url)
+    session_factory = crear_session_factory(engine)
     app.dependency_overrides[sistema._get_engine] = lambda: engine
     app.dependency_overrides[sistema._get_settings] = lambda: settings
+    app.dependency_overrides[dependencias._get_settings] = lambda: settings
+    app.dependency_overrides[dependencias._get_session_factory] = lambda: session_factory
+
+    app.add_exception_handler(DomainError, _domain_error_a_problem_details)
+    app.add_exception_handler(RequestValidationError, _validacion_a_422_sin_valores)
 
     # El orden de agregado importa: Starlette envuelve en orden inverso, así
     # que el último agregado queda más externo. RequestIdMiddleware debe
@@ -51,4 +171,9 @@ app: FastAPI | None
 try:
     app = crear_app_desde_entorno()
 except ValidationError:
+    # Fuera de producción se tolera (pruebas, generación del OpenAPI, import-linter importan este
+    # módulo sin variables de entorno). En producción una configuración inválida no se silencia:
+    # el proceso debe caer con el error que nombra la variable (change 27a, D6).
+    if os.environ.get("ENVIRONMENT") == "production":
+        raise
     app = None

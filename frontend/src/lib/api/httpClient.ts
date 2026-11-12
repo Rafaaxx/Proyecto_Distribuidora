@@ -1,0 +1,158 @@
+import { fijarAccessToken, limpiarAccessToken, obtenerAccessToken, sesionTerminada } from '../auth/tokenStore'
+import { obtenerOGenerarDispositivoId } from '../dispositivo/dispositivoId'
+import { conCandado } from '../locks'
+import { generarOperationId } from './operationId'
+
+/**
+ * Cliente HTTP del área `/admin` sobre la API (`docs/02-arquitectura.md`
+ * §12.1, ADR-017, tarea 13.3).
+ *
+ * Adjunta el access token en memoria (`Authorization: Bearer`) y envía
+ * siempre `credentials: 'include'` para que el navegador mande la cookie
+ * `HttpOnly` del refresh token, que este módulo nunca lee ni necesita leer.
+ *
+ * Ante un 401 (access token vencido o ausente), intenta una única
+ * renovación con `/auth/refresh` y reintenta la petición original una sola
+ * vez con el token nuevo. Si varias peticiones fallan a la vez, comparten
+ * la misma renovación en vuelo (`renovacionEnCurso`): la segunda y
+ * siguientes esperan la misma promesa en vez de disparar su propio
+ * `/auth/refresh`.
+ *
+ * Una renovación rechazada es un corte, no un fallo transitorio (tarea
+ * 11.2, **B1**): desde ese momento el backend ya dijo que la sesión no
+ * existe, así que los 401 siguientes se devuelven tal cual sin volver a
+ * negociar. Sin este corte, cada 401 de cada consulta --y cada reintento
+ * de cada consulta-- abriría su propio `POST /auth/refresh` con el mismo
+ * resultado, y `/admin` quedaría golpeando el servidor sin fin en lugar de
+ * ofrecer "Iniciar sesión".
+ *
+ * Toda escritura (cualquier método distinto de `GET`/`HEAD`) recibe un
+ * encabezado `Operation-Id` (UUIDv7) generado una sola vez por petición y
+ * reutilizado si hay que reintentarla tras renovar el token, para que el
+ * reintento no cuente como una operación distinta ante el bus de comandos
+ * (`openspec/changes/04-pipeline-comandos/design.md` D4, D7 -- tarea 13.1
+ * y 13.2). Quien llama puede fijar su propio `Operation-Id`; en ese caso no
+ * se lo pisa.
+ */
+
+const BASE_URL = '/api/v1'
+
+const METODOS_DE_LECTURA = new Set(['GET', 'HEAD'])
+
+interface RespuestaTokenRenovado {
+  access_token: string
+}
+
+function esEscritura(metodo: string | undefined): boolean {
+  return !METODOS_DE_LECTURA.has((metodo ?? 'GET').toUpperCase())
+}
+
+/**
+ * Fija el `RequestInit` con su `Operation-Id` definitivo (uno nuevo si es
+ * una escritura sin encabezado propio; ninguno si es lectura) para que
+ * ambos intentos de `apiFetch` (el original y el reintento tras renovar el
+ * token) usen exactamente el mismo valor.
+ */
+function conOperationIdFijo(init: RequestInit): RequestInit {
+  const headers = new Headers(init.headers)
+  if (esEscritura(init.method) && !headers.has('Operation-Id')) {
+    headers.set('Operation-Id', generarOperationId())
+  }
+  return { ...init, headers }
+}
+
+const CANDADO_DE_RENOVACION = 'distribuidora:renovacion'
+
+let renovacionEnCurso: Promise<string | null> | null = null
+
+async function renovarAccessToken(): Promise<string | null> {
+  // La sesión ya terminó (el backend rechazó una renovación anterior):
+  // negociar otra vez solo produce otro rechazo. Se devuelve `null` para
+  // que `apiFetch` devuelva el 401 que ya tiene y deje de tocar la red.
+  if (sesionTerminada()) {
+    return null
+  }
+
+  return renovarCompartida()
+}
+
+/** Una sola renovación en vuelo; no consulta `sesionTerminada()` (la pide quien llama). */
+async function renovarCompartida(): Promise<string | null> {
+  if (renovacionEnCurso) {
+    return renovacionEnCurso
+  }
+
+  // Web Lock entre pestañas (change 22b, D11 = A; `02` §12.1): el refresh token rota en cada uso y
+  // reusar uno rotado revoca la familia, así que dos pestañas renuevan una después de la otra. La
+  // cookie se lee al enviar `/auth/refresh`, ya dentro del candado: la pestaña que espera manda la
+  // que dejó la anterior. Sin Web Locks queda como antes (una renovación en vuelo por pestaña).
+  renovacionEnCurso = conCandado(CANDADO_DE_RENOVACION, async () => {
+    const dispositivoId = await obtenerOGenerarDispositivoId()
+    const respuesta = await fetch(`${BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dispositivo_id: dispositivoId }),
+    })
+
+    if (!respuesta.ok) {
+      limpiarAccessToken()
+      return null
+    }
+
+    const datos = (await respuesta.json()) as RespuestaTokenRenovado
+    fijarAccessToken(datos.access_token)
+    return datos.access_token
+  })
+
+  try {
+    return await renovacionEnCurso
+  } finally {
+    renovacionEnCurso = null
+  }
+}
+
+export type ResultadoRenovacion = 'renovada' | 'rechazada' | 'sin_red'
+
+/**
+ * Renueva el access token con el refresh token a pedido (change 21, `design.md` D14): `/ruta` la
+ * llama al desbloquear con el PIN y con conexión. A diferencia de `apiFetch`, la hace aunque la
+ * sesión figure terminada, y distingue el rechazo (hay que iniciar sesión) del corte de red
+ * (se sigue con los datos locales).
+ */
+export async function renovarSesion(): Promise<ResultadoRenovacion> {
+  try {
+    const token = await renovarCompartida()
+    return token ? 'renovada' : 'rechazada'
+  } catch {
+    return 'sin_red'
+  }
+}
+
+function construirPeticion(path: string, init: RequestInit, token: string | null): [string, RequestInit] {
+  const headers = new Headers(init.headers)
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
+  return [`${BASE_URL}${path}`, { ...init, headers, credentials: 'include' }]
+}
+
+/**
+ * Ejecuta una petición autenticada contra la API, renovando el access
+ * token una sola vez si hace falta.
+ */
+export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const initConOperationId = conOperationIdFijo(init)
+  const [url, opciones] = construirPeticion(path, initConOperationId, obtenerAccessToken())
+  let respuesta = await fetch(url, opciones)
+
+  if (respuesta.status === 401) {
+    const tokenNuevo = await renovarAccessToken()
+    if (tokenNuevo) {
+      const [urlReintento, opcionesReintento] = construirPeticion(path, initConOperationId, tokenNuevo)
+      respuesta = await fetch(urlReintento, opcionesReintento)
+    }
+  }
+
+  return respuesta
+}

@@ -75,36 +75,43 @@ La columna **Etapa** indica cuándo se implementa la regla. Las reglas marcadas 
 | --- | --- | --- | --- |
 | Moneda | Código ISO | ARS | 1 |
 | Zona horaria | IANA | America/Argentina/Mendoza | 1 |
-| Modo impositivo | A / B / C | A | 1 (B y C: 4) |
-| Alícuotas de IVA disponibles | Lista | 21%, 10,5%, 0% | 1 |
-| Modalidad de IVA por defecto al facturar | CLIENTE / ABSORBIDO | A definir al configurar | Facturación |
-| Lista de precios por defecto | Lista | General | 1 |
-| Política de crédito por defecto | ADVERTIR / AUTORIZAR / BLOQUEAR | AUTORIZAR | 1 |
-| Tolerancia offline de crédito | Importe o porcentaje del límite | A definir al configurar | 1 |
+| Condición frente al IVA | RESPONSABLE_INSCRIPTO / MONOTRIBUTO / EXENTO | MONOTRIBUTO (ADR-045) | 1 |
+| Modo impositivo | A / B / C (solo A si la condición no es RESPONSABLE_INSCRIPTO) | A | 1 (B y C: 4) |
+| Alícuotas de IVA disponibles | Lista; nombre y porcentaje únicos en la organización; el porcentaje (de 0 a menos de 100 %) no cambia una vez creada; se dan de baja y se reactivan, nunca se borran; no se da de baja una que use un producto activo ni la última activa; la administra `ADMIN_CONFIGURACION` con `ALICUOTA_CREAR` y `ALICUOTA_MODIFICAR` (ADR-061) | 21%, 10,5%, 0% | 1 |
+| Modalidad de IVA por defecto al facturar | CLIENTE / ABSORBIDO (solo si la condición es RESPONSABLE_INSCRIPTO; sin definir en otro caso) | No aplica (monotributo) | Facturación |
+| Lista de precios por defecto | Lista | **Sin definir**: no se siembra ninguna lista; un usuario con `ADMIN_CONFIGURACION` la elige entre las activas con `LISTA_PRECIO_PREDETERMINADA_DEFINIR` (ADR-047) | 1 |
+| Política de crédito por defecto | ADVERTIR / AUTORIZAR / BLOQUEAR; la define `CREDITO_ORGANIZACION_CONFIGURAR` (`ADMIN_CONFIGURACION`) | AUTORIZAR | 1 |
+| Tolerancia offline de crédito | Importe o porcentaje del límite (el porcentaje con dos decimales, `5.00` = 5 %, se aplica sobre el límite y se redondea a centavos, ADR-032, ADR-055); sin tolerancia en el cliente ni en la organización, la tolerancia es cero | A definir al configurar | 1 |
 | Stock negativo online | Bloqueado salvo permiso | Bloqueado | 1 |
 | Descuento manual | Habilitado / deshabilitado | Habilitado | 1 |
-| Motivo obligatorio en descuento manual | Sí / no | A definir | 1 |
+| Motivo obligatorio en descuento manual | Sí / no | A definir; mientras esté sin definir, el motivo no es obligatorio. Lo define `DESCUENTO_MANUAL_CONFIGURAR` (`ADMIN_CONFIGURACION`), junto con la habilitación (ADR-055) | 1 |
 | Motivo obligatorio al usar lista no asignada o versión anterior | Sí / no | Sí | 1 |
-| Redondeo por defecto | Múltiplo y dirección | A definir | 1 |
+| Desvío máximo del reloj del dispositivo en operaciones con conexión | Segundos | 300 si la organización no lo define (aprobado el 2026-10-17, ADR-054) | 1 |
+| Redondeo por defecto | Múltiplo y dirección, los dos o ninguno, con el dominio de PRC-01 y PRC-14; lo define `REDONDEO_POR_DEFECTO_DEFINIR` (`ADMIN_CONFIGURACION`, solo con conexión, auditado); se lee con `ADMIN_CONFIGURACION` o `GESTIONAR_LISTAS` (ADR-061) | Sin definir | 1 |*solo precarga el formulario de una lista nueva cuando está definido; sin definir, el formulario empieza vacío; no cambia las listas existentes; la lista siempre tiene su propio redondeo (PRC-01)* |
 | Venta a consumidor final genérico | Sí / no | A definir | 1 |
 | Estado de facturación inicial por defecto | NO_REQUIERE / PENDIENTE | NO_REQUIERE | 1 |
-| Medios de pago | Lista con indicador de referencia obligatoria | Efectivo, transferencia, cheque, billetera, tarjeta | 1 |
+| Medios de pago | Lista con indicador de referencia obligatoria; nombre único en la organización sin distinguir mayúsculas; se dan de baja y se reactivan, nunca se borran, y siempre queda al menos uno activo (ADR-053) | Efectivo, transferencia (con referencia), cheque (con referencia), billetera, tarjeta (con referencia) | 1 |
+| Mostrar el saldo en la nota de venta | Sí / no; lo define `NOTA_VENTA_CONFIGURAR` (`ADMIN_CONFIGURACION`, solo con conexión, auditado) | No | 1 |
+| Domicilio de la organización en la nota | Texto opcional, hasta 200 caracteres; vacío = nulo; mismo comando | Sin cargar | 1 |
+| Teléfono de la organización en la nota | Texto opcional, hasta 50 caracteres; vacío = nulo; mismo comando | Sin cargar | 1 |
+| Nombre de la organización | Obligatorio, recortado, hasta 200 caracteres; lo define `ORGANIZACION_DATOS_CONFIGURAR` (`ADMIN_CONFIGURACION`, solo con conexión, auditado); se imprime en el encabezado de la nota | El sembrado | 1 |
+| CUIT de la organización | 11 dígitos, opcional; vacío = nulo; mismo comando; se imprime en el encabezado de la nota si está cargado | Sin cargar (nulo) | 1 |
 | Motivos de ajuste de stock | Lista | Rotura, vencimiento, muestra, consumo interno, diferencia de inventario, otro | 1 |
-| Intentos fallidos de PIN antes de bloquear | Número | 5 | 1 |
+| Motivos (todos los ámbitos) | Lista por ámbito de la lista cerrada de `03` §4; nombre único en la organización y el ámbito sin distinguir mayúsculas; el ámbito no cambia; se dan de baja y se reactivan, nunca se borran, y cada ámbito conserva al menos uno activo; los administra `ADMIN_CONFIGURACION` con `MOTIVO_CREAR` y `MOTIVO_MODIFICAR` (ADR-061) | Los sembrados de cada ámbito (`03` §4) | 1 |
+| Intentos fallidos de PIN antes de bloquear | Número | 5; vale solo para los fallos de un mismo usuario contra el PIN de un mismo supervisor, con conexión (`intentos_pin_max`). El tope general por supervisor (20 fallos de cualquier usuario, ADR-055) y el bloqueo del PIN de desbloqueo local (10 fallos, ADR-062) son constantes del código, no parámetros | 1 |
 
 ## 5. Catálogo
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| CAT-01 | Todo producto tiene código único dentro de la organización, nombre, categoría, marca opcional, unidad base, alícuota de IVA y proveedor. | 1 |
-| CAT-02 | Un producto tiene una o más presentaciones. Cada presentación indica unidades base (entero ≥ 1), si se usa en venta y si se usa en compra. | 1 |
+| CAT-01 | Todo producto tiene código único dentro de la organización, nombre, categoría, marca opcional, unidad base, alícuota de IVA y proveedor. El nombre del producto no puede quedar vacío ni de solo espacios tras recortar (`NOMBRE_INVALIDO`, 422) y la unidad base tampoco (`VALOR_OBLIGATORIO`, 422). Los textos válidos se guardan recortados. | 1 |
+| CAT-02 | Un producto tiene una o más presentaciones. Cada presentación indica unidades base (entero ≥ 1), si se usa en venta y si se usa en compra. El nombre de cada presentación no puede quedar vacío ni de solo espacios tras recortar (`NOMBRE_INVALIDO`, 422); el texto válido se guarda recortado. | 1 |
 | CAT-03 | Cada producto tiene exactamente una presentación de referencia, que debe usarse en venta. | 1 |
 | CAT-04 | Las unidades de una presentación ya usada en alguna operación no pueden modificarse. Para cambiar el contenido se crea una presentación nueva y se desactiva la anterior. | 1 |
-| CAT-05 | Un producto o presentación usado en operaciones no se elimina: se desactiva. Los inactivos no se ofrecen en nuevas operaciones. | 1 |
+| CAT-05 | Un producto o presentación usado en operaciones no se elimina: se desactiva. Los inactivos no se ofrecen en nuevas operaciones. Un producto con stock distinto de cero en alguna ubicación de la organización (también negativo) no se desactiva (`PRODUCTO_CON_STOCK`); se vacía primero. Reactivar no tiene esa condición (ADR-048). | 1 |
 | CAT-06 | En la etapa 1 cada producto tiene un único proveedor. El modelo admite proveedores adicionales. | 1 (varios: 4) |
 | CAT-07 | La venta de unidades sueltas requiere una presentación de venta de 1 unidad base. | 1 |
-
-**Visualización de cantidades (CAT-08, etapa 1).** Una cantidad base `q` de un producto con presentación de referencia de `u` unidades se muestra como `floor(|q| / u)` cajas y `|q| mod u` unidades, con signo negativo si `q < 0`.
+| CAT-08 | Visualización de cantidades: una cantidad base `q` de un producto con presentación de referencia de `u` unidades se muestra como `floor(|q| / u)` cajas y `|q| mod u` unidades, con signo negativo si `q < 0`. | 1 |
 
 | Producto | Referencia | Cantidad base | Visualización |
 | --- | --- | --- | --- |
@@ -119,10 +126,11 @@ La columna **Etapa** indica cuándo se implementa la regla. Las reglas marcadas 
 | ID | Regla | Etapa |
 | --- | --- | --- |
 | CST-01 | Un costo informado registra proveedor, producto, presentación, valor, si incluye IVA, bonificación opcional (porcentaje), vigencia desde y observación. | 1 |
-| CST-02 | El costo base derivado se calcula como `valor × (1 − bonificación) / (1 + alícuota si incluye IVA) / unidades de la presentación`, redondeado a 6 decimales solo al final. | 1 |
+| CST-02 | El costo base derivado se calcula como `valor × (1 − bonificación) / (1 + alícuota si incluye IVA y la organización computa crédito fiscal) / unidades de la presentación`, redondeado a 6 decimales solo al final. Si la organización no computa crédito fiscal (CST-06), el valor es el pagado y el IVA es parte del costo: no se divide por `(1 + alícuota)`. | 1 |
 | CST-03 | Los costos informados no se sobrescriben. El vigente para una fecha es el de mayor vigencia desde que no supere esa fecha. | 1 |
 | CST-04 | El costo informado se usa para calcular precios. No se usa para costear ventas. | 1 |
-| CST-05 | Puede cargarse un costo por producto o varios de un proveedor en una sola operación. | 1 (importación masiva: 2) |
+| CST-06 | Solo un responsable inscripto computa crédito fiscal de IVA en compras: la regla *computa crédito fiscal* es verdadera para `RESPONSABLE_INSCRIPTO` y falsa para `MONOTRIBUTO` y `EXENTO`. Toda parte del sistema que necesite saber si el IVA de una compra es costo usa esta regla, no la condición. La regla se congela en cada costo informado y en cada línea de compra (`computa_credito_fiscal`): cambiar la condición rige solo para lo que se registre después y nunca recalcula lo registrado. En una organización que no computa crédito fiscal, `incluye_iva = true` se rechaza (`INCLUYE_IVA_NO_APLICA`) y el modo impositivo es `A` con la modalidad de IVA sin definir (ADR-045). | 1 |
+| CST-05 | Puede cargarse un costo por producto o varios de un proveedor en una sola operación. La importación **inicial** de costos desde una planilla es de la etapa 1 (change 10, por `informar_costos`); la importación masiva **recurrente** es de la etapa 2. | 1 (importación inicial; masiva recurrente: 2) |
 
 Ejemplos de CST-02:
 
@@ -132,6 +140,8 @@ Ejemplos de CST-02:
 | Botella a $1.000 | No | — | $1.000,000000 |
 | Caja x12 a $18.000 | Sí (21%) | — | 18.000 / 1,21 / 12 = $1.239,669421 |
 | Caja x12 a $18.000 | No | 10% | 18.000 × 0,9 / 12 = $1.350,000000 |
+| Caja x12 a $21.780 (organización monotributista: el IVA es costo) | No aplica | — | 21.780 / 12 = $1.815,000000 |
+| Caja x12 a $21.780 (organización monotributista) | No aplica | 10% | 21.780 × 0,9 / 12 = $1.633,500000 |
 
 ### 6.2 Costo promedio
 
@@ -139,7 +149,7 @@ Ejemplos de CST-02:
 | --- | --- | --- |
 | CST-10 | Cada producto tiene un costo promedio por organización, único para todas las ubicaciones. | 1 |
 | CST-11 | Un ingreso con costo (compra, stock inicial, anulación de venta) recalcula el promedio: si el stock total previo es mayor que cero, `(stock × promedio + cantidad × costo) / (stock + cantidad)`; si es cero o negativo, el promedio pasa a ser el costo del ingreso. | 1 |
-| CST-12 | Las transferencias, los ajustes y las rendiciones no modifican el promedio. Los egresos por ajuste se valorizan al promedio vigente. | 1 |
+| CST-12 | Las transferencias, los ajustes y las rendiciones no modifican el promedio ni dejan historia de costo. Todo movimiento de transferencia, de ajuste **o de diferencia de rendición**, de ingreso o de egreso, y los egresos de corrección de un stock inicial (STK-10), se valorizan al promedio vigente. **Un sobrante de rendición de un producto sin promedio entra con costo nulo (ADR-068).** Un ajuste positivo de un producto sin promedio se rechaza (`PRODUCTO_SIN_COSTO`). Los movimientos inversos de la anulación de una transferencia o de un ajuste repiten el costo del movimiento original, no el promedio del momento (ADR-048). El reingreso de una línea de venta sin costo, al anular la venta, sube el stock sin modificar el promedio ni dejar historia, con costo nulo (ADR-058). | 1 |
 | CST-13 | Cada cambio del promedio se registra con valor anterior, valor nuevo, operación origen y momento, de forma que el promedio en cualquier momento pueda reconstruirse. | 1 |
 | CST-14 | El cálculo del costo de venta está encapsulado en un único servicio de costeo. Ninguna otra parte del sistema calcula costos de venta. | 1 |
 | CST-15 | La estrategia FIFO podrá habilitarse desde una fecha de corte sin modificar costos congelados anteriores. | 4 |
@@ -157,12 +167,12 @@ Ejemplo de CST-11:
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| CMP-01 | Una compra registra proveedor, fecha, ubicación de destino, condición (contado o crédito) y al menos una línea. Cada línea indica producto, presentación de compra, cantidad, valor por presentación, si incluye IVA y bonificación opcional. | 1 |
-| CMP-02 | Cada línea deriva cantidad base y costo base neto con la fórmula de CST-02. El total neto de la compra es la suma de `cantidad base × costo base` de sus líneas, redondeada a 2 decimales por línea. | 1 |
-| CMP-03 | Confirmar una compra, en una sola transacción: ingresa stock en la ubicación de destino, recalcula el costo promedio de cada producto, registra la compra en la cuenta corriente del proveedor, registra el pago si es de contado y audita. | 1 |
+| CMP-01 | Una compra registra proveedor, fecha, ubicación de destino, condición (contado o crédito) y al menos una línea. Cada línea indica producto, presentación de compra, cantidad, valor pagado por presentación, si incluye IVA (solo si la organización computa crédito fiscal, CST-06) y bonificación opcional. La compra guarda además el total de factura informado (CMP-03) y, opcionalmente, un número de comprobante del proveedor (informativo, buscable, sin unicidad) y una observación. Solo se admiten productos cuyo proveedor es el de la compra; la cantidad tiene hasta 3 decimales y `cantidad × unidades de la presentación` debe ser entera; hasta 200 líneas; una compra sin líneas se rechaza (INV-07). La fecha es la del comprobante y no puede ser posterior a hoy; los movimientos usan el momento en que se registra. La ubicación de destino es cualquier ubicación activa (ADR-043). | 1 |
+| CMP-02 | Cada línea deriva cantidad base y costo base neto con la fórmula de CST-02. El total neto de la compra es la suma de `cantidad base × costo base` de sus líneas, redondeada a 2 decimales por línea. El total de factura sugerido es el total neto más el IVA de cada línea (alícuota del producto) si la organización computa crédito fiscal, y el total neto a secas si no la computa (el valor cargado ya es el pagado, CST-06); el usuario puede corregirlo. | 1 |
+| CMP-03 | Confirmar una compra, en una sola transacción: ingresa stock en la ubicación de destino, recalcula el costo promedio de cada producto, registra la compra en la cuenta corriente del proveedor **por el total de factura informado** (el stock y el promedio usan el neto), registra el pago si es de contado y audita. El pago de contado es por el total de factura, con uno o más medios activos que suman ese importe (INV-08) y la referencia que el medio exija; su fecha es la de la compra. Una compra a crédito no lleva medios (ADR-043). | 1 |
 | CMP-04 | Si el costo base de una línea difiere del costo informado vigente, el sistema ofrece registrarlo como nuevo costo informado. Nunca lo registra automáticamente. | 1 |
-| CMP-05 | Una compra confirmada solo se corrige por anulación total, con permiso y motivo. La anulación egresa el stock ingresado y revierte la cuenta corriente del proveedor. | 1 |
-| CMP-06 | Al anular una compra, si el stock restante es mayor que cero y el promedio resultante de revertir el ingreso es positivo, se recalcula el promedio; en otro caso se mantiene el vigente y la anulación queda con observación. | 1 |
+| CMP-05 | Una compra confirmada solo se corrige por anulación total, con permiso y motivo. La anulación egresa el stock ingresado, valorizado al costo de cada línea, y revierte la cuenta corriente del proveedor. En una compra de contado se indica si el proveedor devuelve el pago: con devolución el pago se anula y el saldo vuelve a como estaba; sin devolución el pago se mantiene y queda saldo a favor nuestro. Se puede anular aunque el proveedor, el producto o la presentación se hayan desactivado (ADR-043, ADR-044). | 1 |
+| CMP-06 | Al anular una compra, si el stock restante (stock total del producto en la organización) es mayor que cero y el promedio resultante de revertir el ingreso es positivo, se recalcula el promedio; en otro caso se mantiene el vigente y la anulación queda con la observación `ANULACION_COMPRA_SIN_RECALCULO`. En ambos casos queda una fila en la historia de costo (ADR-044). | 1 |
 | CMP-07 | La anulación de una compra que deje stock negativo requiere `PERMITIR_STOCK_NEGATIVO`. | 1 |
 | CMP-08 | Las compras se registran solo con conexión. | 1 |
 | CMP-09 | Órdenes de compra, recepción parcial, vencimientos y notas de crédito o débito de proveedor. | 2 |
@@ -171,9 +181,10 @@ Ejemplo de CST-11:
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| PAG-01 | Un pago registra proveedor, fecha, importe y uno o más medios cuya suma es igual al importe. | 1 |
-| PAG-02 | El pago reduce el saldo general del proveedor. No modifica costos. | 1 |
-| PAG-03 | Un pago confirmado solo se corrige por anulación con permiso y motivo. | 1 |
+| PAG-01 | Un pago registra proveedor, fecha, importe y de 1 a 20 medios activos de la organización cuya suma es igual al importe (INV-08), con la referencia que cada medio exija; el mismo medio puede repetirse. La fecha es la del pago real: no puede ser posterior a hoy y no tiene límite hacia atrás; el movimiento de cuenta usa el momento en que se registra. Admite una observación opcional (guardada recortada) donde se anota, por ejemplo, qué facturas paga. Se puede pagar a un proveedor inactivo (ADR-046). | 1 |
+| PAG-02 | El pago reduce el saldo general del proveedor y no se imputa a ninguna compra. Puede superar la deuda: el saldo queda a nuestro favor y la próxima compra a crédito lo absorbe, sin operación nueva; la pantalla pide confirmación explícita cuando el pago lo deja a nuestro favor. No modifica costos ni stock. Desde el primer pago la cuenta del proveedor ya no admite saldo inicial (CC-08). | 1 |
+| PAG-03 | Un pago confirmado solo se corrige por anulación con permiso y con un motivo del ámbito `ANULACION_PAGO`. La anulación deja el pago `ANULADA` y registra un movimiento `ANULACION_PAGO` que devuelve el saldo (CC-03). El pago de una compra de contado se anula por separado solo si la compra ya está anulada (sin devolución del pago, CMP-05); mientras la compra esté vigente se rechaza. Se puede anular el pago de un proveedor inactivo (ADR-046). | 1 |
+| PAG-04 | Los pagos se registran y se anulan solo con conexión. | 1 |
 
 ## 7. Precios
 
@@ -181,25 +192,27 @@ Ejemplo de CST-11:
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| PRC-01 | Una lista tiene nombre y regla de redondeo. Sus precios viven en versiones. | 1 |
-| PRC-02 | Una versión tiene estado almacenado (BORRADOR, PUBLICADA, ANULADA), vigencia desde y vigencia hasta opcional. | 1 |
-| PRC-03 | La versión vigente de una lista en un momento es la PUBLICADA con mayor vigencia desde que no supere ese momento y cuya vigencia hasta, si existe, sea posterior. Los estados PROGRAMADA, VIGENTE e HISTÓRICA se derivan de las fechas y no se almacenan. | 1 |
-| PRC-04 | Una versión publicada es inmutable. Las correcciones generan una versión nueva. | 1 |
-| PRC-05 | Solo puede anularse una versión publicada cuya vigencia aún no comenzó. | 1 |
+| PRC-01 | Una lista tiene nombre (único por organización, sin distinguir mayúsculas) y una regla de redondeo **obligatoria**: múltiplo mayor que cero con hasta dos decimales y dirección. Sus precios viven en versiones. | 1 |
+| PRC-02 | Una versión tiene estado almacenado (BORRADOR, PUBLICADA, ANULADA), vigencia desde y vigencia hasta opcional. **La vigencia se fija al publicar** (un borrador no tiene): la vigencia desde es opcional, por defecto el momento de la publicación, y nunca anterior a él; la vigencia hasta, si existe, es posterior a la desde. Dos versiones publicadas de una lista no tienen la misma vigencia desde. | 1 |
+| PRC-03 | La versión vigente de una lista en un momento es la PUBLICADA con mayor vigencia desde que no supere ese momento y cuya vigencia hasta, si existe, sea posterior. Los estados PROGRAMADA, VIGENTE e HISTÓRICA se derivan de las fechas y no se almacenan. Publicar no modifica la versión anterior: deja de ser vigente porque la nueva tiene mayor vigencia desde. Cuando vence una versión con vigencia hasta, vuelve a regir la anterior. | 1 |
+| PRC-04 | Una versión publicada es inmutable. Las correcciones generan una versión nueva. El cambio de la presentación de referencia de un producto no altera el precio ni las unidades de referencia guardados en una versión publicada. | 1 |
+| PRC-05 | Solo puede anularse una versión publicada cuya vigencia aún no comenzó (la vigencia desde es posterior al momento de la anulación). **No pide motivo.** Sus precios no se borran ni cambian. | 1 |
 | PRC-06 | Publicar requiere `PUBLICAR_LISTAS` y queda auditado. | 1 |
 
 ### 7.2 Cálculo del precio de referencia
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| PRC-10 | Cada versión tiene, por producto, un único precio de referencia sobre la presentación de referencia. Las demás presentaciones se venden a precio proporcional. | 1 |
-| PRC-11 | El costo de referencia es `costo base del costo informado vigente × unidades de la presentación de referencia`. | 1 |
+| PRC-10 | Cada versión tiene, por producto, un único precio de referencia sobre la presentación de referencia, **y guarda las unidades de esa presentación vigentes al calcularlo o fijarlo**. Las demás presentaciones se venden a precio proporcional. | 1 |
+| PRC-11 | El costo de referencia es `costo base del costo informado vigente (CST-03) × unidades de la presentación de referencia`. Si los costos vigentes del producto por presentación difieren por unidad base, el precio lleva la señal "costos distintos por presentación" y la presentación de la que salió el costo. Si el costo se calculó con otra regla de IVA que la actual (CST-06), lleva la señal "costo con otra regla de IVA". | 1 |
 | PRC-12 | El margen puede ser markup (`precio = costo × (1 + m)`) o margen bruto (`precio = costo / (1 − m)`, con `m < 1`). Toda regla de margen indica cuál usa y la interfaz muestra la fórmula aplicada. | 1 |
-| PRC-13 | Las reglas de margen pertenecen a una lista y se resuelven por precedencia, de más específica a más general: producto, marca, categoría, proveedor, lista. | 1 |
-| PRC-14 | El redondeo se define por múltiplo (10, 50, 100, 500…) y dirección (arriba, más cercano, abajo), por lista con sobrescritura opcional por categoría. En "más cercano", el punto medio redondea hacia arriba. | 1 |
-| PRC-15 | En modos A y B el redondeo se aplica al precio neto. En modo C se aplica al precio con IVA incluido. | 1 (C: 4) |
-| PRC-16 | Cada precio de versión guarda costo de referencia usado, regla de margen aplicada, precio calculado sin redondear, precio final y si fue fijado manualmente. | 1 |
-| PRC-17 | Ante nuevos costos informados, el sistema genera una versión BORRADOR que copia la versión vigente y recalcula los productos afectados. Los precios fijados manualmente se conservan y se señalan si su margen resultante es menor que el de la regla aplicable. | 1 |
+| PRC-13 | Las reglas de margen pertenecen a una lista y se resuelven por precedencia, de más específica a más general: producto, marca, categoría, proveedor, lista. **Hay a lo sumo una regla activa por lista y alcance** (misma entidad). Las reglas no se borran: se modifican o se desactivan, y el cambio rige desde el próximo borrador. El valor es una fracción de hasta seis decimales; el margen bruto es menor que 1. | 1 |
+| PRC-14 | El redondeo se define por múltiplo (10, 50, 100, 500…) y dirección (arriba, más cercano, abajo), por lista con sobrescritura opcional por categoría. En "más cercano", el punto medio redondea hacia arriba. | 1 |*La sobrescritura activa de la categoría del producto manda sobre el redondeo de la lista. Si el redondeo deja el precio en cero, el producto no recibe precio.* |
+| PRC-15 | En modos A y B el redondeo se aplica al precio neto. En modo C se aplica al precio con IVA incluido. | 1 (C: 4) |*En modo C la generación del borrador se rechaza hasta la etapa 4.* |
+| PRC-16 | Cada precio de versión guarda las unidades de referencia, el costo informado y el costo de referencia usados, la regla de margen aplicada (tipo y valor), el precio calculado sin redondear, el precio final y si fue fijado manualmente. **Un precio manual guarda lo mismo que pueda calcularse y nulos si el producto no tiene costo o regla: se admite un precio manual sin costo.** | 1 |
+| PRC-17 | Ante nuevos costos informados, **el usuario genera** una versión BORRADOR con `LISTA_GENERAR_BORRADOR`: informar un costo no genera nada. El borrador parte de la versión base (la publicada y no anulada de mayor vigencia desde) y recalcula **todos los productos activos**; los precios manuales se conservan y se señalan si son menores que el calculado sin redondear ("margen menor que el de la regla"). Cada precio indica si es nuevo, cambia o queda igual respecto de la base. | 1 |
+| PRC-18 | Una lista tiene a lo sumo **un borrador**. Generar crea el borrador (con el número siguiente) o lo reemplaza conservando los precios manuales; no se descarta. Publicar no recalcula: la pantalla muestra cuándo se generó. | 1 |
+| PRC-19 | Un producto activo que el borrador no puede calcular queda **sin precio** y se informa con su causa: `SIN_COSTO`, `SIN_REGLA`, `PRECIO_NO_POSITIVO`, `SIN_PRESENTACION_DE_REFERENCIA` o `SIN_CALCULAR` (hoy se calcularía: hay que regenerar). Solo puede fijársele un precio manual si tiene presentación de referencia. | 1 |
 
 Ejemplo (costo base del vino $1.000, caja x6, costo de referencia $6.000, redondeo a múltiplo de 100):
 
@@ -212,9 +225,9 @@ Ejemplo (costo base del vino $1.000, caja x6, costo de referencia $6.000, redond
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| PRC-20 | La lista de una venta es la asignada al cliente o, si no tiene, la lista por defecto de la organización. Se usa la versión vigente al `occurred_at` de la venta. | 1 |
-| PRC-21 | Usar otra lista o una versión anterior requiere `USAR_LISTA_ANTERIOR` y motivo según configuración. | 1 |
-| PRC-22 | El importe bruto de una línea es `precio de referencia × cantidad base / unidades de referencia`, redondeado a 2 decimales una sola vez. El precio unitario por presentación se muestra redondeado pero nunca se usa para calcular totales. | 1 |
+| PRC-20 | La lista de una venta es la asignada al cliente o, si no tiene, la lista por defecto de la organización; ambas deben estar activas (`LISTA_INACTIVA`, `SIN_LISTA_APLICABLE`). Se usa la versión vigente al `occurred_at` de la venta (`LISTA_SIN_VERSION_VIGENTE` si no hay). La lista por defecto, o la asignada a un cliente no inactivo, no se desactiva (`LISTA_EN_USO`). | 1 |
+| PRC-21 | Usar otra lista activa o una versión anterior requiere `USAR_LISTA_ANTERIOR` y, si la organización lo exige, un motivo activo del ámbito `LISTA_ANTERIOR`. Una versión anterior es una versión publicada, no anulada, de la lista elegida cuya vigencia desde no es posterior al momento de la venta; las programadas no (`VERSION_NO_PERMITIDA`). La venta guarda la lista, la versión y el motivo, y la auditoría lo registra (ADR-054). | 1 |
+| PRC-22 | El importe bruto de una línea es `precio de referencia × cantidad base / unidades de referencia` (**las unidades guardadas en el precio**), redondeado a 2 decimales una sola vez. El precio unitario por presentación se muestra redondeado pero nunca se usa para calcular totales. Las presentaciones que se muestran las entrega `precios` junto con cada precio (activas y de venta, de menos unidades a más; ADR-047 punto 30). Se calcula en `precios/domain` y en `frontend/src/domain/precios`, con casos compartidos. | 1 |
 | PRC-23 | La venta congela, por línea, versión de lista, precio de referencia y unidades de referencia. | 1 |
 
 Ejemplos de PRC-22 (caja x6):
@@ -233,27 +246,28 @@ Ejemplos de PRC-22 (caja x6):
 | --- | --- | --- |
 | STK-01 | El stock se lleva por producto y ubicación, en unidades base enteras. | 1 |
 | STK-02 | Una ubicación tiene nombre, tipo (depósito, vehículo, otro), estado e indicador de si requiere toma para operar. Los vehículos requieren toma. | 1 |
-| STK-03 | Todo cambio de stock es un movimiento con producto, ubicación, cantidad con signo, tipo y operación origen. Tipos: STOCK_INICIAL, COMPRA, ANULACION_COMPRA, VENTA, ANULACION_VENTA, TRANSFERENCIA_SALIDA, TRANSFERENCIA_ENTRADA, AJUSTE, DIFERENCIA_RENDICION. | 1 (DEVOLUCION, RECUENTO: 2) |
+| STK-03 | Todo cambio de stock es un movimiento con producto, ubicación, cantidad con signo, tipo y operación origen. Tipos: STOCK_INICIAL, COMPRA, ANULACION_COMPRA, VENTA, ANULACION_VENTA, TRANSFERENCIA_SALIDA, TRANSFERENCIA_ENTRADA, AJUSTE, DIFERENCIA_RENDICION. Los movimientos inversos de la anulación de una transferencia o de un ajuste reutilizan los tipos `TRANSFERENCIA_SALIDA`, `TRANSFERENCIA_ENTRADA` y `AJUSTE` con signo contrario, y se distinguen por su operación origen (`ANULACION_TRANSFERENCIA`, `ANULACION_AJUSTE_STOCK`). | 1 (DEVOLUCION, RECUENTO: 2) |
 | STK-04 | El stock de un producto en una ubicación es la suma de sus movimientos. | 1 |
-| STK-05 | Con conexión, una operación que deje stock negativo se rechaza salvo que el usuario tenga `PERMITIR_STOCK_NEGATIVO`; en ese caso se acepta con observación. | 1 |
-| STK-06 | Sin conexión, una venta que deje stock negativo se acepta al sincronizar con observación STOCK_NEGATIVO. | 1 |
-| STK-07 | Una transferencia genera, en la misma transacción, una salida en origen y una entrada en destino por la misma cantidad. No modifica costos. | 1 |
-| STK-08 | Un ajuste requiere `AJUSTAR_STOCK` y un motivo del catálogo de la organización. | 1 |
-| STK-09 | Mientras una ubicación está tomada, solo la jornada que la tomó puede generar movimientos sobre ella, salvo la rendición y usuarios con `LIBERAR_UBICACION`, con auditoría. | 1 |
+| STK-05 | Con conexión, una operación que deje stock negativo se rechaza salvo que el usuario tenga `PERMITIR_STOCK_NEGATIVO`; en ese caso se acepta con observación. Excepción: los ajustes y las correcciones de stock inicial (STK-10) nunca dejan stock negativo, tenga o no el usuario el permiso (`STOCK_INSUFICIENTE`). La salida de una transferencia y las anulaciones (de compra, de transferencia y de ajuste) sí pueden, con el permiso (ADR-048). | 1 |
+| STK-06 | Sin conexión, el teléfono bloquea la línea que supera el stock del vehículo salvo que el usuario tenga `PERMITIR_STOCK_NEGATIVO`; con el permiso avisa («Supera el stock del vehículo (quedan N)») y pide confirmación («Vender igual»). El servidor igualmente acepta al sincronizar una venta que deje stock negativo, con observación `STOCK_NEGATIVO`, como red de seguridad (ADR-063). | 1 |
+| STK-07 | Una transferencia genera, en la misma transacción, una salida en origen y una entrada en destino por la misma cantidad, para de 1 a 200 productos distintos, con origen y destino distintos. No modifica el promedio ni el stock total del producto (INV-15); ambos movimientos se valorizan al promedio vigente. No se edita ni se borra: se corrige por anulación total con motivo (TR-06). Con conexión solamente. | 1 |
+| STK-08 | Un ajuste requiere `AJUSTAR_STOCK` y un motivo activo del ámbito `AJUSTE_STOCK` de la organización, uno por ajuste. Lleva de 1 a 200 líneas con cantidad con signo distinta de cero (se admiten signos mezclados) sobre una sola ubicación, y una observación opcional. Un ajuste positivo de un producto sin costo promedio se rechaza (`PRODUCTO_SIN_COSTO`). No se edita ni se borra: se corrige por anulación total con motivo del ámbito `ANULACION_AJUSTE`, una sola vez. Con conexión solamente. | 1 |
+| STK-09 | Una ubicación está **tomada** mientras tiene una jornada `ABIERTA` o `EN_RENDICION`; una ubicación que requiere toma y no tiene jornada no cerrada se mueve libremente. Mientras está tomada, solo la jornada que la tomó puede generar movimientos sobre ella: un movimiento es **de la jornada** si la jornada está `ABIERTA` y el usuario y el dispositivo del comando son los de la jornada. Excepciones: la rendición y los usuarios con `LIBERAR_UBICACION`, que mueven la ubicación en cualquier estado de la jornada; el movimiento de `LIBERAR_UBICACION` queda sin jornada y con una observación en la auditoría que nombra la jornada. **La rendición mueve solo la ubicación de la jornada que rinde o cierra (las diferencias y la salida de la devolución del remanente), y esos movimientos llevan la jornada (ADR-068).** En `EN_RENDICION` la propia jornada ya no mueve stock. Cualquier otro caso se rechaza con `UBICACION_TOMADA` y no escribe nada. La regla se aplica en la única puerta del libro, a todo camino que mueve stock (ADR-049). Una venta recibida sin conexión (SYN-05, INV-17) cuyo stock sale de una ubicación tomada al sincronizar —por la propia jornada en `EN_RENDICION` o por la de otro vendedor— se acepta aunque el usuario no tenga `LIBERAR_UBICACION`: la mercadería ya se entregó. Se descuenta el stock sin `jornada_id`, la venta conserva la jornada del sobre, lleva `UBICACION_TOMADA_AL_SINCRONIZAR` y la auditoría deja la constancia de la jornada que tiene la ubicación. **Lo mismo vale para la anulación de una venta recibida sin conexión: la mercadería ya volvió al vehículo, se acepta, el reingreso queda sin `jornada_id`, la anulación conserva la jornada del sobre y lleva `UBICACION_TOMADA_AL_SINCRONIZAR` sobre la venta (ADR-066).** Con conexión rige la regla de arriba (ADR-054). | 1 |
+| STK-10 | Un producto admite varios `STOCK_INICIAL`, cada uno con su cantidad con signo distinta de cero. Uno positivo es un ingreso con costo (CST-11); uno negativo es una corrección: egresa al promedio vigente sin recalcularlo y no puede dejar negativo el saldo de la ubicación (`STOCK_INSUFICIENTE`, sin excepción por `PERMITIR_STOCK_NEGATIVO`). Se admiten solo mientras el producto no tenga en la organización movimientos de otro tipo (`PRODUCTO_CON_OPERACIONES`). Un costo mal cargado se corrige llevando el stock total a cero y recargando. | 1 |
 
 ### 8.2 Jornada y rendición
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| RUT-01 | Una jornada tiene usuario, dispositivo, ubicación, apertura y cierre. Una ubicación que requiere toma admite como máximo una jornada no cerrada. | 1 |
-| RUT-02 | La carga del vehículo es una transferencia desde depósito, con conexión, antes o durante la apertura. | 1 |
-| RUT-03 | La apertura requiere conexión y `ABRIR_JORNADA`. Toma la ubicación y ejecuta el bootstrap. | 1 |
+| RUT-01 | Una jornada tiene usuario, dispositivo, ubicación, apertura y cierre. Una ubicación que requiere toma admite como máximo una jornada no cerrada, y un usuario y un dispositivo, a lo sumo una cada uno. Solo se abre sobre una ubicación activa que requiere toma (`UBICACION_SIN_TOMA`, `UBICACION_INACTIVA`, `UBICACION_TOMADA`, `USUARIO_CON_JORNADA`, `DISPOSITIVO_CON_JORNADA`). | 1 |
+| RUT-02 | La carga del vehículo es una transferencia desde depósito (`STOCK_TRANSFERIR`), con conexión, antes o durante la apertura; la apertura no lleva líneas. Antes de abrir la hace cualquiera con `TRANSFERIR_STOCK`; con la jornada abierta, el vendedor de la jornada desde su dispositivo o quien tenga `LIBERAR_UBICACION`. | 1 |
+| RUT-03 | La apertura requiere conexión y `ABRIR_JORNADA`. Toma la ubicación para el usuario y el dispositivo de la sesión. El cliente ejecuta el bootstrap después de abrir, al iniciar sesión o desbloquear con conexión si no tiene los datos de la jornada abierta, y cuando el usuario actualiza los datos. El bootstrap exige una jornada `ABIERTA` propia en el dispositivo (`JORNADA_REQUERIDA`) (ADR-062). | 1 |
 | RUT-04 | Durante la jornada, las ventas del dispositivo descuentan stock de la ubicación tomada. | 1 |
-| RUT-05 | La rendición requiere conexión, `RENDIR_JORNADA` y que el dispositivo no tenga comandos pendientes de esa jornada. | 1 |
-| RUT-06 | En la rendición se registra el conteo físico por producto. La diferencia entre contado y esperado genera un movimiento DIFERENCIA_RENDICION auditado. | 1 |
-| RUT-07 | El resumen de rendición muestra stock al abrir, ingresos, ventas, anulaciones, stock esperado, contado, diferencias y cobranzas por medio de pago. | 1 |
-| RUT-08 | Tras la rendición puede transferirse el remanente a depósito. El cierre libera la ubicación. | 1 |
-| RUT-09 | Un usuario con `LIBERAR_UBICACION` puede liberar una jornada abierta con motivo. Los comandos posteriores de esa jornada se aceptan al sincronizar con observación JORNADA_LIBERADA. | 1 |
+| RUT-05 | La rendición requiere conexión, `RENDIR_JORNADA` y que el dispositivo no tenga comandos pendientes de esa jornada. **Se cumple con la entrega del día: el vendedor toca «Terminar el día» en el teléfono (con `ABRIR_JORNADA`, con o sin señal), que encola `JORNADA_ENTREGAR` detrás de todo lo pendiente y deja de ofrecer «Vender», «Anular venta» y «Cobrar» en esa jornada. Como la cola se procesa en orden y un error transitorio corta el lote, cuando el servidor acepta la entrega todo lo anterior del dispositivo ya tiene resultado. La entrega exige la jornada propia `ABIERTA` y no entregada (`JORNADA_ESTADO_INVALIDO`, `JORNADA_YA_ENTREGADA`; el handler exige `ABRIR_JORNADA`, `PERMISO_REQUERIDO`), no cambia su estado y no se revierte; una jornada que ya se entregó y después se libera conserva su entrega (RUT-09). La rendición exige la entrega (`JORNADA_SIN_ENTREGA`); sin teléfono no hay rendición y la jornada se libera (RUT-09) (ADR-068).** **La entrega asegura que todo se envió, no que todo se aceptó: la rendición exige además que la jornada no tenga comandos sin conexión rechazados sin resolver en el registro de rechazos (`RECHAZOS_PENDIENTES`, 409, con la cantidad), para que la venta rechazada que se carga con conexión entre en el esperado y no se descuente dos veces. La cuarentena no la bloquea (su teléfono dado de baja no entrega el día). No se bloquean la entrega, el cierre ni la liberación; la condición se comprueba después de validar el estado de la jornada y la entrega (ADR-069).** | 1 |
+| RUT-06 | En la rendición se registra el conteo físico por producto. La diferencia entre contado y esperado genera un movimiento DIFERENCIA_RENDICION auditado. **Se cuentan todos los productos con saldo distinto de cero en la ubicación o con movimientos en ella durante la jornada (`CONTEO_INCOMPLETO`), en unidades base enteras no negativas (un número con decimales se rechaza como contenido no serializable y uno negativo con `CANTIDAD_INVALIDA`); se puede agregar un sobrante de un producto activo (el faltante de un producto inactivo se acepta; su sobrante exige reactivarlo). Si el esperado cambió mientras se contaba, se rechaza (`ESPERADO_DIFIERE`, con los productos distintos y sus esperados) sin escribir nada. Cada diferencia distinta de cero es un `DIFERENCIA_RENDICION` con origen en la rendición y con la jornada, sin motivo, al promedio vigente sin recalcularlo (CST-12); un sobrante de un producto sin promedio entra con costo nulo; un producto inactivo con una diferencia distinta de cero se rechaza (`PRODUCTO_INACTIVO`). Después de la rendición el stock es lo contado. Una observación opcional de hasta 500 caracteres acompaña la rendición (ADR-068).** | 1 |
+| RUT-07 | El resumen de rendición muestra stock al abrir, ingresos, ventas, anulaciones, stock esperado, contado, diferencias y cobranzas por medio de pago. **El stock se toma por producto de los movimientos de la ubicación registrados entre la apertura y la rendición: al abrir, ingresos (`TRANSFERENCIA_ENTRADA`), ventas, anulaciones de venta y otros; esperado = al abrir + ingresos − ventas + anulaciones + otros, y se congela al rendir. El dinero se toma por la jornada de cada operación: ventas vigentes y anuladas (por la jornada de la anulación, aunque se haya liberado), cobranzas confirmadas por medio de pago y anuladas aparte; lo registrado después del momento de registro de la rendición («tardío») se muestra aparte. El valor de las diferencias requiere `VER_COSTOS`. Una jornada sin conteo muestra el stock calculado sin contado ni diferencias (ADR-068).** | 1 |
+| RUT-08 | Tras la rendición puede transferirse el remanente a depósito. El cierre (`EN_RENDICION → CERRADA`) libera la ubicación, que vuelve a moverse libremente. **La devolución se hace en el cierre, opcional y con `TRANSFERIR_STOCK`: una transferencia común (anulable) a una ubicación activa sin toma (`UBICACION_CON_TOMA` si el destino requiere toma), que no puede dejar negativo, en la misma transacción que el cierre (ADR-068).** | 1 |
+| RUT-09 | Un usuario con `LIBERAR_UBICACION` puede liberar una jornada `ABIERTA` o `EN_RENDICION`, de cualquier usuario, con un motivo activo del ámbito `LIBERACION_JORNADA` y una observación opcional de hasta 500 caracteres; el stock del vehículo no se toca. Los comandos posteriores de esa jornada se aceptan al sincronizar con observación JORNADA_LIBERADA (a partir del primer comando de ruta, change 17), también la anulación de una venta. **El teléfono, cuando con conexión se entera de que su jornada ya no está `ABIERTA` (la consulta de cada ciclo de sincronización, `JORNADA_REQUERIDA` de «Actualizar datos», la consulta al entrar sin jornada o una `JORNADA_LIBERADA` en los resultados), lo guarda, deja de ofrecer «Vender», «Anular venta» y «Cobrar» y avisa según el estado («Tu jornada fue liberada.», «Tu jornada está en rendición.», «Tu jornada fue cerrada.» o «Tu jornada ya no está abierta.», seguido de «Lo que ya vendiste y cobraste se sigue enviando.»). Con el formulario de cobro abierto, «Confirmar cobranza» no confirma y los datos siguen. El aviso vale sin señal y después de recargar; lo ya vendido, anulado y cobrado se sigue enviando; sin conexión no cambia nada; al abrir otra jornada se borra (ADR-066, ADR-067).** | 1 |
 | RUT-10 | Rendición completa de efectivo con caja y tesorería. | 2 |
 
 ## 9. Clientes y crédito
@@ -262,10 +276,12 @@ Ejemplos de PRC-22 (caja x6):
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| CLI-01 | Un cliente tiene nombre, razón social y CUIT/DNI opcionales, dirección, contacto, lista asignada opcional, límite y política de crédito opcionales, tolerancia offline opcional, estado de facturación inicial opcional y estado. | 1 |
+| CLI-01 | Un cliente tiene nombre, razón social y CUIT/DNI opcionales, dirección, contacto, lista asignada opcional, límite y política de crédito opcionales, tolerancia offline opcional, estado de facturación inicial opcional y estado. El estado de facturación inicial del cliente es `NO_REQUIERE`, `PENDIENTE` o nulo (el de la organización); otro valor se rechaza con `ESTADO_FACTURACION_INVALIDO` (422). | 1 |
 | CLI-02 | Estados: ACTIVO, SUSPENDIDO, INACTIVO. Vender a un cliente suspendido requiere `VENDER_CLIENTE_SUSPENDIDO`. A un cliente inactivo no se le vende. | 1 |
-| CLI-03 | Si la organización lo habilita, existe un cliente genérico "consumidor final" con límite de crédito cero. | 1 |
+| CLI-03 | Si la organización lo habilita, existe un cliente genérico "consumidor final" con límite de crédito cero. El consumidor final solo puede estar `ACTIVO` o `SUSPENDIDO`: no se inactiva (ADR-029). En la venta se evalúa con su límite cero y su snapshot de crédito se congela; con conexión `CONSUMIDOR_FINAL_CONTADO` se evalúa antes que el crédito y ningún permiso ni PIN la supera; sin conexión solo rigen `CONSUMIDOR_FINAL_CON_DEUDA` o `CLIENTE_NO_HABILITADO`, sin observaciones de crédito repetidas (ADR-055). | 1 |
 | CLI-04 | Los clientes con operaciones no se eliminan: se inactivan. | 1 |
+| CLI-05 | El documento de un cliente se valida por tipo: los valores válidos son CUIT y DNI; el CUIT tiene 11 dígitos y el DNI entre 7 y 8, siempre solo numéricos. El número se normaliza a dígitos antes de comparar y de guardar. | 1 |
+| CLI-06 | Un cliente `INACTIVO` puede volver a `ACTIVO` solo si no tiene operaciones; con operaciones, `INACTIVO` es terminal (ADR-030). | 1 |
 
 ### 9.2 Crédito (ADR-003)
 
@@ -273,14 +289,14 @@ Ejemplos de PRC-22 (caja x6):
 | --- | --- | --- |
 | CRE-01 | Crédito disponible = límite − saldo actual. Límite vacío significa sin control; límite cero significa solo contado. | 1 |
 | CRE-02 | Una venta consume crédito solo por su parte no cobrada en el momento. El saldo resultante es `saldo actual + total de la venta − cobranza registrada con la venta`. | 1 |
-| CRE-03 | Si el saldo resultante supera el límite, el exceso se trata según la política del cliente o, si no tiene, la de la organización: ADVERTIR, AUTORIZAR o BLOQUEAR. | 1 |
-| CRE-04 | ADVERTIR: se muestra el exceso y el usuario puede confirmar. La venta queda con observación. | 1 |
-| CRE-05 | AUTORIZAR con conexión: confirma un usuario con `SUPERAR_CREDITO` o un supervisor que ingresa su PIN en el dispositivo. | 1 |
-| CRE-06 | AUTORIZAR sin conexión: si el exceso no supera la tolerancia offline (del cliente o de la organización), se confirma con observación EXCESO_CREDITO_AUTORIZADO_OFFLINE. Si la supera, se comporta como BLOQUEAR salvo permiso propio o PIN de supervisor. | 1 |
-| CRE-07 | BLOQUEAR: la venta no se confirma. El usuario puede aumentar la cobranza o reducir el pedido. | 1 |
-| CRE-08 | Sin conexión, el saldo actual es el del bootstrap más los movimientos registrados por el dispositivo durante la jornada. | 1 |
-| CRE-09 | Al sincronizar, el servidor recalcula con el saldo real y nunca rechaza la venta por crédito. Si detecta un exceso que el dispositivo no detectó, agrega la observación EXCESO_CREDITO_DETECTADO_SYNC y notifica a administración. | 1 |
-| CRE-10 | La venta congela límite, saldo considerado, disponible, exceso, política aplicada, si fue online u offline, forma de resolución y autorizador. | 1 |
+| CRE-03 | Si el saldo resultante supera el límite, el exceso se trata según la política del cliente o, si no tiene, la de la organización: ADVERTIR, AUTORIZAR o BLOQUEAR. El exceso es la parte no cobrada de la venta que queda por encima del límite: `mín(máx(0, total − cobranza), máx(0, saldo resultante − límite))`; una venta cobrada entera nunca tiene exceso, aunque el cliente ya esté excedido (ADR-055). | 1 |
+| CRE-04 | ADVERTIR: se muestra el exceso y el usuario puede confirmar aceptándolo expresamente (sin aceptación, `EXCESO_CREDITO_SIN_ACEPTAR`). La venta queda con observación `EXCESO_CREDITO_ADVERTIDO`. | 1 |
+| CRE-05 | AUTORIZAR con conexión: confirma un usuario con `SUPERAR_CREDITO` (se resuelve primero) o un supervisor con ese permiso que ingresa su PIN en el dispositivo; sin ninguno, `AUTORIZACION_CREDITO_REQUERIDA`. | 1 |
+| CRE-06 | AUTORIZAR sin conexión: si el exceso no supera la tolerancia offline (del cliente o de la organización), se confirma con observación EXCESO_CREDITO_AUTORIZADO_OFFLINE. Si la supera, se comporta como BLOQUEAR salvo permiso propio o PIN de supervisor. La tolerancia no rige con conexión. El servidor no valida el tamaño de la tolerancia que usó el dispositivo (no la recibe): el exceso aceptado por tolerancia queda visible por la observación (ADR-032, ADR-055). | 1 |
+| CRE-07 | BLOQUEAR: la venta no se confirma (`CREDITO_EXCEDIDO`), sin excepción de permiso. El usuario puede aumentar la cobranza o reducir el pedido. | 1 |
+| CRE-08 | Sin conexión, el saldo actual es el del bootstrap más los movimientos registrados por el dispositivo durante la jornada que el bootstrap todavía no incluye (débito de la venta menos lo cobrado). Lo mismo rige para el stock del vehículo (RUT-04). Un movimiento local ya está incluido cuando la secuencia de su operación en la cola es menor o igual que la **secuencia procesada** del bootstrap (SYN-11); una operación fuera de la cola o un bootstrap sin esa marca cuentan siempre. Una venta **rechazada** sigue contando completa (stock, débito y su cobro en el momento, con el mismo `operation_id`) hasta que termine la jornada **o hasta que un bootstrap posterior la informe resuelta por administración (SYN-11): desde entonces deja de contar, porque la corrección, si la hubo, ya está en los datos del bootstrap (ADR-069)**: la mercadería ya se entregó. **Una anulación local cuenta desde que se confirma, con la misma regla de la secuencia: devuelve el stock de la venta, acredita el total en la cuenta y, con devolución, descuenta lo cobrado en el momento (sin devolución, lo cobrado queda a favor del cliente). Una anulación rechazada deja de contar —la venta sigue vigente—, salvo que su venta también esté rechazada: entonces cuentan las dos y se compensan (ADR-066).** **Una cobranza local independiente (no el cobro de una venta) cuenta desde que se confirma, con la misma regla de la secuencia: baja el saldo del cliente y le libera crédito (el saldo puede quedar negativo, a favor del cliente). Una cobranza independiente rechazada deja de contar: el servidor solo la rechaza por datos (cliente o medio inexistente, contenido inválido, duplicada, jornada), nunca por reglas de negocio, así que no está en la cuenta del cliente y contarla liberaría crédito que el sistema no reconoce; el dinero queda en poder del vendedor y administración lo resuelve. El cobro de una venta sigue la regla de su venta, también cuando la venta está rechazada (ADR-067).** Enviar una operación no la deja de contar: solo la deja de contar un bootstrap posterior que la incluya (ADR-063, ADR-065, ADR-066, ADR-067). | 1 |
+| CRE-09 | Al sincronizar, el servidor congela la evaluación que hizo el dispositivo (el objeto de crédito es obligatorio sin conexión: si falta, o no trae saldo considerado, política o resolución, es un comando malformado), recalcula con el saldo real y nunca rechaza la venta por crédito: solo una evaluación incoherente consigo misma (un exceso propio con resolución `SIN_EXCESO`, un límite vacío con otra resolución, o `PIN_SUPERVISOR`/`PERMISO_PROPIO` sin autorizador) es un comando malformado (`CREDITO_INCONSISTENTE`). Si detecta un exceso que el dispositivo no detectó, agrega la observación EXCESO_CREDITO_DETECTADO_SYNC y notifica a administración. **La notificación es el aviso de `/admin` a quien tiene `REVISAR_OBSERVACIONES`: el contador de «Revisión» y, en el inicio, la cantidad de excesos detectados al sincronizar pendientes, aparte de los demás avisos, que se actualiza sola (ADR-069).** | 1 |
+| CRE-10 | La venta congela límite, saldo considerado, disponible, exceso, política aplicada, si fue online u offline, forma de resolución y autorizador. Sin conexión se congela la evaluación del dispositivo; el recálculo del servidor queda en la observación (CRE-09). Un límite vacío se congela vacío, con resolución `SIN_EXCESO` (ADR-055). | 1 |
 | CRE-11 | Autorización remota de excepciones. | 2 |
 | CRE-12 | Bloqueo por antigüedad de deuda. | 2 |
 
@@ -292,16 +308,16 @@ Ejemplo: límite $200.000, saldo $150.000, venta $80.000 con cobranza de $20.000
 | --- | --- | --- |
 | DSC-01 | Una regla de descuento tiene tipo, condición, acción, alcance, vigencia, prioridad, indicador de acumulable y estado. | 1 |
 | DSC-02 | Tipos de la etapa 1: VOLUMEN_OPERACION (sobre toda la venta) y VOLUMEN_ALCANCE (sobre líneas de productos, categorías o marcas determinadas). | 1 |
-| DSC-03 | La condición de volumen compara, con operador explícito (≥ o >), una medida contra un umbral. Medidas: cajas equivalentes, unidades base o importe bruto de las líneas elegibles. | 1 |
-| DSC-04 | Acciones de la etapa 1: porcentaje sobre las líneas elegibles o importe fijo distribuido entre ellas en proporción a su bruto; el remanente de redondeo se asigna a la línea de mayor importe. | 1 |
-| DSC-05 | Orden de resolución: (1) bruto por línea desde la lista; (2) se evalúan las reglas activas y vigentes cuyo alcance aplica; (3) entre las no acumulables se aplica solo la de mayor beneficio total, con desempate por prioridad; (4) las acumulables se aplican en orden de prioridad, cada una sobre el resultado anterior; (5) se aplica el descuento manual sobre el resultado. | 1 |
-| DSC-06 | El descuento manual requiere que la organización lo tenga habilitado y el permiso `DESCUENTO_MANUAL`, cuyo tope porcentual depende del rol. Superar el tope requiere `AUTORIZAR_DESCUENTO` o PIN de supervisor. | 1 |
-| DSC-07 | Cada descuento se calcula y redondea a 2 decimales por línea. | 1 |
-| DSC-08 | Cada línea guarda cada descuento aplicado con origen (AUTOMATICO o MANUAL), regla, porcentaje o importe, motivo y autorizador. | 1 |
-| DSC-09 | Con conexión, el servidor recalcula los descuentos y rechaza la confirmación si difieren de los enviados. Sin conexión, acepta los descuentos registrados y agrega la observación DESCUENTO_DIFIERE si su cálculo no coincide. | 1 |
+| DSC-03 | La condición de volumen compara, con operador explícito (≥ o >), una medida contra un umbral. Medidas: cajas equivalentes, unidades base o importe bruto de las líneas elegibles. Las cajas equivalentes de una línea usan las **unidades de referencia guardadas con su precio** (PRC-22) y la medida es la suma exacta de `cantidad base / unidades de referencia`, **sin redondear**, comparada con aritmética entera. El umbral es mayor que 0: hasta 4 decimales en cajas, entero en unidades base, hasta 2 decimales en importe. La condición de toda regla, también de las acumulables, se evalúa una sola vez sobre cantidades y brutos de las líneas, no sobre importes ya descontados. | 1 |
+| DSC-04 | Acciones de la etapa 1: porcentaje sobre las líneas elegibles (mayor que 0 y hasta 100 %, con hasta 6 decimales de fracción) o importe fijo (mayor que 0, hasta 2 decimales) distribuido entre ellas en proporción a su **importe al momento de aplicar la regla** (el bruto si es la primera en aplicarse; el resultado anterior si es acumulable). Cada parte se redondea a 2 decimales y el remanente de redondeo, positivo o negativo, se asigna a la línea de mayor importe y, en empate, a la primera en el orden de la venta. Si el importe fijo supera la suma de las líneas elegibles, se aplica esa suma: ninguna línea queda con neto negativo. | 1 |
+| DSC-05 | Orden de resolución: (1) bruto por línea desde la lista; (2) se evalúan las reglas activas y vigentes cuyo alcance aplica; (3) entre las no acumulables gana **una sola en toda la venta**: la de mayor beneficio total (la suma de los descuentos que daría sobre sus líneas elegibles), con desempate por prioridad —el número más bajo es la mayor prioridad— y, si también empata, por la regla creada primero; las demás no acumulables no se aplican a ninguna línea; (4) las acumulables se aplican en orden de prioridad (y, a igual prioridad, por antigüedad), cada una sobre el resultado anterior; (5) se aplica el descuento manual sobre el resultado: cada línea lleva el porcentaje manual **propio** si lo tiene y, si no, el **general** de la venta (el propio reemplaza al general; no se suman ni se encadenan). El resultado no depende del orden en que se entregan las reglas. | 1 |
+| DSC-06 | El descuento manual requiere que la organización lo tenga habilitado y el permiso `DESCUENTO_MANUAL`, cuyo tope porcentual es el del propio usuario si lo tiene definido (`USUARIO_TOPE_DESCUENTO_DEFINIR`; reemplaza al del rol, sea mayor o menor, y vacío vuelve al del rol) y, si no, el de su rol; el tope propio solo tiene efecto si el rol tiene `DESCUENTO_MANUAL`. Es siempre un **porcentaje** (mayor que 0 y hasta 100 %, hasta 6 decimales), nunca un importe; puede ser **general** para la venta y/o **propio** de líneas individuales, y el propio tiene el mismo dominio que el general. El tope se compara contra el **mayor porcentaje manual que quedó aplicado en alguna línea** de la venta (un general reemplazado en todas las líneas no cuenta). Superar el tope requiere `AUTORIZAR_DESCUENTO` del propio usuario o la autorización de otro usuario que lo tenga (PIN de supervisor, change 18b); **una sola autorización cubre toda la venta** y quien autoriza no queda limitado por su propio tope. Si la organización exige motivo, hay un motivo por venta. El permiso propio se resuelve primero aunque se indique autorizador; si se indica uno, se revisa su permiso antes que su PIN. Sin la credencial que hace falta: `AUTORIZACION_REQUERIDA` (descuento) o `AUTORIZACION_CREDITO_REQUERIDA` (crédito). La autorización de descuento y la de crédito son independientes y, si las da la misma persona, el PIN se pide una vez (ADR-055). | 1 |
+| DSC-07 | Cada descuento se calcula y redondea a 2 decimales por línea (mitad hacia arriba). Un descuento cuyo importe redondea a $0,00 no se informa. | 1 |
+| DSC-08 | Cada línea guarda cada descuento aplicado con origen (AUTOMATICO o MANUAL), regla, porcentaje o importe, motivo y autorizador. Una línea lleva **a lo sumo un descuento `MANUAL`**, y el motivo y el autorizador de la venta se copian en cada uno. | 1 |
+| DSC-09 | Con conexión, el servidor recalcula los descuentos y rechaza la confirmación si difieren de los enviados (`DESCUENTO_DIFIERE`, 409). Sin conexión, acepta los descuentos registrados y agrega una observación DESCUENTO_DIFIERE por venta si su cálculo no coincide o si el descuento manual no pasa la evaluación con los datos vigentes (tope, permiso, habilitación, motivo, autorizador), con todas las causas que apliquen en el detalle (`CALCULO`, `TOPE`, `PERMISO`, `DESHABILITADO`, `MOTIVO`, `AUTORIZADOR_SIN_PERMISO`) (ADR-050, ADR-055). | 1 |
 | DSC-10 | Fidelización por historial, promociones por cliente o segmento, precio especial, bonificación en unidades y control de margen mínimo. | 2 |
 
-Ejemplo de DSC-03 con regla "cajas equivalentes ≥ 20 → 5%": 19 cajas + 5 unidades de un vino x6 son 19,83 cajas equivalentes y no aplica; 20 cajas aplica.
+Ejemplo de DSC-03 con regla "cajas equivalentes ≥ 20 → 5%": 19 cajas + 5 unidades de un vino x6 son 19,83 cajas equivalentes y no aplica; 20 cajas aplica. Tres líneas de 2 unidades de tres vinos x6 suman exactamente 1 caja equivalente (1/3 + 1/3 + 1/3) y "≥ 1" aplica.
 
 ## 11. Ventas
 
@@ -314,7 +330,7 @@ Ejemplo de DSC-03 con regla "cajas equivalentes ≥ 20 → 5%": 19 cajas + 5 uni
 | VTA-03 | Cada línea congela cantidad en la presentación, unidades de la presentación, cantidad base, versión de lista, precio de referencia, unidades de referencia, bruto, descuentos, neto, alícuota, IVA y costo. | 1 |
 | VTA-04 | Neto de línea = bruto − descuentos. En modo A el IVA de la venta es cero y el total es la suma de netos. En modo B el IVA de línea es `neto × alícuota` redondeado a 2 decimales y el total es neto más IVA. En modo C el precio incluye IVA y el neto de línea se deriva dividiendo por `1 + alícuota`. | 1 (B y C: 4) |
 | VTA-05 | El costo congelado de una línea es `costo promedio vigente al procesar la venta en el servidor × cantidad base`, redondeado a 2 decimales. En ventas offline, el promedio es el vigente al sincronizar. | 1 |
-| VTA-06 | El número de nota de venta es el prefijo del dispositivo seguido de un correlativo del dispositivo (`V03-000142`). Es único por organización. | 1 |
+| VTA-06 | El número de nota de venta es el prefijo del dispositivo seguido de un correlativo de seis dígitos del dispositivo (`V03-000142`). Lo propone el dispositivo, también con conexión; el servidor exige el prefijo del dispositivo de la sesión (`NUMERO_INVALIDO`) y rechaza uno ya usado (`NUMERO_DUPLICADO`). Es único por organización. El último correlativo del dispositivo pasa al mayor entre el actual y el de la venta y nunca retrocede (ADR-054). | 1 |
 | VTA-07 | El carrito y la cotización no se persisten en el servidor. Solo existen ventas confirmadas. | 1 |
 | VTA-08 | El estado de facturación inicial de la venta es el configurado en el cliente o, si no tiene, el de la organización. | 1 |
 
@@ -322,20 +338,20 @@ Ejemplo de DSC-03 con regla "cajas equivalentes ≥ 20 → 5%": 19 cajas + 5 uni
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| VTA-10 | Confirmar requiere `VENDER`, cliente habilitado (CLI-02) y precio resoluble (PRC-20). | 1 |
-| VTA-11 | La cobranza registrada con la venta puede ser nula, parcial, total o superior al total. El excedente reduce el saldo previo del cliente. | 1 |
+| VTA-10 | Confirmar requiere `VENDER`, cliente habilitado (CLI-02) y precio resoluble (PRC-20): con conexión, sin lista aplicable, sin versión vigente o con algún producto sin precio en la versión, la venta entera se rechaza (`SIN_LISTA_APLICABLE`, `LISTA_SIN_VERSION_VIGENTE`, `PRODUCTO_SIN_PRECIO`). Con conexión se confirma el precio que vio el usuario: si difiere del que resuelve el servidor, `PRECIO_DIFIERE`. Un producto sin costo promedio no se vende con conexión (`PRODUCTO_SIN_COSTO`) (ADR-054). | 1 |
+| VTA-11 | La cobranza registrada con la venta puede ser nula, parcial, total o superior al total, con de 1 a 20 medios que suman su importe; es a lo sumo una por venta, de origen VENTA. El excedente reduce el saldo previo del cliente. Al consumidor final se le vende solo de contado: la cobranza es igual al total (`CONSUMIDOR_FINAL_CONTADO`) (ADR-054). | 1 |
 | VTA-12 | Confirmar una venta registra, en una sola transacción: la venta y sus líneas, los movimientos de stock, el costo congelado, el débito por el total en la cuenta corriente, la cobranza y su crédito si existe, la evaluación de crédito, el estado de facturación, las observaciones y la auditoría. Si algo falla, no se registra nada. | 1 |
-| VTA-13 | La nota de venta muestra datos de la organización y del cliente, número, fecha, vendedor, líneas en su presentación, descuentos, total, cobranza, saldo resultante si la organización lo configura y la leyenda de documento no válido como factura. | 1 |
+| VTA-13 | La nota de venta se arma solo con los valores congelados de la venta (ADR-059) y muestra: nombre, CUIT y, si están cargados, domicilio y teléfono de la organización; razón social, documento y dirección del cliente (o "Consumidor final"); número, fecha y hora en la zona de la organización y vendedor; las líneas en su presentación con cantidad, precio por presentación (PRC-22), bruto, descuento e importe; subtotal, descuentos y total; la cobranza en el acto con sus medios (o "Sin cobro en el acto"); y la leyenda "Documento no válido como factura" (ADR-008). **Saldo:** solo si la organización activa "mostrar saldo" (por defecto no); es el saldo resultante de CRE-02 calculado con el saldo congelado de la venta (`credito_saldo_considerado + total − cobranza de la venta`), así la reimpresión reproduce la original; no se muestra al consumidor final, en una venta sin ese dato ni en una anulada, y un saldo negativo se rotula "a favor del cliente". **Venta anulada:** la nota lleva la marca "ANULADA" en cada página y una línea con la fecha, el motivo y el destino de lo cobrado (VTA-22), y no lleva saldo; la reimpresión de una venta vigente es idéntica al original y no lleva marca de copia. **IVA según el modo impositivo congelado en la venta** (nunca el actual de la organización): modo A, sin filas de IVA; modo B, líneas netas y, en los totales, Neto, una fila "IVA {alícuota} %" por alícuota presente (incluida la de 0 %, de mayor a menor) y Total; modo C, la nota todavía no se genera (deuda de la etapa 4, `04` §9). | 1 |
 
 ### 11.3 Anulación
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
 | VTA-20 | Una venta confirmada solo se corrige por anulación total, con `ANULAR_VENTA` y motivo. | 1 (devolución parcial: 2) |
-| VTA-21 | La anulación ingresa el stock a la ubicación original al costo congelado de cada línea (recalculando el promedio según CST-11) y registra un crédito en la cuenta corriente por el total de la venta. | 1 |
-| VTA-22 | Al anular se indica si se devuelve el dinero cobrado con la venta. Si se devuelve, se anula también esa cobranza; si no, queda como saldo a favor. | 1 |
+| VTA-21 | La anulación ingresa el stock a la ubicación original al costo unitario congelado de cada línea (recalculando el promedio según CST-11) y registra un crédito en la cuenta corriente por el total de la venta. Una línea vendida sin costo ingresa sin recalcular el promedio (CST-12). La ubicación tomada se rige por STK-09: con la ubicación tomada por otra jornada anula solo quien tiene `LIBERAR_UBICACION`; si no, `UBICACION_TOMADA`. Se anula aunque el cliente, el producto o la presentación se hayan desactivado; una ubicación inactiva la rechaza (`UBICACION_INACTIVA`) (ADR-058). | 1 |
+| VTA-22 | Al anular se indica si se devuelve el dinero cobrado con la venta. Si se devuelve, se anula también esa cobranza, con el motivo y la observación de la venta; si no, queda como saldo a favor. Indicarlo es obligatorio si la venta tiene su cobranza confirmada y no corresponde si no la tiene (`DEVOLUCION_INVALIDA`). Al consumidor final siempre se le devuelve (`CONSUMIDOR_FINAL_SIN_DEVOLUCION`): no tiene cuenta donde dejarle saldo a favor (ADR-058). | 1 |
 | VTA-23 | No se puede anular una venta con estado de facturación PARCIAL o FACTURADA sin anular antes la factura. | Facturación |
-| VTA-24 | Sin conexión, un vendedor con `ANULAR_VENTA` puede anular solo ventas de su jornada en curso. La anulación es un comando que referencia el `operation_id` de la venta. | 1 |
+| VTA-24 | Sin conexión, un vendedor con `ANULAR_VENTA` puede anular solo ventas de su jornada en curso. La anulación es un comando que referencia a la venta por su identificador, que el dispositivo genera al confirmarla. `VENTA_ANULAR` v1 admite el modo `OFFLINE` por el lote de sincronización (por REST sigue siendo solo `ONLINE`): la venta debe ser de la jornada del sobre (`JORNADA_AJENA` si es de otra o no tiene jornada) y una venta inexistente o de otra organización es una dependencia inexistente (`VENTA_INEXISTENTE`, SYN-06). La anulación lleva la jornada del sobre aunque después se haya liberado. Una anulación enviada en el mismo lote que su venta se procesa después de ella (SYN-03). En el teléfono, la anulación se guarda, se encola y cuenta en el stock y el saldo locales en una sola transacción (CRE-08, INV-01) (ADR-058, ADR-066). | 1 |
 
 ## 12. Cuenta corriente y cobranzas
 
@@ -350,16 +366,17 @@ Ejemplo de DSC-03 con regla "cajas equivalentes ≥ 20 → 5%": 19 cajas + 5 uni
 | CC-05 | Una venta registra un débito por su total aunque se cobre en el momento; la cobranza registra su propio crédito. Lo mismo para compras de contado y sus pagos. | 1 |
 | CC-06 | Los movimientos no se editan ni se borran. | 1 |
 | CC-07 | El estado de cuenta muestra los movimientos en orden de `occurred_at` con saldo acumulado calculado al consultar. | 1 (PDF: 2) |
+| CC-08 | Una cuenta admite varios movimientos `SALDO_INICIAL`, cada uno con su sentido; un error de carga se corrige con otro `SALDO_INICIAL` en sentido contrario por la diferencia. Se admiten solo mientras la cuenta no tenga movimientos de otro tipo (`CUENTA_CON_OPERACIONES`). No se carga saldo inicial al consumidor final (`CONSUMIDOR_FINAL_SIN_CUENTA`); cualquier otro estado de cliente o de proveedor lo admite. | 1 |
 
 ### 12.2 Cobranzas
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| COB-01 | Una cobranza tiene `operation_id`, cliente, `occurred_at`, importe mayor que cero, usuario, dispositivo, origen (VENTA o INDEPENDIENTE) y uno o más medios. | 1 |
+| COB-01 | Una cobranza tiene identificador generado por quien la origina, `operation_id`, cliente, `occurred_at` (su momento, D3), importe mayor que cero, usuario, dispositivo, jornada si la registró un vendedor en jornada, origen (VENTA o INDEPENDIENTE), de 1 a 20 medios activos (el mismo medio puede repetirse; sin conexión, un medio inactivo o una referencia faltante se aceptan con observación, SYN-07) y una observación opcional de hasta 500 caracteres. Se cobra a clientes activos, suspendidos e inactivos; al consumidor final no se le registra una cobranza independiente (`CONSUMIDOR_FINAL_SIN_CUENTA`). Puede superar la deuda: el saldo queda a favor del cliente (ADR-052). | 1 |
 | COB-02 | La suma de los medios es igual al importe. Los medios configurados con referencia obligatoria (por ejemplo transferencia) exigen referencia. | 1 |
 | COB-03 | Una cobranza reduce el saldo general del cliente. En la etapa 1 no se imputa a ventas. | 1 (imputación: 4) |
-| COB-04 | Las cobranzas pueden registrarse sin conexión y se consideran en el saldo local (CRE-08). | 1 |
-| COB-05 | Una cobranza solo se corrige por anulación con `ANULAR_COBRANZA` y motivo. | 1 |
+| COB-04 | Las cobranzas pueden registrarse sin conexión y se consideran en el saldo local (CRE-08). **En `/ruta` la cobranza va siempre por la cola, con o sin señal: el teléfono la valida, la guarda y encola `COBRANZA_REGISTRAR` `OFFLINE` con la jornada de la sesión en una sola transacción (INV-01); con señal la sincronización se dispara enseguida. Se cobra a los clientes que el teléfono tiene (activos y suspendidos, de la cartera o no) y nunca al consumidor final (COB-01); requiere `REGISTRAR_COBRANZA` en los permisos del bootstrap. El teléfono exige un importe mayor que cero con dos decimales como máximo, de 1 a 20 medios activos con importe positivo que sumen el importe (INV-08), la referencia donde el medio la exige y una observación de hasta 500 caracteres; muestra el saldo local actual y el resultante, y si el resultante queda a favor del cliente pide confirmarlo (CC-04). No hay comprobante de cobranza en la etapa 1 (COB-06) (ADR-067).** | 1 |
+| COB-05 | Una cobranza solo se corrige por anulación total, con conexión, con `ANULAR_COBRANZA`, un motivo del ámbito `ANULACION_COBRANZA` y una observación opcional. La anulación deja la cobranza `ANULADA` y registra un movimiento `ANULACION_COBRANZA` que devuelve el saldo. Se anula una sola vez, también si el cliente está inactivo o su jornada cerrada; la de origen VENTA se anula con su venta (VTA-22) (ADR-052). | 1 |
 | COB-06 | Comprobante de cobranza compartible. | 2 |
 
 ## 13. Sincronización y comandos
@@ -370,13 +387,24 @@ Ejemplo de DSC-03 con regla "cajas equivalentes ≥ 20 → 5%": 19 cajas + 5 uni
 | SYN-02 | Un `operation_id` es único por organización. Si llega un comando ya procesado con la misma huella, se devuelve el resultado original sin reprocesar. Si llega con distinta huella, se rechaza como inconsistente. | 1 |
 | SYN-03 | Los comandos de un dispositivo se procesan en el orden en que se generaron. Un comando que depende de otro (anulación de una venta) se procesa después de él. | 1 |
 | SYN-04 | Resultados posibles: ACEPTADO, ACEPTADO_CON_OBSERVACIONES o RECHAZADO. | 1 |
-| SYN-05 | Una venta o cobranza registrada sin conexión nunca se rechaza por reglas de negocio (stock, crédito, lista, descuentos, estado del cliente o permisos). Se acepta con las observaciones que correspondan. | 1 |
-| SYN-06 | Solo se rechazan comandos malformados, inconsistentes (SYN-02), de otra organización, con dependencias inexistentes o de dispositivos revocados. Los comandos de dispositivos revocados se guardan en cuarentena para revisión manual; no se pierden. | 1 |
-| SYN-07 | Observaciones de la etapa 1: STOCK_NEGATIVO, EXCESO_CREDITO_ADVERTIDO, EXCESO_CREDITO_AUTORIZADO_OFFLINE, EXCESO_CREDITO_DETECTADO_SYNC, LISTA_NO_VIGENTE, DESCUENTO_DIFIERE, CLIENTE_NO_HABILITADO, PERMISO_REVOCADO, JORNADA_LIBERADA, ANULACION_COMPRA_SIN_RECALCULO. | 1 |
-| SYN-08 | Una observación queda PENDIENTE hasta que un usuario con `REVISAR_OBSERVACIONES` la resuelve con un comentario. Resolverla no modifica la operación; las correcciones se hacen con operaciones nuevas. | 1 |
-| SYN-09 | El dispositivo no elimina una operación local hasta recibir ACEPTADO o ACEPTADO_CON_OBSERVACIONES. Un RECHAZADO queda visible en el dispositivo. | 1 |
-| SYN-10 | Sin conexión, los permisos vigentes son los descargados al abrir la jornada. Si al sincronizar el usuario ya no tiene el permiso, la operación se acepta con PERMISO_REVOCADO. | 1 |
-| SYN-11 | El bootstrap incluye: productos y presentaciones activos, clientes con saldo y datos de crédito, versiones de lista vigentes y las anteriores permitidas, reglas de descuento activas, stock de la ubicación tomada, permisos y topes del usuario, credenciales de autorización de supervisores y configuración de la organización. No incluye costos ni utilidades salvo que el usuario tenga `VER_COSTOS`. | 1 |
+| SYN-05 | Una venta o cobranza registrada sin conexión nunca se rechaza por reglas de negocio (stock, crédito, lista, descuentos, estado del cliente, permisos, un medio de pago desactivado o una referencia faltante). Se acepta con las observaciones que correspondan. La suma de los medios igual al importe (INV-08) no es una regla de negocio: si no se cumple, el comando está malformado (SYN-06) (ADR-052). Una venta sin conexión de un producto o presentación desactivados después del bootstrap se acepta (ADR-054); unos totales que no coinciden con el cálculo sobre los valores enviados son un comando malformado (`TOTALES_INCONSISTENTES`). Los descuentos de una venta sin conexión con importe no positivo o con más de dos decimales, con porcentaje fuera de (0, 1] o que superan el bruto de la línea, con más de un manual por línea, un automático sin regla o un manual con regla, o un total distinto de la suma de los netos, son un comando malformado (`TOTALES_INCONSISTENTES`) (ADR-055). | 1 |
+| SYN-06 | Solo se rechazan comandos malformados, inconsistentes (SYN-02), de otra organización, con dependencias inexistentes o de dispositivos revocados. Una jornada del sobre que no existe en la organización es una dependencia inexistente (`JORNADA_INEXISTENTE`): en el lote el ítem se rechaza sin fila de comando y el lote sigue; por REST responde 404. **La venta que referencia una anulación sin conexión y no existe en la organización (nunca llegó, fue rechazada o es de otra organización) es también una dependencia inexistente (`VENTA_INEXISTENTE`): el ítem se rechaza con su fila de comando, de modo que el reenvío devuelve el mismo rechazo, y el lote sigue (ADR-066).** Los comandos de dispositivos revocados se guardan en cuarentena para revisión manual; no se pierden. **Todo comando sin conexión de un dispositivo activo que el lote rechaza se guarda, en una transacción aparte, en el registro de rechazos, con su contenido y su código (salvo los que traen credenciales y un lote rechazado entero por cola ajena); el reenvío no lo duplica. Rechazos y cuarentena los revisa quien tiene `REVISAR_OBSERVACIONES`: los resuelve con un comentario y, si la operación ocurrió, con el vínculo a la venta o la cobranza cargada con conexión que la corrige (la anulación rechazada se resuelve solo con comentario) (`RECHAZO_RESOLVER`). Ningún comando rechazado o en cuarentena se reenvía ni se reprocesa (ADR-069).** | 1 |
+| SYN-07 | Observaciones de la etapa 1: STOCK_NEGATIVO, EXCESO_CREDITO_ADVERTIDO, EXCESO_CREDITO_AUTORIZADO_OFFLINE, EXCESO_CREDITO_DETECTADO_SYNC, LISTA_NO_VIGENTE, DESCUENTO_DIFIERE, CLIENTE_NO_HABILITADO, PERMISO_REVOCADO, JORNADA_LIBERADA, ANULACION_COMPRA_SIN_RECALCULO, MEDIO_INACTIVO, REFERENCIA_FALTANTE, VENTA_SIN_COSTO, CONSUMIDOR_FINAL_CON_DEUDA, UBICACION_TOMADA_AL_SINCRONIZAR, AUTORIZACION_OFFLINE, JORNADA_RENDIDA, **PRODUCTO_DESACTIVADO**. `MEDIO_INACTIVO` y `REFERENCIA_FALTANTE` se emiten solo sin conexión, una por cada línea de medio afectada: el medio de pago está inactivo al sincronizar, o exige referencia y la línea llegó sin ella; su detalle indica la línea, el medio y el importe. Con conexión, esos casos se rechazan (`MEDIO_PAGO_INACTIVO`, `REFERENCIA_OBLIGATORIA`) (ADR-052). `CONSUMIDOR_FINAL_CON_DEUDA` se emite solo sin conexión, una vez por venta al consumidor final cuya cobranza no es igual al total (si el cliente además no está habilitado, solo `CLIENTE_NO_HABILITADO`). `VENTA_SIN_COSTO` se emite solo sin conexión, una por línea de un producto sin costo promedio; la línea queda con costo nulo. `LISTA_NO_VIGENTE` se emite una vez por venta sin conexión cuando la versión que usó el dispositivo no es la vigente al `occurred_at` para la lista aplicable (ADR-054). `UBICACION_TOMADA_AL_SINCRONIZAR` se emite solo sin conexión, sobre la venta, cuando la ubicación de la que salió el stock estaba tomada por una jornada al sincronizar (la propia en `EN_RENDICION` o la de otro vendedor); la venta se acepta igual (SYN-05, INV-17) y puede convivir con `JORNADA_LIBERADA` (aprobado por el usuario el 2026-10-20). **`VENTA_ANULAR` sin conexión emite las mismas tres, siempre sobre la venta anulada: `PERMISO_REVOCADO` (el usuario ya no tenía `ANULAR_VENTA`), `JORNADA_LIBERADA` y `UBICACION_TOMADA_AL_SINCRONIZAR` (la mercadería vuelve a la ubicación donde está físicamente, sin jornada y con la constancia en la auditoría). La anulación sigue aceptada aunque las tenga, como la venta; un motivo del ámbito dado de baja después del bootstrap se acepta sin observación (ADR-066).** `AUTORIZACION_OFFLINE` se emite solo sin conexión, una por cada autorización de descuento o de crédito resuelta por PIN de supervisor o por permiso propio; su detalle indica el tipo (`DESCUENTO` o `CREDITO`), la resolución, el autorizador y si conserva el permiso al sincronizar; un autorizador enviado con el porcentaje de hoy dentro del tope igual la deja (ADR-055). **`JORNADA_RENDIDA` se emite solo sin conexión, una por operación, sobre la venta, la anulación o la cobranza cuya jornada del sobre está `EN_RENDICION` o `CERRADA`; su detalle indica la jornada y el momento de la rendición; la operación no entra en el conteo (ADR-068).** **`PRODUCTO_DESACTIVADO` se emite solo sin conexión, una por línea de una venta cuyo producto o presentación está inactivo al sincronizar; su detalle indica la línea, el producto, la presentación y cuál está inactivo (`PRODUCTO` si lo están los dos); la venta se acepta igual (ADR-069).** | 1 |
+| SYN-08 | Una observación queda PENDIENTE hasta que un usuario con `REVISAR_OBSERVACIONES` la resuelve con un comentario. Resolverla no modifica la operación; las correcciones se hacen con operaciones nuevas. **`OBSERVACION_RESOLVER` (solo con conexión) resuelve de 1 a 100 observaciones con un mismo comentario de 1 a 500 caracteres, todas o ninguna (`OBSERVACIONES_INVALIDAS`, `COMENTARIO_INVALIDO`, `OBSERVACION_YA_RESUELTA`); guarda quién, cuándo y el comentario. Una observación resuelta no vuelve a pendiente ni cambia, y la base solo admite actualizar las columnas de la resolución (ADR-069).** | 1 |
+| SYN-09 | El dispositivo no elimina una operación local hasta recibir ACEPTADO o ACEPTADO_CON_OBSERVACIONES, y ni siquiera entonces la borra: el resultado solo cambia su estado de envío. Cada venta local es «Sin enviar» (`PENDIENTE`) al confirmarla y pasa a «Enviada» (`ACEPTADA`), «Con observaciones» (`CON_OBSERVACIONES`) o «Rechazada» (`RECHAZADA`) únicamente con el resultado del servidor. Un RECHAZADO queda visible en el dispositivo, no se reenvía solo y se avisa; **cuando el bootstrap lo informa resuelto, muestra además «Resuelta por administración» (ADR-069)**. Ni el bootstrap, ni el cierre de sesión, ni el inicio de sesión de otro usuario, ni el bloqueo del PIN de desbloqueo, ni recibir el resultado borran ventas, cobranzas, movimientos ni comandos locales (ADR-063, ADR-064). | 1 |
+| SYN-10 | Sin conexión, los permisos vigentes son los descargados al abrir la jornada (en el dispositivo). Si al sincronizar el usuario ya no tiene el permiso que declara el tipo de comando, o el usuario o su rol están inactivos, la operación se acepta con PERMISO_REVOCADO. El servidor compara con los permisos actuales; no guarda una foto (ADR-052). Un comando offline sin jornada (`JORNADA_REQUERIDA`) o con la jornada de otro usuario o dispositivo (`JORNADA_AJENA`) se rechaza (SYN-06). | 1 |
+| SYN-11 | El bootstrap incluye: productos y presentaciones activos, clientes activos y suspendidos (y el consumidor final) con la cartera del usuario, saldo y datos de crédito, versiones de lista vigentes, programadas y las anteriores permitidas (estas, solo con `USAR_LISTA_ANTERIOR`), reglas de descuento activas no vencidas, stock de la ubicación tomada, permisos, contexto de venta y topes del usuario, medios, motivos y alícuotas activos, credenciales de autorización de supervisores (solo con `VENDER`), numeración del dispositivo, **la secuencia procesada de la jornada** (la mayor `secuencia` de los comandos registrados de la jornada del bootstrap, del usuario y del dispositivo de la sesión; nula si no hay), **los `operation_id` de los rechazos ya resueltos de esa jornada, usuario y dispositivo, en el nivel superior de la respuesta (`rechazos_resueltos`, fuera de `sesion`) (ADR-069)** y configuración de la organización y de la nota. Se lee en una sola foto de la base, la misma del stock y los saldos. No incluye costos ni utilidades (ADR-062, ADR-065). | 1 |
+
+### 13.1 Importación inicial
+
+| ID | Regla | Etapa |
+| --- | --- | :-: |
+| IMP-01 | Una importación es una sola operación por archivo: o se escriben todas las filas o ninguna (INV-01). Un archivo con errores se rechaza con el informe completo de errores por fila y columna (`IMPORTACION_CON_ERRORES`). | 1 |
+| IMP-02 | Cada fila se valida y se escribe con las mismas reglas que el alta individual de su entidad y produce el mismo código de error ante el mismo dato inválido (TR-10). | 1 |
+| IMP-03 | Una importación de maestros solo crea registros; una clave natural que ya existe es un error de duplicado y ningún registro existente se modifica. | 1 |
+| IMP-04 | Las referencias entre entidades se escriben por clave natural (categoría y marca por nombre, alícuota por porcentaje, proveedor por nombre, producto por código, cliente por código o documento, ubicación por nombre); no se crean al vuelo. | 1 |
+| IMP-05 | Los números de una planilla se leen como decimales exactos: coma decimal y sin separador de miles; un punto se rechaza (INV-03). Las cantidades son enteros (INV-04). | 1 |
+| IMP-06 | El stock y los saldos iniciales importados se fechan con el momento de la importación (sin fecha de corte), como los cargados por pantalla (STK-10, CC-08). | 1 |
 
 ## 14. Seguridad y sesión (ADR-011)
 
@@ -384,21 +412,23 @@ Ejemplo de DSC-03 con regla "cajas equivalentes ≥ 20 → 5%": 19 cajas + 5 uni
 | --- | --- | --- |
 | SEG-01 | El inicio de sesión requiere conexión y credenciales. | 1 |
 | SEG-02 | Un dispositivo se registra en su primer inicio de sesión y recibe un prefijo de numeración. Un usuario con `GESTIONAR_DISPOSITIVOS` puede revocarlo. | 1 |
-| SEG-03 | Con conexión, cada usuario define un PIN para el dispositivo. Sin conexión, el PIN desbloquea la sesión local. | 1 |
-| SEG-04 | Superados los intentos fallidos configurados, la sesión local se bloquea y requiere inicio de sesión con conexión. Las operaciones pendientes no se pierden. | 1 |
-| SEG-05 | La autorización de un supervisor mediante PIN queda registrada con el supervisor como autorizador y se audita. | 1 |
-| SEG-06 | El servidor valida los permisos en cada comando. Ocultar una acción en la interfaz no reemplaza esa validación. | 1 |
+| SEG-03 | Con conexión, cada usuario define un PIN de 6 dígitos para el dispositivo, que no puede ser trivial. Se pide al abrir la aplicación, con o sin conexión; no se pide al volver de segundo plano. Una sola sesión local por dispositivo: cerrar sesión o iniciar con otro usuario borra la sesión, el PIN y los datos maestros del anterior (ADR-062). | 1 |
+| SEG-04 | Superados 10 intentos fallidos del PIN de desbloqueo (constante del código, no un parámetro), la sesión local se bloquea, se borra la derivación del PIN y se requiere inicio de sesión con conexión. Las operaciones pendientes no se pierden. | 1 |
+| SEG-05 | La autorización de un supervisor mediante PIN queda registrada con el supervisor como autorizador y se audita. Con conexión, el servidor verifica el PIN sin guardarlo ni incluirlo en el comando; con `intentos_pin_max` fallos de un mismo usuario, ese usuario no puede usar el PIN de ese supervisor, y con 20 fallos de cualquier usuario el PIN del supervisor se bloquea para todos (`PIN_BLOQUEADO`, 429); cada bloqueo dura 15 minutos desde el último fallo y los intentos durante el bloqueo no cuentan; definir un PIN nuevo reinicia la cuenta. Quien tiene algún permiso de autorización puede definir su propio PIN desde "Mi PIN", confirmando su contraseña (ADR-055). Sin conexión, el teléfono verifica el PIN del supervisor contra la derivación del bootstrap, cuenta los fallos por par (usuario, supervisor) y, con `intentos_pin_max` fallos, bloquea el PIN de ese supervisor en ese teléfono **hasta el próximo bootstrap** (abrir la jornada o «Actualizar datos»): el bloqueo no es por tiempo, porque el reloj del teléfono se puede adelantar; un intento durante el bloqueo no cuenta y un acierto no reinicia la cuenta. El PIN no se guarda ni viaja en el comando (ADR-063). | 1 |
+| SEG-06 | El servidor valida los permisos en cada comando. Ocultar una acción en la interfaz no reemplaza esa validación. Lo hace el bus para todo tipo de comando, llegue por REST o por el lote, según los permisos que el tipo declara en el catálogo (ADR-056). | 1 |
 | SEG-07 | Un intento de acceder a un recurso de otra organización responde como recurso inexistente. | 1 |
 
 ## 15. Auditoría
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
-| AUD-01 | Se auditan: inicio de sesión, cambios de usuarios, roles, permisos y dispositivos; costos informados; publicación y anulación de versiones de lista; uso de lista no asignada o versión anterior; descuentos manuales y autorizaciones; autorizaciones de crédito; ventas, compras, cobranzas y pagos anulados; ajustes de stock; diferencias de rendición; liberación forzada de ubicaciones; cambios de límite y política de crédito; cambios de configuración; resolución de observaciones; comandos rechazados o en cuarentena. | 1 |
+| AUD-01 | Se auditan: inicio de sesión, cambios de usuarios, roles, permisos y dispositivos (modificar usuario, baja y reactivación de usuario, cambio de rol de un usuario, restablecimiento de contraseña, cambio de la propia contraseña —`CAMBIAR_CONTRASENA_PROPIA`, sin dato alguno de la contraseña—, alta, renombre, baja y reactivación de rol, y la revocación de sesiones de una baja o de un cambio de contraseña, `REVOCAR_SESIONES_REFRESH_USUARIO` con `origen = 'COMANDO'`); costos informados; publicación y anulación de versiones de lista; uso de lista no asignada o versión anterior; descuentos manuales y autorizaciones; cambios del tope de descuento de un rol y del tope propio de un usuario (una fila con el valor anterior y el nuevo, `TOPE_DESCUENTO_USUARIO`); asignación de clientes a vendedores (una fila por cliente cambiado, `ASIGNAR_VENDEDOR_CLIENTE`, con el vendedor anterior y el nuevo); autorizaciones de crédito; bloqueos del PIN de autorización (`PIN_AUTORIZACION_BLOQUEADO`); ventas, compras, cobranzas y pagos anulados; transferencias y ajustes de stock y sus anulaciones (la fila de `STOCK_AJUSTAR`, `STOCK_TRANSFERENCIA_ANULAR` y `STOCK_AJUSTE_ANULAR` lleva el motivo, AUD-02); apertura, **entrega del día**, rendición **con su conteo y sus diferencias**, cierre **con la devolución del remanente** y liberación forzada de jornadas (la fila de `JORNADA_LIBERAR` lleva el motivo, AUD-02; **la rendición no lleva motivo: su registro es la rendición y sus líneas, ADR-068**); todo movimiento hecho sobre una ubicación tomada por quien tiene `LIBERAR_UBICACION` (la fila del comando lleva una observación que nombra STK-09 y la jornada); renovaciones de sesión de un usuario o rol inactivo con jornada no cerrada; diferencias de rendición; cambios de límite y política de crédito; cambios de configuración; resolución de observaciones; comandos rechazados o en cuarentena. | 1 |
 | AUD-02 | Cada registro guarda usuario, dispositivo, acción, entidad, identificador, valor anterior y nuevo cuando aplica, motivo, autorizador, `occurred_at`, `registered_at` y `operation_id`. | 1 |
 | AUD-03 | La auditoría es de solo agregado: no se modifica ni se elimina. | 1 |
 
 ## 16. Facturación (módulo independiente)
+
+> **Alcance (ADR-045):** ADR-009 y las reglas FAC-02, FAC-03, FAC-04 y FAC-08 (modalidad de IVA CLIENTE/ABSORBIDO, IVA por alícuota) solo se aplican a organizaciones responsables inscriptas. Un monotributista emite Factura C, sin IVA discriminado ni modalidad de IVA.
 
 | ID | Regla | Etapa |
 | --- | --- | --- |
@@ -428,9 +458,9 @@ Ejemplo de FAC-02 y FAC-03 (ventas por $100.000 netos al 21%, costo $70.000):
 | ID | Regla | Etapa |
 | --- | --- | --- |
 | REP-01 | Los reportes se calculan desde las operaciones registradas. No existen cifras mantenidas manualmente. | 1 |
-| REP-02 | Las ventas se asignan al período por su fecha de negocio (TR-04). Las ventas anuladas se excluyen de los totales de su período y se informan por separado. | 1 |
-| REP-03 | Las cantidades se informan en cajas equivalentes, unidades base y detalle por presentación vendida. | 1 |
-| REP-04 | Utilidad real = neto − costo congelado − IVA absorbido asignado. Solo la ven usuarios con `VER_UTILIDAD`. | 1 |
+| REP-02 | Las ventas se asignan al período por su fecha de negocio (TR-04). Las ventas anuladas se excluyen de los totales de su período y se informan por separado. **El período son fechas de negocio inclusivas; sin fechas, el mes en curso hasta hoy, y como máximo 366 días (`PERIODO_DEMASIADO_LARGO`). Una venta anulada se excluye del período de la venta aunque se anule después, y se lista en ese período con la fecha y el motivo de la anulación (ADR-070).** | 1 |
+| REP-03 | Las cantidades se informan en cajas equivalentes, unidades base y detalle por presentación vendida. **Las cajas equivalentes de cada línea usan sus `unidades_referencia` congeladas, se suman exactas y se redondean a 2 decimales una sola vez por cifra. El reporte de ventas trae resumen, por día, por vendedor y por producto; por producto, solo cantidades y neto (ADR-070).** | 1 |
+| REP-04 | Utilidad real = neto − costo congelado − IVA absorbido asignado. Solo la ven usuarios con `VER_UTILIDAD`. **Con la utilidad se informa el costo vendido. Se calcula solo sobre las líneas con costo; las vendidas sin costo (VTA-05, sin conexión) se informan aparte con su cantidad y su neto. Hasta que exista el módulo de facturación, el IVA absorbido asignado es cero. No se informa margen porcentual (ADR-070).** | 1 |
 | REP-05 | Los reportes usan los valores congelados de cada operación, nunca precios ni costos actuales. | 1 |
 | REP-06 | Utilidad por producto, cliente, proveedor y categoría; costo vendido por proveedor frente a deuda; comparativos; exportación. | 2 |
 
@@ -446,61 +476,95 @@ Cada entidad tiene estados independientes entre sí. Los estados derivados se ca
 | Venta | Sincronización (en dispositivo) | LOCAL_PENDIENTE → ENVIANDO → ACEPTADA \| ACEPTADA_CON_OBSERVACIONES \| RECHAZADA | 1 |
 | Compra | Operativa | CONFIRMADA → ANULADA | 1 |
 | Cobranza / Pago | Operativa | CONFIRMADA → ANULADA | 1 |
+| Transferencia | Operativa | CONFIRMADA → ANULADA | 1 |
+| Ajuste de stock | Operativa | CONFIRMADA → ANULADA | 1 |
 | Versión de lista | Almacenada | BORRADOR → PUBLICADA → ANULADA (solo antes de su vigencia) | 1 |
 | Versión de lista | Derivada | PROGRAMADA / VIGENTE / HISTÓRICA | 1 |
-| Regla de descuento | Almacenada | BORRADOR → ACTIVA ↔ PAUSADA | 1 |
-| Regla de descuento | Derivada | VENCIDA | 1 |
-| Cliente | Almacenada | ACTIVO ↔ SUSPENDIDO; ACTIVO/SUSPENDIDO ↔ INACTIVO | 1 |
+| Regla de descuento | Almacenada | BORRADOR → ACTIVA ↔ PAUSADA. Solo un borrador se edita completo; activada o pausada solo admite fijar su vigencia hasta. Ninguna regla vuelve a BORRADOR ni se borra. | 1 |
+| Regla de descuento | Derivada | VENCIDA (activa o pausada con la vigencia hasta ya pasada) | 1 |
+| Cliente | Almacenada | ACTIVO ↔ SUSPENDIDO; ACTIVO/SUSPENDIDO → INACTIVO; INACTIVO → ACTIVO solo sin operaciones | 1 |
 | Jornada | Almacenada | ABIERTA → EN_RENDICION → CERRADA; ABIERTA/EN_RENDICION → LIBERADA | 1 |
 | Dispositivo | Almacenada | ACTIVO → REVOCADO | 1 |
+| Usuario | Almacenada | ACTIVO ↔ INACTIVO | 1 |
+| Rol | Almacenada | ACTIVO ↔ INACTIVO (la baja solo sin usuarios activos) | 1 |
+
+**Usuario.** `ACTIVO → INACTIVO` es la baja (`USUARIO_BAJA`): corta el acceso en la petición siguiente, revoca las sesiones de refresh salvo las de dispositivos con una jornada no cerrada del usuario, borra su PIN de autorización y conserva su rol, su tope propio y su cartera. `INACTIVO → ACTIVO` es la reactivación (`USUARIO_REACTIVAR`); el usuario inicia sesión de nuevo y define su PIN otra vez si lo necesita. Una baja de un inactivo o una reactivación de un activo se rechaza con `IDENTIDAD_TRANSICION_ESTADO_USUARIO_INVALIDA`. Nadie se da de baja a sí mismo (`IDENTIDAD_AUTOBAJA`) y ninguna baja deja la organización sin un usuario activo con `ADMIN_USUARIOS` (ADR-053, ADR-060).
+
+**Rol.** `ACTIVO → INACTIVO` es la baja (`ROL_BAJA`) y solo se acepta si el rol no tiene usuarios activos (`IDENTIDAD_ROL_CON_USUARIOS_ACTIVOS`); un rol de baja no se asigna, no aparece en los selectores y sus permisos se pueden seguir editando. `INACTIVO → ACTIVO` es libre (`ROL_REACTIVAR`). Ninguna plantilla está protegida (ADR-060).
 | Observación | Almacenada | PENDIENTE → RESUELTA | 1 |
 | Factura | Almacenada | EMITIDA → ANULADA | Facturación |
+
+**Cliente.** Un cliente nace `ACTIVO` (change 07, D7). `INACTIVO` admite una sola salida —volver a `ACTIVO`— y solo si el cliente no tiene operaciones (CLI-06, ADR-030); cuando existan ventas, cobranzas o compras, la transición queda fuera de la máquina. El cliente consumidor final nunca pasa a `INACTIVO` (CLI-03, ADR-029).
+
+**Versión de lista.** Una lista tiene a lo sumo un borrador (PRC-18). `PUBLICADA` y `ANULADA` no cambian sus precios (INV-11). Los estados derivados son `PROGRAMADA`, `VIGENTE` e `HISTÓRICA` (en la API, `HISTORICA`). Solo se anula una versión `PROGRAMADA`.
+
+**Jornada.** "No cerrada" es `ABIERTA` o `EN_RENDICION`: en esos dos estados la ubicación está tomada. `ABIERTA → EN_RENDICION` es la rendición **(exige la entrega del día y que la jornada no tenga rechazos pendientes, y registra el conteo, RUT-05, RUT-06, ADR-069)**; `EN_RENDICION → CERRADA` es el cierre y libera la ubicación **(puede devolver el remanente, RUT-08)**; `LIBERADA` es la liberación forzada con motivo. **La entrega del día no es un estado: la jornada entregada sigue `ABIERTA`.** Cualquier otra transición se rechaza con `JORNADA_ESTADO_INVALIDO` y deja la jornada como estaba; una `CERRADA` o `LIBERADA` no admite ninguna. **Las jornadas cerradas antes del change 24 y las liberadas no tienen conteo; su resumen muestra el stock calculado (ADR-068).**
 
 ## 19. Permisos y roles
 
 | Permiso | Alcance | ADM | GES | SUP | VEN | CON |
 | --- | --- | :-: | :-: | :-: | :-: | :-: |
-| ADMIN_USUARIOS | Usuarios, roles y permisos | ✓ | | | | |
-| ADMIN_CONFIGURACION | Configuración de la organización | ✓ | | | | |
+| ADMIN_USUARIOS | Usuarios, roles y permisos: alta, edición, baja y reactivación de usuarios, cambio de rol, restablecimiento de contraseña y tope de descuento propio de cada usuario; crear, renombrar, dar de baja y reactivar roles, cambiar los permisos de cada rol, consultar el catálogo de permisos, definir el tope de descuento manual de cada rol y consultar los roles con su tope y los usuarios con su rol. Ningún cambio —baja de usuario, cambio de rol, baja de rol ni cambio de permisos— puede dejar la organización sin un usuario activo con este permiso (ADR-053, ADR-060) | ✓ | | | | |
+| ADMIN_CONFIGURACION | Configuración de la organización (incluye crear, modificar y desactivar ubicaciones, STK-02; crear, modificar, dar de baja y reactivar medios de pago, ADR-053; motivos de cada ámbito y alícuotas de IVA, y definir el redondeo por defecto, ADR-061) | ✓ | | | | |
 | GESTIONAR_DISPOSITIVOS | Ver y revocar dispositivos | ✓ | | ✓ | | |
-| IMPORTAR_DATOS | Importaciones y puesta en marcha | ✓ | | | | |
+| IMPORTAR_DATOS | Importaciones y puesta en marcha (incluye registrar saldos iniciales, CC-08, y stock inicial, STK-10) | ✓ | | | | |
 | GESTIONAR_CATALOGO | Productos, presentaciones, categorías | ✓ | ✓ | | | |
-| GESTIONAR_CLIENTES | Alta y edición de clientes | ✓ | ✓ | ✓ | | |
+| GESTIONAR_CLIENTES | Alta y edición de clientes; ver su cuenta corriente; asignar clientes a vendedores (cartera, ADR-060) | ✓ | ✓ | ✓ | | |
 | GESTIONAR_CREDITO | Límite, política y tolerancia de clientes | ✓ | ✓ | | | |
-| GESTIONAR_PROVEEDORES | Alta y edición de proveedores | ✓ | ✓ | | | |
-| VER_COSTOS | Ver costos | ✓ | ✓ | | | |
+| GESTIONAR_PROVEEDORES | Alta y edición de proveedores; ver su cuenta corriente | ✓ | ✓ | | | |
+| VER_COSTOS | Ver costos (incluye el costo promedio de un producto y los costos del kardex y del stock) | ✓ | ✓ | | | |
 | EDITAR_COSTOS | Registrar costos informados | ✓ | ✓ | | | |
 | VER_UTILIDAD | Ver utilidad | ✓ | ✓ | | | ✓ |
-| GESTIONAR_LISTAS | Reglas de margen, redondeo y borradores | ✓ | ✓ | | | |
-| PUBLICAR_LISTAS | Publicar y anular versiones | ✓ | | | | |
+| GESTIONAR_LISTAS | Listas, reglas de margen, redondeo y borradores (generar y fijar precios manuales); **leer listas, reglas, versiones y precios** | ✓ | ✓ | | | |
+| PUBLICAR_LISTAS | Publicar y anular versiones; **leer listas, reglas, versiones y precios** | ✓ | | | | |
 | USAR_LISTA_ANTERIOR | Lista no asignada o versión anterior en venta | ✓ | | ✓ | | |
-| GESTIONAR_DESCUENTOS | Reglas de descuento | ✓ | | | | |
+| GESTIONAR_DESCUENTOS | Reglas de descuento: alta, edición del borrador, activación, pausa y consulta. Abre, solo en lectura, las categorías, marcas y productos para elegir alcances | ✓ | | | | |
 | REGISTRAR_COMPRA | Registrar compras | ✓ | ✓ | | | |
 | ANULAR_COMPRA | Anular compras | ✓ | ✓ | | | |
-| REGISTRAR_PAGO_PROVEEDOR | Registrar pagos | ✓ | ✓ | | | |
-| ANULAR_PAGO_PROVEEDOR | Anular pagos | ✓ | ✓ | | | |
-| TRANSFERIR_STOCK | Transferencias | ✓ | ✓ | ✓ | ✓ | |
-| AJUSTAR_STOCK | Ajustes | ✓ | ✓ | | | |
-| PERMITIR_STOCK_NEGATIVO | Operar con stock negativo online | ✓ | | | | |
-| ABRIR_JORNADA | Abrir jornada y tomar ubicación | ✓ | | ✓ | ✓ | |
-| RENDIR_JORNADA | Rendir y cerrar jornada | ✓ | ✓ | ✓ | | |
-| LIBERAR_UBICACION | Liberación forzada | ✓ | | ✓ | | |
+| REGISTRAR_PAGO_PROVEEDOR | Registrar pagos; ver el listado y el detalle de pagos, el saldo del proveedor y elegir proveedor | ✓ | ✓ | | | |
+| ANULAR_PAGO_PROVEEDOR | Anular pagos; ver el listado y el detalle de pagos | ✓ | ✓ | | | |
+| TRANSFERIR_STOCK | Transferencias; anular las propias; ver el listado y el detalle de transferencias, ubicaciones, stock por ubicación y kardex (sin costos) | ✓ | ✓ | ✓ | ✓ | |
+| ANULAR_TRANSFERENCIA | Anular transferencias de otros usuarios (exige además `TRANSFERIR_STOCK`) | ✓ | ✓ | | | |
+| AJUSTAR_STOCK | Ajustes; anularlos (propios o ajenos); ver el listado y el detalle de ajustes | ✓ | ✓ | | | |
+| PERMITIR_STOCK_NEGATIVO | Operar con stock negativo | ✓ | | | | |
+| ABRIR_JORNADA | Abrir jornada y tomar ubicación; leer las jornadas y la propia jornada actual | ✓ | | ✓ | ✓ | |
+| RENDIR_JORNADA | Rendir y cerrar jornada; leer las jornadas | ✓ | ✓ | ✓ | | |
+| LIBERAR_UBICACION | Liberación forzada de una jornada con motivo; mover una ubicación tomada (STK-09); leer las jornadas | ✓ | | ✓ | | |
 | VENDER | Confirmar ventas | ✓ | | ✓ | ✓ | |
 | ANULAR_VENTA | Anular ventas | ✓ | ✓ | ✓ | | |
 | DESCUENTO_MANUAL | Descuento manual hasta el tope del rol | ✓ (sin tope) | | ✓ | ✓ | |
-| AUTORIZAR_DESCUENTO | Superar tope de descuento | ✓ | | ✓ | | |
+| AUTORIZAR_DESCUENTO | Superar tope de descuento, el propio o el de otro usuario; quien autoriza no queda limitado por su propio tope | ✓ | | ✓ | | |
 | SUPERAR_CREDITO | Vender con exceso de crédito | ✓ | | ✓ | | |
 | VENDER_CLIENTE_SUSPENDIDO | Vender a suspendidos | ✓ | | ✓ | | |
 | REGISTRAR_COBRANZA | Registrar cobranzas | ✓ | ✓ | ✓ | ✓ | |
 | ANULAR_COBRANZA | Anular cobranzas | ✓ | ✓ | ✓ | | |
-| REVISAR_OBSERVACIONES | Resolver observaciones | ✓ | ✓ | ✓ | | |
-| VER_REPORTES | Reportes | ✓ | ✓ | ✓ | | ✓ |
+| REVISAR_OBSERVACIONES | Resolver observaciones; **leer la bandeja de observaciones, el resumen de pendientes, y revisar y resolver los rechazos sin conexión y la cuarentena (ADR-069)** | ✓ | ✓ | ✓ | | |
+| VER_REPORTES | Reportes. **Los saldos de proveedores exigen además `GESTIONAR_PROVEEDORES`, `REGISTRAR_PAGO_PROVEEDOR` o `VER_UTILIDAD` (ADR-070)** | ✓ | ✓ | ✓ | | ✓ |
 | VER_AUDITORIA | Consultar auditoría | ✓ | | | | ✓ |
+| VER_CONSISTENCIA | Ver el aviso de diferencias de la verificación diaria de consistencia en `/admin` y leer su resultado (solo lectura; no modifica nada; ADR-073). **El aviso del inicio de `/admin` se arma sobre `REVISAR_OBSERVACIONES`: un rol a medida con `VER_CONSISTENCIA` y sin ese permiso no lo ve (fuera de alcance, etapa 2)** | ✓ | ✓ | | | |
 | FACTURAR | Emitir facturas | ✓ | ✓ | | | |
 | FACTURAR_ABSORBIENDO_IVA | Emitir con IVA absorbido | ✓ | | | | |
 | ANULAR_FACTURA | Anular facturas | ✓ | ✓ | | | |
 
-Roles: ADM = Administrador, GES = Administración, SUP = Supervisor comercial, VEN = Vendedor/Repartidor, CON = Consulta/Dirección. Los roles son plantillas: la organización puede modificar su composición y los topes de descuento. El vendedor ve el saldo y el crédito disponible de sus clientes; no ve costos ni utilidad.
+Roles: ADM = Administrador, GES = Administración, SUP = Supervisor comercial, VEN = Vendedor/Repartidor, CON = Consulta/Dirección. Los roles son plantillas: la organización puede modificar su composición y los topes de descuento, renombrarlos, crear roles nuevos, darlos de baja (solo sin usuarios activos) y reactivarlos; el nombre es único por organización sin distinguir mayúsculas, aunque el otro rol esté de baja (ADR-028 D9.5, ADR-053, ADR-060). Un usuario puede tener además un tope de descuento propio que reemplaza al de su rol. El vendedor ve el saldo y el crédito disponible de sus clientes; no ve costos ni utilidad.
+
+El listado y el detalle de pagos exigen `REGISTRAR_PAGO_PROVEEDOR` o `ANULAR_PAGO_PROVEEDOR`; el saldo de un proveedor se lee con `GESTIONAR_PROVEEDORES`, `REGISTRAR_PAGO_PROVEEDOR` o `REGISTRAR_COMPRA`; la lista de proveedores para elegir también con `REGISTRAR_PAGO_PROVEEDOR`; medios de pago y motivos, con cualquier sesión (ADR-043, ADR-046).
+
+El listado y el detalle de cobranzas exigen `REGISTRAR_COBRANZA` o `ANULAR_COBRANZA` y alcanzan a todas las cobranzas de la organización; el saldo de un cliente y la lista de clientes para elegir se leen con `GESTIONAR_CLIENTES` o `REGISTRAR_COBRANZA`; la ficha y el estado de cuenta, solo con `GESTIONAR_CLIENTES`. "Sus clientes" son los clientes que tiene asignados el vendedor (`cliente.vendedor_id`). Quien llega a los clientes solo por `VENDER` o `REGISTRAR_COBRANZA` ve primero sus clientes asignados y el consumidor final, y puede buscar en todos; si no tiene ningún cliente asignado ve todos; quien tiene `GESTIONAR_CLIENTES` ve todos siempre. La cartera ordena lo que se ofrece y no restringe: vender o cobrar a un cliente fuera de la cartera se permite, con y sin conexión, sin rechazo ni observación (INV-17). El consumidor final no se asigna a ningún vendedor (CLI-03) (ADR-052, ADR-060).
+
+El listado y el detalle de ventas exigen `VENDER` o `ANULAR_VENTA` y alcanzan a todas las ventas de la organización; los costos de cada línea, además `VER_COSTOS`. Con `VENDER` se leen, solo para vender, los precios de la versión aplicable con las presentaciones de venta y el stock de la ubicación (sin costos), la numeración del dispositivo, la lista de clientes para elegir y su saldo, las listas activas y las ubicaciones activas; las versiones elegibles, con `USAR_LISTA_ANTERIOR` (ADR-054). Sin `USAR_LISTA_ANTERIOR`, los precios para vender son solo los de la versión vigente de la lista que corresponde al cliente. Quien llega a las ubicaciones solo por `VENDER` recibe únicamente las activas y ve quién tiene cada una. El detalle de la venta no trae utilidad (REP-04 exige `VER_UTILIDAD`; es de los reportes). La matriz de permisos de este documento no cambia: `VENDER` y `USAR_LISTA_ANTERIOR` ya existen. También con `VENDER` se leen, solo para vender, el contexto de venta (tope de descuento propio, motivos y autorizadores disponibles), el crédito del cliente (límite, saldo, disponible, política y tolerancia aplicables) y las reglas de descuento aplicables con su nombre (ADR-055). El detalle de la venta trae, si está anulada, la anulación (momento, usuario y motivo con sus nombres, observación y si se devolvió el dinero) y la marca de si el cliente es el consumidor final; el listado filtra por estado (`CONFIRMADA` o `ANULADA`, REP-02). Anular exige `ANULAR_VENTA` (y `LIBERAR_UBICACION` solo si la ubicación está tomada por otra jornada, STK-09); no exige `PERMITIR_STOCK_NEGATIVO` porque solo ingresa stock (ADR-058).
+
+Los permisos de autorización de excepciones (`AUTORIZAR_DESCUENTO`, `SUPERAR_CREDITO`, `VENDER_CLIENTE_SUSPENDIDO`, `USAR_LISTA_ANTERIOR`) habilitan además a definir el propio PIN de autorización («Mi PIN», `PIN_AUTORIZACION_PROPIO_DEFINIR`), confirmando la contraseña; `ADMIN_USUARIOS` define o cambia el de cualquier usuario con alguno de esos permisos (`PIN_AUTORIZACION_ROTAR`) (ADR-055).
+
+Las lecturas de listas, reglas, versiones y precios las puede hacer quien tenga `GESTIONAR_LISTAS` o `PUBLICAR_LISTAS`. El costo de referencia, el margen y el precio calculado de un precio solo se devuelven con `VER_COSTOS`; las señales siempre. Cada precio trae, sin costos, el nombre y las unidades de las presentaciones activas de venta de su producto, para mostrar el precio por presentación (PRC-22) sin una lectura por producto (ADR-047 punto 30). La lista de listas activas para elegir también se lee con `GESTIONAR_CLIENTES` y `ADMIN_CONFIGURACION`, y la lista predeterminada con `ADMIN_CONFIGURACION`, `GESTIONAR_LISTAS` o `PUBLICAR_LISTAS`. Las lecturas de productos, categorías, marcas y proveedores para elegir el alcance de una regla se abren, solo en lectura, a `GESTIONAR_LISTAS` (ADR-047).
+
+El listado y el detalle de transferencias se leen con `TRANSFERIR_STOCK`; los de ajustes, con `AJUSTAR_STOCK`, y sus costos solo con `VER_COSTOS`. `ANULAR_TRANSFERENCIA` solo agrega el alcance sobre las transferencias de otros usuarios y no abre ninguna lectura; sin ese permiso, anular la transferencia de otro responde 403. Quien tiene `PERMITIR_STOCK_NEGATIVO` puede, además, dejar stock negativo con la salida de una transferencia y con la anulación de una transferencia o de un ajuste (ADR-048).
+
+El listado, el detalle **y el resumen** de jornadas se leen con cualquiera de `ABRIR_JORNADA`, `RENDIR_JORNADA` o `LIBERAR_UBICACION`, y alcanzan a todas las jornadas de la organización **(el valor de las diferencias, además con `VER_COSTOS`); `RENDIR_JORNADA` lee también, solo en lectura, los productos activos para agregar un sobrante, y devolver el remanente en el cierre exige además `TRANSFERIR_STOCK`. La entrega del día se hace con `ABRIR_JORNADA` (ADR-068)**; la jornada actual del usuario y del dispositivo de la sesión se lee con `ABRIR_JORNADA`. El listado de ubicaciones y el stock por ubicación (`TRANSFERIR_STOCK`) indican qué ubicaciones están tomadas, por quién y desde cuándo. Quien tiene `LIBERAR_UBICACION` puede además mover una ubicación tomada (STK-09); los permisos propios de cada operación se exigen igual (ADR-049).
+
+El resultado de la verificación de consistencia se lee con `VER_CONSISTENCIA` (`GET /api/v1/sistema/consistencia`; ADR-073).
+
+Los reportes (ventas por período, rendiciones, saldos de clientes y de proveedores, observaciones por vendedor y ajustes por motivo) se leen con `VER_REPORTES` y alcanzan a toda la organización. Con `VER_UTILIDAD` traen además el costo vendido y la utilidad (REP-04); con `VER_COSTOS`, el valor de las diferencias de rendición y de los ajustes. El resumen de una jornada se lee también desde los reportes con `VER_REPORTES`. Los saldos de clientes se leen solo con `VER_REPORTES`; los saldos de proveedores, con `VER_REPORTES` y además `GESTIONAR_PROVEEDORES`, `REGISTRAR_PAGO_PROVEEDOR` o `VER_UTILIDAD` (con la plantilla, ADM, GES y CON; el Supervisor no, por el criterio de ADR-033), y `/admin` oculta su pestaña a quien no cumple la regla. Desde los reportes, «Ver estado de cuenta» exige el permiso de la ficha y «Ver en Revisión», `REVISAR_OBSERVACIONES` (ADR-070).
 
 ## 20. Invariantes
 
@@ -523,30 +587,43 @@ Deben cumplirse siempre y estar cubiertos por pruebas automatizadas.
 | INV-13 | El saldo de cada cuenta corriente es igual a la suma de sus movimientos. | Nuevo |
 | INV-14 | Total de una venta = suma de netos de sus líneas + suma de IVA de sus líneas. | Nuevo |
 | INV-15 | Una transferencia no modifica el stock total del producto en la organización. | Nuevo |
-| INV-16 | Una ubicación que requiere toma tiene como máximo una jornada no cerrada. | Nuevo |
+| INV-16 | Una ubicación que requiere toma tiene como máximo una jornada no cerrada (`ABIERTA` o `EN_RENDICION`); lo mismo vale para cada usuario y cada dispositivo. | Nuevo |
 | INV-17 | Una venta o cobranza offline nunca se rechaza por reglas de negocio. | Nuevo |
 | INV-18 | Las unidades de una presentación usada en operaciones no cambian. | Nuevo |
 | INV-19 | Anular una venta deja el stock y el saldo del cliente como si no se hubiera registrado, sin borrar ningún registro. | Nuevo |
 | INV-20 | Facturar nunca vuelve a generar la deuda de la mercadería. | FAC-01 |
 | INV-21 | Ningún usuario obtiene ni modifica datos de otra organización. | T-022 |
 
+INV-19 (VTA-22): con devolución del dinero, el stock y el saldo del cliente quedan exactamente como antes de la venta; sin devolución, el saldo difiere solo en el importe cobrado, que queda a favor del cliente (ADR-058).
+
+INV-01 (un rechazo por último medio activo o por último administrador no deja ningún cambio), INV-02 (medios y roles siempre filtrados por organización), INV-05 (los medios se desactivan, nunca se borran: el usuario de aplicación no tiene `DELETE` sobre `medio_pago`), INV-06 (el doble envío con el mismo `operation_id` no duplica efectos) e INV-21 (un medio o un rol de otra organización responde 404) tienen pruebas que los citan por ID en el change 17b, incluidas pruebas de concurrencia con commits reales (dos bajas simultáneas de los dos últimos medios; dos cambios simultáneos que quitan `ADMIN_USUARIOS` a los dos únicos roles que lo tienen; dos altas simultáneas del mismo nombre).
+
+INV-01, INV-02, INV-03, INV-05, INV-06, INV-10 (descuentos de línea y snapshot de crédito sin `UPDATE` ni `DELETE`), INV-13, INV-14, INV-17 e INV-21 tienen pruebas que los citan por ID en el change 18b.
+
+INV-01, INV-05, INV-06, INV-10, INV-12, INV-13, INV-19 e INV-21 tienen pruebas que los citan por ID en el change 19, incluidas pruebas de concurrencia con commits reales (dos anulaciones de la misma venta; la anulación con devolución frente a `COBRANZA_ANULAR`; la anulación frente a una venta, a la desactivación del producto y a la apertura de una jornada) y una propiedad con SQL (confirmar y anular con devolución deja stock y saldo como antes, y los libros solo crecen).
+
+**Cobertura del change 20b (ADR-060).** INV-01: la baja, el cambio de rol y la asignación de cartera se rechazan enteros o se aplican enteros (`test_cliente_vendedor_asignar`, `test_usuario_baja`). INV-02: el nombre de rol único por organización (`ux_rol__nombre`) no cruza organizaciones (`test_usuarios_roles_cartera_migracion`). INV-03: el tope propio viaja como fracción string (`test_usuario_tope_descuento_definir`, `usuarios.test.ts`). INV-05: ninguna baja borra usuarios, roles ni su auditoría (`test_inv05_bajas_no_borran`). INV-06: todo comando del change responde igual ante el doble envío. INV-17: una venta o cobranza fuera de la cartera nunca se rechaza (`test_cartera_no_rechaza_operaciones`). INV-21: toda ruta nueva con su prueba de recurso ajeno (404). La regla del último administrador tiene pruebas de conteo (`test_identidad_conteo_administradores`) y de concurrencia real (`test_identidad_bajas_concurrentes`, `test_rol_baja_concurrente`).
+
 ## 21. Efectos de cada evento
 
 | Evento | Stock | Costo promedio | Cta. cliente | Cta. proveedor | Utilidad | Auditoría |
 | --- | --- | --- | --- | --- | --- | --- |
-| Stock inicial | + | Recalcula | — | — | — | Sí |
+| Stock inicial | + / − (corrección, STK-10) | Recalcula (+); no cambia (−) | — | — | — | Sí |
 | Saldo inicial | — | — | + / − | + / − | — | Sí |
 | Costo informado | — | — | — | — | — | Sí |
 | Versión publicada | — | — | — | — | — | Sí |
 | Compra | + | Recalcula | — | + (y − si contado) | — | Sí |
 | Anulación de compra | − | Recalcula o mantiene | — | − | — | Sí |
 | Pago a proveedor | — | — | — | − | — | Sí |
-| Transferencia | − origen / + destino | — | — | — | — | Sí |
-| Ajuste de stock | + / − | — | — | — | — | Sí |
+| Anulación de pago | — | — | — | + | — | Sí |
+| Transferencia | − origen / + destino | No cambia (valoriza al promedio vigente) | — | — | — | Sí |
+| Anulación de transferencia | + origen / − destino | No cambia (costo original) | — | — | — | Sí |
+| Ajuste de stock | + / − | No cambia (valoriza al promedio vigente) | — | — | — | Sí |
+| Anulación de ajuste | − / + (inverso) | No cambia (costo original) | — | — | — | Sí |
 | Venta | − | — | + total (y − si cobra) | — | Congela | Sí |
 | Anulación de venta | + | Recalcula | − total | — | Excluye | Sí |
 | Cobranza | — | — | − | — | — | Sí |
-| Diferencia de rendición | + / − | — | — | — | — | Sí |
+| Diferencia de rendición | + / − | No cambia (valoriza al promedio vigente) | — | — | — | Sí |
 | Factura modalidad CLIENTE | — | — | + IVA | — | — | Sí |
 | Factura modalidad ABSORBIDO | — | — | — | — | − IVA absorbido | Sí |
 

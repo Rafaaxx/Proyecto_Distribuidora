@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 | --- | --- |
-| Estado | Vigente |
+| Estado | Vigente (alcance limitado a organizaciones responsables inscriptas por ADR-045, 2026-10-03) |
 | Fecha | 2026-09-16 |
 | Referenciado en | `docs/00` §12, `docs/01` §16, `docs/03` §4 |
 

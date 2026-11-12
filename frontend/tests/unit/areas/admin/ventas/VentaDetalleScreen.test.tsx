@@ -1,0 +1,289 @@
+import { QueryClientProvider } from '@tanstack/react-query'
+import { render, screen, within } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }))
+vi.mock('../../../../../src/lib/api/httpClient', () => ({ apiFetch: apiFetchMock }))
+
+import { VentaDetalleScreen } from '../../../../../src/areas/admin/ventas/VentaDetalleScreen'
+import type { ReglaDeApi } from '../../../utils/enrutarApi'
+import { queryClientConYo, type RolDePrueba } from '../../../utils/permisosDePrueba'
+import {
+  COBRANZA_ID,
+  JORNADA_ID,
+  LINEA_BOTELLAS,
+  LINEA_CAJAS,
+  MOTIVO_LISTA_ID,
+  VENTA_ID,
+  montarApi,
+  ventaDetalle,
+} from './ventasDePrueba'
+
+function renderPantalla(rol: RolDePrueba = 'SUP', permisos?: string[]) {
+  const cliente = permisos ? queryClientConYo(rol, { permisos } as never) : queryClientConYo(rol)
+  return render(
+    <QueryClientProvider client={cliente}>
+      <MemoryRouter initialEntries={[`/admin/ventas/${VENTA_ID}`]}>
+        <Routes>
+          <Route path="/admin/ventas/:ventaId" element={<VentaDetalleScreen />} />
+          <Route path="/admin/ventas" element={<p>Listado de ventas</p>} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
+function detalle(campos: Partial<Record<string, unknown>> = {}): ReglaDeApi {
+  return { metodo: 'GET', ruta: `/ventas/${VENTA_ID}`, responder: () => ({ status: 200, cuerpo: ventaDetalle(campos) }) }
+}
+
+const LINEA_CON_COSTO = { ...LINEA_CAJAS, costo_unitario: '1050.000000', costo_total: '75600.00' }
+
+describe('VentaDetalleScreen (tarea 12.3)', () => {
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+  })
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('muestra la venta como quedó congelada: cabecera, líneas en su presentación, totales y cobranza enlazada', async () => {
+    montarApi(apiFetchMock, [detalle()])
+    renderPantalla('SUP')
+
+    expect(await screen.findByRole('heading', { name: /venta v01-000042/i })).toBeInTheDocument()
+    const cabecera = screen.getByTestId('cabecera-de-la-venta')
+    expect(cabecera).toHaveTextContent('Kiosco La Esquina')
+    expect(cabecera).toHaveTextContent('Juan Vendedor')
+    expect(cabecera).toHaveTextContent('Depósito central')
+    expect(cabecera).toHaveTextContent('Confirmada')
+    expect(cabecera).toHaveTextContent('Con conexión')
+    expect(cabecera).toHaveTextContent('Jornada: sin jornada')
+
+    const caja = screen.getByTestId('linea-l1')
+    expect(caja).toHaveTextContent('Vino A')
+    expect(caja).toHaveTextContent('2 × Caja x6 (12 unidades)')
+    expect(caja).toHaveTextContent('$ 25.000,00')
+    const botellas = screen.getByTestId('linea-l2')
+    expect(botellas).toHaveTextContent('3 × Botella (3 unidades)')
+    expect(botellas).toHaveTextContent('$ 6.250,00')
+
+    expect(screen.getByTestId('total-de-la-venta')).toHaveTextContent('$ 31.250,00')
+    const cobranza = screen.getByTestId('cobranza-de-la-venta')
+    expect(cobranza).toHaveTextContent('$ 20.000,00')
+    expect(within(cobranza).getByRole('link', { name: /ver la cobranza/i })).toHaveAttribute('href', `/admin/cobranzas/${COBRANZA_ID}`)
+  })
+
+  it('muestra la lista y la versión; con otra lista elegida, también el motivo (PRC-21, PRC-23)', async () => {
+    montarApi(apiFetchMock, [detalle()])
+    const primero = renderPantalla('SUP')
+    const lista = await screen.findByTestId('lista-de-la-venta')
+    expect(lista).toHaveTextContent('Mayorista')
+    expect(lista).toHaveTextContent('Versión 2')
+    expect(lista).not.toHaveTextContent(/motivo/i)
+    primero.unmount()
+
+    apiFetchMock.mockReset()
+    montarApi(apiFetchMock, [detalle({ motivo_lista: { motivo_id: MOTIVO_LISTA_ID, nombre: 'Precio acordado con el cliente' } })])
+    renderPantalla('SUP')
+    expect(await screen.findByTestId('lista-de-la-venta')).toHaveTextContent('Motivo: Precio acordado con el cliente')
+  })
+
+  it('una venta con jornada enlaza al listado de esa jornada; una sin cobranza lo dice', async () => {
+    montarApi(apiFetchMock, [detalle({ jornada_id: JORNADA_ID, cobranza: null })])
+    renderPantalla('SUP')
+
+    expect(await screen.findByRole('link', { name: /ventas de esta jornada/i })).toHaveAttribute('href', `/admin/ventas?jornada=${JORNADA_ID}`)
+    expect(screen.getByTestId('cobranza-de-la-venta')).toHaveTextContent(/sin cobranza en el acto/i)
+  })
+
+  // Escenario: "Venta con observaciones"
+  it('la marca "Stock negativo" aparece junto a su línea con el saldo resultante (SYN-07, STK-05)', async () => {
+    montarApi(apiFetchMock, [
+      detalle({
+        observaciones: [
+          { codigo: 'STOCK_NEGATIVO', estado: 'PENDIENTE', detalle: { linea_id: 'l1', producto_id: 'x', saldo_resultante: -4 } },
+          { codigo: 'CONSUMIDOR_FINAL_CON_DEUDA', estado: 'PENDIENTE', detalle: { total: '4300.00', cobranza: '4000.00' } },
+        ],
+      }),
+    ])
+    renderPantalla('SUP')
+
+    const linea = await screen.findByTestId('linea-l1')
+    expect(linea).toHaveTextContent('Stock negativo')
+    expect(linea).toHaveTextContent('Saldo resultante: -4 unidades')
+    expect(screen.getByTestId('linea-l2')).not.toHaveTextContent('Stock negativo')
+    expect(screen.getByTestId('observaciones-generales')).toHaveTextContent('Consumidor final con deuda')
+    expect(screen.getByTestId('observaciones-generales')).toHaveTextContent('Total $ 4.300,00 · cobrado $ 4.000,00')
+  })
+
+  // Escenarios: "Detalle sin costos" / "Detalle con costos"
+  it('con VER_COSTOS muestra costo unitario y total de cada línea (VTA-05)', async () => {
+    montarApi(apiFetchMock, [detalle({ lineas: [LINEA_CON_COSTO, LINEA_BOTELLAS] })])
+    renderPantalla('ADM')
+
+    const linea = await screen.findByTestId('linea-l1')
+    expect(linea).toHaveTextContent('Costo unitario: 1.050,000000')
+    expect(linea).toHaveTextContent('Costo total: $ 75.600,00')
+    expect(screen.getByTestId('linea-l2')).toHaveTextContent('Sin costo informado')
+  })
+
+  it('sin VER_COSTOS no muestra ninguna señal de costo (nulos de la API) ni utilidad', async () => {
+    montarApi(apiFetchMock, [detalle()])
+    renderPantalla('SUP')
+
+    await screen.findByTestId('linea-l1')
+    expect(screen.queryByText(/costo/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/utilidad/i)).not.toBeInTheDocument()
+  })
+
+  it('sin permiso de leer cobranzas la cobranza se muestra sin enlace', async () => {
+    montarApi(apiFetchMock, [detalle()])
+    renderPantalla('SUP', ['VENDER'])
+
+    const cobranza = await screen.findByTestId('cobranza-de-la-venta')
+    expect(cobranza).toHaveTextContent('$ 20.000,00')
+    expect(within(cobranza).queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  it('una venta que no existe o es de otra organización muestra el aviso (404, INV-21)', async () => {
+    montarApi(apiFetchMock, [
+      { metodo: 'GET', ruta: `/ventas/${VENTA_ID}`, responder: () => ({ status: 404, cuerpo: { title: 'No existe', codigo: 'RECURSO_NO_ENCONTRADO' } }) },
+    ])
+    renderPantalla('SUP')
+    expect(await screen.findByText(/no se encontr[oó] la venta/i)).toBeInTheDocument()
+  })
+
+  it('un error cualquiera y un 403 se muestran sin romper la pantalla', async () => {
+    montarApi(apiFetchMock, [{ metodo: 'GET', ruta: `/ventas/${VENTA_ID}`, responder: () => ({ status: 500, cuerpo: { title: 'Falla', codigo: 'ERROR' } }) }])
+    const primero = renderPantalla('SUP')
+    expect(await screen.findByText(/no se pudo obtener la venta/i)).toBeInTheDocument()
+    primero.unmount()
+
+    apiFetchMock.mockReset()
+    montarApi(apiFetchMock, [{ metodo: 'GET', ruta: `/ventas/${VENTA_ID}`, responder: () => ({ status: 403, cuerpo: { title: 'No', codigo: 'PERMISO_REQUERIDO' } }) }])
+    renderPantalla('SUP')
+    expect(await screen.findByText(/no ten[eé]s permiso para ver las ventas/i)).toBeInTheDocument()
+  })
+
+  it('sin VENDER ni ANULAR_VENTA no pide nada', () => {
+    montarApi(apiFetchMock, [detalle()])
+    renderPantalla('CON')
+    expect(screen.getByText(/no ten[eé]s permiso para ver las ventas/i)).toBeInTheDocument()
+    expect(apiFetchMock).not.toHaveBeenCalled()
+  })
+
+  // Escenario: "Detalle de una venta autorizada"
+  it('muestra los descuentos de cada línea (origen, regla, porcentaje, importe, motivo y autorizador) y el snapshot de crédito con su autorizador (DSC-08, CRE-10)', async () => {
+    montarApi(apiFetchMock, [
+      detalle({
+        lineas: [
+          {
+            ...LINEA_CAJAS,
+            importe_descuento: '3625.00',
+            importe_neto: '21375.00',
+            descuentos: [
+              { origen: 'AUTOMATICO', regla_id: 'r1', regla_nombre: 'Volumen vinos', porcentaje: '0.050000', importe: '1250.00', motivo_id: null, motivo_nombre: null, autorizador_id: null, autorizador_nombre: null },
+              { origen: 'MANUAL', regla_id: null, regla_nombre: null, porcentaje: '0.100000', importe: '2375.00', motivo_id: 'm1', motivo_nombre: 'Cliente frecuente', autorizador_id: 'u1', autorizador_nombre: 'Marta' },
+            ],
+          },
+          LINEA_BOTELLAS,
+        ],
+        credito: {
+          limite: '160000.00',
+          saldo_considerado: '150000.00',
+          disponible: '10000.00',
+          exceso: '21250.00',
+          politica: 'AUTORIZAR',
+          resolucion: 'PIN_SUPERVISOR',
+          autorizador_id: 'u1',
+          autorizador_nombre: 'Marta',
+        },
+      }),
+    ])
+    renderPantalla('SUP')
+
+    const linea = await screen.findByTestId('linea-l1')
+    expect(linea).toHaveTextContent('Descuento automático «Volumen vinos» 5 %: −$ 1.250,00')
+    expect(linea).toHaveTextContent('Descuento manual 10 % (motivo: Cliente frecuente; autorizó Marta): −$ 2.375,00')
+    const credito = screen.getByTestId('credito-de-la-venta')
+    expect(credito).toHaveTextContent('Límite $ 160.000,00')
+    expect(credito).toHaveTextContent('Debía $ 150.000,00')
+    expect(credito).toHaveTextContent('Disponible $ 10.000,00')
+    expect(credito).toHaveTextContent('Exceso $ 21.250,00')
+    expect(credito).toHaveTextContent('Política Autorizar')
+    expect(screen.getByTestId('credito-resolucion')).toHaveTextContent('Autorizado con el PIN de un supervisor · autorizó Marta')
+  })
+
+  // Escenario: "Venta del change anterior"
+  it('una venta anterior al change (sin snapshot de crédito ni descuentos) se muestra sin esa tarjeta y sin fallar (CRE-10)', async () => {
+    montarApi(apiFetchMock, [detalle({ credito: null })])
+    renderPantalla('SUP')
+
+    expect(await screen.findByTestId('linea-l1')).toBeInTheDocument()
+    expect(screen.queryByTestId('credito-de-la-venta')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('descuento-l1-0')).not.toBeInTheDocument()
+  })
+
+  it('un exceso advertido figura entre las observaciones con su título', async () => {
+    montarApi(apiFetchMock, [
+      detalle({ observaciones: [{ codigo: 'EXCESO_CREDITO_ADVERTIDO', estado: 'PENDIENTE', detalle: { exceso: '21250.00' } }] }),
+    ])
+    renderPantalla('SUP')
+
+    expect(await screen.findByTestId('observaciones-generales')).toHaveTextContent('Exceso de crédito advertido')
+  })
+})
+
+/**
+ * Change 25, tarea 15.2 (D11, D12; SYN-07, SYN-08): cada observación resuelta muestra quién, cuándo y con qué
+ * comentario (solo lectura); las etiquetas y los detalles nuevos.
+ */
+describe('VentaDetalleScreen: resolución de las observaciones (tarea 15.2)', () => {
+  beforeEach(() => {
+    apiFetchMock.mockReset()
+  })
+
+  it('una observación resuelta dice «Resuelta por {usuario} el {fecha}: {comentario}»; una pendiente, no', async () => {
+    montarApi(apiFetchMock, [
+      detalle({
+        observaciones: [
+          { codigo: 'STOCK_NEGATIVO', estado: 'PENDIENTE', detalle: { linea_id: 'l1', saldo_resultante: -4 } },
+          {
+  codigo: 'CONSUMIDOR_FINAL_CON_DEUDA',
+  estado: 'RESUELTA',
+  detalle: { total: '4300.00', cobranza: '4000.00' },
+  resuelto_por_nombre: 'Marta',
+  resuelto_en: '2026-11-05T12:00:00Z',
+  comentario: 'Se corrigió con un ajuste',
+},
+        ],
+      }),
+    ])
+    renderPantalla('SUP')
+
+    const generales = await screen.findByTestId('observaciones-generales')
+    expect(within(generales).getByText(/^Resuelta por Marta el \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}: Se corrigió con un ajuste$/)).toBeInTheDocument()
+    expect(within(await screen.findByTestId('linea-l1')).queryByText(/^Resuelta/)).not.toBeInTheDocument()
+  })
+
+  it('muestra las etiquetas y los detalles que faltaban (D12)', async () => {
+    montarApi(apiFetchMock, [
+      detalle({
+        observaciones: [
+          { codigo: 'JORNADA_RENDIDA', estado: 'PENDIENTE', detalle: { jornada_id: 'j1', rendida_en: '2026-11-04T20:00:00Z' } },
+          { codigo: 'PRODUCTO_DESACTIVADO', estado: 'PENDIENTE', detalle: { linea_id: 'l2', inactivo: 'PRODUCTO' } },
+          { codigo: 'DESCUENTO_DIFIERE', estado: 'PENDIENTE', detalle: { causas: [{ causa: 'MOTIVO' }] } },
+        ],
+      }),
+    ])
+    renderPantalla('SUP')
+
+    const generales = await screen.findByTestId('observaciones-generales')
+    expect(within(generales).getByText('Llegó después de la rendición')).toBeInTheDocument()
+    expect(within(generales).getByText(/^Rendida el \d{2}\/\d{2}\/\d{4}/)).toBeInTheDocument()
+    expect(within(generales).getByText('Causa: faltó el motivo')).toBeInTheDocument()
+    expect(screen.getByTestId('linea-l2')).toHaveTextContent('Producto desactivado')
+  })
+})

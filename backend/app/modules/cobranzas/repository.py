@@ -1,0 +1,415 @@
+"""Acceso a datos de `cobranzas` (change 17; `design.md` D2, D16, D18).
+
+Solo SQL: las reglas viven en `domain/` y el orden de las operaciones en `service.py`. Toda
+función recibe `organizacion_id` como primer parámetro y filtra por él (INV-21,
+`docs/02-arquitectura.md` §8). Sin `commit`: la transacción la gestiona el bus.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from datetime import datetime
+from decimal import Decimal
+from uuid import UUID
+
+from sqlalchemy import func, select, tuple_
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from app.core.ids import nuevo_id
+from app.modules.cobranzas.domain.consultas import codificar_cursor, decodificar_cursor
+from app.modules.cobranzas.domain.errores import (
+    CobranzaDuplicadaError,
+    CobranzaYaAnuladaError,
+    RecursoNoEncontradoError,
+)
+from app.modules.cobranzas.models import Cobranza, CobranzaAnulacion, CobranzaMedio
+
+FUNCIONES_SIN_ORGANIZACION_ID: frozenset[str] = frozenset()
+"""`cobranzas` no tiene catálogo global: toda función recibe `organizacion_id` primero."""
+
+
+@dataclass(frozen=True)
+class DatosDeCobranza:
+    """Lo que se inserta de una cobranza. Nace siempre `CONFIRMADA`: no se inserta una cobranza
+    ya anulada (COB-01, TR-06)."""
+
+    id: UUID
+    cliente_id: UUID
+    venta_id: UUID | None
+    origen: str
+    importe: Decimal
+    jornada_id: UUID | None
+    observacion: str | None
+    operation_id: UUID
+    usuario_id: UUID
+    dispositivo_id: UUID
+    occurred_at: datetime
+    registered_at: datetime
+
+
+@dataclass(frozen=True)
+class DatosDeMedioDeCobranza:
+    medio_pago_id: UUID
+    importe: Decimal
+    referencia: str | None
+
+
+def existe_cobranza(organizacion_id: UUID, sesion: Session, *, cobranza_id: UUID) -> bool:
+    """Si la organización ya tiene una cobranza con ese identificador (`02` §9). La clave
+    primaria es global: un identificador ocupado por otra organización lo traduce el guardado
+    (`_guardar_con_traduccion`) al mismo `COBRANZA_DUPLICADA`, sin leer datos ajenos."""
+    return (
+        sesion.scalar(
+            select(Cobranza.id).where(
+                Cobranza.organizacion_id == organizacion_id, Cobranza.id == cobranza_id
+            )
+        )
+        is not None
+    )
+
+
+def _guardar_con_traduccion(
+    organizacion_id: UUID, sesion: Session, mutar: Callable[[], None]
+) -> None:
+    """Ejecuta `mutar` dentro de un `SAVEPOINT` y traduce la violación de integridad a un error
+    de dominio de código estable: el identificador repetido (carrera con otro comando) a
+    `COBRANZA_DUPLICADA` y una referencia inexistente o de otra organización (FK compuesta,
+    INV-02) a 404. `mutar` DEBE ejecutar la mutación dentro de este `with`."""
+    del organizacion_id  # No filtra nada: la mutación ya trae su organización.
+    try:
+        with sesion.begin_nested():
+            mutar()
+    except IntegrityError as error:
+        mensaje = str(getattr(error, "orig", error))
+        if "pk_cobranza" in mensaje:
+            raise CobranzaDuplicadaError(
+                "El identificador de la cobranza ya fue usado por otra operación."
+            ) from error
+        if "fk_cobranza__cliente" in mensaje:
+            raise RecursoNoEncontradoError(
+                "El cliente indicado no existe en esta organización."
+            ) from error
+        if "fk_cobranza_medio__medio_pago" in mensaje:
+            raise RecursoNoEncontradoError(
+                "El medio de pago indicado no existe en esta organización."
+            ) from error
+        raise
+
+
+def insertar_cobranza(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    cobranza: DatosDeCobranza,
+    medios: list[DatosDeMedioDeCobranza],
+) -> Cobranza:
+    """Inserta la cobranza `CONFIRMADA` y sus medios, en la transacción de quien llama (INV-01,
+    INV-08: la suma de los medios la valida el dominio). La posición de cada medio (`orden`,
+    desde 0) es la de la lista."""
+    fila = Cobranza(
+        id=cobranza.id,
+        organizacion_id=organizacion_id,
+        cliente_id=cobranza.cliente_id,
+        venta_id=cobranza.venta_id,
+        origen=cobranza.origen,
+        importe=cobranza.importe,
+        estado="CONFIRMADA",
+        jornada_id=cobranza.jornada_id,
+        observacion=cobranza.observacion,
+        operation_id=cobranza.operation_id,
+        usuario_id=cobranza.usuario_id,
+        dispositivo_id=cobranza.dispositivo_id,
+        occurred_at=cobranza.occurred_at,
+        registered_at=cobranza.registered_at,
+    )
+    filas_de_medio = [
+        CobranzaMedio(
+            id=nuevo_id(),
+            organizacion_id=organizacion_id,
+            cobranza_id=cobranza.id,
+            orden=orden,
+            medio_pago_id=medio.medio_pago_id,
+            importe=medio.importe,
+            referencia=medio.referencia,
+        )
+        for orden, medio in enumerate(medios)
+    ]
+
+    def _mutar() -> None:
+        sesion.add(fila)
+        sesion.flush()  # la cobranza antes que sus medios (FK compuesta)
+        for medio in filas_de_medio:
+            sesion.add(medio)
+
+    _guardar_con_traduccion(organizacion_id, sesion, _mutar)
+    return fila
+
+
+def obtener_cobranza(organizacion_id: UUID, cobranza_id: UUID, sesion: Session) -> Cobranza | None:
+    """La cobranza de la organización sin bloquearla (INV-21: otra organización no existe)."""
+    return sesion.scalar(
+        select(Cobranza).where(
+            Cobranza.organizacion_id == organizacion_id, Cobranza.id == cobranza_id
+        )
+    )
+
+
+def obtener_cobranza_de_venta(
+    organizacion_id: UUID, venta_id: UUID, sesion: Session
+) -> Cobranza | None:
+    """La cobranza en el acto de una venta (origen `VENTA`), sin bloquearla, o `None`. A lo
+    sumo una por venta (VTA-11); una de otra organización no se devuelve (INV-21)."""
+    return sesion.scalar(
+        select(Cobranza).where(
+            Cobranza.organizacion_id == organizacion_id, Cobranza.venta_id == venta_id
+        )
+    )
+
+
+def obtener_cobranza_para_actualizar(
+    organizacion_id: UUID, cobranza_id: UUID, sesion: Session
+) -> Cobranza | None:
+    """La cobranza bloqueada `FOR UPDATE`, con el estado releído de la base (D18: la anulación
+    revalida con la fila tomada, antes del saldo)."""
+    return sesion.scalar(
+        select(Cobranza)
+        .where(Cobranza.organizacion_id == organizacion_id, Cobranza.id == cobranza_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+
+
+@dataclass(frozen=True)
+class DatosDeAnulacion:
+    """Lo que se inserta de la anulación de una cobranza (COB-05)."""
+
+    cobranza_id: UUID
+    motivo_id: UUID
+    observacion: str | None
+    operation_id: UUID
+    usuario_id: UUID
+    dispositivo_id: UUID
+    occurred_at: datetime
+    registered_at: datetime
+
+
+def marcar_anulada(
+    organizacion_id: UUID, sesion: Session, *, cobranza: Cobranza, anulacion: DatosDeAnulacion
+) -> CobranzaAnulacion:
+    """Deja la cobranza `ANULADA` (la única columna que `app_runtime` puede actualizar, INV-05) e
+    inserta su anulación. El `UNIQUE` de `cobranza_id` impide dos anulaciones aunque se saltara
+    el bloqueo del servicio (D16)."""
+    fila = CobranzaAnulacion(
+        id=nuevo_id(),
+        organizacion_id=organizacion_id,
+        cobranza_id=anulacion.cobranza_id,
+        motivo_id=anulacion.motivo_id,
+        observacion=anulacion.observacion,
+        operation_id=anulacion.operation_id,
+        usuario_id=anulacion.usuario_id,
+        dispositivo_id=anulacion.dispositivo_id,
+        occurred_at=anulacion.occurred_at,
+        registered_at=anulacion.registered_at,
+    )
+    try:
+        with sesion.begin_nested():
+            cobranza.estado = "ANULADA"
+            sesion.add(fila)
+            sesion.flush()
+    except IntegrityError as error:
+        mensaje = str(getattr(error, "orig", error))
+        if "ux_cobranza_anulacion__cobranza" in mensaje:
+            raise CobranzaYaAnuladaError("La cobranza ya está anulada.") from error
+        if "fk_cobranza_anulacion__motivo" in mensaje:
+            raise RecursoNoEncontradoError(
+                "El motivo indicado no existe en esta organización."
+            ) from error
+        raise
+    return fila
+
+
+def listar_cobranzas_paginado(
+    organizacion_id: UUID,
+    sesion: Session,
+    *,
+    limite: int,
+    cursor: str | None,
+    cliente_id: UUID | None,
+    estado: str | None,
+    usuario_id: UUID | None,
+    jornada_id: UUID | None,
+    desde: datetime | None,
+    hasta: datetime | None,
+) -> tuple[list[Cobranza], str | None]:
+    """Cobranzas de la organización de la más reciente a la más vieja, por cursor
+    `(occurred_at, id)` descendente (índices `ix_cobranza__occurred_at` y `ix_cobranza__cliente`,
+    D16). `desde` es inclusivo y `hasta` exclusivo (instantes: ver `rango_de_instantes`).
+    Devuelve `(filas, cursor_siguiente)`."""
+    consulta = select(Cobranza).where(Cobranza.organizacion_id == organizacion_id)
+    if cliente_id is not None:
+        consulta = consulta.where(Cobranza.cliente_id == cliente_id)
+    if estado is not None:
+        consulta = consulta.where(Cobranza.estado == estado)
+    if usuario_id is not None:
+        consulta = consulta.where(Cobranza.usuario_id == usuario_id)
+    if jornada_id is not None:
+        consulta = consulta.where(Cobranza.jornada_id == jornada_id)
+    if desde is not None:
+        consulta = consulta.where(Cobranza.occurred_at >= desde)
+    if hasta is not None:
+        consulta = consulta.where(Cobranza.occurred_at < hasta)
+    if cursor is not None:
+        momento, id_cursor = decodificar_cursor(cursor)
+        consulta = consulta.where(tuple_(Cobranza.occurred_at, Cobranza.id) < (momento, id_cursor))
+    consulta = consulta.order_by(Cobranza.occurred_at.desc(), Cobranza.id.desc()).limit(limite + 1)
+
+    filas = list(sesion.scalars(consulta).all())
+    if len(filas) > limite:
+        pagina = filas[:limite]
+        ultima = pagina[-1]
+        return pagina, codificar_cursor(ultima.occurred_at, ultima.id)
+    return filas, None
+
+
+def listar_medios_de_cobranza(
+    organizacion_id: UUID, cobranza_id: UUID, sesion: Session
+) -> list[CobranzaMedio]:
+    """Los medios de la cobranza en el orden en que se cargaron (a lo sumo 20, D2)."""
+    return list(
+        sesion.scalars(
+            select(CobranzaMedio)
+            .where(
+                CobranzaMedio.organizacion_id == organizacion_id,
+                CobranzaMedio.cobranza_id == cobranza_id,
+            )
+            .order_by(CobranzaMedio.orden)
+        ).all()
+    )
+
+
+def obtener_anulacion(
+    organizacion_id: UUID, cobranza_id: UUID, sesion: Session
+) -> CobranzaAnulacion | None:
+    """La anulación de la cobranza, si la tiene (a lo sumo una, D16)."""
+    return sesion.scalar(
+        select(CobranzaAnulacion).where(
+            CobranzaAnulacion.organizacion_id == organizacion_id,
+            CobranzaAnulacion.cobranza_id == cobranza_id,
+        )
+    )
+
+
+def tomar_cobranza_de_venta(
+    organizacion_id: UUID, venta_id: UUID, sesion: Session
+) -> Cobranza | None:
+    """Toma con FOR UPDATE la cobranza origen VENTA de la venta (D9)."""
+    return sesion.scalar(
+        select(Cobranza)
+        .where(
+            Cobranza.organizacion_id == organizacion_id,
+            Cobranza.venta_id == venta_id,
+            Cobranza.origen == "VENTA",
+        )
+        .with_for_update()
+    )
+
+
+@dataclass(frozen=True)
+class TotalDeCobranzas:
+    """Cobranzas de una jornada de un estado: cuántas y su importe, sumado en la base."""
+
+    estado: str
+    tardia: bool
+    cantidad: int
+    total: Decimal
+
+
+@dataclass(frozen=True)
+class TotalDeMedio:
+    """El importe de un medio de pago en las cobranzas de una jornada de un estado."""
+
+    estado: str
+    tardia: bool
+    medio_pago_id: UUID
+    total: Decimal
+
+
+def totales_de_cobranzas_de_jornada(
+    organizacion_id: UUID, jornada_id: UUID, corte: datetime | None, sesion: Session
+) -> tuple[list[TotalDeCobranzas], list[TotalDeMedio]]:
+    """Las cobranzas de la jornada (RUT-07, change 24 D4) agrupadas en la base por estado y por
+    si se registraron después de `corte` (la rendición; sin `corte`, ninguna): cantidad e importe
+    y, por medio de pago, el importe de cada medio. Ninguna suma se hace en Python."""
+    # Sin `corte` ninguna es tardía: no se agrupa por una constante.
+    tardia = Cobranza.registered_at > corte if corte is not None else None
+    columnas_de_grupo = [Cobranza.estado] + ([tardia] if tardia is not None else [])
+    marca = [tardia.label("tardia")] if tardia is not None else []
+    totales = (
+        sesion.execute(
+            select(
+                Cobranza.estado,
+                *marca,
+                func.count().label("cantidad"),
+                func.coalesce(func.sum(Cobranza.importe), 0).label("total"),
+            )
+            .where(Cobranza.organizacion_id == organizacion_id, Cobranza.jornada_id == jornada_id)
+            .group_by(*columnas_de_grupo)
+        )
+        .mappings()
+        .all()
+    )
+    por_medio = (
+        sesion.execute(
+            select(
+                Cobranza.estado,
+                *marca,
+                CobranzaMedio.medio_pago_id,
+                func.coalesce(func.sum(CobranzaMedio.importe), 0).label("total"),
+            )
+            .select_from(CobranzaMedio)
+            .join(
+                Cobranza,
+                (Cobranza.organizacion_id == CobranzaMedio.organizacion_id)
+                & (Cobranza.id == CobranzaMedio.cobranza_id),
+            )
+            .where(Cobranza.organizacion_id == organizacion_id, Cobranza.jornada_id == jornada_id)
+            .group_by(*columnas_de_grupo, CobranzaMedio.medio_pago_id)
+        )
+        .mappings()
+        .all()
+    )
+    return (
+        [
+            TotalDeCobranzas(
+                fila["estado"],
+                bool(fila.get("tardia", False)),
+                int(fila["cantidad"]),
+                Decimal(fila["total"]),
+            )
+            for fila in totales
+        ],
+        [
+            TotalDeMedio(
+                fila["estado"],
+                bool(fila.get("tardia", False)),
+                fila["medio_pago_id"],
+                Decimal(fila["total"]),
+            )
+            for fila in por_medio
+        ],
+    )
+
+
+def resumir_cobranzas(
+    organizacion_id: UUID, ids: Sequence[UUID], sesion: Session
+) -> list[tuple[UUID, UUID, Decimal, datetime]]:
+    """`(id, cliente, importe, momento)` de las cobranzas de la organización entre `ids`, en una
+    consulta (las de otra organización no aparecen; INV-21). Para el resumen de la bandeja."""
+    if not ids:
+        return []
+    consulta = select(
+        Cobranza.id, Cobranza.cliente_id, Cobranza.importe, Cobranza.occurred_at
+    ).where(Cobranza.organizacion_id == organizacion_id, Cobranza.id.in_(list(ids)))
+    return [(f.id, f.cliente_id, f.importe, f.occurred_at) for f in sesion.execute(consulta)]

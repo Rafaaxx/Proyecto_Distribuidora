@@ -1,0 +1,90 @@
+[
+  {
+    "id": "VTA22-anulacion-sin-cobro",
+    "reglas": ["VTA-21", "VTA-22", "INV-19"],
+    "entrada": {
+      "motor": "vta22",
+      "total_venta": "80000.00",
+      "importe_cobranza": null,
+      "devuelve_dinero": null,
+      "es_consumidor_final": false
+    },
+    "salida_esperada": {
+      "movimientos": [
+        { "tipo": "ANULACION_VENTA", "importe": "80000.00" }
+      ],
+      "saldo_final_relativo": "-80000.00"
+    }
+  },
+  {
+    "id": "VTA22-anulacion-con-cobro-parcial-con-devolucion",
+    "reglas": ["VTA-21", "VTA-22", "INV-19"],
+    "entrada": {
+      "motor": "vta22",
+      "total_venta": "150000.00",
+      "importe_cobranza": "20000.00",
+      "devuelve_dinero": true,
+      "es_consumidor_final": false
+    },
+    "salida_esperada": {
+      "movimientos": [
+        { "tipo": "ANULACION_VENTA", "importe": "150000.00" },
+        { "tipo": "ANULACION_COBRANZA", "importe": "20000.00" }
+      ],
+      "saldo_final_relativo": "0.00"
+    }
+  },
+  {
+    "id": "VTA22-anulacion-con-cobro-parcial-sin-devolucion",
+    "reglas": ["VTA-21", "VTA-22", "INV-19"],
+    "entrada": {
+      "motor": "vta22",
+      "total_venta": "150000.00",
+      "importe_cobranza": "20000.00",
+      "devuelve_dinero": false,
+      "es_consumidor_final": false
+    },
+    "salida_esperada": {
+      "movimientos": [
+        { "tipo": "ANULACION_VENTA", "importe": "150000.00" }
+      ],
+      "saldo_final_relativo": "-20000.00"
+    }
+  },
+  {
+    "id": "VTA22-anulacion-cobro-mayor-que-total",
+    "reglas": ["VTA-11", "VTA-22", "INV-19"],
+    "entrada": {
+      "motor": "vta22",
+      "total_venta": "80000.00",
+      "importe_cobranza": "100000.00",
+      "devuelve_dinero": true,
+      "es_consumidor_final": false
+    },
+    "salida_esperada": {
+      "movimientos": [
+        { "tipo": "ANULACION_VENTA", "importe": "80000.00" },
+        { "tipo": "ANULACION_COBRANZA", "importe": "100000.00" }
+      ],
+      "saldo_final_relativo": "0.00"
+    }
+  },
+  {
+    "id": "VTA22-anulacion-consumidor-final",
+    "reglas": ["CLI-03", "VTA-22", "INV-19"],
+    "entrada": {
+      "motor": "vta22",
+      "total_venta": "4300.00",
+      "importe_cobranza": "4300.00",
+      "devuelve_dinero": true,
+      "es_consumidor_final": true
+    },
+    "salida_esperada": {
+      "movimientos": [
+        { "tipo": "ANULACION_VENTA", "importe": "4300.00" },
+        { "tipo": "ANULACION_COBRANZA", "importe": "4300.00" }
+      ],
+      "saldo_final_relativo": "0.00"
+    }
+  }
+]

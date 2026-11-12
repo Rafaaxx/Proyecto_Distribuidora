@@ -1,0 +1,133 @@
+import 'fake-indexeddb/auto'
+
+import { screen, within } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { VentasDeHoyScreen } from '../../../../../src/areas/ruta/ventas/VentasDeHoyScreen'
+import { baseLocal } from '../../../../../src/lib/dispositivo/db'
+import { aplicarBootstrap } from '../../../../../src/sync/aplicarBootstrap'
+import { bootstrapParaVender } from '../../../utils/datosParaVender'
+import { ID, clienteDePrueba } from '../../../utils/bootstrapDePrueba'
+import { montarEnRuta } from '../../../utils/rutaDePrueba'
+import { sembrarAnulacion, sembrarVenta } from '../../../utils/sembrarVenta'
+
+/**
+ * Change 22a, tarea 11.1 (spec `ruta/area-de-ruta`, "Ventas de hoy desde la base local";
+ * `design.md` D14; cita SYN-09, RUT-04): lista las ventas de la jornada abierta con número,
+ * cliente, total y estado de envío, sin señal; las de otra jornada no aparecen; el detalle abre
+ * la nota.
+ */
+describe('VentasDeHoyScreen (tarea 11.1)', () => {
+  beforeEach(async () => {
+    vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false)
+    await Promise.all(baseLocal.tables.map((t) => t.clear()))
+    await aplicarBootstrap(
+      bootstrapParaVender((b) => {
+        b.clientes = [
+          { ...clienteDePrueba(1, 'Almacén Uno'), credito: { limite: null, politica: 'BLOQUEAR', tolerancia_tipo: null, tolerancia_valor: null } },
+          { ...clienteDePrueba(2, 'Kiosco Dos'), credito: { limite: null, politica: 'BLOQUEAR', tolerancia_tipo: null, tolerancia_valor: null } },
+        ]
+      }),
+    )
+  })
+
+  it('sin señal lista las ventas con número, cliente, total y "Sin enviar"', async () => {
+    await sembrarVenta('a', { cajas: 1, unidades: 0, ahora: new Date('2026-10-30T14:00:00.000Z') })
+    await sembrarVenta('b', { clienteId: ID(102), cajas: 0, unidades: 2, ahora: new Date('2026-10-30T15:00:00.000Z') })
+
+    montarEnRuta(<VentasDeHoyScreen />, { ruta: '/ruta/ventas' })
+
+    const filas = await screen.findAllByRole('listitem')
+    expect(filas).toHaveLength(2)
+    // La más nueva primero.
+    expect(within(filas[0] as HTMLElement).getByText('0001-000009')).toBeInTheDocument()
+    expect(within(filas[0] as HTMLElement).getByText('Kiosco Dos')).toBeInTheDocument()
+    expect(within(filas[0] as HTMLElement).getByText('$ 16.000,00')).toBeInTheDocument()
+    expect(within(filas[0] as HTMLElement).getByText('Sin enviar')).toBeInTheDocument()
+    expect(within(filas[1] as HTMLElement).getByText('0001-000008')).toBeInTheDocument()
+    expect(within(filas[1] as HTMLElement).getByText('Almacén Uno')).toBeInTheDocument()
+    expect(within(filas[1] as HTMLElement).getByText('$ 48.000,00')).toBeInTheDocument()
+  })
+
+  it('las ventas de otra jornada no aparecen (RUT-04)', async () => {
+    await sembrarVenta('a', { cajas: 1, unidades: 0 })
+    await sembrarVenta('b', { cajas: 0, unidades: 2 })
+    await baseLocal.ventas.update('venta-b', { jornada_id: 'jornada-anterior' })
+
+    montarEnRuta(<VentasDeHoyScreen />, { ruta: '/ruta/ventas' })
+
+    expect(await screen.findByText('0001-000008')).toBeInTheDocument()
+    expect(screen.queryByText('0001-000009')).not.toBeInTheDocument()
+  })
+
+  it('cada venta enlaza a su detalle con la nota', async () => {
+    await sembrarVenta('a', { cajas: 1, unidades: 0 })
+
+    montarEnRuta(<VentasDeHoyScreen />, { ruta: '/ruta/ventas' })
+
+    expect(await screen.findByRole('link', { name: /0001-000008/ })).toHaveAttribute('href', '/ruta/ventas/venta-a')
+  })
+
+  it('sin ventas en la jornada lo dice', async () => {
+    montarEnRuta(<VentasDeHoyScreen />, { ruta: '/ruta/ventas' })
+
+    expect(await screen.findByText('Todavía no hiciste ventas en esta jornada.')).toBeInTheDocument()
+  })
+
+  it('sin datos descargados lo avisa', async () => {
+    await baseLocal.sesion.clear()
+
+    montarEnRuta(<VentasDeHoyScreen />, { ruta: '/ruta/ventas' })
+
+    expect(await screen.findByText(/todavía no hay datos descargados/i)).toBeInTheDocument()
+  })
+
+  /**
+   * Change 22b, tarea 10.3 (spec `ruta/area-de-ruta`, «Ventas de hoy desde la base local»,
+   * escenario «Estados después de sincronizar»; cita SYN-04, SYN-09).
+   */
+  it('después de sincronizar muestra «Enviada», «Con observaciones» y «Rechazada» (y «Sin enviar» la que falta)', async () => {
+    await sembrarVenta('a', { cajas: 0, unidades: 1, ahora: new Date('2026-10-30T14:00:00.000Z') })
+    await sembrarVenta('b', { cajas: 0, unidades: 1, ahora: new Date('2026-10-30T15:00:00.000Z') })
+    await sembrarVenta('c', { cajas: 0, unidades: 1, ahora: new Date('2026-10-30T16:00:00.000Z') })
+    await sembrarVenta('d', { cajas: 0, unidades: 1, ahora: new Date('2026-10-30T17:00:00.000Z') })
+    await baseLocal.ventas.update('venta-a', { estado_envio: 'ACEPTADA' })
+    await baseLocal.ventas.update('venta-b', { estado_envio: 'CON_OBSERVACIONES' })
+    await baseLocal.ventas.update('venta-c', { estado_envio: 'RECHAZADA' })
+
+    montarEnRuta(<VentasDeHoyScreen />, { ruta: '/ruta/ventas' })
+
+    const filas = await screen.findAllByRole('listitem')
+    const textoDe = (numero: string) =>
+      within(filas.find((f) => within(f).queryByText(numero)) as HTMLElement)
+    expect(textoDe('0001-000008').getByText('Enviada')).toBeInTheDocument()
+    expect(textoDe('0001-000009').getByText('Con observaciones')).toBeInTheDocument()
+    expect(textoDe('0001-000010').getByText('Rechazada')).toBeInTheDocument()
+    expect(textoDe('0001-000011').getByText('Sin enviar')).toBeInTheDocument()
+  })
+
+  /** Change 22d, tarea 10.2 («Ventas de hoy»; VTA-20, SYN-09): la venta anulada lleva «Anulada». */
+  it('tres ventas, una anulada: ve las tres y solo la anulada lleva «Anulada»', async () => {
+    await sembrarVenta('a', { cajas: 1, unidades: 0, ahora: new Date('2026-10-30T14:00:00.000Z') })
+    await sembrarVenta('b', { cajas: 0, unidades: 2, ahora: new Date('2026-10-30T15:00:00.000Z') })
+    await sembrarVenta('c', { cajas: 0, unidades: 1, ahora: new Date('2026-10-30T15:30:00.000Z') })
+    await sembrarAnulacion('b')
+
+    montarEnRuta(<VentasDeHoyScreen />, { ruta: '/ruta/ventas' })
+
+    const filas = await screen.findAllByRole('listitem')
+    expect(filas).toHaveLength(3)
+    const anuladas = filas.filter((fila) => within(fila).queryByText('Anulada') !== null)
+    expect(anuladas).toHaveLength(1)
+    expect(within(anuladas[0] as HTMLElement).getByText(/0001-000009/)).toBeInTheDocument()
+  })
+
+  it('sin anulaciones ninguna fila dice «Anulada»', async () => {
+    await sembrarVenta('a', { cajas: 1, unidades: 0 })
+
+    montarEnRuta(<VentasDeHoyScreen />, { ruta: '/ruta/ventas' })
+
+    await screen.findAllByRole('listitem')
+    expect(screen.queryByText('Anulada')).not.toBeInTheDocument()
+  })
+})

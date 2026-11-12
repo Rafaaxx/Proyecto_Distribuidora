@@ -10,7 +10,25 @@ from alembic import context
 # Permite `import app...` al ejecutar alembic desde `backend/`.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.core.config import Settings  # noqa: E402
+from app.core.alembic_url import resolver_database_url_migraciones  # noqa: E402
+from app.core.db import Base  # noqa: E402
+
+# Importar los `models.py` de cada módulo registra sus tablas en
+# `Base.metadata` (import por efecto secundario, único lugar donde se hace).
+from app.modules.catalogo import models as catalogo_models  # noqa: E402,F401
+from app.modules.clientes import models as clientes_models  # noqa: E402,F401
+from app.modules.cobranzas import models as cobranzas_models  # noqa: E402,F401
+from app.modules.configuracion import models as configuracion_models  # noqa: E402,F401
+from app.modules.costeo import models as costeo_models  # noqa: E402,F401
+from app.modules.cuentas_corrientes import models as cuentas_corrientes_models  # noqa: E402,F401
+from app.modules.descuentos import models as descuentos_models  # noqa: E402,F401
+from app.modules.identidad import models as identidad_models  # noqa: E402,F401
+from app.modules.importacion import models as importacion_models  # noqa: E402,F401
+from app.modules.precios import models as precios_models  # noqa: E402,F401
+from app.modules.proveedores import models as proveedores_models  # noqa: E402,F401
+from app.modules.stock import models as stock_models  # noqa: E402,F401
+from app.modules.sync import models as sync_models  # noqa: E402,F401
+from app.modules.ventas import models as ventas_models  # noqa: E402,F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -21,17 +39,18 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-target_metadata = None
+# `target_metadata` alimenta `alembic revision --autogenerate` (tarea 4.3):
+# compara `Base.metadata` (los modelos) contra el esquema real de la base.
+target_metadata = Base.metadata
 
 
 def _database_url() -> str:
-    """La URL de la base viene de `app.core.config.Settings` (variable de
-    entorno `DATABASE_URL`), nunca de `alembic.ini` (`docs/02` §14)."""
-    return Settings().database_url  # type: ignore[call-arg]
+    """La URL de la base viene de `DATABASE_URL_MIGRATIONS` (rol
+    `app_migrations`, dueño del esquema), nunca de `alembic.ini` (`docs/02`
+    §14) ni de `app.core.config.Settings` (esa es `DATABASE_URL`, rol
+    `app_runtime`: la aplicación en runtime, no Alembic) -- tarea 1.5,
+    `design.md` D3."""
+    return resolver_database_url_migraciones()
 
 
 def run_migrations_offline() -> None:

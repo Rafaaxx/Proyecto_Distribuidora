@@ -51,6 +51,8 @@ Toda tabla de negocio tiene:
 | `organizacion_id` | `uuid` | Obligatoria (INV-02) |
 | `creado_en` | `timestamptz` | `default now()` |
 
+Excepción: una tabla de saldo cuya clave natural es compuesta y que ninguna otra tabla referencia no lleva `id`; su clave primaria empieza por `organizacion_id` (INV-02). Hoy es el caso de `saldo_cuenta` (ADR-035), `stock_saldo` y `costo_producto` (ADR-039).
+
 Las tablas de datos maestros agregan `actualizado_en` (obligatoria: la usa el bootstrap incremental, `02` §13.4) y `actualizado_por_id`.
 
 Las tablas de operaciones agregan:
@@ -90,7 +92,8 @@ CREATE TABLE venta (
 
 ```
 identidad        organizacion · configuracion_organizacion · usuario · rol · permiso
-                 rol_permiso · dispositivo · sesion_refresh
+                 rol_permiso · dispositivo · sesion_refresh · intento_login
+                 intento_pin_autorizacion · verificacion_consistencia
 configuracion    alicuota_iva · medio_pago · motivo
 catalogo         categoria · marca · producto · presentacion
 proveedores      proveedor · costo_informado · compra · compra_linea
@@ -106,7 +109,7 @@ descuentos       regla_descuento · regla_descuento_alcance
 ventas           venta · venta_linea · venta_linea_descuento · venta_anulacion
 cobranzas        cobranza · cobranza_medio · cobranza_anulacion
 ctas. corrientes cuenta_movimiento · saldo_cuenta
-sync             comando · comando_cuarentena · observacion
+sync             comando · comando_cuarentena · comando_rechazado · observacion
 auditoria        auditoria
 importacion      importacion
 facturacion      factura · factura_venta · factura_alicuota · ajuste_iva_absorbido
@@ -119,8 +122,9 @@ facturacion      factura · factura_venta · factura_alicuota · ajuste_iva_abso
 | Columna | Tipo | Notas |
 | --- | --- | --- |
 | `id` | `uuid` | PK |
-| `nombre` | `text` | |
-| `cuit` | `text` | Opcional |
+| `nombre` | `text` | Editable con `ORGANIZACION_DATOS_CONFIGURAR` |
+| `slug` | `text` | `UNIQUE`. Resuelve la organización en el login antes de que exista un token (`ADR-021`) |
+| `cuit` | `text` | Opcional; 11 dígitos normalizados; editable con `ORGANIZACION_DATOS_CONFIGURAR` |
 | `moneda` | `text` | ISO 4217 |
 | `zona_horaria` | `text` | IANA |
 | `estado` | `text` | `ACTIVA`, `SUSPENDIDA` |
@@ -132,23 +136,28 @@ Una fila por organización (`01` §4).
 | Columna | Tipo | Notas |
 | --- | --- | --- |
 | `organizacion_id` | `uuid` | PK y FK |
+| `condicion_iva` | `text` | `RESPONSABLE_INSCRIPTO`, `MONOTRIBUTO`, `EXENTO`; `NOT NULL`; la regla derivada es CST-06 (ADR-045) |
 | `modo_impositivo` | `text` | `A`, `B`, `C` |
-| `lista_precio_default_id` | `uuid` | |
+| `lista_precio_default_id` | `uuid` | *`uuid`, nulo hasta que se define; clave foránea compuesta `(organizacion_id, lista_precio_default_id)` a `lista_precio`. Lo escribe `LISTA_PRECIO_PREDETERMINADA_DEFINIR` (solo una lista activa).* |
 | `politica_credito_default` | `text` | `ADVERTIR`, `AUTORIZAR`, `BLOQUEAR` |
 | `tolerancia_offline_tipo` | `text` | `IMPORTE`, `PORCENTAJE` |
 | `tolerancia_offline_valor` | `numeric(14,2)` | |
 | `descuento_manual_habilitado` | `boolean` | |
 | `motivo_obligatorio_descuento` | `boolean` | |
 | `motivo_obligatorio_lista` | `boolean` | |
-| `redondeo_multiplo` | `numeric(14,2)` | |
-| `redondeo_direccion` | `text` | `ARRIBA`, `CERCANO`, `ABAJO` |
+| `redondeo_multiplo` | `numeric(14,2)` | Nulo = sin definir; `> 0` (`ck_configuracion_organizacion__redondeo_multiplo_positivo`); lo escribe `REDONDEO_POR_DEFECTO_DEFINIR` (ADR-061) |
+| `redondeo_direccion` | `text` | `ARRIBA`, `CERCANO`, `ABAJO`; nulo si y solo si el múltiplo es nulo (`ck_configuracion_organizacion__redondeo_coherente`) |
 | `permite_consumidor_final` | `boolean` | |
 | `cliente_consumidor_final_id` | `uuid` | Opcional |
 | `estado_facturacion_default` | `text` | `NO_REQUIERE`, `PENDIENTE` |
-| `modalidad_iva_default` | `text` | `CLIENTE`, `ABSORBIDO` |
+| `nota_venta_muestra_saldo` | `boolean` | `NOT NULL DEFAULT false`; si la nota imprime el saldo resultante (VTA-13, CRE-02) |
+| `nota_venta_domicilio` | `text` | Nulo si no se cargó; `CHECK` de no vacío y de hasta 200 caracteres |
+| `nota_venta_telefono` | `text` | Nulo si no se cargó; `CHECK` de no vacío y de hasta 50 caracteres |
+| `modalidad_iva_default` | `text` | `CLIENTE`, `ABSORBIDO`; nulo si no es responsable inscripto |
 | `intentos_pin_max` | `integer` | |
-| `app_version_minima` | `text` | `02` §6.6 |
 | `desvio_reloj_max_segundos` | `integer` | `02` §9 |
+
+`CHECK` de `condicion_iva` y de coherencia (ADR-045, D2): `condicion_iva = 'RESPONSABLE_INSCRIPTO' OR (modo_impositivo = 'A' AND modalidad_iva_default IS NULL)`: una organización no inscripta vende a precio final (modo A) y no tiene modalidad de IVA. `app_runtime` no puede borrar la fila.
 
 ### `usuario`
 
@@ -168,7 +177,7 @@ Una fila por organización (`01` §4).
 
 | Tabla | Columnas |
 | --- | --- |
-| `rol` | `id`, `organizacion_id`, `nombre`, `tope_descuento` `numeric(9,6)`, `activo` |
+| `rol` | `id`, `organizacion_id`, `nombre` (`ux_rol__nombre` único sobre `(organizacion_id, lower(nombre))`, activos o no; ADR-060), `tope_descuento` `numeric(9,6)`, `activo` |
 | `permiso` | `codigo` `text` PK (global, sin organización), `descripcion`, `modulo` |
 | `rol_permiso` | `organizacion_id`, `rol_id`, `permiso_codigo`; PK compuesta |
 
@@ -187,15 +196,29 @@ El catálogo de `permiso` se sincroniza por migración con `01` §19. Permisos p
 
 ### `sesion_refresh`
 
-`id`, `organizacion_id`, `usuario_id`, `dispositivo_id`, `token_hash`, `familia_id`, `emitido_en`, `expira_en`, `usado_en`, `revocado_en`, `motivo_revocacion`. Índice por `token_hash` (`02` §12.1).
+`id`, `organizacion_id`, `usuario_id`, `dispositivo_id`, `token_hash`, `familia_id`, `emitido_en`, `expira_en`, `usado_en`, `revocado_en`, `motivo_revocacion`. Índice por `token_hash` (`02` §12.1). `motivo_revocacion` toma uno de: `USUARIO_INACTIVO` (baja de usuario y renovación de un usuario inactivo), `ROL_INACTIVO` (renovación con el rol de baja), `CONTRASENA_RESTABLECIDA` (el administrador restableció la contraseña) y `CONTRASENA_CAMBIADA` (el usuario cambió la suya; se conserva la sesión del dispositivo desde el que se cambió). La baja y los cambios de contraseña no revocan las familias de los dispositivos con una jornada no cerrada del usuario (ADR-028 D9.3-B, ADR-060).
+
+### `intento_login`
+
+`id`, `usuario_id` (FK a `usuario`; nulo si el par escrito no resuelve un usuario), `clave_intento` `text` (SHA-256 hexadecimal, 64 caracteres, del par escrito `[slug, usuario]`; nulo solo en las filas anteriores al change 18b que no tenían `usuario_id`), `ip`, `exito` (`true` solo en el marcador del desbloqueo manual), `creado_en`. Índices `(usuario_id, creado_en)`, `(ip, creado_en)` y `(clave_intento, creado_en)`. Sin `organizacion_id` a propósito: es seguridad previa a la autenticación y existe también cuando el slug no existe (exenta de INV-02). Solo inserción (`app_runtime` con `SELECT, INSERT`, INV-05); la tarea diaria borra las filas de más de 24 horas con `app_mantenimiento` (`SELECT, DELETE`; ADR-073). El límite de 5 fallos se cuenta por `clave_intento` (ADR-057, ADR-018).
+
+### `verificacion_consistencia`
+
+`id`, `organizacion_id`, `ejecutada_en` `timestamptz`, `resultado` (`SIN_DIFERENCIAS` o `CON_DIFERENCIAS`, con `CHECK`), `diferencias` `jsonb` (identificadores e importes como texto), `registered_at` `timestamptz`. `UNIQUE (organizacion_id, id)`; índice `(organizacion_id, ejecutada_en DESC)`. Solo inserción: la escribe el servicio `tareas` con `app_mantenimiento` (`INSERT, SELECT`), no el bus (no es una operación de negocio: no la origina un usuario ni tiene `operation_id`); `app_runtime` solo `SELECT` (`GET /api/v1/sistema/consistencia`, permiso `VER_CONSISTENCIA`). Una fila por organización y corrida (ADR-073).
+
+### `intento_pin_autorizacion`
+
+`id`, `organizacion_id`, `autorizador_id`, `intentante_id` (obligatorio salvo en la fila marcador), `exito` (`true` solo en la fila que reinicia la cuenta al definir el PIN), `creado_en`. Claves foráneas compuestas a `usuario`; `CHECK (exito OR intentante_id IS NOT NULL)`; índices `(organizacion_id, autorizador_id, creado_en)` y `(organizacion_id, autorizador_id, intentante_id, creado_en)`. Solo inserción; se escribe en una transacción aparte para que el fallo quede aunque el comando se revierta (SEG-05, ADR-055).
 
 ### `alicuota_iva`, `medio_pago`, `motivo`
 
 | Tabla | Columnas |
 | --- | --- |
-| `alicuota_iva` | `id`, `organizacion_id`, `nombre`, `valor` `numeric(9,6)`, `activo` |
-| `medio_pago` | `id`, `organizacion_id`, `nombre`, `requiere_referencia` `boolean`, `activo` |
-| `motivo` | `id`, `organizacion_id`, `ambito` (`AJUSTE_STOCK`, `ANULACION_VENTA`, `ANULACION_COMPRA`, `ANULACION_COBRANZA`, `DESCUENTO_MANUAL`, `LISTA_ANTERIOR`, `LIBERACION_JORNADA`), `nombre`, `activo` |
+| `alicuota_iva` | `id`, `organizacion_id`, `nombre` (`ux_alicuota_iva__nombre` único sobre `(organizacion_id, lower(nombre))`), `valor` `numeric(9,6)` (`ux_alicuota_iva__valor` único sobre `(organizacion_id, valor)`; `ck_alicuota_iva__valor`: `valor >= 0 AND valor < 1`; no cambia después del alta), `activo`; activas o no; ADR-061 |
+| `medio_pago` | `id`, `organizacion_id`, `nombre` (`ux_medio_pago__nombre` único sobre `(organizacion_id, lower(nombre))`, activos o no; ADR-053), `requiere_referencia` `boolean`, `activo` |
+| `motivo` | `id`, `organizacion_id`, `ambito` (`AJUSTE_STOCK`, `ANULACION_VENTA`, `ANULACION_COMPRA`, `ANULACION_COBRANZA`, `ANULACION_PAGO`, `ANULACION_TRANSFERENCIA`, `ANULACION_AJUSTE`, `DESCUENTO_MANUAL`, `LISTA_ANTERIOR`, `LIBERACION_JORNADA`; no cambia después del alta), `nombre` (`ux_motivo__nombre` único sobre `(organizacion_id, ambito, lower(nombre))`, activos o no; ADR-061), `activo` |
+
+Las organizaciones nuevas nacen con tres motivos del ámbito `ANULACION_COMPRA` ("Error de carga", "Devolución al proveedor" y "Otro") y tres del ámbito `ANULACION_PAGO` ("Error de carga", "Pago rechazado o devuelto" y "Otro"); la migración del change 11 agrega los primeros y la del change 12 (`d1e2f3a4b5c6`) los segundos, de forma idempotente, a las organizaciones existentes que no tengan ninguno de ese ámbito. Los medios de pago y los motivos activos se leen por API (`GET /configuracion/medios-pago` y `GET /configuracion/motivos?ambito=`) (ADR-043). Las organizaciones nuevas nacen también con dos motivos del ámbito `ANULACION_TRANSFERENCIA` ("Error de carga" y "Otro") y dos del ámbito `ANULACION_AJUSTE` ("Error de carga" y "Otro"); la migración del change 14 (`f3a4b5c6d7e8`) los agrega, de forma idempotente, a las organizaciones existentes que no tengan ninguno de ese ámbito (ADR-048). El catálogo de `permiso` (§4, `rol_permiso`) suma `ANULAR_TRANSFERENCIA`, que la misma migración asigna a las plantillas Administrador y Administración. Las organizaciones nuevas nacen también con tres motivos del ámbito `LIBERACION_JORNADA` ("Dispositivo perdido o averiado", "Vendedor ausente" y "Otro"); la migración del change 15 (`a4b5c6d7e8f9`) los agrega, de forma idempotente, a las organizaciones existentes que no tengan ninguno de ese ámbito (ADR-049). Las organizaciones nuevas nacen también con tres motivos del ámbito `ANULACION_COBRANZA` ("Error de carga", "Pago rechazado o no acreditado" y "Otro"); la migración del change 17 los agrega, de forma idempotente, a las organizaciones existentes que no tengan ninguno de ese ámbito (ADR-052). Las organizaciones nuevas nacen con Transferencia, Cheque y Tarjeta con `requiere_referencia = true` y Efectivo y Billetera sin; la migración del change 17b marca así los medios con esos nombres de las organizaciones existentes y no lo revierte al bajar. Los medios se crean y modifican con `MEDIO_PAGO_CREAR` y `MEDIO_PAGO_MODIFICAR`; el usuario de aplicación sigue sin `DELETE` sobre `medio_pago` (ADR-053). El `downgrade` de la migración del 17b borra `ux_medio_pago__nombre` y no revierte `requiere_referencia`; una prueba de ida y vuelta con cobranzas y pagos que usan los medios lo deja escrito. Las organizaciones nuevas nacen también con tres motivos del ámbito `LISTA_ANTERIOR` ("Precio acordado con el cliente", "Error en la lista vigente" y "Otro", aprobados el 2026-10-17); la migración del change 18a (`a2b3c4d5e6f7`) los agrega, de forma idempotente, a las organizaciones existentes que no tengan ninguno de ese ámbito (ADR-054). Las organizaciones nuevas nacen también con tres motivos del ámbito `ANULACION_VENTA` ("Error de carga", "Devolución del cliente" y "Otro"); la migración del change 19 (`d9e0f1a2b3c4`) los agrega, de forma idempotente, a las organizaciones existentes que no tengan ninguno de ese ámbito (ADR-058). Los motivos y las alícuotas se crean y modifican con `MOTIVO_CREAR`, `MOTIVO_MODIFICAR`, `ALICUOTA_CREAR` y `ALICUOTA_MODIFICAR`; el usuario de aplicación sigue sin `DELETE` sobre `motivo` y `alicuota_iva`. La administración lee todos los motivos con `GET /configuracion/motivos/todos` y las alícuotas con `GET /configuracion/alicuotas`, que admite también `ADMIN_CONFIGURACION` (ADR-061).
 
 ## 5. Catálogo
 
@@ -248,6 +271,10 @@ La presentación de referencia se resuelve por este indicador y no con una clave
 
 **No tiene columna de saldo** (CC-04, INV-13): el saldo vive en `saldo_cuenta`.
 
+**Unicidades** (`design.md` D7 del change 06, aprobadas 2026-09-23):
+- `ux_proveedor__nombre` — única `(organizacion_id, nombre)`: el nombre no se repite entre proveedores de la misma organización, activos o no.
+- `ux_proveedor__cuit` — índice único parcial `(organizacion_id, cuit) WHERE cuit IS NOT NULL`: el CUIT, cuando se informa, no se repite en la organización; varios proveedores sin CUIT en la misma organización son válidos (la parcialidad los excluye del índice).
+
 ### `costo_informado`
 
 | Columna | Tipo | Notas |
@@ -256,6 +283,7 @@ La presentación de referencia se resuelve por este indicador y no con una clave
 | `proveedor_id`, `producto_id`, `presentacion_id` | `uuid` | |
 | `valor` | `numeric(14,2)` | Valor informado por presentación |
 | `incluye_iva` | `boolean` | |
+| `computa_credito_fiscal` | `boolean` | `NOT NULL`. La regla de la organización (CST-06) al registrar el costo, congelada: reconstruye el cálculo. `CHECK (computa_credito_fiscal OR NOT incluye_iva)` (ADR-045, D3) |
 | `bonificacion` | `numeric(9,6)` | Default 0 |
 | `alicuota_aplicada` | `numeric(9,6)` | Congelada para reconstruir el cálculo |
 | `costo_base` | `numeric(18,6)` | Derivado (CST-02) |
@@ -263,25 +291,27 @@ La presentación de referencia se resuelve por este indicador y no con una clave
 | `observacion` | `text` | |
 | `operation_id`, `usuario_id`, `creado_en` | | |
 
-Índice `ix_costo_informado__producto_vigencia (organizacion_id, producto_id, vigencia_desde DESC)` para CST-03.
+Índice `ix_costo_informado__producto_vigencia (organizacion_id, producto_id, vigencia_desde DESC, creado_en DESC, id DESC)` para CST-03: el desempate por `creado_en DESC, id DESC` (`design.md` D4 del change 06, aprobado 2026-09-23) resuelve qué costo prevalece cuando dos tienen la misma `vigencia_desde` — el registrado último.
 
 ### `compra` y `compra_linea`
 
 | Tabla | Columnas |
 | --- | --- |
-| `compra` | `id`, `organizacion_id`, `proveedor_id`, `ubicacion_id`, `fecha` `date`, `condicion` (`CONTADO`, `CREDITO`), `total_neto`, `estado` (`CONFIRMADA`, `ANULADA`), `anulacion_motivo_id`, `anulada_en`, `anulada_por_id`, columnas de operación |
-| `compra_linea` | `id`, `organizacion_id`, `compra_id`, `producto_id`, `presentacion_id`, `unidades_presentacion` `integer` (congelado), `cantidad` `numeric(14,3)`, `cantidad_base` `integer`, `valor_presentacion` `numeric(14,2)`, `incluye_iva`, `bonificacion`, `costo_base` `numeric(18,6)`, `importe_neto` `numeric(14,2)` |
+| `compra` | `id`, `organizacion_id`, `proveedor_id`, `ubicacion_id`, `fecha` `date` (del comprobante), `condicion` (`CONTADO`, `CREDITO`), `total_neto` `numeric(14,2)`, `total_factura` `numeric(14,2)` (el importe que registra la cuenta del proveedor), `numero_comprobante` (opcional), `observacion` (opcional), `estado` (`CONFIRMADA`, `ANULADA`), `anulacion_motivo_id`, `anulada_en`, `anulada_por_id`, columnas de operación |
+| `compra_linea` | `id`, `organizacion_id`, `compra_id`, `orden` `integer`, `producto_id`, `presentacion_id`, `unidades_presentacion` `integer` (congelado), `cantidad` `numeric(14,3)`, `cantidad_base` `integer`, `valor_presentacion` `numeric(14,2)` (el valor pagado), `incluye_iva`, `computa_credito_fiscal` `boolean` (congelada, CST-06), `bonificacion` `numeric(9,6)`, `alicuota_aplicada` `numeric(9,6)` (congelada), `costo_base` `numeric(18,6)`, `importe_neto` `numeric(14,2)` |
 
-`CHECK (cantidad_base > 0)`. La existencia de al menos una línea (INV-07) se valida en el servicio dentro de la transacción.
+`total_neto` es la suma de los importes de las líneas; en una organización que no computa crédito fiscal significa *total de costo* y **incluye el IVA pagado** (ADR-045, D5); la deuda es siempre `total_factura`. `CHECK` de `condicion`, `estado`, `total_neto >= 0`, `total_factura > 0` y de coherencia "anulada ⇔ motivo, momento y usuario"; en la línea, `CHECK (cantidad > 0, cantidad_base > 0, valor_presentacion > 0, 0 <= bonificacion < 1, costo_base > 0, computa_credito_fiscal OR NOT incluye_iva)` y `UNIQUE (compra_id, orden)`. La existencia de al menos una línea (INV-07) se valida en el servicio dentro de la transacción. Índices: `(organizacion_id, fecha DESC, id DESC)`, `(organizacion_id, proveedor_id, fecha DESC)` y `compra_linea (organizacion_id, presentacion_id)` (verificador de INV-18). Todas las claves foráneas son compuestas e incluyen `organizacion_id`.
 
 ### `pago_proveedor` y `pago_proveedor_medio`
 
 | Tabla | Columnas |
 | --- | --- |
-| `pago_proveedor` | `id`, `organizacion_id`, `proveedor_id`, `fecha`, `importe` `numeric(14,2)` `CHECK (> 0)`, `estado`, columnas de operación |
+| `pago_proveedor` | `id`, `organizacion_id`, `proveedor_id`, `fecha` (la del pago real), `importe` `numeric(14,2)` `CHECK (> 0)`, `estado` (`CONFIRMADA`, `ANULADA`), `origen` (`COMPRA`, `INDEPENDIENTE`), `compra_id` (nulo si el origen es `INDEPENDIENTE`; único si no es nulo), `observacion` `text` (opcional, inmutable; hasta 500 caracteres, aplicado en el esquema de la API y en el contenido del comando, sin `CHECK`), `anulado_en`, `anulado_por_id`, `anulacion_motivo_id` (nulable en la columna; `ck_pago_proveedor__anulacion_coherente` exige "anulada ⇔ momento, usuario y motivo", igual que `compra`), columnas de operación |
 | `pago_proveedor_medio` | `id`, `organizacion_id`, `pago_id`, `medio_pago_id`, `importe`, `referencia` |
 
-INV-08 (suma de medios = importe) se valida en el servicio y se cubre con prueba de propiedad.
+Índices de listado: `(organizacion_id, fecha DESC, id DESC)` y `(organizacion_id, proveedor_id, fecha DESC, id DESC)`.
+
+INV-08 (suma de medios = importe) se valida en el servicio y se cubre con prueba de propiedad. El change 11 creó estas tablas para el pago de una compra de contado (`origen = COMPRA`, ADR-043); el change 12 agregó el pago independiente sobre las mismas tablas, con la anulación en columnas del propio pago (no en una tabla aparte como `cobranza_anulacion`, ADR-046). `observacion` queda fuera del `UPDATE` de `app_runtime`. `app_runtime` tiene `SELECT, INSERT, UPDATE` sobre `compra` y `pago_proveedor` (el `UPDATE` solo alcanza el estado y los campos de anulación), `SELECT, INSERT` sobre `compra_linea` y `pago_proveedor_medio`, y nunca `DELETE` (INV-05).
 
 ## 7. Costeo
 
@@ -291,53 +321,48 @@ Fila de bloqueo del producto (`02` §7.2 y §7.3).
 
 | Columna | Tipo | Notas |
 | --- | --- | --- |
-| `organizacion_id`, `producto_id` | `uuid` | PK compuesta |
-| `costo_promedio` | `numeric(18,6)` | CST-10 |
-| `stock_total` | `integer` | Suma de `stock_saldo` del producto |
+| `organizacion_id`, `producto_id` | `uuid` | PK compuesta (sin `id`, §2.3). FK compuesta `(organizacion_id, producto_id) → producto` |
+| `costo_promedio` | `numeric(18,6)` | CST-10. **Nulo** hasta el primer ingreso con costo (ADR-039); `CHECK (costo_promedio IS NULL OR costo_promedio > 0)` |
+| `stock_total` | `integer` | `NOT NULL DEFAULT 0`. Suma de `stock_saldo` del producto; cambia con todo movimiento |
 | `actualizado_en` | `timestamptz` | |
+
+La fila nace de forma perezosa con el primer movimiento del producto (`INSERT ... ON CONFLICT DO NOTHING` y `SELECT ... FOR UPDATE`).
 
 ### `costo_producto_mov`
 
 Historia del promedio (CST-13), de solo inserción.
 
-`id`, `organizacion_id`, `producto_id`, `origen_tipo` (`COMPRA`, `ANULACION_COMPRA`, `STOCK_INICIAL`, `ANULACION_VENTA`), `origen_id`, `cantidad` `integer`, `costo_ingreso` `numeric(18,6)`, `stock_anterior`, `promedio_anterior`, `stock_nuevo`, `promedio_nuevo`, `recalculado` `boolean` (falso cuando se mantuvo el promedio, CMP-06), `operation_id`, `registered_at`.
+`id`, `organizacion_id` (`UNIQUE (organizacion_id, id)`), `producto_id` (FK compuesta a `producto`), `origen_tipo` (`COMPRA`, `ANULACION_COMPRA`, `STOCK_INICIAL`, `ANULACION_VENTA`; `CHECK` de catálogo), `origen_id`, `cantidad` `integer`, `costo_ingreso` `numeric(18,6)`, `stock_anterior` `integer`, `promedio_anterior` `numeric(18,6)` (nulo en el primer ingreso del producto), `stock_nuevo` `integer`, `promedio_nuevo` `numeric(18,6)`, `recalculado` `boolean` (falso cuando se mantuvo el promedio, CMP-06), `operation_id`, `registered_at`. El usuario de aplicación solo tiene `SELECT` e `INSERT` (INV-05).
 
-## 8. Precios
+## 8. Precios (reemplazo de la tabla y de las restricciones)
 
 | Tabla | Columnas | Reglas |
 | --- | --- | --- |
-| `lista_precio` | `id`, `organizacion_id`, `nombre`, `redondeo_multiplo`, `redondeo_direccion`, `activo` | PRC-01, PRC-14 |
-| `regla_margen` | `id`, `organizacion_id`, `lista_id`, `alcance_tipo` (`PRODUCTO`, `MARCA`, `CATEGORIA`, `PROVEEDOR`, `LISTA`), `alcance_id` (nulo si `LISTA`), `tipo` (`MARKUP`, `MARGEN_BRUTO`), `valor` `numeric(9,6)`, `activo` | PRC-12, PRC-13 |
-| `redondeo_categoria` | `id`, `organizacion_id`, `lista_id`, `categoria_id`, `multiplo`, `direccion` | PRC-14 |
-| `lista_version` | `id`, `organizacion_id`, `lista_id`, `numero` `integer`, `estado` (`BORRADOR`, `PUBLICADA`, `ANULADA`), `vigencia_desde` `timestamptz`, `vigencia_hasta` `timestamptz` nulo, `creado_por_id`, `publicado_por_id`, `publicado_en`, `operation_id` | PRC-02 a PRC-06 |
-| `precio_item` | `id`, `organizacion_id`, `version_id`, `producto_id`, `costo_referencia` `numeric(18,6)`, `regla_margen_id`, `tipo_margen`, `valor_margen`, `precio_calculado` `numeric(18,6)`, `precio_final` `numeric(14,2)`, `manual` `boolean` | PRC-16 |
+| `lista_precio` | `id`, `organizacion_id`, `nombre`, `redondeo_multiplo` `numeric(14,2)`, `redondeo_direccion`, `activo`, `creado_en`, `actualizado_en`, `actualizado_por_id` | PRC-01, PRC-14 |
+| `regla_margen` | `id`, `organizacion_id`, `lista_id`, `alcance_tipo`, `alcance_id` (nulo si `LISTA`), `tipo`, `valor` `numeric(9,6)`, `activo`, `creado_en`, `actualizado_en`; columnas generadas `producto_id`, `marca_id`, `categoria_id`, `proveedor_id` | PRC-12, PRC-13 |
+| `redondeo_categoria` | `id`, `organizacion_id`, `lista_id`, `categoria_id`, `multiplo`, `direccion`, `activo` | PRC-14 |
+| `lista_version` | `id`, `organizacion_id`, `lista_id`, `numero`, `estado`, `vigencia_desde` (nulo solo en `BORRADOR`), `vigencia_hasta`, `generado_en`, `version_base_id`, `creado_por_id`, `publicado_por_id`, `publicado_en`, `anulado_por_id`, `anulado_en`, `operation_id` | PRC-02 a PRC-06, PRC-18 |
+| `precio_item` | `id`, `organizacion_id`, `version_id`, `producto_id`, `unidades_referencia` `integer`, `costo_informado_id` (nulo), `costo_referencia`, `regla_margen_id`, `tipo_margen`, `valor_margen`, `precio_calculado` (todos nulos en un precio manual sin costo o regla), `precio_final` `numeric(14,2)`, `manual` | PRC-10, PRC-16 |
 
-Restricciones:
+Restricciones nuevas (además de las existentes): `lista_precio`: `redondeo_multiplo > 0`, catálogo de `redondeo_direccion` y único `(organizacion_id, lower(nombre))`; `regla_margen`: "sin `alcance_id` ⇔ alcance `LISTA`", clave foránea compuesta de cada columna generada (ADR-035) y único parcial por lista y alcance entre las activas; `redondeo_categoria`: único `(organizacion_id, lista_id, categoria_id)`; `lista_version`: `CHECK` de coherencia de publicación y de anulación, único parcial "un borrador por lista", único parcial `(organizacion_id, lista_id, vigencia_desde)` entre las publicadas e índice `(organizacion_id, lista_id, vigencia_desde DESC)`; `precio_item`: `unidades_referencia >= 1`, `precio_final > 0` y clave foránea compuesta de `costo_informado_id`.
 
-```sql
-ALTER TABLE regla_margen ADD CONSTRAINT ck_regla_margen__valor
-    CHECK (valor >= 0 AND (tipo <> 'MARGEN_BRUTO' OR valor < 1));   -- PRC-12
-CREATE UNIQUE INDEX ux_precio_item__version_producto
-    ON precio_item (organizacion_id, version_id, producto_id);      -- PRC-10
-CREATE UNIQUE INDEX ux_lista_version__numero
-    ON lista_version (organizacion_id, lista_id, numero);
-```
-
-`precio_item` guarda un único precio por producto, sobre la presentación de referencia. No existe precio por presentación (PRC-10). La inmutabilidad de una versión publicada (INV-11) se aplica en el servicio.
+Privilegios de `app_runtime`: `SELECT, INSERT, UPDATE` en los maestros; en `lista_version`, `SELECT, INSERT` y `UPDATE` solo de estado, vigencias, publicación, anulación y generación, sin `DELETE`; en `precio_item`, `SELECT, INSERT, UPDATE, DELETE` (el borrador se regenera). La inmutabilidad de una versión publicada (INV-11) se aplica en el servicio, con una única función de escritura de precios y pruebas de integración, concurrencia y propiedades (ADR-047 punto 18).
 
 ## 9. Stock y ruta
 
 ### `ubicacion`
 
-`id`, `organizacion_id`, `nombre`, `tipo` (`DEPOSITO`, `VEHICULO`, `OTRO`), `requiere_toma` `boolean`, `activo` (STK-02).
+`id`, `organizacion_id`, `nombre`, `tipo` (`DEPOSITO`, `VEHICULO`, `OTRO`; `CHECK` de catálogo), `requiere_toma` `boolean`, `activo`, `creado_en`, `actualizado_en`, `actualizado_por_id` (STK-02; dato maestro, §2.3). `UNIQUE (organizacion_id, id)`. Restricciones: `ux_ubicacion__nombre` único sobre `(organizacion_id, lower(nombre))`, activas o no, y `CHECK (tipo <> 'VEHICULO' OR requiere_toma)` (ADR-038). El usuario de aplicación tiene `SELECT`, `INSERT` y `UPDATE`.
 
 ### `stock_saldo`
 
 | Columna | Tipo | Notas |
 | --- | --- | --- |
-| `organizacion_id`, `producto_id`, `ubicacion_id` | `uuid` | PK compuesta |
-| `cantidad_base` | `integer` | Puede ser negativa (STK-05, STK-06) |
+| `organizacion_id`, `producto_id`, `ubicacion_id` | `uuid` | PK compuesta (sin `id`, §2.3). FK compuestas a `producto` y a `ubicacion` |
+| `cantidad_base` | `integer` | `NOT NULL DEFAULT 0`. Puede ser negativa (STK-05, STK-06); ningún camino del change 09 la deja negativa |
 | `actualizado_en` | `timestamptz` | |
+
+La fila nace de forma perezosa con el primer movimiento del par (`INSERT ... ON CONFLICT DO NOTHING` y `SELECT ... FOR UPDATE`). El usuario de aplicación tiene `SELECT`, `INSERT` y `UPDATE`.
 
 ### `stock_movimiento`
 
@@ -351,10 +376,12 @@ Libro de stock, de solo inserción (INV-12).
 | `tipo` | `text` | STK-03 |
 | `origen_tipo`, `origen_id` | `text`, `uuid` | Documento que lo generó |
 | `costo_unitario` | `numeric(18,6)` | Congelado en ventas y ajustes |
-| `jornada_id`, `motivo_id` | `uuid` | Opcionales |
-| Columnas de operación | | |
+| `jornada_id`, `motivo_id` | `uuid` | Opcionales. `motivo_id` con FK compuesta a `motivo`; `jornada_id` con FK compuesta `(organizacion_id, jornada_id)` a `jornada` (change 15, ADR-049). Lo fija la puerta del libro, nunca el sobre: la jornada de la ubicación tomada si el movimiento es de la jornada, y nulo si la ubicación estaba libre o se movió por excepción |
+| `operation_id`, `usuario_id`, `dispositivo_id`, `occurred_at`, `registered_at` | | Columnas de operación (§2.3), todas `NOT NULL`; `dispositivo_id` con FK compuesta a `dispositivo` y `usuario_id` a `usuario` |
 
-Índices: `(organizacion_id, producto_id, ubicacion_id, occurred_at)` para kardex y verificación de consistencia; `(organizacion_id, origen_tipo, origen_id)` para reversiones.
+`UNIQUE (organizacion_id, id)`; FK compuestas a `producto` y `ubicacion`; `CHECK` de catálogo en `tipo` (los nueve tipos de la etapa 1 de STK-03). El usuario de aplicación solo tiene `SELECT` e `INSERT` (INV-05).
+
+Índices: `(organizacion_id, producto_id, ubicacion_id, occurred_at, id)` para kardex y verificación de consistencia; `(organizacion_id, origen_tipo, origen_id)` para reversiones.
 
 El origen es genérico (`origen_tipo` + `origen_id`) y no una clave foránea por tipo de documento. Se valida en el servicio y en pruebas.
 
@@ -362,35 +389,51 @@ El origen es genérico (`origen_tipo` + `origen_id`) y no una clave foránea por
 
 | Tabla | Columnas |
 | --- | --- |
-| `transferencia` | `id`, `organizacion_id`, `ubicacion_origen_id`, `ubicacion_destino_id`, `estado`, columnas de operación; `CHECK (origen <> destino)` |
-| `transferencia_linea` | `id`, `organizacion_id`, `transferencia_id`, `producto_id`, `cantidad_base` `CHECK (> 0)` |
-| `ajuste_stock` | `id`, `organizacion_id`, `ubicacion_id`, `motivo_id`, `observacion`, columnas de operación |
-| `ajuste_stock_linea` | `id`, `organizacion_id`, `ajuste_id`, `producto_id`, `cantidad_base` (con signo), `costo_unitario` `numeric(18,6)` |
+| `transferencia` | `id`, `organizacion_id`, `ubicacion_origen_id`, `ubicacion_destino_id`, `observacion`, `estado` (`CONFIRMADA`, `ANULADA`; `CHECK` de catálogo), `anulacion_motivo_id`, `anulada_en`, `anulada_por_id`, columnas de operación; `CHECK (origen <> destino)` y `CHECK` de coherencia de anulación (las tres columnas no nulas si y solo si `estado = 'ANULADA'`) |
+| `transferencia_linea` | `id`, `organizacion_id`, `transferencia_id`, `orden` `integer`, `producto_id`, `cantidad_base` `CHECK (> 0)`; `UNIQUE (organizacion_id, transferencia_id, orden)` |
+| `ajuste_stock` | `id`, `organizacion_id`, `ubicacion_id`, `motivo_id`, `observacion`, `estado` (`CONFIRMADA`, `ANULADA`), `anulacion_motivo_id`, `anulado_en`, `anulado_por_id`, columnas de operación; mismo `CHECK` de coherencia |
+| `ajuste_stock_linea` | `id`, `organizacion_id`, `ajuste_id`, `orden` `integer`, `producto_id`, `cantidad_base` (con signo) `CHECK (<> 0)`, `costo_unitario` `numeric(18,6)` (nulable); `UNIQUE (organizacion_id, ajuste_id, orden)` |
+
+`UNIQUE (organizacion_id, id)` y claves foráneas compuestas a `ubicacion`, `producto`, `motivo`, `usuario` y `dispositivo`. Sin `UNIQUE` sobre `operation_id`: INV-06 lo garantiza la reserva en `comando`. Índices de listado `(organizacion_id, occurred_at DESC, id DESC)` en ambas cabeceras. El usuario de aplicación tiene `SELECT` e `INSERT` en las cuatro tablas y `UPDATE` **solo** sobre `estado` y las tres columnas de anulación de cada cabecera; las líneas no tienen `UPDATE` y ninguna tiene `DELETE` (INV-05). Los movimientos de stock de una transferencia usan `origen_tipo = 'TRANSFERENCIA'`, los de un ajuste `'AJUSTE_STOCK'` y los de sus anulaciones `'ANULACION_TRANSFERENCIA'` y `'ANULACION_AJUSTE_STOCK'`, con `origen_id` igual al id de la cabecera; los inversos repiten el `costo_unitario` del original (ADR-048).
 
 ### `jornada`
 
 | Columna | Tipo | Notas |
 | --- | --- | --- |
-| `id`, `organizacion_id` | `uuid` | |
-| `usuario_id`, `dispositivo_id`, `ubicacion_id` | `uuid` | RUT-01 |
-| `estado` | `text` | `ABIERTA`, `EN_RENDICION`, `CERRADA`, `LIBERADA` |
-| `abierta_en`, `rendida_en`, `cerrada_en`, `liberada_en` | `timestamptz` | |
-| `liberada_por_id`, `motivo_liberacion_id` | `uuid` | RUT-09 |
+| `id`, `organizacion_id` | `uuid` | `UNIQUE (organizacion_id, id)` |
+| `usuario_id`, `dispositivo_id`, `ubicacion_id` | `uuid` | RUT-01. FK compuestas a `usuario`, `dispositivo` y `ubicacion` |
+| `estado` | `text` | `ABIERTA`, `EN_RENDICION`, `CERRADA`, `LIBERADA`; `CHECK` de catálogo |
+| `operation_id`, `occurred_at`, `registered_at`, `creado_en` | | Columnas de operación (§2.3) de la apertura, todas `NOT NULL` |
+| `abierta_en`, `rendida_en`, `cerrada_en`, `liberada_en` | `timestamptz` | `abierta_en` `NOT NULL`; los demás, nulos hasta que ocurre la transición |
+| `rendida_por_id`, `cerrada_por_id`, `liberada_por_id` | `uuid` | Quién rindió, cerró y liberó; FK compuestas a `usuario`; nulos si y solo si su momento es nulo |
+| `motivo_liberacion_id` | `uuid` | RUT-09. FK compuesta a `motivo` (ámbito `LIBERACION_JORNADA`); no nulo si y solo si `liberada_en` no es nulo |
+| `observacion_liberacion` | `text` | Opcional, de 1 a 500 caracteres; solo en una `LIBERADA` |
+| `entregada_en`, `entrega_occurred_at`, `entrega_secuencia` | `timestamptz`, `timestamptz`, `integer` | RUT-05. La entrega del día: nulas juntas; solo en `ABIERTA`, `EN_RENDICION`, `CERRADA` o `LIBERADA` (`ck_jornada__entrega_coherente`: una jornada entregada y luego liberada la conserva); toda `EN_RENDICION` o `CERRADA` posterior al change 24 la tiene (ADR-068) |
+
+`CHECK` de coherencia por estado: `CERRADA` tiene cierre y rendición; `LIBERADA` tiene liberación y motivo y no cierre; `EN_RENDICION` tiene rendición; `ABIERTA` no tiene rendición. El usuario de aplicación tiene `SELECT` e `INSERT`, y `UPDATE` **solo** de `estado`, de las columnas de transición **y de las de la entrega** (nunca de `ubicacion_id`, `usuario_id`, `dispositivo_id` ni `abierta_en`); no tiene `DELETE` (INV-05, TR-06). No hay tabla de toma: la toma es la fila en `ABIERTA` o `EN_RENDICION` más sus índices.
 
 ```sql
 CREATE UNIQUE INDEX ux_jornada__ubicacion_abierta
     ON jornada (organizacion_id, ubicacion_id)
     WHERE estado IN ('ABIERTA', 'EN_RENDICION');   -- INV-16
+CREATE UNIQUE INDEX ux_jornada__usuario_abierta
+    ON jornada (organizacion_id, usuario_id)
+    WHERE estado IN ('ABIERTA', 'EN_RENDICION');
+CREATE UNIQUE INDEX ux_jornada__dispositivo_abierta
+    ON jornada (organizacion_id, dispositivo_id)
+    WHERE estado IN ('ABIERTA', 'EN_RENDICION');
+CREATE INDEX ix_jornada__abierta_en
+    ON jornada (organizacion_id, abierta_en DESC, id DESC);   -- listado
 ```
 
 ### `rendicion` y `rendicion_linea`
 
 | Tabla | Columnas |
 | --- | --- |
-| `rendicion` | `id`, `organizacion_id`, `jornada_id` (único), columnas de operación |
-| `rendicion_linea` | `id`, `organizacion_id`, `rendicion_id`, `producto_id`, `cantidad_esperada`, `cantidad_contada`, `diferencia` `integer` |
+| `rendicion` | `id`, `organizacion_id`, `jornada_id` (único), **`observacion` (opcional, de 1 a 500)**, columnas de operación |
+| `rendicion_linea` | `id`, `organizacion_id`, `rendicion_id`, `producto_id`, **`stock_al_abrir`, `ingresos`, `ventas`, `anulaciones`, `otros`**, `cantidad_esperada`, `cantidad_contada` (**`CHECK (>= 0)`**), `diferencia` `integer`; **`costo_unitario` `numeric(18,6)` nulable; `UNIQUE (organizacion_id, rendicion_id, producto_id)`; `CHECK (diferencia = cantidad_contada - cantidad_esperada)` y `CHECK (cantidad_esperada = stock_al_abrir + ingresos - ventas + anulaciones + otros)`** |
 
-Las diferencias generan movimientos `DIFERENCIA_RENDICION` con origen en la rendición (RUT-06).
+Las diferencias generan movimientos `DIFERENCIA_RENDICION` con origen en la rendición (RUT-06). **FK compuestas a `jornada`, `producto`, `usuario` y `dispositivo`. El usuario de aplicación tiene `SELECT` e `INSERT` y nunca `UPDATE` ni `DELETE` (INV-05). Las columnas de la línea son el resumen de stock congelado al rendir (RUT-07, ADR-068). Migración: revisión `d2f4a6c8e0b1_rendicion_de_jornada` (sobre el head anterior): crea `rendicion` y `rendicion_linea`, agrega las tres columnas de `jornada` y rehace el `CHECK` de `observacion.codigo`; sube y baja limpia sobre una base con datos y el `downgrade` aborta con un mensaje claro si hay rendiciones o entregas.**
 
 ## 10. Clientes
 
@@ -399,28 +442,30 @@ Las diferencias generan movimientos `DIFERENCIA_RENDICION` con origen en la rend
 | Columna | Tipo | Notas |
 | --- | --- | --- |
 | `id`, `organizacion_id` | `uuid` | |
-| `codigo` | `text` | `UNIQUE (organizacion_id, codigo)` |
-| `nombre`, `razon_social` | `text` | |
-| `documento_tipo`, `documento_numero` | `text` | CUIT o DNI |
-| `condicion_iva` | `text` | Para facturación |
-| `direccion`, `telefono`, `email` | `text` | |
-| `lista_precio_id` | `uuid` | Opcional (PRC-20) |
+| `codigo` | `text` | Opcional. Único por organización con índice parcial `WHERE codigo IS NOT NULL` (`ux_cliente__codigo`, `design.md` D1 del change 07, ADR-031) |
+| `nombre`, `razon_social` | `text` | `nombre` NO es único: el mismo nombre puede repetirse en la organización (D1) |
+| `documento_tipo`, `documento_numero` | `text` | CUIT o DNI; opcionales como pareja (si se informa uno, el otro es obligatorio). `documento_numero` se normaliza a solo dígitos. Único por organización como pareja, con índice parcial `WHERE documento_numero IS NOT NULL` (`ux_cliente__documento`, D1). Longitud validada por tipo: CUIT 11 dígitos, DNI 7 u 8 (CLI-05) |
+| `direccion`, `telefono`, `email` | `text` | `direccion` obligatoria |
+| `lista_precio_id` | `uuid` | Nulo = la lista por defecto de la organización (PRC-20). Clave foránea compuesta `(organizacion_id, lista_precio_id)` a `lista_precio`. Se ofrece en la ficha con las listas activas (ADR-047 punto 12). En `PUT /clientes/{id}` y `CLIENTE_MODIFICAR`, ausente conserva la lista, nulo explícito la quita y un identificador la asigna (ADR-047 punto 29). |
+| `vendedor_id` | `uuid` | Nulo = sin vendedor asignado. Clave foránea compuesta `(organizacion_id, vendedor_id)` a `usuario (organizacion_id, id)` e índice completo `ix_cliente__vendedor (organizacion_id, vendedor_id)` (sirve también al filtro "sin vendedor"). Lo cambia solo `CLIENTE_VENDEDOR_ASIGNAR`, no `CLIENTE_MODIFICAR`. El consumidor final no se asigna (CLI-03). Si el vendedor se da de baja o pierde el permiso, la asignación se conserva y la pantalla la marca para reasignar (ADR-060) |
 | `limite_credito` | `numeric(14,2)` | Nulo = sin control (CRE-01) |
-| `politica_credito` | `text` | Nulo = la de la organización |
-| `tolerancia_offline_tipo`, `tolerancia_offline_valor` | | Nulos = los de la organización |
+| `politica_credito` | `text` | Nulo = la de la organización (CRE-03) |
+| `tolerancia_offline_tipo`, `tolerancia_offline_valor` | `text`, `numeric(14,2)` | Nulos = los de la organización (CRE-06). Misma escala que `configuracion_organizacion.tolerancia_offline_valor` (ADR-032 del change 07) |
 | `estado_facturacion_default` | `text` | Nulo = el de la organización (VTA-08) |
-| `es_consumidor_final` | `boolean` | CLI-03 |
-| `estado` | `text` | `ACTIVO`, `SUSPENDIDO`, `INACTIVO` |
-| `actualizado_en` | `timestamptz` | |
+| `es_consumidor_final` | `boolean` | CLI-03; solo lo asigna `CLIENTE_CONSUMIDOR_FINAL_CONFIGURAR` (ADR-029) |
+| `estado` | `text` | `ACTIVO`, `SUSPENDIDO`, `INACTIVO`. Nace `ACTIVO`; `INACTIVO` se revierte solo sin operaciones (CLI-06, ADR-030) |
+| `creado_en`, `actualizado_en` | `timestamptz` | |
+
+**Deuda consciente (change 07):** `condicion_iva`, que este párrafo listaba, no se crea todavía — `01` §16 y FAC-04 no definen su dominio y el change de facturación la agrega junto con su catálogo (`design.md` D5 del change 07). El modelo en código no tiene esa columna hasta entonces.
 
 ## 11. Descuentos
 
 | Tabla | Columnas | Reglas |
 | --- | --- | --- |
-| `regla_descuento` | `id`, `organizacion_id`, `nombre`, `tipo` (`VOLUMEN_OPERACION`, `VOLUMEN_ALCANCE`), `medida` (`CAJAS_EQUIVALENTES`, `UNIDADES_BASE`, `IMPORTE_BRUTO`), `operador` (`GTE`, `GT`), `umbral` `numeric(14,4)`, `accion_tipo` (`PORCENTAJE`, `IMPORTE_FIJO`), `accion_valor`, `prioridad` `integer`, `acumulable` `boolean`, `vigencia_desde`, `vigencia_hasta`, `estado` (`BORRADOR`, `ACTIVA`, `PAUSADA`) | DSC-01 a DSC-04 |
-| `regla_descuento_alcance` | `id`, `organizacion_id`, `regla_id`, `alcance_tipo` (`PRODUCTO`, `CATEGORIA`, `MARCA`), `alcance_id` | DSC-02 |
+| `regla_descuento` | `id`, `organizacion_id`, `nombre`, `tipo` (`VOLUMEN_OPERACION`, `VOLUMEN_ALCANCE`), `medida` (`CAJAS_EQUIVALENTES`, `UNIDADES_BASE`, `IMPORTE_BRUTO`), `operador` (`GTE`, `GT`), `umbral` `numeric(14,4)` (mayor que 0), `accion_tipo` (`PORCENTAJE`, `IMPORTE_FIJO`), `accion_porcentaje` `numeric(9,6)` (mayor que 0 y hasta 1), `accion_importe` `numeric(14,2)` (mayor que 0) —exactamente una de las dos, la que corresponde a `accion_tipo`—, `prioridad` `integer` (desde 1; el número más bajo es la mayor prioridad), `acumulable` `boolean`, `vigencia_desde` `timestamptz`, `vigencia_hasta` `timestamptz` (posterior a la desde), `estado` (`BORRADOR`, `ACTIVA`, `PAUSADA`; `VENCIDA` es derivado y no se almacena), `creado_en`, `actualizado_en`, `actualizado_por_id` | DSC-01 a DSC-04 |
+| `regla_descuento_alcance` | `id`, `organizacion_id`, `regla_id`, `alcance_tipo` (`PRODUCTO`, `CATEGORIA`, `MARCA`), `alcance_id`, y las columnas generadas `producto_id`, `categoria_id`, `marca_id` (cada una toma `alcance_id` solo si `alcance_tipo` es el suyo), `creado_en` | DSC-02 |
 
-Una regla `VOLUMEN_OPERACION` no tiene filas de alcance. Una `VOLUMEN_ALCANCE` tiene al menos una.
+Una regla `VOLUMEN_OPERACION` no tiene filas de alcance. Una `VOLUMEN_ALCANCE` tiene al menos una (lo garantiza el servicio; no es expresable como `CHECK` de fila). Restricciones: `UNIQUE (organizacion_id, id)` en las dos tablas; `CHECK` de catálogo en `tipo`, `medida`, `operador`, `accion_tipo`, `estado` y `alcance_tipo`; `CHECK` que exige la columna de acción que corresponde y fija el dominio de cada una; `vigencia_hasta > vigencia_desde`; `estado = 'BORRADOR' OR vigencia_desde IS NOT NULL`; claves foráneas compuestas (incluyen `organizacion_id`) de cada alcance a la regla y, por las columnas generadas, a `producto`, `categoria` y `marca`; único por regla, tipo y entidad; índice de listado `(organizacion_id, estado, id DESC)`. El usuario de aplicación tiene `SELECT`, `INSERT` y `UPDATE` sobre `regla_descuento` y ningún `DELETE` (TR-06); sobre `regla_descuento_alcance`, `SELECT`, `INSERT` y `DELETE` y ningún `UPDATE` (el `DELETE` solo lo usa el servicio al reemplazar los alcances de un borrador).
 
 ## 12. Ventas, cobranzas y cuentas corrientes
 
@@ -433,16 +478,19 @@ Una regla `VOLUMEN_OPERACION` no tiene filas de alcance. Una `VOLUMEN_ALCANCE` t
 | `numero` | `text` | `UNIQUE (organizacion_id, numero)` (VTA-06) |
 | `cliente_id`, `usuario_id`, `dispositivo_id`, `ubicacion_id` | `uuid` | |
 | `jornada_id` | `uuid` | Nulo en ventas desde PC |
-| `lista_version_id` | `uuid` | PRC-23 |
+| `lista_id` | `uuid` | FK compuesta a `lista_precio` (PRC-21) |
+| `lista_version_id` | `uuid` | Versión común de todas las líneas, que el servidor exige igual (PRC-23, ADR-054 D16) |
+| `motivo_lista_id` | `uuid` | Nulable; FK compuesta a `motivo` (ámbito `LISTA_ANTERIOR`; PRC-21) |
+| `creado_en` | `timestamptz` | |
 | `modo_impositivo` | `text` | Congelado |
 | `modo_confirmacion` | `text` | `ONLINE`, `OFFLINE` |
 | `total_neto`, `total_iva`, `total` | `numeric(14,2)` | INV-14 |
 | `estado` | `text` | `CONFIRMADA`, `ANULADA` |
 | `estado_facturacion` | `text` | `NO_REQUIERE`, `PENDIENTE`, `PARCIAL`, `FACTURADA` |
 | `importe_facturado` | `numeric(14,2)` | Default 0 (INV-09) |
-| `credito_limite`, `credito_saldo_considerado`, `credito_disponible`, `credito_exceso` | `numeric(14,2)` | CRE-10 |
-| `credito_politica`, `credito_resolucion` | `text` | `ADVERTENCIA_ACEPTADA`, `PERMISO_PROPIO`, `PIN_SUPERVISOR`, `TOLERANCIA_OFFLINE`, `SIN_EXCESO` |
-| `credito_autorizador_id` | `uuid` | |
+| `credito_limite`, `credito_saldo_considerado`, `credito_disponible`, `credito_exceso` | `numeric(14,2)` | CRE-10. Nulos en las ventas anteriores al 18b; límite, disponible y exceso nulos juntos significan sin control (con resolución `SIN_EXCESO`); `CHECK (credito_exceso >= 0)` |
+| `credito_politica`, `credito_resolucion` | `text` | `ADVERTIR`, `AUTORIZAR`, `BLOQUEAR`; `ADVERTENCIA_ACEPTADA`, `PERMISO_PROPIO`, `PIN_SUPERVISOR`, `TOLERANCIA_OFFLINE`, `SIN_EXCESO` (`CHECK` de catálogo) |
+| `credito_autorizador_id` | `uuid` | FK compuesta a `usuario`; obligatorio con `PIN_SUPERVISOR` (`CHECK`) |
 | `operation_id`, `occurred_at`, `registered_at` | | |
 
 ```sql
@@ -450,27 +498,30 @@ ALTER TABLE venta ADD CONSTRAINT ck_venta__facturado
     CHECK (importe_facturado >= 0 AND importe_facturado <= total_neto);   -- INV-09
 ALTER TABLE venta ADD CONSTRAINT ck_venta__jornada
     CHECK (modo_confirmacion = 'ONLINE' OR jornada_id IS NOT NULL);
+ALTER TABLE venta ADD CONSTRAINT ck_venta__total
+    CHECK (total = total_neto + total_iva);                               -- INV-14
 ```
 
-Índices: `(organizacion_id, occurred_at)`, `(organizacion_id, cliente_id, occurred_at)`, `(organizacion_id, usuario_id, occurred_at)`, y parcial `(organizacion_id, cliente_id) WHERE estado_facturacion IN ('PENDIENTE','PARCIAL')`.
+Índices: `(organizacion_id, occurred_at)`, `(organizacion_id, cliente_id, occurred_at)`, `(organizacion_id, usuario_id, occurred_at)`, `(organizacion_id, jornada_id)` y parcial `(organizacion_id, cliente_id) WHERE estado_facturacion IN ('PENDIENTE','PARCIAL')`. `app_runtime`: `SELECT, INSERT` en `venta` y `venta_linea`; `UPDATE` solo de `venta.estado` (que pasa de `CONFIRMADA` a `ANULADA`, una sola vez) y nunca `DELETE` (INV-05). `venta_linea` no tiene `UPDATE`. `venta_linea_descuento` llegó con el 18b y `venta_anulacion` con el 19 (ADR-054, ADR-058).
 
 ### `venta_linea`
 
 | Columna | Tipo | Notas |
 | --- | --- | --- |
 | `id`, `organizacion_id`, `venta_id` | `uuid` | |
-| `orden` | `integer` | |
+| `orden` | `integer` | `UNIQUE (organizacion_id, venta_id, orden)` |
 | `producto_id`, `presentacion_id` | `uuid` | |
+| `lista_version_id` | `uuid` | Versión de la línea (PRC-23) |
 | `unidades_presentacion` | `integer` | Congelado (INV-18) |
-| `cantidad` | `integer` | En la presentación |
-| `cantidad_base` | `integer` | `CHECK (> 0)` |
+| `cantidad` | `integer` | En la presentación; `CHECK (> 0)` |
+| `cantidad_base` | `integer` | `CHECK (> 0)`; `CHECK (cantidad_base = cantidad * unidades_presentacion)` |
 | `precio_referencia` | `numeric(14,2)` | Congelado |
 | `unidades_referencia` | `integer` | Congelado (PRC-23) |
 | `importe_bruto`, `importe_descuento`, `importe_neto` | `numeric(14,2)` | |
 | `alicuota` | `numeric(9,6)` | Congelada |
 | `importe_iva` | `numeric(14,2)` | Cero en modo A |
-| `costo_unitario` | `numeric(18,6)` | VTA-05 |
-| `costo_total` | `numeric(14,2)` | |
+| `costo_unitario` | `numeric(18,6)` | VTA-05; nulable, junto con `costo_total` (ADR-054 D10) |
+| `costo_total` | `numeric(14,2)` | Nulable, junto con `costo_unitario` |
 
 `CHECK (importe_neto = importe_bruto - importe_descuento)`.
 
@@ -478,19 +529,21 @@ ALTER TABLE venta ADD CONSTRAINT ck_venta__jornada
 
 ### `venta_linea_descuento`
 
-`id`, `organizacion_id`, `venta_linea_id`, `origen` (`AUTOMATICO`, `MANUAL`), `regla_id` (nulo si manual), `porcentaje` `numeric(9,6)`, `importe` `numeric(14,2)`, `motivo_id`, `autorizador_id` (DSC-08).
+`id`, `organizacion_id`, `venta_linea_id`, `origen` (`AUTOMATICO`, `MANUAL`), `regla_id` (nulo si manual), `porcentaje` `numeric(9,6)`, `importe` `numeric(14,2)`, `motivo_id`, `autorizador_id` (DSC-08), más `orden`. Claves foráneas compuestas a `venta_linea`, `regla_descuento`, `motivo` y `usuario`; `CHECK` de origen, regla nula si y solo si es manual, importe > 0 y porcentaje en (0, 1] o nulo (importe fijo); índice único parcial por línea donde `origen = 'MANUAL'` (DSC-08); `app_runtime` con `SELECT, INSERT` (INV-10).
 
 ### `venta_anulacion`
 
-`id`, `organizacion_id`, `venta_id` (único), `motivo_id`, `observacion`, `devuelve_dinero` `boolean` (VTA-22), columnas de operación.
+`id`, `organizacion_id`, `venta_id`, `motivo_id`, `observacion` (opcional, hasta 500), `devuelve_dinero` `boolean` (VTA-22; nulo si y solo si la venta no tenía cobranza confirmada), `jornada_id` (nulable: **con conexión**, la jornada `ABIERTA` del usuario y el dispositivo sobre la ubicación de la venta, STK-09; **sin conexión, la jornada del sobre —que es la de la venta—, aunque después se haya liberado, de modo que la rendición del change 24 cuenta la anulación por esa jornada, RUT-07; ADR-066**), columnas de operación. Claves foráneas compuestas a `venta`, `motivo`, `jornada`, `usuario` y `dispositivo`; `UNIQUE (organizacion_id, venta_id)` (una sola anulación por venta) e índice por `(organizacion_id, venta_id)`. `app_runtime` tiene `SELECT, INSERT` y nunca `UPDATE` ni `DELETE` (INV-05). Migración `d9e0f1a2b3c4`: el `downgrade` aborta con un mensaje claro si hay una venta `ANULADA` (ADR-058). *(Sin migración: la columna ya era nulable.)*
 
 ### `cobranza`, `cobranza_medio`, `cobranza_anulacion`
 
 | Tabla | Columnas |
 | --- | --- |
-| `cobranza` | `id`, `organizacion_id`, `cliente_id`, `venta_id` (nulo si independiente), `origen` (`VENTA`, `INDEPENDIENTE`), `importe` `CHECK (> 0)`, `estado`, `jornada_id`, columnas de operación |
-| `cobranza_medio` | `id`, `organizacion_id`, `cobranza_id`, `medio_pago_id`, `importe`, `referencia` |
-| `cobranza_anulacion` | `id`, `organizacion_id`, `cobranza_id` (único), `motivo_id`, columnas de operación |
+| `cobranza` | `id` (generado por quien origina), `organizacion_id`, `cliente_id`, `venta_id` (nulo si independiente; FK compuesta `(organizacion_id, venta_id)` a `venta`, change 18a), `origen` (`VENTA`, `INDEPENDIENTE`, coherente con `venta_id`), `importe` `numeric(14,2)` `CHECK (> 0)`, `estado` (`CONFIRMADA`, `ANULADA`), `jornada_id`, `observacion` (opcional, hasta 500), columnas de operación |
+| `cobranza_medio` | `id`, `organizacion_id`, `cobranza_id`, `orden` `CHECK (>= 0)` (posición de la línea en el pedido, única por cobranza; D16), `medio_pago_id`, `importe` `CHECK (> 0)`, `referencia` |
+| `cobranza_anulacion` | `id`, `organizacion_id`, `cobranza_id` (único), `motivo_id`, `observacion` (opcional, hasta 500), columnas de operación |
+
+FK compuestas a `cliente`, `jornada`, `usuario`, `dispositivo`, `medio_pago` y `motivo`. Índices `(organizacion_id, occurred_at DESC, id DESC)`, `(organizacion_id, cliente_id, occurred_at DESC, id DESC)` y `(organizacion_id, jornada_id)`. `app_runtime` tiene `SELECT, INSERT` en las tres, `UPDATE` solo de `cobranza.estado` y nunca `DELETE` (INV-05). INV-08 se valida en el servicio y se cubre con una propiedad que suma con SQL (ADR-052).
 
 ### `cuenta_movimiento`
 
@@ -498,14 +551,19 @@ Libro único para clientes y proveedores, de solo inserción (CC-01).
 
 | Columna | Tipo | Notas |
 | --- | --- | --- |
-| `id`, `organizacion_id` | `uuid` | |
+| `id`, `organizacion_id` | `uuid` | `UNIQUE (organizacion_id, id)` |
 | `cuenta_tipo` | `text` | `CLIENTE`, `PROVEEDOR` |
 | `entidad_id` | `uuid` | Cliente o proveedor |
-| `tipo` | `text` | CC-02, CC-03 |
+| `cliente_id` | `uuid` | **Generada** por la base: `entidad_id` si `cuenta_tipo = CLIENTE`, si no nulo. FK compuesta `(organizacion_id, cliente_id) → cliente` |
+| `proveedor_id` | `uuid` | **Generada** por la base: `entidad_id` si `cuenta_tipo = PROVEEDOR`, si no nulo. FK compuesta `(organizacion_id, proveedor_id) → proveedor` |
+| `tipo` | `text` | CC-02, CC-03. `CHECK` de catálogo y de coherencia con `cuenta_tipo` (sin los tipos de IVA, que agrega el módulo de facturación) |
 | `sentido` | `text` | `AUMENTA`, `REDUCE` |
 | `importe` | `numeric(14,2)` | `CHECK (importe > 0)` |
 | `origen_tipo`, `origen_id` | `text`, `uuid` | |
-| `occurred_at`, `registered_at`, `usuario_id`, `operation_id` | | |
+| `occurred_at`, `registered_at`, `usuario_id`, `operation_id` | | `usuario_id` con FK compuesta a `usuario` |
+| `dispositivo_id` | `uuid` | `NOT NULL`. FK compuesta `(organizacion_id, dispositivo_id) → dispositivo` (§2.3) |
+
+`cliente_id` y `proveedor_id` no las escribe nadie: las calcula PostgreSQL, y existen para que la referencia a `cliente` o a `proveedor` sea una clave foránea compuesta (§2.4) aunque `entidad_id` apunte a dos tablas según `cuenta_tipo`. El emparejamiento entre `tipo` y `sentido` (por ejemplo, `VENTA` siempre `AUMENTA`) no tiene `CHECK` en la base: lo verifica el dominio (ADR-034).
 
 **No tiene columna de saldo acumulado.** El saldo se calcula (CC-04) y se materializa en `saldo_cuenta`.
 
@@ -513,7 +571,7 @@ Libro único para clientes y proveedores, de solo inserción (CC-01).
 
 ### `saldo_cuenta`
 
-`organizacion_id`, `cuenta_tipo`, `entidad_id` (PK compuesta), `saldo` `numeric(14,2)`, `actualizado_en`. Es la fila que se bloquea al evaluar crédito y al registrar movimientos (`02` §7.3).
+`organizacion_id`, `cuenta_tipo`, `entidad_id` (PK compuesta, sin `id`: ninguna tabla referencia una fila de saldo), `cliente_id` y `proveedor_id` (generadas, con las mismas FK compuestas que `cuenta_movimiento`), `saldo` `numeric(14,2) NOT NULL DEFAULT 0`, `actualizado_en`. Es la fila que se bloquea al evaluar crédito y al registrar movimientos (`02` §7.3). La fila nace de forma perezosa con el primer movimiento de la cuenta (`INSERT ... ON CONFLICT DO NOTHING` y `SELECT ... FOR UPDATE`).
 
 ## 13. Sincronización, auditoría, importación y facturación
 
@@ -525,7 +583,7 @@ Libro único para clientes y proveedores, de solo inserción (CC-01).
 | `operation_id` | `uuid` | `UNIQUE (organizacion_id, operation_id)` (INV-06) |
 | `tipo`, `version` | `text`, `integer` | |
 | `modo` | `text` | `ONLINE`, `OFFLINE` |
-| `usuario_id`, `dispositivo_id`, `jornada_id` | `uuid` | |
+| `usuario_id`, `dispositivo_id`, `jornada_id` | `uuid` | `jornada_id` opcional, con FK compuesta `(organizacion_id, jornada_id)` a `jornada` (change 15, ADR-049); el bus comprueba antes de reservar que la jornada existe (`02` §6.3, paso 1b) |
 | `secuencia` | `integer` | Orden en la cola del dispositivo |
 | `huella` | `text` | SHA-256 del contenido canónico |
 | `app_version` | `text` | |
@@ -538,11 +596,15 @@ El índice único es el mecanismo de idempotencia (`02` §6.3). El contenido com
 
 ### `comando_cuarentena`
 
-`id`, `organizacion_id`, `dispositivo_id`, `usuario_id`, `operation_id`, `tipo`, `contenido` `jsonb`, `motivo`, `recibido_en`, `revisado_en`, `revisado_por_id` (SYN-06).
+`id`, `organizacion_id`, `dispositivo_id`, `usuario_id`, `operation_id`, `tipo`, `contenido` `jsonb`, `motivo`, `recibido_en`, `revisado_en`, `revisado_por_id`, **`comentario` (de 1 a 500), `vinculo_tipo`, `vinculo_id`** (SYN-06). **El usuario de aplicación solo actualiza las columnas de la revisión; `CHECK` de coherencia (revisada con las tres primeras no nulas). Migración del change 25 (ADR-069).**
+
+### `comando_rechazado`
+
+`id`, `organizacion_id`, `operation_id` (`UNIQUE (organizacion_id, operation_id)`), `tipo`, `version`, `modo`, `usuario_id`, `dispositivo_id`, `jornada_id` (nulable; nula si la jornada del sobre no existía), `secuencia`, `occurred_at`, `app_version`, `contenido` `jsonb`, `error_codigo`, `recibido_en`, `estado` (`PENDIENTE`, `RESUELTO`), `resuelto_por_id`, `resuelto_en`, `comentario` (de 1 a 500), `vinculo_tipo`, `vinculo_id` (SYN-06). FK compuestas a `usuario`, `dispositivo` y `jornada`. El lote la escribe en transacción aparte por cada comando sin conexión rechazado; el usuario de aplicación tiene `SELECT`, `INSERT` y `UPDATE` solo de las columnas de la resolución, nunca `DELETE` (INV-05). Índice parcial `(organizacion_id, jornada_id) WHERE estado = 'PENDIENTE'` (ADR-069).
 
 ### `observacion`
 
-`id`, `organizacion_id`, `comando_id`, `operacion_tipo`, `operacion_id`, `codigo` (SYN-07), `detalle` `jsonb`, `estado` (`PENDIENTE`, `RESUELTA`), `resuelto_por_id`, `resuelto_en`, `comentario`.
+`id`, `organizacion_id`, `comando_id`, `operacion_tipo`, `operacion_id`, `codigo` (SYN-07; `CHECK` `ck_observacion__codigo` con el catálogo, que el change 17 amplía con `MEDIO_INACTIVO` y `REFERENCIA_FALTANTE`, el change 18a con `VENTA_SIN_COSTO`, `CONSUMIDOR_FINAL_CON_DEUDA` y `UBICACION_TOMADA_AL_SINCRONIZAR` el change 18b con `AUTORIZACION_OFFLINE`, el change 24 con `JORNADA_RENDIDA` **y el change 25 con `PRODUCTO_DESACTIVADO`**), `detalle` `jsonb`, `estado` (`PENDIENTE`, `RESUELTA`), `resuelto_por_id`, `resuelto_en`, `comentario`. **El usuario de aplicación solo actualiza `estado`, `resuelto_por_id`, `resuelto_en` y `comentario`; `CHECK` `ck_observacion__resolucion_coherente` (pendiente con las tres nulas, resuelta con las tres no nulas) y `ck_observacion__comentario` (de 1 a 500) (ADR-069).** En las observaciones de un medio de cobranza, `detalle` lleva `medio` (posición de la línea), `medio_pago_id`, `nombre` e `importe` (ADR-052).
 
 Índice parcial `(organizacion_id, codigo) WHERE estado = 'PENDIENTE'`.
 
@@ -552,7 +614,7 @@ El índice único es el mecanismo de idempotencia (`02` §6.3). El contenido com
 
 ### `importacion`
 
-`id`, `organizacion_id`, `tipo` (`PRODUCTOS`, `CLIENTES`, `PROVEEDORES`, `PRECIOS`, `STOCK_INICIAL`, `SALDOS_INICIALES`), `archivo_nombre`, `estado`, `filas_total`, `filas_ok`, `filas_error`, `errores` `jsonb`, columnas de operación.
+`id`, `organizacion_id`, `tipo` (`PRODUCTOS`, `CLIENTES`, `PROVEEDORES`, `PRECIOS`, `COSTOS`, `STOCK_INICIAL`, `SALDOS_INICIALES`), `archivo_nombre`, `estado` (`CONFIRMADA`), `filas_total`, `filas_ok`, `filas_error`, `errores` `jsonb`, y las columnas de operación (`operation_id`, `usuario_id`, `dispositivo_id`, `occurred_at`, `registered_at`, §2.3). `UNIQUE (organizacion_id, id)`; FK compuestas a `usuario` y `dispositivo`; `CHECK` de `tipo` y `estado` y de filas no negativas; índice `(organizacion_id, registered_at DESC, id)` para el historial. De solo inserción (`GRANT SELECT, INSERT`). Con el modo todo-o-nada solo se guardan importaciones confirmadas (`filas_error` = 0, `errores` = `[]`). `PRECIOS` está en el catálogo del `CHECK` pero no tiene importador hasta el change 13.
 
 ### Facturación (se crea al desarrollar el módulo)
 
@@ -594,14 +656,20 @@ El débito de IVA en modalidad CLIENTE es un `cuenta_movimiento` de tipo `IVA_FA
 | INV-02 | `organizacion_id` obligatorio y claves foráneas compuestas |
 | INV-03 | Tipos `numeric`; prueba que recorre el catálogo de columnas |
 | INV-04 | `integer` en cantidades base |
-| INV-05 | Permisos del usuario de aplicación sobre tablas de libro |
+| INV-05 | Permisos del usuario de aplicación sobre tablas de libro y sobre las líneas y cabeceras de transferencias y ajustes (`UPDATE` acotado por columna en las cabeceras), de jornadas (`UPDATE` acotado por columna) y de reglas de descuento (sin `DELETE` en `regla_descuento`; sin `UPDATE` en `regla_descuento_alcance`) y de cobranzas (`UPDATE` solo del estado; anulación única por `cobranza_anulacion.cobranza_id`), de `venta` (`UPDATE` solo de `estado`, sin `DELETE`), de `venta_linea` (sin `UPDATE` ni `DELETE`) y de `venta_anulacion` (solo `SELECT` e `INSERT`; anulación única por `venta_anulacion.venta_id`) |
 | INV-06 | `UNIQUE (organizacion_id, operation_id)` en `comando` |
+| DSC-01 a DSC-04 | `CHECK` de catálogo, de dominio y de coherencia en `regla_descuento` (una sola columna de acción, la que corresponde al tipo; vigencia ordenada; vigencia desde obligatoria si la regla no es borrador) |
 | INV-09 | `CHECK` en `venta.importe_facturado` |
-| INV-16 | Índice único parcial en `jornada` |
+| INV-14 | `CHECK (total = total_neto + total_iva)` en `venta` y `CHECK (importe_neto = importe_bruto - importe_descuento)` en `venta_linea`; la suma por líneas se verifica en el servicio y con una propiedad que suma con SQL |
+| INV-16 | Índices únicos parciales en `jornada` (por ubicación, por usuario y por dispositivo, sobre `ABIERTA` y `EN_RENDICION`) |
 | INV-18 | Columnas congeladas en `venta_linea` más validación de servicio |
 | VTA-06 | `UNIQUE (organizacion_id, numero)` en `venta` |
 | CAT-03 | Índice único parcial en `presentacion` |
 | PRC-10 | `UNIQUE (organizacion_id, version_id, producto_id)` |
+| PRC-13 | Índice único parcial en regla_margen |
+| PRC-18 | Índice único parcial de borrador en lista_version |
+| PRC-02 | Índice único parcial de vigencia desde entre las publicadas |
+| INV-11 | (se garantiza en los servicios) |
 
 El resto (INV-01, INV-07, INV-08, INV-10 a INV-15, INV-17, INV-19 a INV-21) se garantiza en los servicios y se verifica con las pruebas de `02` §15.
 
@@ -612,7 +680,7 @@ El resto (INV-01, INV-07, INV-08, INV-10 a INV-15, INV-17, INV-19 a INV-21) se g
 | Saldo de un cliente | `saldo_cuenta` por PK |
 | Estado de cuenta | `cuenta_movimiento (organizacion_id, cuenta_tipo, entidad_id, occurred_at, id)` |
 | Stock de una ubicación | `stock_saldo` por PK; `ix_stock_saldo__ubicacion` |
-| Kardex de un producto | `stock_movimiento (organizacion_id, producto_id, ubicacion_id, occurred_at)` |
+| Kardex de un producto | `stock_movimiento (organizacion_id, producto_id, ubicacion_id, occurred_at, id)` |
 | Ventas de un período | `venta (organizacion_id, occurred_at)` |
 | Ventas de un vendedor o jornada | `venta (organizacion_id, usuario_id, occurred_at)`; `ix_venta__jornada` |
 | Ventas pendientes de facturar | Índice parcial por estado de facturación |
@@ -621,7 +689,7 @@ El resto (INV-01, INV-07, INV-08, INV-10 a INV-15, INV-17, INV-19 a INV-21) se g
 | Costo informado vigente | `costo_informado (organizacion_id, producto_id, vigencia_desde DESC)` |
 | Verificación de consistencia | Recorridos completos por producto y por cuenta, en tarea nocturna |
 
-Los reportes de utilidad por producto, cliente o proveedor se implementan como vistas (`vista_venta_utilidad`) que combinan `venta_linea` con `ajuste_iva_absorbido`. En la etapa 1 son vistas simples; si el volumen lo exige, pasan a vistas materializadas con actualización programada.
+Los reportes de utilidad por producto, cliente o proveedor (REP-06, etapa 2) se implementan como vistas (`vista_venta_utilidad`) que combinan `venta_linea` con `ajuste_iva_absorbido`; si el volumen lo exige, pasan a vistas materializadas con actualización programada. **Los reportes de la etapa 1 (change 26) consultan las tablas con SQLAlchemy Core, sin vistas ni migración; la utilidad del período suma `venta_linea` con el IVA absorbido en cero hasta que exista `ajuste_iva_absorbido` (ADR-070).**
 
 ## 17. Migraciones
 

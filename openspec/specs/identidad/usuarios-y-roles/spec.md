@@ -1,0 +1,460 @@
+# Identidad - Usuarios y Roles
+
+## Purpose
+
+Define qué es un usuario del sistema, qué rol tiene, qué permisos le confiere ese rol y qué tope de descuento rige para él, de modo que el catálogo de permisos de `01` §19 sea la única fuente de lo que cada persona puede hacer.
+
+## Requirements
+
+### Requirement: El catálogo de permisos es global y lo fija el código
+
+El sistema DEBE mantener el catálogo de permisos como dato global, sin organización, sincronizado desde el código y no editable por ninguna organización. El catálogo DEBE contener exactamente los permisos de `01` §19 (`03` §4, `03` §17).
+
+#### Scenario: El catálogo contiene los permisos de la documentación
+
+- **GIVEN** el esquema migrado a la última revisión
+- **WHEN** se consulta el catálogo de permisos
+- **THEN** están presentes los 39 permisos de `01` §19, incluidos `ADMIN_USUARIOS`, `GESTIONAR_DISPOSITIVOS`, `VENDER`, `VER_COSTOS`, `AUTORIZAR_DESCUENTO` y `VER_AUDITORIA`
+- **AND** ninguno tiene organización asociada
+- **Regla:** `01` §19, `03` §4 (el catálogo de `permiso` es global, sin organización)
+
+#### Scenario: Sincronizar el catálogo dos veces no lo duplica
+
+- **GIVEN** el catálogo de permisos ya sincronizado
+- **WHEN** se vuelve a aplicar la sincronización
+- **THEN** la cantidad de permisos no cambia y ninguno queda duplicado
+- **Regla:** `03` §17 (los datos de catálogo que dependen del código se sincronizan por migración)
+
+#### Scenario: Una organización no puede crear ni borrar permisos
+
+- **GIVEN** un usuario con `ADMIN_USUARIOS`
+- **WHEN** intenta agregar un permiso que no está en el catálogo o quitar uno existente
+- **THEN** la operación no está disponible: el catálogo no es editable desde la aplicación
+- **Regla:** `03` §4 (el catálogo de `permiso` se sincroniza por migración)
+
+### Requirement: Un rol agrupa permisos y fija un tope de descuento
+
+Un rol DEBE pertenecer a una organización, tener un nombre, un conjunto de permisos tomados del catálogo global y un tope de descuento. La organización DEBE poder modificar la composición de sus roles y sus topes, porque los cinco roles son plantillas y no valores fijos (`01` §19).
+
+#### Scenario: Las cinco plantillas de rol quedan disponibles al crear la organización
+
+- **GIVEN** una organización recién creada
+- **WHEN** se consultan sus roles
+- **THEN** existen los cinco roles de `01` §19: Administrador, Administración, Supervisor comercial, Vendedor/Repartidor y Consulta/Dirección
+- **AND** cada uno tiene exactamente los permisos que `01` §19 le marca
+- **Regla:** `01` §19 (los roles son plantillas)
+
+#### Scenario: El vendedor no recibe permisos de costo ni de utilidad
+
+- **GIVEN** la organización con sus cinco roles sembrados
+- **WHEN** se consultan los permisos del rol Vendedor/Repartidor
+- **THEN** incluyen `VENDER`, `REGISTRAR_COBRANZA`, `ABRIR_JORNADA`, `TRANSFERIR_STOCK` y `DESCUENTO_MANUAL`
+- **AND** no incluyen `VER_COSTOS` ni `VER_UTILIDAD`
+- **Regla:** `01` §19 (el vendedor ve el saldo y el crédito disponible de sus clientes; no ve costos ni utilidad)
+
+#### Scenario: Una organización cambia la composición de un rol
+
+- **GIVEN** el rol Supervisor comercial de una organización
+- **WHEN** un usuario con `ADMIN_USUARIOS` le quita el permiso `LIBERAR_UBICACION`
+- **THEN** ese rol deja de conferir `LIBERAR_UBICACION` en esa organización
+- **AND** el mismo rol de otra organización no cambia
+- **Regla:** `01` §19, TR-08 (todo dato de negocio solo es modificable desde su organización)
+
+#### Scenario: Un rol no puede referirse a un permiso inexistente
+
+- **GIVEN** un usuario con `ADMIN_USUARIOS`
+- **WHEN** intenta asignar a un rol un código de permiso que no está en el catálogo global
+- **THEN** la operación se rechaza con un error de dominio de código estable y el rol queda sin cambios
+- **Regla:** `03` §4 (`rol_permiso` referencia el catálogo global de permisos)
+
+### Requirement: Un usuario pertenece a una organización y tiene exactamente un rol
+
+Un usuario DEBE pertenecer a una organización, tener un nombre de usuario único dentro de ella, una contraseña almacenada como derivación irrecuperable, un rol y un estado (`ACTIVO` o `INACTIVO`). Los permisos de un usuario DEBEN ser los de su rol; no existen permisos asignados directamente al usuario en esta etapa (`03` §4).
+
+#### Scenario: Dos organizaciones pueden tener el mismo nombre de usuario
+
+- **GIVEN** la organización A con un usuario llamado `admin`
+- **WHEN** se crea un usuario llamado `admin` en la organización B
+- **THEN** el alta se acepta y ambos usuarios coexisten como personas distintas
+- **Regla:** `03` §4 (`UNIQUE (organizacion_id, usuario)`), TR-08
+
+#### Scenario: Un nombre de usuario repetido dentro de la organización se rechaza
+
+- **GIVEN** la organización A con un usuario llamado `vendedor1`
+- **WHEN** se intenta crear otro usuario llamado `vendedor1` en la organización A
+- **THEN** la operación se rechaza y no queda ningún usuario nuevo
+- **Regla:** `03` §4 (`UNIQUE (organizacion_id, usuario)`)
+
+#### Scenario: La contraseña no se puede recuperar del sistema
+
+- **GIVEN** un usuario creado con una contraseña
+- **WHEN** se consulta ese usuario por cualquier vía de lectura del sistema
+- **THEN** la respuesta no contiene la contraseña ni su derivación
+- **AND** lo almacenado es una derivación de la que no se puede reconstruir la contraseña
+- **Regla:** `03` §4 (`password_hash`, Argon2id), `02` §17 (nunca se registran contraseñas)
+
+#### Scenario: Un usuario inactivo no puede operar
+
+- **GIVEN** un usuario con estado `INACTIVO`
+- **WHEN** intenta iniciar sesión con credenciales correctas
+- **THEN** el intento se rechaza sin distinguirse de un intento con credenciales incorrectas
+- **Regla:** SEG-01 (el inicio de sesión requiere conexión y credenciales), `03` §4 (`estado`)
+
+#### Scenario: Un usuario no puede quedar sin rol
+
+- **GIVEN** un usuario con `ADMIN_USUARIOS`
+- **WHEN** intenta crear o modificar un usuario sin indicar un rol
+- **THEN** la operación se rechaza con un error de dominio de código estable
+- **Regla:** `03` §4 (`usuario.rol_id`)
+
+#### Scenario: Un usuario no puede tomar un rol de otra organización
+
+- **GIVEN** la organización A y un rol que pertenece a la organización B
+- **WHEN** se intenta crear en la organización A un usuario con ese rol
+- **THEN** la operación se rechaza y el rol ajeno no resulta alcanzable
+- **Regla:** INV-21, `03` §2.4 (las claves foráneas entre entidades de negocio son compuestas)
+
+### Requirement: El tope de descuento del usuario puede sobrescribir al del rol
+
+El tope de descuento aplicable a un usuario DEBE ser su propio tope cuando tiene uno definido, y el de su rol cuando no lo tiene. El tope DEBE representarse como fracción decimal exacta de hasta seis decimales, nunca como punto flotante (TR-02, INV-03).
+
+#### Scenario: Sin tope propio rige el del rol
+
+- **GIVEN** un usuario cuyo rol tiene tope de descuento y que no tiene tope propio definido
+- **WHEN** se consulta su tope aplicable
+- **THEN** es el tope del rol
+- **Regla:** `03` §4 (`tope_descuento_override`: si es nulo rige el del rol)
+
+#### Scenario: Con tope propio rige el del usuario
+
+- **GIVEN** un usuario con un tope propio distinto del de su rol
+- **WHEN** se consulta su tope aplicable
+- **THEN** es el tope propio del usuario, aunque sea menor o mayor que el del rol
+- **Regla:** `03` §4 (`tope_descuento_override`)
+
+#### Scenario: El tope se representa en decimal exacto
+
+- **GIVEN** un tope de descuento del 10 %
+- **WHEN** se almacena y se vuelve a leer
+- **THEN** su representación es `0.100000`, con seis decimales exactos
+- **AND** ningún punto del sistema lo convierte a punto flotante binario
+- **Regla:** TR-02 (los porcentajes se representan con 6 decimales como fracción), INV-03
+
+#### Scenario: Un tope fuera de rango se rechaza
+
+- **GIVEN** un usuario con `ADMIN_USUARIOS`
+- **WHEN** intenta fijar un tope de descuento negativo o mayor que `1.000000`
+- **THEN** la operación se rechaza con un error de dominio de código estable
+- **Regla:** TR-02, `01` §19 (el tope acota el descuento manual)
+
+### Requirement: La organización arranca con un usuario administrador y sin contraseña por omisión
+
+La puesta en marcha de una organización DEBE producir un usuario con el rol Administrador cuya contraseña se provee al momento de la puesta en marcha. El sistema NO DEBE tener ninguna contraseña inicial fija ni por omisión.
+
+#### Scenario: Sin contraseña provista la puesta en marcha falla
+
+- **GIVEN** una puesta en marcha que no recibe la contraseña del administrador inicial
+- **WHEN** se ejecuta
+- **THEN** falla indicando que falta la contraseña
+- **AND** no crea ningún usuario
+- **Regla:** `02` §18 (los secretos se cargan desde el entorno, no desde el repositorio)
+
+#### Scenario: Repetir la puesta en marcha no pisa la contraseña existente
+
+- **GIVEN** una organización ya puesta en marcha cuyo administrador cambió su contraseña
+- **WHEN** se vuelve a ejecutar la puesta en marcha
+- **THEN** el usuario administrador conserva su contraseña actual
+- **AND** no se crea un segundo administrador
+- **Regla:** `04` §2.1 (la puesta en marcha es idempotente; mismo criterio que la siembra del change 02)
+
+### Requirement: El alta de usuario se ejecuta como comando idempotente
+
+El alta de un usuario DEBE ejecutarse como un comando del pipeline de escritura, con su identificador de operación obligatorio, su verificación de permiso y su registro de auditoría con ese identificador. Reenviar el alta con el mismo identificador de operación y el mismo contenido NO DEBE crear un segundo usuario (`02` §6.5, SYN-01, SYN-02, INV-06).
+
+#### Scenario: Un alta de usuario sin identificador de operación se rechaza
+
+- **GIVEN** un usuario con el permiso de administrar usuarios
+- **WHEN** envía un alta de usuario sin identificador de operación
+- **THEN** la petición se rechaza y no queda ningún usuario nuevo
+- **Regla:** SYN-01, TR-07
+
+#### Scenario: Reenviar el alta no crea un segundo usuario
+
+- **GIVEN** un alta de usuario ya aceptada
+- **WHEN** se reenvía con el mismo identificador de operación y el mismo contenido
+- **THEN** la respuesta es el resultado original y sigue existiendo un solo usuario
+- **Regla:** SYN-02, INV-06
+
+#### Scenario: Reenviar el alta con otro contenido se rechaza como inconsistente
+
+- **GIVEN** un alta de usuario ya aceptada
+- **WHEN** llega otra con el mismo identificador de operación y otro nombre de usuario
+- **THEN** se rechaza con el código `COMANDO_INCONSISTENTE` y no queda un usuario nuevo
+- **Regla:** SYN-02
+
+#### Scenario: Un alta sin permiso se rechaza sin efectos
+
+- **GIVEN** un usuario sin el permiso de administrar usuarios
+- **WHEN** envía un alta de usuario con un identificador de operación válido
+- **THEN** se rechaza y no queda ningún usuario nuevo ni registro del comando como aceptado
+- **Regla:** SEG-06
+
+#### Scenario: El alta queda auditada con su identificador de operación
+
+- **GIVEN** un alta de usuario aceptada
+- **WHEN** se consulta su registro de auditoría
+- **THEN** lleva el identificador de operación del comando
+- **Regla:** AUD-01, AUD-02, TR-07
+
+### Requirement: El tope de descuento de un rol se define por comando
+
+El comando `ROL_TOPE_DESCUENTO_DEFINIR` DEBE fijar el tope de descuento manual de un rol de la organización (`01` §19: "la organización puede modificar … los topes de descuento"; DSC-06). DEBE exigir el permiso `ADMIN_USUARIOS` y conexión: es solo `ONLINE`. El tope DEBE llegar como cadena con una fracción de hasta 6 decimales entre `0` y `1` (TR-02, INV-03); fuera de ese rango se rechaza con `IDENTIDAD_TOPE_DESCUENTO_FUERA_DE_RANGO` (422). Un rol inexistente o de otra organización responde 404. El comando NO DEBE cambiar los permisos del rol ni el tope propio de ningún usuario, y el tope nuevo DEBE regir desde la siguiente evaluación de un descuento manual. El cambio DEBE quedar auditado con el valor anterior y el nuevo (AUD-01, AUD-02). Los roles de la organización DEBEN poder consultarse con su tope, como cadena, por quien tenga `ADMIN_USUARIOS`. El tope NO DEBE agregarse al token ni a la consulta de la sesión en curso.
+
+#### Scenario: Definir el tope de un rol
+
+- **GIVEN** un Administrador con `ADMIN_USUARIOS` y el rol "Vendedor/Repartidor" con tope `0.000000`
+- **WHEN** envía `ROL_TOPE_DESCUENTO_DEFINIR` con `"0.050000"`
+- **THEN** el rol queda con tope `0.050000` y sus permisos no cambian
+- **Regla:** DSC-06; `01` §19; TR-02
+
+#### Scenario: El tope nuevo rige en la siguiente evaluación
+
+- **GIVEN** un Vendedor sin tope propio cuyo rol pasó de `0.000000` a `0.050000`
+- **WHEN** se consulta su tope aplicable
+- **THEN** es `0.050000`
+- **Regla:** DSC-06; `03` §4
+
+#### Scenario: El tope propio de un usuario no cambia
+
+- **GIVEN** un Vendedor con tope propio `0.080000`
+- **WHEN** el tope de su rol se cambia a `0.050000`
+- **THEN** su tope aplicable sigue siendo `0.080000`
+- **Regla:** `03` §4 (`tope_descuento_override`)
+
+#### Scenario: Sin permiso
+
+- **GIVEN** un Supervisor comercial, que no tiene `ADMIN_USUARIOS`
+- **WHEN** envía `ROL_TOPE_DESCUENTO_DEFINIR`
+- **THEN** se rechaza con 403 `PERMISO_REQUERIDO` y el tope no cambia
+- **Regla:** SEG-06; `01` §19
+
+#### Scenario: Tope fuera de rango
+
+- **GIVEN** un Administrador
+- **WHEN** envía un tope negativo, mayor que `1.000000` o con siete decimales
+- **THEN** se rechaza con 422 `IDENTIDAD_TOPE_DESCUENTO_FUERA_DE_RANGO` y el tope no cambia
+- **Regla:** TR-02; `01` §19
+
+#### Scenario: El tope llega como número
+
+- **GIVEN** un Administrador
+- **WHEN** envía el tope como número JSON `0.05`
+- **THEN** se rechaza con 422 y el tope no cambia
+- **Regla:** INV-03; `02` §10.2
+
+#### Scenario: Rol de otra organización
+
+- **GIVEN** un rol que pertenece a otra organización
+- **WHEN** el Administrador envía `ROL_TOPE_DESCUENTO_DEFINIR` sobre él
+- **THEN** responde 404 y el rol ajeno no cambia
+- **Regla:** INV-21; SEG-07
+
+#### Scenario: El cambio queda auditado
+
+- **GIVEN** un rol con tope `0.000000`
+- **WHEN** se acepta un `ROL_TOPE_DESCUENTO_DEFINIR` con `"0.050000"`
+- **THEN** queda una sola fila de auditoría con el usuario, el rol, el valor anterior `0.000000`, el nuevo `0.050000` y el `operation_id`
+- **Regla:** AUD-01; AUD-02
+
+#### Scenario: Doble envío
+
+- **GIVEN** un `ROL_TOPE_DESCUENTO_DEFINIR` ya aceptado
+- **WHEN** llega otra vez con el mismo `operation_id` y el mismo contenido
+- **THEN** se devuelve el resultado original y sigue habiendo una sola fila de auditoría
+- **Regla:** SYN-02; INV-06
+
+#### Scenario: Mismo identificador con otro tope
+
+- **GIVEN** un `ROL_TOPE_DESCUENTO_DEFINIR` ya aceptado con `"0.050000"`
+- **WHEN** llega el mismo `operation_id` con `"0.200000"`
+- **THEN** se rechaza con `COMANDO_INCONSISTENTE` y el tope sigue en `0.050000`
+- **Regla:** SYN-02
+
+#### Scenario: El comando no se acepta sin conexión
+
+- **GIVEN** un lote de sincronización con un `ROL_TOPE_DESCUENTO_DEFINIR` en modo `OFFLINE`
+- **WHEN** el servidor procesa el lote
+- **THEN** ese comando se rechaza y el tope no cambia
+- **Regla:** `02` §6.5
+
+#### Scenario: Consulta de roles con su tope
+
+- **GIVEN** un Administrador
+- **WHEN** consulta los roles de la organización
+- **THEN** recibe cada rol con su nombre, si está activo y su tope como cadena (`"1.000000"` para el Administrador), y ningún rol de otra organización
+- **Regla:** `01` §19; INV-21; `02` §10.2
+
+#### Scenario: La sesión en curso sigue sin exponer el tope
+
+- **GIVEN** un usuario autenticado
+- **WHEN** consulta su sesión en curso
+- **THEN** la respuesta sigue sin contener el tope de descuento
+- **Regla:** ADR-027; SYN-11
+
+### Requirement: Ningún cambio de permisos deja la organización sin administrador
+
+`ROL_PERMISOS_CAMBIAR` DEBE rechazarse con `IDENTIDAD_SIN_ADMINISTRADOR` (409) cuando, después del cambio, ningún usuario `ACTIVO` con rol activo de la organización tendría `ADMIN_USUARIOS` (`design.md` D8 del change 17b, ADR-053). El rechazo NO DEBE cambiar el rol ni invalidar ningún PIN. La regla DEBE valer también con dos cambios simultáneos sobre roles distintos. Un cambio que no quita `ADMIN_USUARIOS`, o que lo quita dejando otro usuario activo con ese permiso, se acepta como hasta ahora.
+
+#### Scenario: Quitar el permiso al único rol que lo tiene
+- **GIVEN** la organización A, donde solo el rol Administrador tiene `ADMIN_USUARIOS` y Rafa es su único usuario activo
+- **WHEN** Rafa le quita `ADMIN_USUARIOS` al rol Administrador
+- **THEN** la respuesta es 409 con `IDENTIDAD_SIN_ADMINISTRADOR` y el rol conserva todos sus permisos
+- **Regla:** ADR-053; TR-10
+
+#### Scenario: Otro usuario activo conserva el permiso
+- **GIVEN** la organización A, donde el rol Administración también tiene `ADMIN_USUARIOS` y Laura es su usuaria activa
+- **WHEN** se le quita `ADMIN_USUARIOS` al rol Administrador
+- **THEN** el cambio se acepta y Laura sigue pudiendo administrar roles
+- **Regla:** `01` §19; ADR-053
+
+#### Scenario: El otro rol solo tiene usuarios inactivos
+- **GIVEN** el rol Administración con `ADMIN_USUARIOS` cuyo único usuario está `INACTIVO`
+- **WHEN** se le quita `ADMIN_USUARIOS` al rol Administrador, cuyo único usuario es Rafa
+- **THEN** la respuesta es 409 con `IDENTIDAD_SIN_ADMINISTRADOR`
+- **Regla:** ADR-053; ADR-028
+
+#### Scenario: El rechazo no toca el PIN
+- **GIVEN** un cambio sobre el rol Administrador que quita `ADMIN_USUARIOS` y los cuatro permisos de autorización, rechazado con `IDENTIDAD_SIN_ADMINISTRADOR`
+- **WHEN** se mira el PIN de autorización de Rafa
+- **THEN** sigue vigente
+- **Regla:** ADR-011; INV-01
+
+#### Scenario: Dos cambios simultáneos
+- **GIVEN** los roles Administrador y Administración con `ADMIN_USUARIOS`, cada uno con un usuario activo, y ningún otro rol con ese permiso
+- **WHEN** dos administradores les quitan `ADMIN_USUARIOS` a la vez, uno a cada rol
+- **THEN** uno se acepta y el otro responde `IDENTIDAD_SIN_ADMINISTRADOR`; la organización conserva un usuario activo con `ADMIN_USUARIOS`
+- **Regla:** ADR-053; INV-01
+
+#### Scenario: Otra organización no cuenta
+- **GIVEN** la organización B con usuarios activos con `ADMIN_USUARIOS`, y A con uno solo
+- **WHEN** en A se le quita `ADMIN_USUARIOS` al único rol que lo tiene
+- **THEN** la respuesta es 409 con `IDENTIDAD_SIN_ADMINISTRADOR`
+- **Regla:** TR-08; INV-02
+
+#### Scenario: Doble envío
+- **GIVEN** un cambio de permisos ya aceptado
+- **WHEN** se reenvía con el mismo `operation_id` y el mismo contenido
+- **THEN** se devuelve el resultado original sin una segunda fila de auditoría
+- **Regla:** INV-06
+
+### Requirement: La contraseña del alta de usuario viaja fuera del contenido del comando
+
+`USUARIO_CREAR` DEBE recibir la contraseña fuera del contenido: la ruta `POST /api/v1/identidad/usuarios` DEBE separarla del cuerpo antes de armar el contenido y calcular la huella, y entregarla al handler como dato efímero (`SecretStr`) que no se persiste, no se registra y no se incluye en el resultado. El contenido DEBE llevar solo `usuario`, `nombre`, `email` y `rol_id` con `extra="forbid"`: un contenido con `password` adentro DEBE rechazarse como malformado. La contraseña NO DEBE aparecer en la huella, en `comando`, en `comando_cuarentena`, en la auditoría, en el resultado, en los registros ni en el `input` de un error de validación; las reglas de validación de la contraseña no cambian y su mensaje no incluye el valor (`02` §17, ADR-019, ADR-056).
+
+#### Scenario: La contraseña no queda en ningún registro
+
+- **GIVEN** un administrador con `ADMIN_USUARIOS`
+- **WHEN** crea un usuario con una contraseña válida y otro intento con una inválida
+- **THEN** la contraseña no aparece en la huella, `comando`, la auditoría, el resultado, los registros ni la respuesta de error, y el usuario creado inicia sesión con ella
+- **Regla:** `02` §17; ADR-019; ADR-022
+
+#### Scenario: Dos contraseñas distintas dan la misma huella
+
+- **GIVEN** un alta aceptada
+- **WHEN** se reenvía con el mismo `Operation-Id`, el mismo contenido y otra contraseña
+- **THEN** devuelve el resultado original sin volver a derivar la contraseña
+- **Regla:** INV-06; SYN-02
+
+#### Scenario: Un contenido con contraseña adentro
+
+- **WHEN** el contenido del comando trae `password`
+- **THEN** se rechaza como malformado
+- **Regla:** `02` §17; ADR-056
+
+### Requirement: Ninguna baja ni cambio de rol deja la organización sin administrador
+
+`USUARIO_BAJA`, `USUARIO_ROL_CAMBIAR` y `ROL_BAJA` DEBEN rechazarse con `IDENTIDAD_SIN_ADMINISTRADOR` (409) cuando, después del cambio, ningún usuario `ACTIVO` con rol activo de la organización tendría `ADMIN_USUARIOS`, con la misma regla que `ROL_PERMISOS_CAMBIAR` (ADR-053). El rechazo NO DEBE cambiar el usuario ni el rol, revocar sesiones ni borrar ningún PIN. La regla DEBE valer con operaciones simultáneas (`design.md` D3, D4).
+
+#### Scenario: El único administrador se cambia a un rol sin el permiso
+- **GIVEN** Rafa, único usuario activo con `ADMIN_USUARIOS`
+- **WHEN** Rafa se asigna a sí mismo un rol sin ese permiso
+- **THEN** la respuesta es 409 `IDENTIDAD_SIN_ADMINISTRADOR`, Rafa conserva su rol y su PIN
+- **Regla:** ADR-053; INV-01
+
+#### Scenario: La regla de la baja como defensa en profundidad
+- **GIVEN** que la autobaja está prohibida, el último administrador solo puede quedar dado de baja por una carrera entre comandos
+- **WHEN** la regla del último administrador se evalúa dentro de la baja con el bloqueo de la organización tomado
+- **THEN** una baja que dejaría cero administradores responde 409 `IDENTIDAD_SIN_ADMINISTRADOR` sin revocar sesiones ni borrar el PIN
+- **Regla:** ADR-053; ADR-028 D9.5; INV-01
+
+#### Scenario: Otro administrador queda activo
+- **GIVEN** Rafa y Laura activos con `ADMIN_USUARIOS`
+- **WHEN** Laura da de baja a Rafa
+- **THEN** la baja se acepta
+- **Regla:** `01` §19; ADR-053
+
+#### Scenario: Dos administradores se dan de baja entre sí
+- **GIVEN** Rafa, Laura y Pedro activos con `ADMIN_USUARIOS`
+- **WHEN** Rafa da de baja a Laura y Laura da de baja a Rafa al mismo tiempo
+- **THEN** exactamente una de las dos bajas se aplica; la otra responde `PERMISO_REQUERIDO` porque quien la envió ya no está activo, y la organización conserva al menos un administrador
+- **Regla:** `design.md` D4; INV-01
+
+#### Scenario: Los dos últimos administradores a la vez
+- **GIVEN** Rafa y Laura, los únicos activos con `ADMIN_USUARIOS`
+- **WHEN** Rafa da de baja a Laura y Laura le cambia el rol a Rafa al mismo tiempo
+- **THEN** una se acepta y la otra se rechaza; la organización conserva un usuario activo con `ADMIN_USUARIOS`
+- **Regla:** ADR-053; INV-01
+
+#### Scenario: Otra organización no cuenta
+- **GIVEN** la organización B con varios administradores y A con uno solo
+- **WHEN** en A se da de baja a su único administrador
+- **THEN** la respuesta es 409 `IDENTIDAD_SIN_ADMINISTRADOR`
+- **Regla:** INV-02
+
+### Requirement: El tope de descuento propio de un usuario se define por comando
+
+`USUARIO_TOPE_DESCUENTO_DEFINIR` v1 DEBE fijar o quitar (`null`) el tope de descuento propio de un usuario, con `ADMIN_USUARIOS`, solo con conexión, con la misma validación que el tope del rol, y dejar una fila de auditoría con el valor anterior y el nuevo. Con tope propio rige el propio; sin él, el del rol (`design.md` D12).
+
+#### Scenario: Definir un tope propio mayor que el del rol
+- **GIVEN** el vendedor Juan con el rol Vendedor de tope 5 %
+- **WHEN** un administrador le define un tope propio de `"0.100000"`
+- **THEN** el contexto de venta de Juan informa 10 % y la auditoría guarda `null` como anterior y `"0.100000"` como nuevo
+- **Regla:** DSC-06; AUD-01; INV-03
+
+#### Scenario: Quitar el tope propio
+- **GIVEN** Juan con tope propio 10 % y su rol con 5 %
+- **WHEN** se le define `null`
+- **THEN** rige el 5 % del rol
+- **Regla:** DSC-06; `03` §4
+
+#### Scenario: Fuera de rango
+- **WHEN** se envía `"1.500000"` o un valor negativo
+- **THEN** la respuesta es 422 `IDENTIDAD_TOPE_DESCUENTO_FUERA_DE_RANGO` y el tope no cambia
+- **Regla:** TR-02; INV-01
+
+#### Scenario: Doble envío
+- **GIVEN** un tope ya definido
+- **WHEN** se reenvía con el mismo `operation_id` y el mismo contenido
+- **THEN** se devuelve el resultado original sin una segunda fila de auditoría
+- **Regla:** INV-06
+
+### Requirement: El alta de usuario exige un rol activo y un nombre de usuario libre
+
+`USUARIO_CREAR` DEBE rechazar un rol con `activo = false` (409 `IDENTIDAD_ROL_INACTIVO`) y un nombre de inicio de sesión ya usado en la organización (409 `IDENTIDAD_USUARIO_DUPLICADO`), sin crear nada (`design.md` D9).
+
+#### Scenario: Rol de baja
+- **WHEN** se da de alta un usuario con un rol dado de baja
+- **THEN** la respuesta es 409 `IDENTIDAD_ROL_INACTIVO` y no se crea ningún usuario
+- **Regla:** ADR-028 D9.4; INV-01
+
+#### Scenario: Nombre de usuario repetido
+- **GIVEN** el usuario `vendedor` en la organización A
+- **WHEN** se da de alta otro `vendedor` en A
+- **THEN** la respuesta es 409 `IDENTIDAD_USUARIO_DUPLICADO`
+- **Regla:** `03` §4
+
+#### Scenario: El mismo nombre en otra organización
+- **GIVEN** el usuario `vendedor` en la organización B
+- **WHEN** se da de alta `vendedor` en A
+- **THEN** se acepta
+- **Regla:** INV-02

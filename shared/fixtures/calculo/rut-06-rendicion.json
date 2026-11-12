@@ -1,0 +1,317 @@
+[
+  {
+    "id": "RUT06-conjunto-saldo-distinto-de-cero",
+    "reglas": ["RUT-06", "STK-04"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "conjunto",
+      "saldos": { "vino-a": 40, "agua-500": 12, "gaseosa-2l": 0 },
+      "con_movimiento": []
+    },
+    "salida_esperada": { "conjunto": ["agua-500", "vino-a"] }
+  },
+  {
+    "id": "RUT06-conjunto-movimiento-en-la-ventana-aunque-el-saldo-sea-cero",
+    "reglas": ["RUT-06", "STK-04"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "conjunto",
+      "saldos": { "vino-a": 40, "agua-500": 0, "gaseosa-2l": 0 },
+      "con_movimiento": ["agua-500"]
+    },
+    "salida_esperada": { "conjunto": ["agua-500", "vino-a"] }
+  },
+  {
+    "id": "RUT06-conjunto-saldo-negativo-tambien-se-cuenta",
+    "reglas": ["RUT-06", "STK-06"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "conjunto",
+      "saldos": { "vino-a": -2 },
+      "con_movimiento": []
+    },
+    "salida_esperada": { "conjunto": ["vino-a"] }
+  },
+  {
+    "id": "RUT06-conjunto-vacio-sin-saldos-ni-movimientos",
+    "reglas": ["RUT-06"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "conjunto",
+      "saldos": { "gaseosa-2l": 0 },
+      "con_movimiento": []
+    },
+    "salida_esperada": { "conjunto": [] }
+  },
+  {
+    "id": "RUT06-esperado-vino-a-10-mas-36-menos-8-mas-2",
+    "reglas": ["RUT-07", "STK-04"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "esperado",
+      "al_abrir": 10,
+      "ingresos": 36,
+      "ventas": 8,
+      "anulaciones": 2,
+      "otros": 0
+    },
+    "salida_esperada": { "esperado": 40 }
+  },
+  {
+    "id": "RUT06-esperado-con-otros-movimientos-negativos",
+    "reglas": ["RUT-07", "STK-04"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "esperado",
+      "al_abrir": 10,
+      "ingresos": 0,
+      "ventas": 0,
+      "anulaciones": 0,
+      "otros": -6
+    },
+    "salida_esperada": { "esperado": 4 }
+  },
+  {
+    "id": "RUT06-esperado-negativo-con-stock-negativo-permitido",
+    "reglas": ["RUT-07", "STK-06"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "esperado",
+      "al_abrir": 0,
+      "ingresos": 0,
+      "ventas": 5,
+      "anulaciones": 0,
+      "otros": 0
+    },
+    "salida_esperada": { "esperado": -5 }
+  },
+  {
+    "id": "RUT06-diferencia-faltante-37-contadas-de-40",
+    "reglas": ["RUT-06", "INV-04"],
+    "entrada": { "motor": "rut06", "operacion": "diferencia", "contada": 37, "esperada": 40 },
+    "salida_esperada": { "diferencia": -3 }
+  },
+  {
+    "id": "RUT06-diferencia-sobrante-14-contadas-de-12",
+    "reglas": ["RUT-06", "INV-04"],
+    "entrada": { "motor": "rut06", "operacion": "diferencia", "contada": 14, "esperada": 12 },
+    "salida_esperada": { "diferencia": 2 }
+  },
+  {
+    "id": "RUT06-diferencia-cero-cuando-coincide",
+    "reglas": ["RUT-06", "INV-04"],
+    "entrada": { "motor": "rut06", "operacion": "diferencia", "contada": 40, "esperada": 40 },
+    "salida_esperada": { "diferencia": 0 }
+  },
+  {
+    "id": "RUT06-faltantes-un-producto-sin-contar",
+    "reglas": ["RUT-06"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "faltantes",
+      "conjunto": ["agua-500", "vino-a"],
+      "contados": ["vino-a"]
+    },
+    "salida_esperada": { "faltantes": ["agua-500"] }
+  },
+  {
+    "id": "RUT06-faltantes-ninguno-cuando-se-contaron-todos-y-un-sobrante",
+    "reglas": ["RUT-06"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "faltantes",
+      "conjunto": ["agua-500", "vino-a"],
+      "contados": ["agua-1500", "agua-500", "vino-a"]
+    },
+    "salida_esperada": { "faltantes": [] }
+  },
+  {
+    "id": "RUT06-conteo-sin-diferencias",
+    "reglas": ["RUT-06", "INV-04"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "conteo",
+      "conjunto": ["vino-a", "agua-500"],
+      "esperados": { "vino-a": 40, "agua-500": 12 },
+      "lineas": [
+        { "producto": "vino-a", "contada": 40, "esperada": 40 },
+        { "producto": "agua-500", "contada": 12, "esperada": 12 }
+      ]
+    },
+    "salida_esperada": {
+      "lineas": [
+        { "producto": "vino-a", "esperado": 40, "contado": 40, "diferencia": 0 },
+        { "producto": "agua-500", "esperado": 12, "contado": 12, "diferencia": 0 }
+      ]
+    }
+  },
+  {
+    "id": "RUT06-conteo-faltante-de-vino-a-37-de-40",
+    "reglas": ["RUT-06", "INV-04"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "conteo",
+      "conjunto": ["vino-a", "agua-500"],
+      "esperados": { "vino-a": 40, "agua-500": 12 },
+      "lineas": [
+        { "producto": "vino-a", "contada": 37, "esperada": 40 },
+        { "producto": "agua-500", "contada": 12, "esperada": 12 }
+      ]
+    },
+    "salida_esperada": {
+      "lineas": [
+        { "producto": "vino-a", "esperado": 40, "contado": 37, "diferencia": -3 },
+        { "producto": "agua-500", "esperado": 12, "contado": 12, "diferencia": 0 }
+      ]
+    }
+  },
+  {
+    "id": "RUT06-conteo-sobrante-fuera-del-conjunto",
+    "reglas": ["RUT-06"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "conteo",
+      "conjunto": ["vino-a"],
+      "esperados": { "vino-a": 40 },
+      "lineas": [
+        { "producto": "vino-a", "contada": 40, "esperada": 40 },
+        { "producto": "agua-1500", "contada": 2, "esperada": 0 }
+      ]
+    },
+    "salida_esperada": {
+      "lineas": [
+        { "producto": "vino-a", "esperado": 40, "contado": 40, "diferencia": 0 },
+        { "producto": "agua-1500", "esperado": 0, "contado": 2, "diferencia": 2 }
+      ]
+    }
+  },
+  {
+    "id": "RUT06-conteo-vacio-con-conjunto-vacio",
+    "reglas": ["RUT-06"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "conteo",
+      "conjunto": [],
+      "esperados": {},
+      "lineas": []
+    },
+    "salida_esperada": { "lineas": [] }
+  },
+  {
+    "id": "RUT06-conteo-incompleto-falta-agua-500",
+    "reglas": ["RUT-06"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "conteo",
+      "conjunto": ["vino-a", "agua-500"],
+      "esperados": { "vino-a": 40, "agua-500": 12 },
+      "lineas": [{ "producto": "vino-a", "contada": 40, "esperada": 40 }]
+    },
+    "salida_esperada": { "error": { "codigo": "CONTEO_INCOMPLETO", "productos": ["agua-500"] } }
+  },
+  {
+    "id": "RUT06-conteo-incompleto-producto-vendido-hasta-cero",
+    "reglas": ["RUT-06"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "conteo",
+      "conjunto": ["vino-a", "agua-500"],
+      "esperados": { "vino-a": 40, "agua-500": 0 },
+      "lineas": [{ "producto": "vino-a", "contada": 40, "esperada": 40 }]
+    },
+    "salida_esperada": { "error": { "codigo": "CONTEO_INCOMPLETO", "productos": ["agua-500"] } }
+  },
+  {
+    "id": "RUT06-conteo-producto-repetido",
+    "reglas": ["RUT-06"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "conteo",
+      "conjunto": ["vino-a"],
+      "esperados": { "vino-a": 40 },
+      "lineas": [
+        { "producto": "vino-a", "contada": 40, "esperada": 40 },
+        { "producto": "vino-a", "contada": 39, "esperada": 40 }
+      ]
+    },
+    "salida_esperada": { "error": { "codigo": "PRODUCTO_REPETIDO" } }
+  },
+  {
+    "id": "RUT06-conteo-cantidad-negativa",
+    "reglas": ["RUT-06", "INV-04"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "conteo",
+      "conjunto": ["vino-a"],
+      "esperados": { "vino-a": 40 },
+      "lineas": [{ "producto": "vino-a", "contada": -1, "esperada": 40 }]
+    },
+    "salida_esperada": { "error": { "codigo": "CANTIDAD_INVALIDA" } }
+  },
+  {
+    "id": "RUT06-conteo-cantidad-con-decimales",
+    "reglas": ["RUT-06", "INV-04"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "conteo",
+      "conjunto": ["vino-a"],
+      "esperados": { "vino-a": 40 },
+      "lineas": [{ "producto": "vino-a", "contada": 2.5, "esperada": 40 }]
+    },
+    "salida_esperada": { "error": { "codigo": "CANTIDAD_INVALIDA" } }
+  },
+  {
+    "id": "RUT06-conteo-cantidad-invalida-gana-sobre-conteo-incompleto",
+    "reglas": ["RUT-06", "INV-04"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "conteo",
+      "conjunto": ["vino-a", "agua-500"],
+      "esperados": { "vino-a": 40, "agua-500": 12 },
+      "lineas": [{ "producto": "vino-a", "contada": -3, "esperada": 40 }]
+    },
+    "salida_esperada": { "error": { "codigo": "CANTIDAD_INVALIDA" } }
+  },
+  {
+    "id": "RUT06-conteo-esperado-difiere-vino-a-ahora-34",
+    "reglas": ["RUT-06", "STK-04"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "conteo",
+      "conjunto": ["vino-a", "agua-500"],
+      "esperados": { "vino-a": 34, "agua-500": 12 },
+      "lineas": [
+        { "producto": "vino-a", "contada": 34, "esperada": 40 },
+        { "producto": "agua-500", "contada": 12, "esperada": 12 }
+      ]
+    },
+    "salida_esperada": {
+      "error": {
+        "codigo": "ESPERADO_DIFIERE",
+        "distintos": ["vino-a"],
+        "esperados": { "vino-a": 34, "agua-500": 12 }
+      }
+    }
+  },
+  {
+    "id": "RUT06-conteo-esperado-difiere-sobrante-que-ya-tiene-movimientos",
+    "reglas": ["RUT-06", "STK-04"],
+    "entrada": {
+      "motor": "rut06",
+      "operacion": "conteo",
+      "conjunto": ["vino-a", "agua-1500"],
+      "esperados": { "vino-a": 40, "agua-1500": 5 },
+      "lineas": [
+        { "producto": "vino-a", "contada": 40, "esperada": 40 },
+        { "producto": "agua-1500", "contada": 2, "esperada": 0 }
+      ]
+    },
+    "salida_esperada": {
+      "error": {
+        "codigo": "ESPERADO_DIFIERE",
+        "distintos": ["agua-1500"],
+        "esperados": { "vino-a": 40, "agua-1500": 5 }
+      }
+    }
+  }
+]

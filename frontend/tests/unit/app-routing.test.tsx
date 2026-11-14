@@ -43,14 +43,25 @@ describe('ruteo de áreas (docs/02 §13.1: /ruta y /admin cargadas de forma dife
     expect(await screen.findByRole('heading', { name: /iniciar sesión/i }, { timeout: 15_000 })).toBeInTheDocument()
   }, 20_000)
 
-  it('redirige /admin al inicio de sesión (change 03, tarea 13.4)', async () => {
+  it('redirige /admin a /admin/inicio: con la sesión viva (el /yo simulado responde) no pide iniciar sesión', async () => {
     render(
       <MemoryRouter initialEntries={['/admin']}>
         <AppRoutes />
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: /iniciar sesión/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Para revisar' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /iniciar sesión/i })).not.toBeInTheDocument()
+  })
+
+  it('/admin/login con la sesión viva redirige al inicio en vez de mostrar el formulario', async () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/login']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: 'Para revisar' })).toBeInTheDocument()
   })
 
   it('muestra la pantalla de dispositivos al navegar a /admin/dispositivos', async () => {
@@ -97,14 +108,16 @@ describe('ruteo de áreas (docs/02 §13.1: /ruta y /admin cargadas de forma dife
     expect(await screen.findByRole('heading', { name: 'Para revisar' })).toBeInTheDocument()
   })
 
-  it('redirige la raíz a /ruta', async () => {
+  it('la raíz muestra la página inicial y no redirige a /ruta', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <AppRoutes />
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: /iniciar sesión/i })).toBeInTheDocument()
+    expect(await screen.findAllByRole('link', { name: /entrar como vendedor/i })).toHaveLength(2)
+    expect(screen.getAllByRole('link', { name: /entrar como vendedor/i })[0]).toHaveAttribute('href', '/ruta')
+    expect(screen.queryByRole('heading', { name: /iniciar sesión/i })).not.toBeInTheDocument()
   })
 })
 

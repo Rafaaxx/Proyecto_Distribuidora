@@ -1,0 +1,10 @@
+# Configuracion de gitleaks (CI, trabajo `seguridad`). Usa las reglas por defecto y solo agrega
+# excepciones acotadas y justificadas. Una excepcion nueva se justifica aca.
+title = "distribuidora"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Entorno de aceptacion automatica (change 28, D13): se versiona a proposito; todos los valores son de prueba (prefijo `prueba-`), de un entorno desechable que `npm run test:e2e` levanta y descarta."
+paths = ['''^infra/aceptacion\.env$''']

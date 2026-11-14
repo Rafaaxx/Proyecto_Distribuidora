@@ -1,10 +1,15 @@
 -r requirements.txt
 
 ast_serialize==0.11.2
+boolean.py==5.0
+CacheControl==0.14.4
 certifi==2026.7.22
 charset-normalizer==3.5.1
 colorama==0.4.6
+cyclonedx-python-lib==11.12.0
+defusedxml==0.7.1
 docker==7.2.0
+filelock==4.2.10
 grimp==3.17
 httpcore==1.0.9
 httpx==0.28.1
@@ -12,13 +17,19 @@ hypothesis==6.168.0
 import-linter==2.15
 iniconfig==2.3.0
 librt==0.15.0
+license-expression==30.4.4
 markdown-it-py==4.2.0
 mdurl==0.1.2
+msgpack==1.2.4
 mypy==2.3.1
 mypy_extensions==1.1.0
 packaging==26.3
 pathspec==1.1.1
+pip_audit==2.10.1
+pip-requirements-parser==32.0.1
+platformdirs==4.14.5
 pluggy==1.6.0
+py-serializable==2.2.0
 Pygments==2.21.0
 pytest==9.1.1
 pywin32==312; sys_platform == "win32"
@@ -27,5 +38,7 @@ rich==15.0.0
 ruff==0.16.8
 sortedcontainers==2.4.0
 testcontainers[postgres]==4.15.0
+tomli==2.5.0
+tomli_w==1.2.0
 urllib3==2.8.0
 wrapt==2.4.1

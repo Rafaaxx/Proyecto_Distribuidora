@@ -17142,12 +17142,15 @@
         "properties": {
           "permisos": {
             "items": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 100
             },
             "type": "array",
+            "maxItems": 500,
             "title": "Permisos"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "permisos"
@@ -18556,16 +18559,19 @@
         "properties": {
           "usuario": {
             "type": "string",
+            "maxLength": 200,
             "title": "Usuario"
           },
           "nombre": {
             "type": "string",
+            "maxLength": 200,
             "title": "Nombre"
           },
           "email": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 320
               },
               {
                 "type": "null"
@@ -18575,6 +18581,7 @@
           },
           "password": {
             "type": "string",
+            "maxLength": 128,
             "format": "password",
             "title": "Password",
             "writeOnly": true
@@ -18585,6 +18592,7 @@
             "title": "Rol Id"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "usuario",
@@ -22189,14 +22197,17 @@
         "properties": {
           "organizacion_slug": {
             "type": "string",
+            "maxLength": 100,
             "title": "Organizacion Slug"
           },
           "usuario": {
             "type": "string",
+            "maxLength": 200,
             "title": "Usuario"
           },
           "contrasena": {
             "type": "string",
+            "maxLength": 128,
             "title": "Contrasena"
           },
           "dispositivo_id": {
@@ -22206,9 +22217,11 @@
           },
           "nombre_dispositivo": {
             "type": "string",
+            "maxLength": 200,
             "title": "Nombre Dispositivo"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "organizacion_slug",
@@ -22217,7 +22230,8 @@
           "dispositivo_id",
           "nombre_dispositivo"
         ],
-        "title": "LoginRequest"
+        "title": "LoginRequest",
+        "description": "Auditoría de seguridad: `extra=\"forbid\"` (el frontend envía exactamente estos cinco campos,\n`features/identidad/login.ts`) y topes de largo. El del usuario es el del dominio\n(`NOMBRE_DE_USUARIO_LONGITUD_MAXIMA`); la contraseña, 128, muy por encima de lo que se usa."
       },
       "LoteComandosRequest": {
         "properties": {
@@ -26852,11 +26866,13 @@
             "title": "Dispositivo Id"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "dispositivo_id"
         ],
-        "title": "RefreshRequest"
+        "title": "RefreshRequest",
+        "description": "El frontend envía solo el dispositivo (`lib/api/httpClient.ts`)."
       },
       "ReglaAplicableResponse": {
         "properties": {
@@ -28756,11 +28772,13 @@
         "properties": {
           "pin": {
             "type": "string",
+            "maxLength": 64,
             "format": "password",
             "title": "Pin",
             "writeOnly": true
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "pin"

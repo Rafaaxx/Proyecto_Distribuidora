@@ -43,8 +43,45 @@ def test_atiende_el_dominio_con_el_emisor_elegido_por_variable():
     assert "default_sni {$DOMINIO}" in SIN_COMENTARIOS
 
 
+def _bloque_handle(ruta: str) -> str:
+    patron = rf"handle {re.escape(ruta)}\s*\{{(.*?)\n\t\}}"
+    m = re.search(patron, SIN_COMENTARIOS, re.DOTALL)
+    assert m, f"falta `handle {ruta}`"
+    return m.group(1)
+
+
 def test_reenvia_la_api_al_backend_en_el_mismo_origen():
-    assert re.search(r"handle /api/\*\s*\{\s*reverse_proxy backend:8000\s*\}", SIN_COMENTARIOS)
+    for ruta in ("/api/*", "/api/v1/sync/comandos", "/api/v1/importaciones/*"):
+        assert "reverse_proxy backend:8000" in _bloque_handle(ruta)
+
+
+def _tope(ruta: str) -> int:
+    m = re.search(r"request_body\s*\{\s*max_size (\d+)MB\s*\}", _bloque_handle(ruta))
+    assert m, f"`handle {ruta}` no limita el cuerpo"
+    return int(m.group(1))
+
+
+def test_la_api_limita_el_cuerpo_de_la_peticion():
+    # Tope general bajo; el lote de sincronización (hasta 50 comandos) y la importación de
+    # planillas (la aplicación admite 5 MB, `LIMITE_DE_BYTES`) tienen el suyo, mayor.
+    assert _tope("/api/*") == 1
+    assert _tope("/api/v1/sync/comandos") == 4
+    assert _tope("/api/v1/importaciones/*") == 6
+
+
+def test_los_topes_especificos_van_antes_que_el_general():
+    # `handle` es excluyente y gana el primero que coincide.
+    orden = [
+        SIN_COMENTARIOS.index(f"handle {ruta}")
+        for ruta in ("/api/v1/sync/comandos", "/api/v1/importaciones/*", "/api/*")
+    ]
+    assert orden == sorted(orden)
+
+
+def test_el_tope_de_importacion_cubre_el_limite_de_la_aplicacion():
+    from app.modules.importacion.domain.planilla import LIMITE_DE_BYTES
+
+    assert _tope("/api/v1/importaciones/*") * 1024 * 1024 > LIMITE_DE_BYTES
 
 
 def test_devuelve_index_html_para_rutas_de_la_aplicacion():
@@ -234,6 +271,8 @@ def test_el_fragmento_declara_los_encabezados_complementarios_y_quita_server():
     assert re.search(r'Referrer-Policy\s+"same-origin"', FRAGMENTO)
     assert re.search(r'Cross-Origin-Opener-Policy\s+"same-origin"', FRAGMENTO)
     assert re.search(r'X-Frame-Options\s+"DENY"', FRAGMENTO)
+    # Sistema privado: ningún buscador lo indexa.
+    assert re.search(r'X-Robots-Tag\s+"noindex, nofollow"', FRAGMENTO)
     permisos = re.search(r'Permissions-Policy\s+"([^"]+)"', FRAGMENTO)
     assert permisos
     for funcion in ("camera", "microphone", "geolocation", "payment"):
@@ -361,6 +400,7 @@ def _verificar(encabezados: dict[str, str], con_hsts: bool) -> None:
     assert "camera=()" in encabezados["permissions-policy"]
     assert encabezados["cross-origin-opener-policy"] == "same-origin"
     assert encabezados["x-frame-options"] == "DENY"
+    assert encabezados["x-robots-tag"] == "noindex, nofollow"
     assert ("strict-transport-security" in encabezados) is con_hsts
     assert "server" not in encabezados
 

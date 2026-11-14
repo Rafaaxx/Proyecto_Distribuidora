@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
 
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -59,13 +59,33 @@ describe('RutaLayout: rutas y menú de /ruta', () => {
     expect(screen.queryByText(/Hola, /)).not.toBeInTheDocument()
   })
 
-  it('/ruta/ayuda abre el índice de ayuda y una ruta desconocida vuelve al inicio', async () => {
+  it('/ruta/ayuda abre el índice de ayuda y una ruta desconocida muestra la 404 con vuelta a /ruta', async () => {
     const ayuda = montar('/ruta/ayuda')
     expect(await screen.findByRole('heading', { name: 'Ayuda' })).toBeInTheDocument()
     ayuda.unmount()
 
     montar('/ruta/lo-que-no-existe')
-    expect(await screen.findByText(/Hola, Vendedor Uno/)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Esta página no existe' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /volver al inicio/i })).toHaveAttribute('href', '/ruta')
+    // El menú inferior sigue disponible: la 404 se ve dentro del área.
+    expect(screen.getByRole('navigation', { name: 'Menú de ruta' })).toBeInTheDocument()
+    expect(screen.queryByText(/Hola, Vendedor Uno/)).not.toBeInTheDocument()
+  })
+
+  it('el título de la pestaña sigue la pantalla activa de /ruta', async () => {
+    const vender = montar('/ruta/vender')
+    await screen.findByRole('heading', { name: 'Vender' })
+    expect(document.title).toBe('Vender · Distribuidora')
+    vender.unmount()
+
+    const inicio = montar('/ruta')
+    await screen.findByText(/Hola, Vendedor Uno/)
+    expect(document.title).toBe('Inicio · Distribuidora')
+    inicio.unmount()
+
+    const cobrar = montar('/ruta/cobrar')
+    await waitFor(() => expect(document.title).toBe('Cobrar · Distribuidora'))
+    cobrar.unmount()
   })
 })
 

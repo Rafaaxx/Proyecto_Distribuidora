@@ -6372,7 +6372,12 @@ export interface components {
             /** Items */
             items: components["schemas"]["ListaResponse"][];
         };
-        /** LoginRequest */
+        /**
+         * LoginRequest
+         * @description Auditoría de seguridad: `extra="forbid"` (el frontend envía exactamente estos cinco campos,
+         *     `features/identidad/login.ts`) y topes de largo. El del usuario es el del dominio
+         *     (`NOMBRE_DE_USUARIO_LONGITUD_MAXIMA`); la contraseña, 128, muy por encima de lo que se usa.
+         */
         LoginRequest: {
             /** Organizacion Slug */
             organizacion_slug: string;
@@ -8279,7 +8284,10 @@ export interface components {
             /** Direccion */
             direccion: string | null;
         };
-        /** RefreshRequest */
+        /**
+         * RefreshRequest
+         * @description El frontend envía solo el dispositivo (`lib/api/httpClient.ts`).
+         */
         RefreshRequest: {
             /**
              * Dispositivo Id

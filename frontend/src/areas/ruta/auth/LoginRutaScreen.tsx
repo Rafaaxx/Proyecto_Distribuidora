@@ -8,6 +8,7 @@ import { Campo } from '../../../components/ui/Field'
 import { esquemaLogin, type DatosLogin } from '../../../domain/identidad/loginSchema'
 import { iniciarSesionConContrasena } from '../../../features/identidad/login'
 import { useConectado } from '../../../lib/conexion'
+import { useTituloDePagina } from '../../../lib/useTituloDePagina'
 
 /**
  * Inicio de sesión propio de `/ruta` (change 21, `design.md` D12; SEG-01, SEG-02, ADR-018).
@@ -30,6 +31,7 @@ export interface LoginRutaScreenProps {
 }
 
 export function LoginRutaScreen({ onIniciada, motivo }: LoginRutaScreenProps) {
+  useTituloDePagina('Iniciar sesión')
   const conectado = useConectado()
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState<string | null>(null)

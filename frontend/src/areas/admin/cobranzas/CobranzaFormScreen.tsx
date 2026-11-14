@@ -5,6 +5,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Ayuda } from '../../../components/ui/Ayuda'
 import { Alert } from '../../../components/ui/Alert'
 import { Boton } from '../../../components/ui/Button'
+import { clasesDeBoton } from '../../../components/ui/botonEstilos'
 import { Card } from '../../../components/ui/Card'
 import { Dialogo } from '../../../components/ui/Dialog'
 import { Campo } from '../../../components/ui/Field'
@@ -145,15 +146,14 @@ function CobranzaFormulario() {
           <p data-testid="saldo-final">{textoDeSaldo('CLIENTE', registrada.saldo)}</p>
           <p>{registrada.jornada_id ? 'La cobranza quedó en tu jornada.' : 'La cobranza quedó sin jornada.'}</p>
           <div className="flex flex-wrap gap-3">
-            <Link to={`/admin/cobranzas/${registrada.cobranza_id}`} className="text-primary/70 hover:text-primary hover:underline">
+            <Link to={`/admin/cobranzas/${registrada.cobranza_id}`} className={clasesDeBoton('secundario', 'grande')}>
               Ver la cobranza
             </Link>
-            <Link to="/admin/cobranzas" className="text-primary/70 hover:text-primary hover:underline">
+            <Link to="/admin/cobranzas" className={clasesDeBoton('secundario', 'grande')}>
               Volver al listado
             </Link>
-            <button
-              type="button"
-              className="text-primary/70 hover:text-primary hover:underline"
+            <Boton
+              variante="secundario"
               onClick={() => {
                 reset(VALORES_INICIALES)
                 setCobranzaId(generarOperationId())
@@ -161,7 +161,7 @@ function CobranzaFormulario() {
               }}
             >
               Registrar otra cobranza
-            </button>
+            </Boton>
           </div>
         </Card>
       </main>
@@ -276,7 +276,7 @@ function CobranzaFormulario() {
           <Boton type="submit" disabled={!habilitado || registrar.isPending || esperandoSaldo}>
             Confirmar cobranza
           </Boton>
-          <Link to="/admin/cobranzas" className="self-center text-sm text-primary/70 hover:text-primary">
+          <Link to="/admin/cobranzas" className={clasesDeBoton('secundario', 'grande')}>
             Cancelar
           </Link>
         </div>

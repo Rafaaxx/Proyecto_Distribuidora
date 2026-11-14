@@ -12,7 +12,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Depends, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api_v1.dependencias import _get_settings, get_session
@@ -20,7 +20,10 @@ from app.core.clock import SystemClock
 from app.core.config import Settings
 from app.core.errors import DomainError
 from app.modules.identidad import service as identidad_service
-from app.modules.identidad.domain.usuarios import RefreshTokenInvalidoError
+from app.modules.identidad.domain.usuarios import (
+    NOMBRE_DE_USUARIO_LONGITUD_MAXIMA,
+    RefreshTokenInvalidoError,
+)
 
 router = APIRouter(prefix="/auth", tags=["autenticacion"])
 
@@ -32,11 +35,17 @@ _MAX_AGE_COOKIE_REFRESH_SEGUNDOS = 30 * 24 * 60 * 60
 
 
 class LoginRequest(BaseModel):
-    organizacion_slug: str
-    usuario: str
-    contrasena: str
+    """Auditoría de seguridad: `extra="forbid"` (el frontend envía exactamente estos cinco campos,
+    `features/identidad/login.ts`) y topes de largo. El del usuario es el del dominio
+    (`NOMBRE_DE_USUARIO_LONGITUD_MAXIMA`); la contraseña, 128, muy por encima de lo que se usa."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    organizacion_slug: str = Field(max_length=100)
+    usuario: str = Field(max_length=NOMBRE_DE_USUARIO_LONGITUD_MAXIMA)
+    contrasena: str = Field(max_length=128)
     dispositivo_id: UUID
-    nombre_dispositivo: str
+    nombre_dispositivo: str = Field(max_length=200)
 
 
 class TokenResponse(BaseModel):
@@ -45,6 +54,10 @@ class TokenResponse(BaseModel):
 
 
 class RefreshRequest(BaseModel):
+    """El frontend envía solo el dispositivo (`lib/api/httpClient.ts`)."""
+
+    model_config = ConfigDict(extra="forbid")
+
     dispositivo_id: UUID
 
 

@@ -1,4 +1,7 @@
-import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
+import { NavLink, Route, Routes, useLocation } from 'react-router-dom'
+
+import { PaginaNoEncontrada } from '../../app/PaginaNoEncontrada'
+import { useTituloDePagina } from '../../lib/useTituloDePagina'
 
 import { AyudaRutaRoutes } from './ayuda/AyudaRutaRoutes'
 import { ClienteFichaScreen } from './clientes/ClienteFichaScreen'
@@ -40,7 +43,35 @@ function claseDeMenu({ isActive }: { isActive: boolean }): string {
   ].join(' ')
 }
 
+/**
+ * Título de la pestaña por pantalla, resuelto en un solo lugar: el primer prefijo que coincide
+ * gana, así que los más específicos van antes. Sin coincidencia (la 404) devuelve `null` y la
+ * pantalla hija fija el suyo.
+ */
+const TITULOS_DE_RUTA: readonly (readonly [prefijo: string, titulo: string])[] = [
+  ['/ruta/jornada', 'Abrir jornada'],
+  ['/ruta/clientes', 'Clientes'],
+  ['/ruta/productos', 'Productos'],
+  ['/ruta/stock', 'Stock'],
+  ['/ruta/vender', 'Vender'],
+  ['/ruta/ventas', 'Ventas de hoy'],
+  ['/ruta/cobrar', 'Cobrar'],
+  ['/ruta/cobranzas', 'Cobranzas de hoy'],
+  ['/ruta/sincronizacion', 'Sincronización'],
+  ['/ruta/cuenta', 'Mi cuenta'],
+  ['/ruta/ayuda', 'Ayuda'],
+]
+
+function tituloDeRuta(pathname: string): string | null {
+  const ruta = pathname.replace(/\/+$/, '')
+  if (ruta === '/ruta') return 'Inicio'
+  const hallado = TITULOS_DE_RUTA.find(([prefijo]) => ruta === prefijo || ruta.startsWith(`${prefijo}/`))
+  return hallado ? hallado[1] : null
+}
+
 export function RutaLayout() {
+  useTituloDePagina(tituloDeRuta(useLocation().pathname))
+
   return (
     <div className="flex min-h-dvh flex-col bg-surface-muted">
       <IndicadorDeSincronizacion />
@@ -64,7 +95,7 @@ export function RutaLayout() {
           <Route path="cuenta/contrasena" element={<MiContrasenaRutaScreen />} />
           <Route path="cuenta/pin" element={<CambiarPinScreen />} />
           <Route path="ayuda/*" element={<AyudaRutaRoutes />} />
-          <Route path="*" element={<Navigate to="/ruta" replace />} />
+          <Route path="*" element={<PaginaNoEncontrada destino="/ruta" />} />
         </Routes>
       </main>
       <nav

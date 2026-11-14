@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom'
 import { Alert } from '../../../components/ui/Alert'
 import { Ayuda } from '../../../components/ui/Ayuda'
 import { Boton } from '../../../components/ui/Button'
+import { clasesDeBoton } from '../../../components/ui/botonEstilos'
 import { Card } from '../../../components/ui/Card'
 import { Dialogo } from '../../../components/ui/Dialog'
 import { Campo } from '../../../components/ui/Field'
@@ -949,7 +950,7 @@ function VentaFormulario() {
           <Boton type="submit" disabled={!habilitado || confirmar.isPending || esperandoSaldo}>
             Confirmar venta
           </Boton>
-          <Link to="/admin/ventas" className="self-center text-sm text-primary/70 hover:text-primary">
+          <Link to="/admin/ventas" className={clasesDeBoton('secundario', 'grande')}>
             Cancelar
           </Link>
         </div>

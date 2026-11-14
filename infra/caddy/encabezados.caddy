@@ -18,6 +18,9 @@ header {
 	Cross-Origin-Opener-Policy "same-origin"
 	# Para navegadores viejos; `frame-ancestors 'none'` lo cubre en los nuevos.
 	X-Frame-Options "DENY"
+	# Sistema privado: que ningun buscador lo indexe (robots.txt lo refuerza, pero este
+	# encabezado alcanza tambien a /api/* y a lo que robots.txt no cubre).
+	X-Robots-Tag "noindex, nofollow"
 	# No se anuncia el nombre del servidor (tampoco el del backend en /api).
 	-Server
 }

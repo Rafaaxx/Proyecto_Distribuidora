@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 
 import { Alert } from '../../../components/ui/Alert'
 import { Boton } from '../../../components/ui/Button'
+import { clasesDeBoton } from '../../../components/ui/botonEstilos'
 import { Campo } from '../../../components/ui/Field'
 import { Card } from '../../../components/ui/Card'
 import { Dialogo } from '../../../components/ui/Dialog'
@@ -143,22 +144,21 @@ function PagoFormulario() {
           <p>El pago quedó asentado en la cuenta del proveedor.</p>
           <p data-testid="saldo-final">{textoDeSaldo('PROVEEDOR', registrado.saldo)}</p>
           <div className="flex flex-wrap gap-3">
-            <Link to={`/admin/pagos-proveedores/${registrado.pago_id}`} className="text-primary/70 hover:text-primary hover:underline">
+            <Link to={`/admin/pagos-proveedores/${registrado.pago_id}`} className={clasesDeBoton('secundario', 'grande')}>
               Ver el pago
             </Link>
-            <Link to="/admin/pagos-proveedores" className="text-primary/70 hover:text-primary hover:underline">
+            <Link to="/admin/pagos-proveedores" className={clasesDeBoton('secundario', 'grande')}>
               Volver al listado
             </Link>
-            <button
-              type="button"
-              className="text-primary/70 hover:text-primary hover:underline"
+            <Boton
+              variante="secundario"
               onClick={() => {
                 reset(valoresIniciales(''))
                 setRegistrado(null)
               }}
             >
               Registrar otro pago
-            </button>
+            </Boton>
           </div>
         </Card>
       </main>
@@ -264,7 +264,7 @@ function PagoFormulario() {
           <Boton type="submit" disabled={!habilitado || registrar.isPending || esperandoSaldo}>
             Confirmar pago
           </Boton>
-          <Link to="/admin/pagos-proveedores" className="self-center text-sm text-primary/70 hover:text-primary">
+          <Link to="/admin/pagos-proveedores" className={clasesDeBoton('secundario', 'grande')}>
             Cancelar
           </Link>
         </div>

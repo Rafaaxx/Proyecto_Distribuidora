@@ -22,6 +22,8 @@ export interface Permisos {
    * ofrece iniciar sesión. */
   error: ErrorDeIdentidad | undefined
   reintentar(): void
+  /** Hay una consulta de `/yo` en vuelo (incluso con un error previo en pantalla). */
+  actualizando: boolean
 }
 
 /**
@@ -55,6 +57,7 @@ export function usePermisos(): Permisos {
     tiene: (permiso: CodigoPermiso) => estado === 'listo' && (consulta.data?.permisos.includes(permiso) ?? false),
     yo: consulta.data,
     error: consulta.error instanceof ErrorDeIdentidad ? consulta.error : undefined,
+    actualizando: consulta.isFetching,
     reintentar: () => {
       void consulta.refetch()
     },

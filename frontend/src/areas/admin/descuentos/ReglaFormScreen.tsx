@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { Alert } from '../../../components/ui/Alert'
 import { Boton } from '../../../components/ui/Button'
+import { clasesDeBoton } from '../../../components/ui/botonEstilos'
 import { Card } from '../../../components/ui/Card'
 import { Campo } from '../../../components/ui/Field'
 import { PageHeader } from '../../../components/ui/PageHeader'
@@ -276,7 +277,7 @@ function FormularioDeRegla({ valores, nombresIniciales, reglaId, textoDelBoton, 
           <Boton type="submit" disabled={crear.isPending || modificar.isPending}>
             {textoDelBoton}
           </Boton>
-          <Link to={rutaDeSalida} className="self-center text-sm text-primary/70 hover:text-primary">
+          <Link to={rutaDeSalida} className={clasesDeBoton('secundario', 'grande')}>
             Cancelar
           </Link>
         </div>

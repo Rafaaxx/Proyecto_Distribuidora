@@ -1,26 +1,22 @@
-import type { ButtonHTMLAttributes } from 'react'
+import { useContext, type ButtonHTMLAttributes } from 'react'
+
+import { clasesDeBoton, TamanoDeBotonContext, type TamanoBoton, type VarianteBoton } from './botonEstilos'
 
 /**
- * Botón base de `/admin` (tarea 10.1, `design.md` D10). Sin lógica de
- * negocio -- solo variantes visuales sobre los tokens de `index.css`.
+ * Botón base (tarea 10.1, `design.md` D10). Sin lógica de negocio -- solo variantes visuales
+ * sobre los tokens de `index.css`. Los estilos y los tamaños viven en `botonEstilos.ts`.
  */
-export type VarianteBoton = 'primario' | 'secundario' | 'peligro'
+export type { TamanoBoton, VarianteBoton }
 
 export interface BotonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variante?: VarianteBoton
+  /** Si se omite, toma el del `TamanoDeBotonContext` más cercano (`normal` sin proveedor). */
+  tamano?: TamanoBoton
 }
 
-const CLASES_BASE =
-  'inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50'
-
-const CLASES_POR_VARIANTE: Record<VarianteBoton, string> = {
-  primario: 'bg-primary text-primary-foreground hover:opacity-90',
-  secundario: 'bg-surface-muted text-primary border border-border hover:bg-surface',
-  peligro: 'bg-danger text-danger-foreground hover:opacity-90',
-}
-
-export function Boton({ variante = 'primario', className, type = 'button', ...resto }: BotonProps) {
-  const clases = [CLASES_BASE, CLASES_POR_VARIANTE[variante], className].filter(Boolean).join(' ')
+export function Boton({ variante = 'primario', tamano, className, type = 'button', ...resto }: BotonProps) {
+  const tamanoDelArea = useContext(TamanoDeBotonContext)
+  const clases = [clasesDeBoton(variante, tamano ?? tamanoDelArea), className].filter(Boolean).join(' ')
   return <button type={type} className={clases} {...resto} />
 }
 

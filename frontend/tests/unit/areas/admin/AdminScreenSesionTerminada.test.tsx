@@ -85,13 +85,13 @@ describe('AdminScreen: la renovación rechazada pasa a "sesión terminada" (tare
     // listado de catálogo. No es `/yo`, que es lo que dispara el corte.
     await userEvent.setup().click(within(menu).getByRole('link', { name: 'Catálogo' }))
 
-    const enlace = await screen.findByRole('link', { name: 'Iniciar sesión' })
-    expect(enlace).toHaveAttribute('href', '/admin/login')
+    // La sesión terminó: el layout lleva solo a la pantalla de inicio de sesión.
+    expect(await screen.findByRole('heading', { name: 'Iniciar sesión' })).toBeInTheDocument()
     // Reintentar no serviría: sin token la renovación ya fue rechazada una
     // vez, así que un nuevo intento vuelve a fallar (ADR-017).
     expect(screen.queryByRole('button', { name: 'Reintentar' })).not.toBeInTheDocument()
     // Falla cerrada: ninguna sección protegida sobrevive a la sesión muerta.
-    expect(within(menuDeAdministracion()).queryAllByRole('link')).toHaveLength(0)
+    expect(screen.queryByRole('navigation', { name: /navegación de administración/i })).not.toBeInTheDocument()
     // Y es determinista: una sola renovación en toda la vida de la pantalla
     // y ni un reintento de la consulta de sesión.
     expect(servidor.rutasPedidas('/auth/refresh')).toHaveLength(1)
@@ -118,12 +118,12 @@ describe('AdminScreen: la renovación rechazada pasa a "sesión terminada" (tare
     servidor.darDeBajaAlUsuario()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Revocar' }))
 
-    expect(await screen.findByRole('link', { name: 'Iniciar sesión' })).toHaveAttribute('href', '/admin/login')
-    expect(within(menuDeAdministracion()).queryAllByRole('link')).toHaveLength(0)
+    expect(await screen.findByRole('heading', { name: 'Iniciar sesión' })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: /navegación de administración/i })).not.toBeInTheDocument()
     expect(servidor.rutasPedidas('/auth/refresh')).toHaveLength(1)
   })
 
-  it('al montar /admin sin access token con la renovación rechazada aparece el aviso (no queda en blanco y no reintenta)', async () => {
+  it('al montar /admin sin access token con la renovación rechazada lleva al inicio de sesión (no queda en blanco y no reintenta)', async () => {
     // Sesión muerta desde el arranque, que es lo que hay después de recargar
     // la página con la sesión revocada: no hay access token en memoria y el
     // refresh se rechaza.
@@ -132,16 +132,41 @@ describe('AdminScreen: la renovación rechazada pasa a "sesión terminada" (tare
 
     await montarAdmin('/admin/catalogo/productos')
 
-    const enlace = await screen.findByRole('link', { name: 'Iniciar sesión' })
-    expect(enlace).toHaveAttribute('href', '/admin/login')
+    // No quedó en blanco: se muestra el formulario de inicio de sesión.
+    expect(await screen.findByRole('heading', { name: 'Iniciar sesión' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Reintentar' })).not.toBeInTheDocument()
-    // No quedó en blanco: el layout se dibujó, sin ninguna sección protegida.
-    expect(menuDeAdministracion()).toBeInTheDocument()
-    expect(within(menuDeAdministracion()).queryAllByRole('link')).toHaveLength(0)
     // No reintenta ni una vez: una sola petición de sesión y una sola
-    // renovación, sin el backoff por defecto de TanStack Query.
+    // renovación, sin el backoff por defecto de TanStack Query. La pantalla de login consulta
+    // la misma sesión (comparte `['yo']`) y no abre ningún bucle de renovación.
     expect(servidor.rutasPedidas('/auth/refresh')).toHaveLength(1)
     expect(servidor.rutasPedidas('/yo')).toHaveLength(1)
+  })
+
+  it('/admin/login con la sesión viva (cookie de refresh vigente) redirige al inicio sin pedir credenciales', async () => {
+    const servidor = crearServidorDePrueba()
+    servirCon(servidor)
+
+    await montarAdmin('/admin/login')
+
+    expect(await screen.findByRole('link', { name: 'Catálogo' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Iniciar sesión' })).not.toBeInTheDocument()
+  })
+
+  it('tras cerrar sesión, el login no redirige de vuelta al inicio aunque la cookie de refresh siga', async () => {
+    const servidor = crearServidorDePrueba()
+    servirCon(servidor)
+    const { fijarAccessToken } = await import('../../../../src/lib/auth/tokenStore')
+    act(() => fijarAccessToken('access-token-vigente'))
+    await montarAdmin('/admin/catalogo/productos')
+    await screen.findByRole('link', { name: 'Catálogo' })
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Cerrar sesión' }))
+
+    expect(await screen.findByRole('heading', { name: 'Iniciar sesión' })).toBeInTheDocument()
+    expect(servidor.rutasPedidas('/auth/logout')).toHaveLength(1)
+    // Sin nuevas renovaciones: la sesión quedó marcada como terminada.
+    expect(servidor.rutasPedidas('/auth/refresh')).toHaveLength(0)
+    expect(screen.queryByRole('link', { name: 'Catálogo' })).not.toBeInTheDocument()
   })
 
   it('sin access token pero con la renovación aceptada, la página recargada recupera la sesión y no ofrece iniciar sesión', async () => {
@@ -240,6 +265,10 @@ function crearServidorDePrueba({
       }
       tokensRenovados += 1
       return Promise.resolve(respuesta(200, { access_token: `access-token-renovado-${tokensRenovados}` }))
+    }
+
+    if (ruta === '/auth/logout') {
+      return Promise.resolve(new Response(null, { status: 204 }))
     }
 
     if (!estado.sesionHabilitada || !llevaToken) {

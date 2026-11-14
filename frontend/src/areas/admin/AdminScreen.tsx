@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Suspense, lazy, useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
+import { PaginaNoEncontrada } from '../../app/PaginaNoEncontrada'
+import { TamanoDeBotonContext } from '../../components/ui/botonEstilos'
 import { clavesIdentidad } from '../../features/identidad/claves'
 import { suscribirACambiosDeToken } from '../../lib/auth/tokenStore'
 import { AdminInicio } from './AdminInicio'
@@ -44,10 +46,10 @@ const AyudaArea = lazy(() => import('./AyudaArea'))
  * crea acá para que solo exista mientras el área de administración está
  * montada (carga diferida, `AppRoutes.tsx`).
  *
- * Sin sesión restaurada todavía (ese flujo no lo pide ningún escenario de
- * este change): la raíz de `/admin` redirige siempre a `login`. Cambia
- * cuando exista una pantalla que dependa de sesión persistida entre
- * recargas.
+ * La raíz de `/admin` redirige a `inicio` (dentro del layout), que recupera la sesión al
+ * recargar con la cookie `HttpOnly` del refresh token (ADR-017): si la sesión sigue viva entra
+ * directo, y si terminó el layout lleva a `login`. Redirigir siempre a `login` obligaba a iniciar
+ * sesión de nuevo aunque la sesión estuviera viva.
  *
  * `inicio` es la ruta índice dentro del layout (tarea 7.6, **B3**): el login
  * lleva ahí y desde ahí se salta a la primera sección que el usuario pueda
@@ -101,166 +103,169 @@ export function AdminScreen() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Routes>
-        <Route path="/" element={<Navigate to="login" replace />} />
-        <Route path="login" element={<LoginScreen />} />
-        <Route element={<AdminLayout />}>
-          <Route path="inicio" element={<AdminInicio />} />
-          <Route path="dispositivos" element={<DispositivosScreen />} />
-          <Route
-            path="catalogo/*"
-            element={
-              <Suspense fallback={null}>
-                <CatalogoArea />
-              </Suspense>
-            }
-          />
-          <Route
-            path="proveedores/*"
-            element={
-              <Suspense fallback={null}>
-                <ProveedoresArea />
-              </Suspense>
-            }
-          />
-          <Route
-            path="compras/*"
-            element={
-              <Suspense fallback={null}>
-                <ComprasArea />
-              </Suspense>
-            }
-          />
-          <Route
-            path="pagos-proveedores/*"
-            element={
-              <Suspense fallback={null}>
-                <PagosArea />
-              </Suspense>
-            }
-          />
-          <Route
-            path="clientes/*"
-            element={
-              <Suspense fallback={null}>
-                <ClientesArea />
-              </Suspense>
-            }
-          />
-          <Route
-            path="cobranzas/*"
-            element={
-              <Suspense fallback={null}>
-                <CobranzasArea />
-              </Suspense>
-            }
-          />
-          <Route
-            path="ventas/*"
-            element={
-              <Suspense fallback={null}>
-                <VentasArea />
-              </Suspense>
-            }
-          />
-          <Route
-            path="precios/*"
-            element={
-              <Suspense fallback={null}>
-                <PreciosArea />
-              </Suspense>
-            }
-          />
-          <Route
-            path="descuentos/*"
-            element={
-              <Suspense fallback={null}>
-                <DescuentosArea />
-              </Suspense>
-            }
-          />
-          <Route
-            path="stock/*"
-            element={
-              <Suspense fallback={null}>
-                <StockArea />
-              </Suspense>
-            }
-          />
-          <Route
-            path="revision/*"
-            element={
-              <Suspense fallback={null}>
-                <RevisionArea />
-              </Suspense>
-            }
-          />
-          <Route
-            path="reportes/*"
-            element={
-              <Suspense fallback={null}>
-                <ReportesArea />
-              </Suspense>
-            }
-          />
-          <Route
-            path="importacion/*"
-            element={
-              <Suspense fallback={null}>
-                <ImportacionArea />
-              </Suspense>
-            }
-          />
-          <Route
-            path="ayuda/*"
-            element={
-              <Suspense fallback={null}>
-                <AyudaArea />
-              </Suspense>
-            }
-          />
-          <Route
-            path="configuracion/*"
-            element={
-              <Suspense fallback={null}>
-                <ConfiguracionArea />
-              </Suspense>
-            }
-          />
-          <Route
-            path="roles/*"
-            element={
-              <Suspense fallback={null}>
-                <RolesArea />
-              </Suspense>
-            }
-          />
-          <Route
-            path="usuarios/*"
-            element={
-              <Suspense fallback={null}>
-                <UsuariosArea />
-              </Suspense>
-            }
-          />
-          <Route
-            path="mi-contrasena"
-            element={
-              <Suspense fallback={null}>
-                <MiContrasenaScreen />
-              </Suspense>
-            }
-          />
-          <Route
-            path="mi-pin"
-            element={
-              <Suspense fallback={null}>
-                <MiPinScreen />
-              </Suspense>
-            }
-          />
-        </Route>
-      </Routes>
+      <TamanoDeBotonContext.Provider value="grande">
+        <Routes>
+          <Route path="/" element={<Navigate to="inicio" replace />} />
+          <Route path="login" element={<LoginScreen />} />
+          <Route element={<AdminLayout />}>
+            <Route path="inicio" element={<AdminInicio />} />
+            <Route path="dispositivos" element={<DispositivosScreen />} />
+            <Route
+              path="catalogo/*"
+              element={
+                <Suspense fallback={null}>
+                  <CatalogoArea />
+                </Suspense>
+              }
+            />
+            <Route
+              path="proveedores/*"
+              element={
+                <Suspense fallback={null}>
+                  <ProveedoresArea />
+                </Suspense>
+              }
+            />
+            <Route
+              path="compras/*"
+              element={
+                <Suspense fallback={null}>
+                  <ComprasArea />
+                </Suspense>
+              }
+            />
+            <Route
+              path="pagos-proveedores/*"
+              element={
+                <Suspense fallback={null}>
+                  <PagosArea />
+                </Suspense>
+              }
+            />
+            <Route
+              path="clientes/*"
+              element={
+                <Suspense fallback={null}>
+                  <ClientesArea />
+                </Suspense>
+              }
+            />
+            <Route
+              path="cobranzas/*"
+              element={
+                <Suspense fallback={null}>
+                  <CobranzasArea />
+                </Suspense>
+              }
+            />
+            <Route
+              path="ventas/*"
+              element={
+                <Suspense fallback={null}>
+                  <VentasArea />
+                </Suspense>
+              }
+            />
+            <Route
+              path="precios/*"
+              element={
+                <Suspense fallback={null}>
+                  <PreciosArea />
+                </Suspense>
+              }
+            />
+            <Route
+              path="descuentos/*"
+              element={
+                <Suspense fallback={null}>
+                  <DescuentosArea />
+                </Suspense>
+              }
+            />
+            <Route
+              path="stock/*"
+              element={
+                <Suspense fallback={null}>
+                  <StockArea />
+                </Suspense>
+              }
+            />
+            <Route
+              path="revision/*"
+              element={
+                <Suspense fallback={null}>
+                  <RevisionArea />
+                </Suspense>
+              }
+            />
+            <Route
+              path="reportes/*"
+              element={
+                <Suspense fallback={null}>
+                  <ReportesArea />
+                </Suspense>
+              }
+            />
+            <Route
+              path="importacion/*"
+              element={
+                <Suspense fallback={null}>
+                  <ImportacionArea />
+                </Suspense>
+              }
+            />
+            <Route
+              path="ayuda/*"
+              element={
+                <Suspense fallback={null}>
+                  <AyudaArea />
+                </Suspense>
+              }
+            />
+            <Route
+              path="configuracion/*"
+              element={
+                <Suspense fallback={null}>
+                  <ConfiguracionArea />
+                </Suspense>
+              }
+            />
+            <Route
+              path="roles/*"
+              element={
+                <Suspense fallback={null}>
+                  <RolesArea />
+                </Suspense>
+              }
+            />
+            <Route
+              path="usuarios/*"
+              element={
+                <Suspense fallback={null}>
+                  <UsuariosArea />
+                </Suspense>
+              }
+            />
+            <Route
+              path="mi-contrasena"
+              element={
+                <Suspense fallback={null}>
+                  <MiContrasenaScreen />
+                </Suspense>
+              }
+            />
+            <Route
+              path="mi-pin"
+              element={
+                <Suspense fallback={null}>
+                  <MiPinScreen />
+                </Suspense>
+              }
+            />
+            <Route path="*" element={<PaginaNoEncontrada destino="/admin/inicio" />} />
+          </Route>
+        </Routes>
+      </TamanoDeBotonContext.Provider>
     </QueryClientProvider>
   )
 }

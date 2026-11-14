@@ -32,7 +32,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, ConfigDict, SecretStr, StrictBool
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, StrictBool
 from sqlalchemy.orm import Session
 
 from app.api_v1.dependencias import get_session
@@ -55,7 +55,10 @@ from app.core.errors import DomainError
 from app.modules.identidad import commands as identidad_commands  # noqa: F401
 from app.modules.identidad import repository
 from app.modules.identidad import service as identidad_service
-from app.modules.identidad.domain.usuarios import PERMISOS_AUTORIZACION_EXCEPCION
+from app.modules.identidad.domain.usuarios import (
+    NOMBRE_DE_USUARIO_LONGITUD_MAXIMA,
+    PERMISOS_AUTORIZACION_EXCEPCION,
+)
 from app.modules.identidad.domain.valores import computa_credito_fiscal
 from app.modules.identidad.models import Rol, Usuario
 from app.modules.sync import service as sync_service
@@ -172,10 +175,12 @@ class UsuarioResponse(BaseModel):
 class CrearUsuarioRequest(BaseModel):
     """`password: SecretStr`, sin validadores (D2): el valor no aparece en un error."""
 
-    usuario: str
-    nombre: str
-    email: str | None
-    password: SecretStr
+    model_config = ConfigDict(extra="forbid")
+
+    usuario: str = Field(max_length=NOMBRE_DE_USUARIO_LONGITUD_MAXIMA)
+    nombre: str = Field(max_length=200)
+    email: str | None = Field(max_length=320)
+    password: SecretStr = Field(max_length=128)
     rol_id: UUID
 
 
@@ -757,7 +762,9 @@ def definir_tope_descuento_de_usuario(
 
 
 class ComposicionRolRequest(BaseModel):
-    permisos: list[str]
+    model_config = ConfigDict(extra="forbid")
+
+    permisos: list[Annotated[str, Field(max_length=100)]] = Field(max_length=500)
 
 
 class RolResponse(BaseModel):
@@ -973,7 +980,9 @@ def definir_tope_descuento_de_rol(
 class RotarPinRequest(BaseModel):
     """`pin: SecretStr`, sin validadores (D2): el valor no aparece en un error."""
 
-    pin: SecretStr
+    model_config = ConfigDict(extra="forbid")
+
+    pin: SecretStr = Field(max_length=64)
 
 
 @router.post("/usuarios/{usuario_id}/pin", status_code=204)

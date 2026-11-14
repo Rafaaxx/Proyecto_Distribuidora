@@ -204,6 +204,48 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  seguridad:
+    name: "7. Seguridad: dependencias y secretos"
+    # Auditoria de seguridad. Falla si hay una vulnerabilidad conocida en las dependencias de
+    # produccion (Python y npm, nivel alto o mas) o un secreto versionado. Las excepciones de
+    # secretos viven en `.gitleaks.toml`, justificadas.
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: "8.28.0"
+      GITLEAKS_SHA256: "a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Historial completo: gitleaks revisa tambien los commits, no solo el ultimo arbol.
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements-dev.txt
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar herramientas del backend
+        working-directory: backend
+        run: pip install -r requirements-dev.txt
+      - name: pip-audit (dependencias de produccion del backend)
+        working-directory: backend
+        # `requirements.txt` ya fija todas las versiones (incluidas las transitivas).
+        run: python -m pip_audit -r requirements.txt --no-deps --disable-pip
+      - name: npm audit (dependencias de produccion del frontend)
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+      - name: gitleaks (secretos en el repositorio)
+        run: |
+          archivo="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$RUNNER_TEMP/$archivo"             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archivo}"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/$archivo" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/$archivo" -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" git --config .gitleaks.toml --redact --verbose .
+
   build-frontend:
     name: "6. Build de producción del frontend"
     runs-on: ubuntu-latest

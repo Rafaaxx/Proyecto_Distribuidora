@@ -44,6 +44,11 @@ describe('LoginRutaScreen (tarea 9.1)', () => {
     vi.restoreAllMocks()
   })
 
+  it('pone «Iniciar sesión» en el título de la pestaña', () => {
+    render(<LoginRutaScreen onIniciada={vi.fn()} />)
+    expect(document.title).toBe('Iniciar sesión · Distribuidora')
+  })
+
   it('con conexión inicia sesión enviando el identificador del dispositivo y avisa', async () => {
     apiFetchMock.mockResolvedValueOnce(respuesta(200, { access_token: 'tok-ruta' }))
     const onIniciada = vi.fn()

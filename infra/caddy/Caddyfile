@@ -26,7 +26,34 @@
 	import /etc/caddy/encabezados.caddy
 
 	# La API va al backend: mismo origen para el navegador, sin CORS (02 §11).
+	# Tope del cuerpo de la peticion (auditoria de seguridad): Caddy corta con 413 antes de que
+	# llegue al backend. `handle` es excluyente y gana el primero que coincide, por eso los
+	# topes especificos van antes que el general.
+	#
+	# Lote de sincronizacion: hasta 50 comandos (`MAXIMO_COMANDOS_POR_LOTE`). Una venta de muchas
+	# lineas pesa unas decenas de KB, asi que 50 caben holgados en 4 MB; 1 MB podria cortar un
+	# lote legitimo de un telefono que estuvo mucho tiempo sin senal.
+	handle /api/v1/sync/comandos {
+		request_body {
+			max_size 4MB
+		}
+		reverse_proxy backend:8000
+	}
+
+	# Importacion de planillas: la aplicacion admite 5 MB de archivo (`LIMITE_DE_BYTES`); 6 MB deja
+	# lugar al sobre multipart. Entre 5 y 6 MB responde la aplicacion con su error de dominio.
+	handle /api/v1/importaciones/* {
+		request_body {
+			max_size 6MB
+		}
+		reverse_proxy backend:8000
+	}
+
+	# Todo lo demas: JSON chico. 1 MB sobra para cualquier otro comando.
 	handle /api/* {
+		request_body {
+			max_size 1MB
+		}
 		reverse_proxy backend:8000
 	}
 

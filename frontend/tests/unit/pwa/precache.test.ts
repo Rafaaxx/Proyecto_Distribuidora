@@ -92,4 +92,14 @@ describe('precache del service worker (tarea 11.2)', () => {
     expect(manifiesto.display).toBe('standalone')
     expect(Array.isArray(manifiesto.icons) && manifiesto.icons.length >= 2).toBe(true)
   })
+
+  it('copia robots.txt al build (sistema privado) y sirve las páginas legales con el shell', () => {
+    expect(leer('robots.txt')).toMatch(/User-agent: \*\s+Disallow: \//)
+    // No va al precache (no es un recurso de la aplicación) y su navegación no está denegada.
+    expect(urls).not.toContain('robots.txt')
+    const denegadas = [/^\/api\//, /^\/admin/]
+    for (const ruta of ['/privacidad', '/terminos', '/']) {
+      expect(denegadas.some((patron) => patron.test(ruta))).toBe(false)
+    }
+  })
 })

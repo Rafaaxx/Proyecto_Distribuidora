@@ -1,12 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { navegarMock, apiFetchMock } = vi.hoisted(() => ({
+const { navegarMock, escrituraMock, yoMock } = vi.hoisted(() => ({
   navegarMock: vi.fn(),
-  apiFetchMock: vi.fn(),
+  // Todo lo que no es `/yo` (el login mismo).
+  escrituraMock: vi.fn(),
+  // La consulta de sesión que la pantalla hace al montar para saber si ya hay sesión viva.
+  yoMock: vi.fn(),
 }))
 
 vi.mock('react-router-dom', async () => {
@@ -15,7 +18,7 @@ vi.mock('react-router-dom', async () => {
 })
 
 vi.mock('../../../../../src/lib/api/httpClient', () => ({
-  apiFetch: apiFetchMock,
+  apiFetch: (ruta: string, init?: RequestInit) => (ruta === '/yo' ? yoMock() : escrituraMock(ruta, init)),
 }))
 
 vi.mock('../../../../../src/lib/dispositivo/dispositivoId', () => ({
@@ -23,6 +26,7 @@ vi.mock('../../../../../src/lib/dispositivo/dispositivoId', () => ({
 }))
 
 import { LoginScreen } from '../../../../../src/areas/admin/auth/LoginScreen'
+import { yoDePrueba } from '../../../utils/permisosDePrueba'
 
 function renderPantalla() {
   const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
@@ -51,12 +55,20 @@ function respuesta(status: number, cuerpo: unknown) {
  */
 describe('LoginScreen (tarea 13.4)', () => {
   beforeEach(() => {
-    apiFetchMock.mockReset()
+    escrituraMock.mockReset()
     navegarMock.mockReset()
+    // Sin sesión viva por defecto: `/yo` responde 401.
+    yoMock.mockReset()
+    yoMock.mockResolvedValue(respuesta(401, { title: 'No autenticado.', codigo: 'IDENTIDAD_ACCESS_TOKEN_INVALIDO' }))
   })
 
   afterEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('pone «Iniciar sesión» en el título de la pestaña', () => {
+    renderPantalla()
+    expect(document.title).toBe('Iniciar sesión · Distribuidora')
   })
 
   it('muestra los campos de organización, usuario y contraseña', () => {
@@ -74,11 +86,11 @@ describe('LoginScreen (tarea 13.4)', () => {
     await usuarioEvento.click(screen.getByRole('button', { name: /iniciar sesión/i }))
 
     expect(await screen.findAllByRole('alert')).not.toHaveLength(0)
-    expect(apiFetchMock).not.toHaveBeenCalled()
+    expect(escrituraMock).not.toHaveBeenCalled()
   })
 
   it('envía organización, usuario, contraseña y el dispositivo, y navega al inicio de /admin tras iniciar sesión (tarea 7.6, B3)', async () => {
-    apiFetchMock.mockResolvedValueOnce(respuesta(200, { access_token: 'token-emitido', token_type: 'bearer' }))
+    escrituraMock.mockResolvedValueOnce(respuesta(200, { access_token: 'token-emitido', token_type: 'bearer' }))
     const usuarioEvento = userEvent.setup()
     renderPantalla()
 
@@ -92,8 +104,8 @@ describe('LoginScreen (tarea 13.4)', () => {
     // ruta índice, que lleva a la primera sección permitida del usuario.
     await waitFor(() => expect(navegarMock).toHaveBeenCalledWith('/admin/inicio'))
 
-    expect(apiFetchMock).toHaveBeenCalledTimes(1)
-    const [ruta, opciones] = apiFetchMock.mock.calls[0] as [string, RequestInit]
+    expect(escrituraMock).toHaveBeenCalledTimes(1)
+    const [ruta, opciones] = escrituraMock.mock.calls[0] as [string, RequestInit]
     expect(ruta).toBe('/auth/login')
     const cuerpo = JSON.parse(opciones.body as string)
     expect(cuerpo).toEqual({
@@ -107,7 +119,7 @@ describe('LoginScreen (tarea 13.4)', () => {
 
   it('muestra el mismo mensaje genérico tanto para contraseña incorrecta como para usuario inexistente', async () => {
     const mensajeIndistinguible = 'Usuario o contraseña incorrectos.'
-    apiFetchMock.mockResolvedValueOnce(
+    escrituraMock.mockResolvedValueOnce(
       respuesta(401, { title: mensajeIndistinguible, codigo: 'IDENTIDAD_CREDENCIALES_INVALIDAS' }),
     )
     const usuarioEvento = userEvent.setup()
@@ -120,7 +132,7 @@ describe('LoginScreen (tarea 13.4)', () => {
 
     expect(await screen.findByText(mensajeIndistinguible)).toBeInTheDocument()
 
-    apiFetchMock.mockResolvedValueOnce(
+    escrituraMock.mockResolvedValueOnce(
       respuesta(401, { title: mensajeIndistinguible, codigo: 'IDENTIDAD_CREDENCIALES_INVALIDAS' }),
     )
     await usuarioEvento.clear(screen.getByLabelText(/^usuario$/i))
@@ -129,6 +141,33 @@ describe('LoginScreen (tarea 13.4)', () => {
 
     const mensajes = await screen.findAllByText(mensajeIndistinguible)
     expect(mensajes).toHaveLength(1)
+    expect(navegarMock).not.toHaveBeenCalled()
+  })
+
+  it('si ya hay una sesión viva (/yo responde) no muestra el formulario: redirige a /admin/inicio', async () => {
+    yoMock.mockResolvedValue(respuesta(200, yoDePrueba('GES')))
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/admin/login']}>
+          <Routes>
+            <Route path="/admin/login" element={<LoginScreen />} />
+            <Route path="/admin/inicio" element={<p>Inicio de administración</p>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByText('Inicio de administración')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/organización/i)).not.toBeInTheDocument()
+  })
+
+  it('sin sesión (/yo da 401) muestra el formulario y consulta /yo una sola vez', async () => {
+    renderPantalla()
+
+    expect(await screen.findByLabelText(/organización/i)).toBeInTheDocument()
+    await waitFor(() => expect(yoMock).toHaveBeenCalled())
+    expect(yoMock).toHaveBeenCalledTimes(1)
     expect(navegarMock).not.toHaveBeenCalled()
   })
 })

@@ -1,19 +1,27 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 
 import { Alert } from '../../../components/ui/Alert'
 import { Boton } from '../../../components/ui/Button'
 import { Campo } from '../../../components/ui/Field'
 import { esquemaLogin, type DatosLogin } from '../../../domain/identidad/loginSchema'
 import { useLogin } from '../../../features/identidad/useLogin'
+import { usePermisos } from '../../../features/identidad/usePermisos'
+import { useTituloDePagina } from '../../../lib/useTituloDePagina'
 
 /**
  * Pantalla de inicio de sesión de `/admin` (tarea 13.4). React Hook Form +
  * Zod (`CLAUDE.md` §2); la validación vive en `domain/identidad/loginSchema.ts`,
  * este componente solo la conecta al formulario y muestra el resultado.
+ *
+ * Si ya hay una sesión viva (la consulta `['yo']` responde, incluso recuperándola con la cookie
+ * del refresh token tras una recarga, ADR-017) redirige a `/admin/inicio`. No hay bucle: con la
+ * sesión terminada (renovación rechazada o cierre de sesión) `obtenerYo` falla rápido sin tocar la
+ * red, `['yo']` queda en error y se muestra el formulario.
  */
 export function LoginScreen() {
+  useTituloDePagina('Iniciar sesión')
   const {
     register,
     handleSubmit,
@@ -21,6 +29,7 @@ export function LoginScreen() {
   } = useForm<DatosLogin>({ resolver: zodResolver(esquemaLogin) })
   const login = useLogin()
   const navigate = useNavigate()
+  const permisos = usePermisos()
 
   const alEnviar = handleSubmit((datos) => {
     login.mutate(datos, {
@@ -32,6 +41,10 @@ export function LoginScreen() {
       onSuccess: () => navigate('/admin/inicio'),
     })
   })
+
+  if (permisos.yo) {
+    return <Navigate to="/admin/inicio" replace />
+  }
 
   const clasesInput =
     'rounded-md border border-border px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40'

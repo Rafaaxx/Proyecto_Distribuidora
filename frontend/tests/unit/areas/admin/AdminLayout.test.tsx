@@ -37,6 +37,7 @@ function montarLayout(queryClient: QueryClient, rutaInicial = '/admin/catalogo')
             <Route path="dispositivos" element={<p>Pantalla de dispositivos</p>} />
             <Route path="reportes" element={<p>Pantalla de reportes</p>} />
           </Route>
+          <Route path="/admin/login" element={<p>Pantalla de login</p>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -184,21 +185,17 @@ describe('AdminLayout: estado pendiente y estado de error de la consulta de sesi
     expect(apiFetchMock.mock.calls.filter(([ruta]) => ruta === '/yo')).toHaveLength(2)
   })
 
-  it('si la consulta falla con 401 (la renovación del token fue rechazada), el aviso ofrece iniciar sesión y no reintentar', async () => {
+  it('si la consulta falla con 401 (la renovación del token fue rechazada), redirige a /admin/login y no ofrece reintentar', async () => {
     apiFetchMock.mockResolvedValue(
       respuesta(401, { title: 'Sesión terminada.', codigo: 'IDENTIDAD_ACCESS_TOKEN_INVALIDO' }),
     )
     montarLayout(clienteSinYo())
 
-    const enlace = await screen.findByRole('link', { name: 'Iniciar sesión' })
-    expect(enlace).toHaveAttribute('href', '/admin/login')
-    // Sesión terminada (p. ej. revocada por un restablecimiento de contraseña): no suena a error.
-    expect(screen.getByText('Tu sesión terminó. Iniciá sesión de nuevo.')).toBeInTheDocument()
-    expect(screen.queryByText(/no se pudieron obtener tus permisos/i)).not.toBeInTheDocument()
-    // Reintentar no serviría: sin access token la renovación ya fue
-    // rechazada una vez, así que un nuevo intento vuelve a fallar (ADR-017).
+    // Sesión terminada (p. ej. revocada por un restablecimiento de contraseña): se lleva al login en vez
+    // de dejar un menú vacío. Reintentar no serviría: sin access token la renovación ya fue rechazada (ADR-017).
+    expect(await screen.findByText('Pantalla de login')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Reintentar' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Catálogo' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/no se pudieron obtener tus permisos/i)).not.toBeInTheDocument()
   })
 })
 
@@ -206,8 +203,8 @@ describe('AdminLayout: estado pendiente y estado de error de la consulta de sesi
  * Spec `identidad/permisos-efectivos`, escenario "El encabezado identifica
  * la sesión" (tarea 7.5, **B4**, `design.md` D6-A). Los tres nombres salen
  * de `GET /api/v1/yo`, que devuelve `usuario`, `organizacion` y `rol` con su
- * `nombre` (ADR-027). No incluye botón de cierre de sesión: ningún
- * documento lo pide para este change.
+ * `nombre` (ADR-027). El botón de cierre de sesión se prueba en
+ * `AdminLayoutMenuLateral.test.tsx`.
  */
 describe('AdminLayout: el encabezado identifica la sesión (tarea 7.5, B4)', () => {
   beforeEach(() => {
